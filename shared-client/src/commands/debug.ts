@@ -221,11 +221,13 @@ const ADVANCE_HELP = `advance <ticks> [options]
   <ticks>              Number of ticks to fast-forward (mutually exclusive with --to)
   --to <tick>          Fast-forward to an absolute tick
   --no-stop-attack     Do not stop when our buildings/units take damage
-  --no-stop-alert      Do not stop on critical alerts (power shortage / output blocked)
+  --no-stop-alert      Do not stop on new critical alerts (power shortage / input shortage)
   --no-stop-gameover   Do not stop when the match ends
   --json               Print the raw response JSON
 
 Admin only; a multiplayer game (more than one non-bot player) requires the admin role.
+Only alerts that appear during the fast-forward stop it: routine line alerts
+(output blocked / throughput drop / backlog) are ignored.
 POST /admin/advance — see docs/dev/服务端API.md`;
 
 export async function cmdAdvance(args: string[], { api }: CommandContext): Promise<string> {

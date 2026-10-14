@@ -553,7 +553,9 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ```
 
 - `ticks` 与 `to_tick` **必须且只能给一个**（`to_tick` 必须大于当前 tick，`ticks` 必须为正）；两者都给或都不给 → `400`；未知字段 → `400`。
-- `stop_on` 三项**默认全开**，只有显式传 `false` 才关闭：`game_over`（对局宣判结束）、`under_attack`（我方建筑/单位受到伤害或被摧毁；拆除与太阳帆寿终不算）、`critical_alert`（高价值产线告警：缺电 `power_shortage`、产出阻塞 `output_blocked`）。
+- `stop_on` 三项**默认全开**，只有显式传 `false` 才关闭：`game_over`（对局宣判结束）、`under_attack`（我方建筑/单位受到伤害或被摧毁；拆除与太阳帆寿终不算）、`critical_alert`（**快进开始后新出现的**高价值产线告警：缺电 `power_shortage`（含欠压停机）、缺料停工 `input_shortage`）。
+  - 常态产线告警刻意排除，它们不该打断「一路狂奔」：`output_blocked`（产物阻塞）、`throughput_drop`（产能下降）、`backlog`（堆积升高）、`unit_spawn_blocked`（出厂口被占满）。
+  - 快进开始前就已经成立的高价值告警（同一建筑同一类型）不算「新出现」，不会触发；只有快进期间新冒出来的才停下（`go test ./internal/gamecore/ -run TestAdvanceCriticalAlert` 覆盖）。
 - 「我方」口径 = 发起者所属玩家；发起者不在本局玩家表里（纯 admin 账号）时退回本局所有非 bot 玩家。
 - 多人门禁：本局非 bot 玩家多于发起者一人时，只有 `role=admin` 能快进，否则 `403` 并在 `error` 里说明原因（快进会一次性推进全局时间线，其他人类玩家没有叫停机会）。
 - 响应 `200`：`start_tick` / `end_tick` / `stopped_reason` / `detail` / `elapsed_ms` / `ticks_per_sec`。`stopped_reason` ∈ `reached` / `game_over` / `under_attack` / `critical_alert` / `cancelled`。

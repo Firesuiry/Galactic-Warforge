@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -140,6 +141,147 @@ func TestAdvanceStopsOnCriticalAlert(t *testing.T) {
 	}
 	if miner.Runtime.State != model.BuildingWorkNoPower {
 		t.Fatalf("miner state = %s, want no_power", miner.Runtime.State)
+	}
+}
+
+// 关键警报只认「快进开始后新出现的」：快进前就已经断电的建筑不该在第一 tick
+// 就把快进拦下（试玩 1014 层 06 遗留 2）。
+func TestAdvanceCriticalAlertIgnoresPreexistingAlert(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+
+	pos, err := findOpenTileForType(ws, 4, model.BuildingTypeMiningMachine)
+	if err != nil || pos == nil {
+		t.Fatalf("find open tile: %v", err)
+	}
+	miner := newBuilding("miner-known", model.BuildingTypeMiningMachine, "p1", *pos)
+	placeBuilding(ws, miner)
+	addResourceNode(ws, "node-known", miner.Position, 6)
+
+	// 先在快进之外跑一段，让采矿机进入 no_power 并且真的发出过 power_shortage。
+	for i := 0; i < 30; i++ {
+		core.processTick()
+	}
+	if miner.Runtime.State != model.BuildingWorkNoPower {
+		t.Fatalf("fixture must put the miner into no_power before advance, got %s", miner.Runtime.State)
+	}
+	if miner.ProductionMonitor == nil || miner.ProductionMonitor.LastAlertAt[model.AlertTypePowerShortage] == 0 {
+		t.Fatalf("fixture must have raised a power_shortage alert before advance: %+v", miner.ProductionMonitor)
+	}
+	// 把「上次告警」往前推，让快进期间这条存量告警按提醒间隔再发一次事件：
+	// 只有存量过滤生效时快进才不会在第一 tick 被它拦下（否则本用例等同没测）。
+	miner.ProductionMonitor.LastAlertAt[model.AlertTypePowerShortage] = -model.ProductionAlertRemindTicks
+	start := core.CurrentTick()
+
+	res, err := core.Advance(AdvanceSpec{Ticks: 200, StopOn: AdvanceStopOn{CriticalAlert: true}}, nil)
+	if err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	if res.StoppedReason != model.AdvanceStoppedReached {
+		t.Fatalf("a pre-existing power_shortage must not stop the advance: reason=%q detail=%q", res.StoppedReason, res.Detail)
+	}
+	if res.EndTick != start+200 {
+		t.Fatalf("end_tick = %d, want %d", res.EndTick, start+200)
+	}
+	if got := miner.ProductionMonitor.LastAlertAt[model.AlertTypePowerShortage]; got <= start {
+		t.Fatalf("存量告警应在快进期间按提醒间隔重新发出（last_alert_at=%d, start=%d）——否则本用例没覆盖到过滤逻辑", got, start)
+	}
+}
+
+// 关键警报的类型口径（纯函数）：常态告警（产物阻塞 / 产能下降 / 堆积 / 出厂口
+// 占满）不再打断快进，只有缺电与缺料停工算数。
+func TestAdvanceCriticalAlertTypeSelection(t *testing.T) {
+	for _, alertType := range []model.ProductionAlertType{
+		model.AlertTypeOutputBlocked,
+		model.AlertTypeThroughputDrop,
+		model.AlertTypeBacklog,
+		model.AlertTypeUnitSpawnBlocked,
+	} {
+		events := []*model.GameEvent{advanceAlertEvent("b-1", alertType, 42)}
+		if detail, hit := advanceCriticalAlert(events, nil); hit {
+			t.Fatalf("%s 是常态告警，不该停下快进，got %q", alertType, detail)
+		}
+	}
+	for _, alertType := range []model.ProductionAlertType{
+		model.AlertTypePowerShortage,
+		model.AlertTypeInputShortage,
+	} {
+		events := []*model.GameEvent{advanceAlertEvent("b-1", alertType, 42)}
+		detail, hit := advanceCriticalAlert(events, nil)
+		if !hit {
+			t.Fatalf("%s 是高价值告警，应该停下快进", alertType)
+		}
+		if !strings.Contains(detail, string(alertType)) {
+			t.Fatalf("detail = %q, want it to name %s", detail, alertType)
+		}
+	}
+}
+
+// 存量告警过滤（纯函数）：同一建筑同一类型的告警在快进前就有 → 跳过；别的建筑
+// 新出现的同类告警照常触发。
+func TestAdvanceCriticalAlertSkipsKnownAlerts(t *testing.T) {
+	events := []*model.GameEvent{
+		advanceAlertEvent("b-1", model.AlertTypePowerShortage, 42),
+		advanceAlertEvent("b-2", model.AlertTypeInputShortage, 43),
+	}
+	known := map[string]struct{}{advanceAlertKey("b-1", model.AlertTypePowerShortage): {}}
+	detail, hit := advanceCriticalAlert(events, known)
+	if !hit || !strings.Contains(detail, "b-2") {
+		t.Fatalf("b-2 是新出现的缺料告警，应该触发，got hit=%v detail=%q", hit, detail)
+	}
+
+	known[advanceAlertKey("b-2", model.AlertTypeInputShortage)] = struct{}{}
+	if detail, hit := advanceCriticalAlert(events, known); hit {
+		t.Fatalf("全部命中存量告警时不该触发，got %q", detail)
+	}
+}
+
+// 存量告警快照：runtime 的 no_power 与监视器的 ActiveAlerts[input_shortage] 就是
+// 「快进开始前已经成立」的高价值告警。
+func TestActiveCriticalAlertsSnapshot(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+
+	noPower := newBuilding("b-nopower", model.BuildingTypeMiningMachine, "p1", model.Position{X: 1, Y: 1})
+	noPower.Runtime.State = model.BuildingWorkNoPower
+	ws.Buildings[noPower.ID] = noPower
+
+	starved := newBuilding("b-starved", model.BuildingTypeMiningMachine, "p1", model.Position{X: 5, Y: 5})
+	starved.ProductionMonitor = model.NewProductionMonitorState()
+	starved.ProductionMonitor.ActiveAlerts = map[model.ProductionAlertType]bool{model.AlertTypeInputShortage: true}
+	ws.Buildings[starved.ID] = starved
+
+	healthy := newBuilding("b-healthy", model.BuildingTypeMiningMachine, "p1", model.Position{X: 9, Y: 9})
+	ws.Buildings[healthy.ID] = healthy
+
+	known := core.activeCriticalAlerts()
+	if _, ok := known[advanceAlertKey("b-nopower", model.AlertTypePowerShortage)]; !ok {
+		t.Fatal("断电建筑必须进存量快照")
+	}
+	if _, ok := known[advanceAlertKey("b-starved", model.AlertTypeInputShortage)]; !ok {
+		t.Fatal("缺料停工建筑必须进存量快照")
+	}
+	if _, ok := known[advanceAlertKey("b-healthy", model.AlertTypePowerShortage)]; ok {
+		t.Fatal("正常建筑不该进存量快照")
+	}
+	if len(known) != 2 {
+		t.Fatalf("存量快照 = %v, want 2 条", known)
+	}
+}
+
+// advanceAlertEvent 造一条产线告警事件（停止条件判定的输入）。
+func advanceAlertEvent(buildingID string, alertType model.ProductionAlertType, tick int64) *model.GameEvent {
+	return &model.GameEvent{
+		Tick:      tick,
+		EventType: model.EvtProductionAlert,
+		Payload: map[string]any{
+			"alert": &model.ProductionAlert{
+				BuildingID: buildingID,
+				AlertType:  alertType,
+				Tick:       tick,
+				Message:    model.AlertMessage(alertType, buildingID),
+			},
+		},
 	}
 }
 

@@ -252,7 +252,7 @@ agent_thread agent-war-director
 | `alert_snapshot` | `alert_snapshot [options]` | Query production alert snapshot |
 | `replay` | `replay [options]` | Replay tick range |
 | `rollback` | `rollback [options]` | Rollback to tick |
-| `advance` | `advance <ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]` | 狂飙模式：快进到目标 tick（admin）；默认在我方受袭/关键警报/对局结束时提前停下 |
+| `advance` | `advance <ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]` | 狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下 |
 | `advance_cancel` | — | 取消进行中的快进（admin） |
 | `help` | `help [command]` | Show help |
 | `agent_list` | — | List agent-gateway agent profiles |

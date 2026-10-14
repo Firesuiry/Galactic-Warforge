@@ -22,8 +22,14 @@ import (
 
 // AdvanceStopOn 快进的停止条件开关（三项默认全开，显式传 false 关闭）。
 type AdvanceStopOn struct {
-	GameOver      bool
-	UnderAttack   bool
+	GameOver    bool
+	UnderAttack bool
+	// CriticalAlert 只认「快进开始后新出现的」高价值产线告警：电力不足
+	// （power_shortage，含欠压停机）与原料短缺导致停工（input_shortage）。
+	// 常态告警（output_blocked 产物阻塞、throughput_drop 产能下降、backlog 堆积、
+	// unit_spawn_blocked 出厂口被占满）刻意排除——它们在正常产线里反复出现，
+	// 会把「一路狂奔」切碎（试玩 1014 层 06 遗留 2）。
+	// 快进开始前就已在持续中的同类告警（同一建筑同一类型）也不再触发。
 	CriticalAlert bool
 }
 
@@ -148,6 +154,12 @@ func (gc *GameCore) Advance(spec AdvanceSpec, ownedTargets map[string]struct{}) 
 	}()
 
 	startTick := gc.CurrentTick()
+	// 快进开始前已存在的「高价值告警」（同一建筑同一类型）不参与触发：它们要么是
+	// 开局就带着的老问题，要么是玩家已知的常态，不该在快进第一 tick 就把人拦下。
+	knownAlerts := map[string]struct{}{}
+	if spec.StopOn.CriticalAlert {
+		knownAlerts = gc.activeCriticalAlerts()
+	}
 	target := spec.ToTick
 	if target <= 0 {
 		target = startTick + spec.Ticks
@@ -183,7 +195,7 @@ func (gc *GameCore) Advance(spec AdvanceSpec, ownedTargets map[string]struct{}) 
 			}
 		}
 		if spec.StopOn.CriticalAlert {
-			if detail, hit := advanceCriticalAlert(events); hit {
+			if detail, hit := advanceCriticalAlert(events, knownAlerts); hit {
 				result.StoppedReason = model.AdvanceStoppedCriticalAlert
 				result.Detail = detail
 				break
@@ -316,8 +328,11 @@ func advanceTargetOwnedBy(targetID string, victims map[string]struct{}) bool {
 	return ok
 }
 
-// advanceCriticalAlert 判定本 tick 有没有「高价值」产线告警：缺电与产出阻塞。
-func advanceCriticalAlert(events []*model.GameEvent) (string, bool) {
+// advanceCriticalAlert 判定本 tick 有没有「高价值」产线告警：电力不足（含欠压
+// 停机）与原料短缺导致停工。常态告警（产物阻塞 / 产能下降 / 堆积 / 出厂口占满）
+// 刻意排除。known 是快进开始前已在持续中的告警键（advanceAlertKey），命中则跳过：
+// 只有快进期间「新出现」的才值得停下来看。
+func advanceCriticalAlert(events []*model.GameEvent, known map[string]struct{}) (string, bool) {
 	for _, evt := range events {
 		if evt == nil || evt.EventType != model.EvtProductionAlert {
 			continue
@@ -326,12 +341,58 @@ func advanceCriticalAlert(events []*model.GameEvent) (string, bool) {
 		if !ok || alert == nil {
 			continue
 		}
-		switch alert.AlertType {
-		case model.AlertTypePowerShortage, model.AlertTypeOutputBlocked:
-			return fmt.Sprintf("关键警报：%s（%s，tick %d）", alert.Message, alert.AlertType, alert.Tick), true
+		if !advanceCriticalAlertType(alert.AlertType) {
+			continue
 		}
+		if _, ok := known[advanceAlertKey(alert.BuildingID, alert.AlertType)]; ok {
+			continue
+		}
+		return fmt.Sprintf("关键警报：%s（%s，tick %d）", alert.Message, alert.AlertType, alert.Tick), true
 	}
 	return "", false
+}
+
+// advanceCriticalAlertType 快进愿意为之停下的告警类型：缺电与缺料停工。
+func advanceCriticalAlertType(alertType model.ProductionAlertType) bool {
+	switch alertType {
+	case model.AlertTypePowerShortage, model.AlertTypeInputShortage:
+		return true
+	}
+	return false
+}
+
+// advanceAlertKey 告警的「同一建筑同一类型」身份（快进开始前的存量判定用）。
+func advanceAlertKey(buildingID string, alertType model.ProductionAlertType) string {
+	return buildingID + "\x00" + string(alertType)
+}
+
+// activeCriticalAlerts 当前仍成立的高价值告警键集合：建筑 runtime 状态就是
+// 「现在是否缺电」，生产监视器的 ActiveAlerts 就是「现在是否缺料停工」——
+// 两者都比翻事件历史更准（告警有冷却/提醒间隔，事件流里的最后一条可能是很久以前的）。
+func (gc *GameCore) activeCriticalAlerts() map[string]struct{} {
+	out := map[string]struct{}{}
+	if gc == nil {
+		return out
+	}
+	for _, ws := range gc.sortedWorlds() {
+		if ws == nil {
+			continue
+		}
+		ws.RLock()
+		for _, building := range ws.Buildings {
+			if building == nil {
+				continue
+			}
+			if building.Runtime.State == model.BuildingWorkNoPower {
+				out[advanceAlertKey(building.ID, model.AlertTypePowerShortage)] = struct{}{}
+			}
+			if monitor := building.ProductionMonitor; monitor != nil && monitor.ActiveAlerts[model.AlertTypeInputShortage] {
+				out[advanceAlertKey(building.ID, model.AlertTypeInputShortage)] = struct{}{}
+			}
+		}
+		ws.RUnlock()
+	}
+	return out
 }
 
 func numericPayload(value any) (float64, bool) {

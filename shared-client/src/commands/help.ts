@@ -104,7 +104,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   alert_snapshot: { usage: '[options]', desc: 'Query production alert snapshot' },
   save: { usage: '[--reason <text>]', desc: 'Trigger manual save' },
   checkpoint: { usage: '<list|save <name>|load <name>> [--note <text>] [--contract <file.json>] [--replace]', desc: '命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin）' },
-  advance: { usage: '<ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]', desc: '狂飙模式：快进到目标 tick（admin）；默认在我方受袭/关键警报/对局结束时提前停下' },
+  advance: { usage: '<ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]', desc: '狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下' },
   advance_cancel: { desc: '取消进行中的快进（admin）' },
   replay: { usage: '[options]', desc: 'Replay tick range' },
   rollback: { usage: '[options]', desc: 'Rollback to tick' },
