@@ -120,7 +120,7 @@ func chargeExchangerItems(ws *model.WorldState, network *model.PowerNetwork, sur
 			if !consumeExchangerItem(building.Storage, module.EmptyItemID) {
 				break
 			}
-			accepted, _, err := building.Storage.ReceiveOutput(module.FullItemID, 1)
+			accepted, _, err := building.Storage.StoreProduct(module.FullItemID, 1)
 			if err != nil || accepted != 1 {
 				// Output side is full: refund the consumed empty item and stall.
 				_, _, _ = building.Storage.Receive(module.EmptyItemID, 1)
@@ -169,7 +169,7 @@ func dischargeExchangerItems(ws *model.WorldState, network *model.PowerNetwork, 
 			if !consumeExchangerItem(building.Storage, module.FullItemID) {
 				break
 			}
-			accepted, _, err := building.Storage.ReceiveOutput(module.EmptyItemID, 1)
+			accepted, _, err := building.Storage.StoreProduct(module.EmptyItemID, 1)
 			if err != nil || accepted != 1 {
 				// Output side is full: refund the consumed full item and stall.
 				_, _, _ = building.Storage.Receive(module.FullItemID, 1)

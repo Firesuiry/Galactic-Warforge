@@ -76,7 +76,9 @@ func TestRefineryFeedbackOutputBackpressureIsAtomic(t *testing.T) {
 	attachBuilding(ws, b)
 	b.Storage.Inventory = model.ItemInventory{model.ItemRefinedOil: 1, model.ItemHydrogen: 2}
 	settleProduction(ws)
-	b.Storage.OutputBuffer = model.ItemInventory{model.ItemHydrogen: b.Storage.OutputBufferCapacity()}
+	// 反馈料（氢）的原料份额躺在输入路径里，产出份额落输出缓冲：堵死输出缓冲与
+	// 产出预留段即可让整批落不下（不去动输入缓冲里的原料份额）。
+	fillProductLandingSpots(b.Storage, model.ItemHydrogen)
 	for i := 0; i < 100; i++ {
 		settleProduction(ws)
 	}
@@ -86,7 +88,7 @@ func TestRefineryFeedbackOutputBackpressureIsAtomic(t *testing.T) {
 	if availableStorageItem(b.Storage, model.ItemEnergeticGraphite) != 0 {
 		t.Fatal("partially committed blocked batch")
 	}
-	b.Storage.OutputBuffer = nil
+	drainProductLandingSpots(b.Storage, model.ItemHydrogen)
 	settleProduction(ws)
 	settleStorage(ws)
 	if b.ExportableItemQuantity(model.ItemHydrogen) != 3 || b.ExportableItemQuantity(model.ItemEnergeticGraphite) != 1 {
@@ -168,7 +170,7 @@ func TestRefineryPipelineDoesNotExportUnprocessedSeed(t *testing.T) {
 	if item := selectOutputFluid(b, endpoint); item != "" {
 		t.Fatalf("raw seed selected as pipeline output: %s", item)
 	}
-	if accepted, _, err := b.Storage.ReceiveOutput(model.ItemHydrogen, 3); err != nil || accepted != 3 {
+	if accepted, _, err := b.Storage.StoreProduct(model.ItemHydrogen, 3); err != nil || accepted != 3 {
 		t.Fatalf("deposit produced hydrogen: %d %v", accepted, err)
 	}
 	if item := selectOutputFluid(b, endpoint); item != model.ItemHydrogen {

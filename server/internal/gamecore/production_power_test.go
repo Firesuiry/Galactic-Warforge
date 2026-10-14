@@ -135,10 +135,10 @@ func TestProductionPowerSaveResumesFractionAndBlockedBatch(t *testing.T) {
 	if !reflect.DeepEqual(resumed.Production, b.Production) {
 		t.Fatalf("save lost fraction: %+v vs %+v", resumed.Production, b.Production)
 	}
-	// Block both possible products while leaving the next batch's photons intact.
+	// Block every product landing spot (output buffer + output reserve) while
+	// leaving the next batch's photons intact.
 	for _, building := range []*model.Building{b, resumed} {
-		building.Storage.EnsureInventory()[model.ItemStoneOre] = building.Storage.Capacity - 2
-		building.Storage.EnsureInputBuffer()[model.ItemStoneOre] = building.Storage.InputBufferCapacity() - 2
+		fillProductLandingSpots(building.Storage, model.ItemAntimatter)
 	}
 	for tick := 0; tick < 180; tick++ {
 		supply := []int{20, 12, 24, 0}[tick%4]
@@ -154,8 +154,7 @@ func TestProductionPowerSaveResumesFractionAndBlockedBatch(t *testing.T) {
 	if resumed.Production.RemainingTicks != 0 || resumed.Production.ProgressFraction != 0 || len(resumed.Production.PendingOutputs) != 1 || len(resumed.Production.PendingByproducts) != 1 || availableStorageItem(resumed.Storage, model.ItemCriticalPhoton) != 2 {
 		t.Fatalf("blocked batch consumed future material/credit: %+v %+v", resumed.Production, resumed.Storage)
 	}
-	delete(resumed.Storage.Inventory, model.ItemStoneOre)
-	delete(resumed.Storage.InputBuffer, model.ItemStoneOre)
+	drainProductLandingSpots(resumed.Storage, model.ItemAntimatter)
 	productionPowerTick(resumedWS, resumedGenerator, 0)
 	if resumed.ExportableItemQuantity(model.ItemAntimatter) != 0 {
 		t.Fatal("unpowered blocked batch committed")

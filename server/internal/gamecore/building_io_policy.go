@@ -278,9 +278,9 @@ func refillBuildingOutputBuffer(building *model.Building) {
 	allowed := buildingOutputAllowList(building, nil)
 	if len(allowed) == 0 {
 		// 只有采掘类建筑（Collect != nil：采矿机 / 大型采矿机 / 抽水站 / 采油机 /
-		// 轨道采集器）才把主库存搬进输出缓冲：它们没有产物配方，输出缓冲就是出货口，
-		// storageOutputBlocked(collector=true) 的「满仓阻塞」告警依赖这个口径
-		// （见 production_monitor.go 与 t130_collect_monitor_test.go / miner_alert_dedup_test.go）。
+		// 轨道采集器）把主库存搬进输出缓冲：它们没有产物配方，输出缓冲就是出货口，
+		// storageOutputBlocked 的「满仓阻塞」告警依赖这个口径（见
+		// no_recipe_storage_test.go / t130_collect_monitor_test.go）。
 		//
 		// 其余「无配方且无输出准入清单」的建筑（兵营、补给站、炮塔、储物仓 / 储液罐、
 		// 物流站、研究模式研究站、战场分析基站等）没有产物需要经输出缓冲出货：装入的

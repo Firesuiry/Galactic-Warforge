@@ -150,7 +150,7 @@ func TestAdvancedMiningMachineMinesMultipleVeins(t *testing.T) {
 			t.Fatalf("expected vein %s remaining 84, got %d", id, got)
 		}
 	}
-	if got := miner.Storage.UsedInventory() + miner.Storage.UsedInputBuffer(); got != 48 {
+	if got := totalStorageItems(miner.Storage); got != 48 {
 		t.Fatalf("expected 48 total ore stored, got %d", got)
 	}
 	if got := ws.Players["p1"].Resources.Minerals; got != 24 {

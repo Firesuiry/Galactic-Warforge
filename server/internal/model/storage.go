@@ -13,11 +13,18 @@ type StoragePriority struct {
 
 // StorageState tracks the storage inventory and IO buffers.
 //
-// Reserve 是「产出预留」：主库存里必须留出的空位数，产出结算（storeProductionOutputs）
-// 只用这段空位落成品。生产建筑按当前配方写入预留量（见 Building.SyncStorageReserve），
-// 玩家装入（Load）/传送带送入（Receive）都不得越过它——否则整批产出会被
-// storeProductionOutputs 丢弃，建筑表面 running 却永远不产出（试玩 1014 层 04 P1）。
-// 输入缓冲不受预留约束：FlushInput 把输入搬进主库存时也只填到「容量 − 预留」。
+// 三个桶的语义（试玩 1015 理顺）：
+//   - InputBuffer 只收原料：传送带 / 分拣器 / 管道 / 装入（Receive / Load /
+//     PreviewReceive）走的是「输入路径」，只写输入缓冲与主库存的非预留段。
+//   - OutputBuffer 只装成品：配方产物、副产物与采集产物都经 StoreProduct 落这里。
+//     皮带 / 分拣器 / 机器人取货（ExportableItemQuantity）看到的就是成品，
+//     未处理原料不会混在里面被送走。成品**绝不进输入缓冲**——旧实现用 Receive
+//     落成品，成品占满输入缓冲后与原料互相卡死（熔炉表面 running、每 tick
+//     storeProductionOutputs 失败，试玩 1015）。
+//   - Reserve 是「产出预留」：主库存里必须留出的空位数，成品在输出缓冲放不下时
+//     落在这里（StoreProduct 的第二落点）。生产建筑按当前配方写入预留量
+//     （见 Building.SyncStorageReserve），输入路径一律不得越过它——否则整批产出
+//     会落不下，建筑表面 running 却永远不产出（试玩 1014 层 04 P1）。
 type StorageState struct {
 	Capacity       int             `json:"capacity"`
 	Slots          int             `json:"slots"`
@@ -138,7 +145,8 @@ func (s *StorageState) InputBufferSpace() int {
 }
 
 // ReservedSpace returns the free room inside the production output reserve.
-// 预留段是主库存顶端 Reserve 个槽位；总空位先算给预留段。
+// 预留段是主库存顶端 Reserve 个槽位：总空位先算给预留段（与 AvailableInventory
+// 互补——两者之和恒等于主库存空位总数）。
 func (s *StorageState) ReservedSpace() int {
 	if s == nil || s.Reserve <= 0 || s.Capacity <= 0 {
 		return 0
@@ -146,13 +154,16 @@ func (s *StorageState) ReservedSpace() int {
 	return min(s.Reserve, max(0, s.Capacity-s.UsedInventory()))
 }
 
-// Receive accepts items into storage buffers/inventory and returns accepted and remaining quantities.
+// Receive accepts incoming material (belt/sorter/pipe) into the input path.
+// 输入路径 = 输入缓冲优先，其次是主库存的「容量 − 预留」段；成品不走这里
+// （见 StoreProduct）。
 func (s *StorageState) Receive(itemID string, qty int) (int, int, error) {
 	return s.receive(itemID, qty, false)
 }
 
-// Load stores player-delivered items directly into local storage so they can be
-// consumed immediately by building logic such as production or launch.
+// Load stores player-delivered material directly into local storage so it can
+// be consumed immediately by building logic such as production or launch.
+// 与 Receive 同属输入路径，只是先填主库存（玩家装入希望在「本地存储」立刻看到）。
 func (s *StorageState) Load(itemID string, qty int) (int, int, error) {
 	return s.receive(itemID, qty, true)
 }
@@ -213,8 +224,16 @@ func (s *StorageState) receive(itemID string, qty int, inventoryFirst bool) (int
 	return accepted, remaining, nil
 }
 
-// ReceiveOutput deposits finished products without mixing them with recipe inputs.
-func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
+// StoreProduct deposits finished products on the output path: the output buffer
+// first, then the production output reserve in the main inventory.
+// 成品与原料走两条互不挤占的通道：
+//   - 原料（Receive / Load / PreviewReceive / FlushInput）只填输入缓冲与主库存的
+//     「容量 − 预留」段，永远不越预留线；
+//   - 成品只填输出缓冲与主库存的**产出预留段**，绝不进输入缓冲。
+//
+// 旧实现用 Receive 落成品：成品挤进输入缓冲、把输入缓冲占满，原料与成品互相
+// 卡死（试玩 1015：熔炉表面 running、每 tick storeProductionOutputs 失败）。
+func (s *StorageState) StoreProduct(itemID string, qty int) (int, int, error) {
 	if s == nil {
 		return 0, qty, fmt.Errorf("缺少存储")
 	}
@@ -224,11 +243,85 @@ func (s *StorageState) ReceiveOutput(itemID string, qty int) (int, int, error) {
 	if !s.canAcceptNewItem(itemID) {
 		return 0, qty, nil
 	}
-	take := min(qty, max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer()))
-	if take > 0 {
-		addToInventory(s.EnsureOutputBuffer(), itemID, take)
+
+	accepted := 0
+	remaining := qty
+	if remaining > 0 {
+		available := max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer())
+		if take := min(available, remaining); take > 0 {
+			addToInventory(s.EnsureOutputBuffer(), itemID, take)
+			accepted += take
+			remaining -= take
+		}
 	}
-	return take, qty - take, nil
+	if remaining > 0 {
+		if take := min(s.ReservedSpace(), remaining); take > 0 {
+			addToInventory(s.EnsureInventory(), itemID, take)
+			accepted += take
+			remaining -= take
+		}
+	}
+	return accepted, remaining, nil
+}
+
+// StoreCollectorProduct deposits collector output. 采集建筑没有配方、也没有产出
+// 预留：它的主库存本来就是出货缓冲（settleStorage 每 tick 把主库存搬进输出缓冲，
+// 「满仓阻塞」告警也据此判定），所以产物可以占满主库存、不受预留约束。
+// 落点仍是「输出缓冲 → 主库存」，与生产建筑的 StoreProduct 同一顺序。
+func (s *StorageState) StoreCollectorProduct(itemID string, qty int) (int, int, error) {
+	return s.storeProductInInventory(itemID, qty, s.availableInventorySpace())
+}
+
+// PreviewStoreProduct calculates how many products would be accepted without
+// mutating state (same landing path as StoreProduct).
+func (s *StorageState) PreviewStoreProduct(itemID string, qty int) (int, int, error) {
+	if s == nil {
+		return 0, qty, fmt.Errorf("缺少存储")
+	}
+	if err := validateItemQuantity(itemID, qty); err != nil {
+		return 0, qty, err
+	}
+	if !s.canAcceptNewItem(itemID) {
+		return 0, qty, nil
+	}
+	accepted := min(qty, max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer()))
+	if remaining := qty - accepted; remaining > 0 {
+		accepted += min(remaining, s.ReservedSpace())
+	}
+	return accepted, qty - accepted, nil
+}
+
+// storeProductInInventory 是产出的共用落货实现：输出缓冲 → 主库存（inventoryRoom
+// 由调用方给出：生产建筑用产出预留段，采集建筑用整个主库存）。
+func (s *StorageState) storeProductInInventory(itemID string, qty, inventoryRoom int) (int, int, error) {
+	if s == nil {
+		return 0, qty, fmt.Errorf("缺少存储")
+	}
+	if err := validateItemQuantity(itemID, qty); err != nil {
+		return 0, qty, err
+	}
+	if !s.canAcceptNewItem(itemID) {
+		return 0, qty, nil
+	}
+
+	accepted := 0
+	remaining := qty
+	if remaining > 0 {
+		available := max(0, s.OutputBufferCapacity()-s.UsedOutputBuffer())
+		if take := min(available, remaining); take > 0 {
+			addToInventory(s.EnsureOutputBuffer(), itemID, take)
+			accepted += take
+			remaining -= take
+		}
+	}
+	if remaining > 0 {
+		if take := min(inventoryRoom, remaining); take > 0 {
+			addToInventory(s.EnsureInventory(), itemID, take)
+			accepted += take
+			remaining -= take
+		}
+	}
+	return accepted, remaining, nil
 }
 
 // PreviewReceive calculates how many items would be accepted without mutating state.
@@ -467,10 +560,10 @@ func (s *StorageState) SetReserve(reserve int) {
 
 // SyncStorageReserve 按建筑当前配方写入「产出预留」：主库存里必须留出的空位数，
 // 等于该配方一批产出的总量（不含增产模式加成——没有任何命令能切换 Mode，加成
-// 只在目录配置里存在）。没有配方（含研究模式的研究站）时预留归零。
+// 只在目录配置里存在）。没有配方（含研究模式的研究站、采集建筑）时预留归零。
 //
 // 不变量：预留 ≤ 主库存容量。批产出大于容量的配方（分馏塔无存储模块，走独立结算）
-// 退化为预留整个容量，由产出结算走输入缓冲 + 输出缓冲落货。
+// 退化为预留整个容量，由产出结算走输出缓冲 + 输入缓冲落货。
 func (s *StorageState) SyncStorageReserve(batch int) {
 	if s == nil {
 		return
@@ -485,17 +578,28 @@ func (s *StorageState) availableInventory() int {
 	if s == nil || s.Capacity <= 0 {
 		return 0
 	}
-	used := s.UsedInventory()
-	limit := s.Capacity - s.Reserve
-	if used >= limit {
+	room := s.Capacity - s.Reserve - s.UsedInventory()
+	if room < 0 {
 		return 0
 	}
-	return limit - used
+	return room
 }
 
-// AvailableInventory 是 availableInventory 的导出形式（产出落货判定用：产出的
-// 落货路径是输出缓冲 → 输入缓冲 → 主库存的产出预留空位，gamecore 的阻塞判定
-// 需要与这里同一口径）。
+// availableInventorySpace 是主库存的空位总数（不含预留约束）：采集类产物的
+// 落点用它（见 StoreCollectorProduct），输入路径用 availableInventory（扣掉预留）。
+func (s *StorageState) availableInventorySpace() int {
+	if s == nil || s.Capacity <= 0 {
+		return 0
+	}
+	used := s.UsedInventory()
+	if used >= s.Capacity {
+		return 0
+	}
+	return s.Capacity - used
+}
+
+// AvailableInventory 是 availableInventory 的导出形式（装入回执判定「主库存是否
+// 已到产出预留线」用，见 gamecore.transferLoadBlockReason）。
 func (s *StorageState) AvailableInventory() int {
 	return s.availableInventory()
 }

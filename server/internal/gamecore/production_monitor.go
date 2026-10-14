@@ -156,8 +156,10 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 }
 
 // storageOutputBlocked reports whether produced items can no longer leave the
-// building. Collectors only stall once their main inventory is also full,
-// since their output buffer refills from inventory every tick.
+// building. 产出的落点是「输出缓冲 → 主库存」（见 model.StorageState.StoreProduct /
+// StoreCollectorProduct）：两处都放不下才算真的阻塞，与 storeProductionOutputs
+// 同一口径。生产建筑的主库存落货只用「产出预留」那一段空位，采集建筑没有配方、
+// 预留为 0，主库存全段可用（也正因如此，它们的「满仓阻塞」判定与生产建筑一致）。
 func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
 	if storage == nil || storage.OutputBufferCapacity() <= 0 {
 		return false
@@ -168,9 +170,7 @@ func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
 	if collector {
 		return storage.Capacity > 0 && storage.UsedInventory() >= storage.Capacity
 	}
-	// 生产建筑：产出的落货路径是「输出缓冲 → 输入缓冲 → 主库存（扣掉产出预留）」，
-	// 三处都放不下才算真的阻塞（与 storeProductionOutputs 的判定同一口径）。
-	return storage.InputBufferSpace() <= 0 && storage.AvailableInventory() <= 0
+	return storage.ReservedSpace() <= 0
 }
 
 func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) []*model.ProductionAlert {

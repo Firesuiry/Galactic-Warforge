@@ -92,6 +92,11 @@ type zeroOpening struct {
 	milestone map[string]int64
 	soldiers  map[string]bool
 
+	// powerRescues 电力告急时插建的风机数（见 powerRescue）。
+	powerRescues int
+	// pureMineSite：开局计划挑到了「纯矿」的采矿机落点（5×5 覆盖框内只有一种矿）。
+	// 混合簇上的矿机会被先攒满的那种矿堵死，脚本的搬运量随之失控。
+	pureMineSite  bool
 	lastBuildTick int64
 	lastFeedTick  int64
 	lastMoveTick  int64
@@ -99,6 +104,11 @@ type zeroOpening struct {
 	lastRallyTick int64
 
 	buildFails map[string]int
+
+	// soldierFails / soldierFailReasons：兵营排产被拒的次数与原因（诊断用，
+	// 见 produceSoldier）。兵营缺料是常态，不能混进 buildFails。
+	soldierFails       int
+	soldierFailReasons map[string]int
 
 	firstAttackTick int64
 	firstWavePeak   int
@@ -174,6 +184,48 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 	if len(iron) < 2 || len(copper) < 1 || len(stone) < 1 {
 		t.Fatalf("基地半径 %d 内矿点不足：iron=%d copper=%d stone=%d", radius, len(iron), len(copper), len(stone))
 	}
+	// 采矿机是 3×3 占地 + 1 圈覆盖（5×5 框，最多 25 条脉）：挑「纯矿」的落点，
+	// 别把机器压在混合簇上。细分网格下一台 3×3 矿机覆盖 5×5 框内的**所有**矿脉，
+	// 每脉 8/tick——压在铁铜混合簇上时产量是熔炉消耗（1/60 tick）的几十倍，
+	// 修好「落不下就不扣矿脉、也不回充 minerals」（试玩 1015）之后，机器几 tick
+	// 就被混合矿堵满，搬运脚本搬不空就整局矿物收入归零（实测 pt1011 的两台矿机
+	// 各压 48 煤 + 37 铜，背包卡在 200/200，tick 9000 之后 minerals 恒为 10）。
+	// 真人也一样：矿机压在混合簇上要么配齐所有矿种的出口，要么挑纯矿。
+	pureSite := func(nodes []*model.ResourceNodeState, kind string) *model.ResourceNodeState {
+		for _, node := range nodes {
+			covered, target := 0, 0
+			for dy := -1; dy < 4; dy++ {
+				for dx := -1; dx < 4; dx++ {
+					cell := ws.SurfaceOffset(node.Position, dx, dy)
+					if !ws.InBounds(cell.X, cell.Y) {
+						continue
+					}
+					id := ws.Grid[cell.Y][cell.X].ResourceNodeID
+					if id == "" {
+						continue
+					}
+					covered++
+					if other := ws.Resources[id]; other != nil && other.Kind == kind {
+						target++
+					}
+				}
+			}
+			if covered > 0 && covered == target {
+				return node
+			}
+		}
+		return nil
+	}
+	pickOre := func(nodes []*model.ResourceNodeState, kind string) *model.ResourceNodeState {
+		if node := pureSite(nodes, kind); node != nil {
+			return node
+		}
+		return nodes[0]
+	}
+	ironNode, copperNode := pickOre(iron, model.ItemIronOre), pickOre(copper, model.ItemCopperOre)
+	if ironNode != iron[0] || copperNode != copper[0] {
+		op.pureMineSite = true
+	}
 	// 可选追加：兵营产线（兵营 → 补给站 → 子弹），按需加在矩阵链之后。
 	// 不再补第三台电路板制造台：每台制造台 8 个齿轮全靠机甲手搓（20 tick/个），
 	// 齿轮是整条早期链最紧的料（实测建造失败回执里「制造台缺 8 个齿轮」出现
@@ -187,15 +239,39 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 		{btype: model.BuildingTypeWindTurbine},
 		{btype: model.BuildingTypeTeslaTower},
 		{btype: model.BuildingTypeWindTurbine},
-		{btype: model.BuildingTypeMiningMachine, node: iron[0]},
+		{btype: model.BuildingTypeMiningMachine, node: ironNode},
+		// 铁熔炉紧跟第一座矿机：矿机一开工就有矿要吃，熔炉早一步到位就早一步
+		// 把矿变成锭（锭是手搓链最上游的料），也给矿机一个出口。实测把熔炉排到
+		// 两座矿机之后时，tick 7000 还没建起熔炉（`TestSkirmishPlayerOpens
+		// PowerMiningSmeltingBy7000` 的脚本节奏断言）。
+		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron"},
 		{btype: model.BuildingTypeTeslaTower},
-		{btype: model.BuildingTypeMiningMachine, node: copper[0]},
+		{btype: model.BuildingTypeMiningMachine, node: copperNode},
+		{btype: model.BuildingTypeWindTurbine},
+		// 铜熔炉必须紧跟铁熔炉：矿机压在铁铜混合簇上，一次覆盖多条脉，
+		// 没有铜的出口时铜几 tick 就填满矿机（48+8），矿机随即阻塞、不再挖矿
+		// 也不再回充 minerals（试玩 1015 的修法）——整局矿物收入归零，连
+		// 铜熔炉自己都建不起来。铁熔炉先上（电路板/磁线圈/石砖都要铁块），
+		// 铜熔炉紧随其后，两种矿就都有出口。
+		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_copper"},
 		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron"},
 		{btype: model.BuildingTypeWindTurbine},
-		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron"},
 		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_copper"},
+		// 兵营 + 补给站：开局就有、容量 1000 的「矿石堆场」，**必须紧跟熔炉**。
+		// 细分网格下一台 3×3 采矿机覆盖 5×5 框内的所有矿脉（每脉 8/tick，实测
+		// 20 条以上），产量是早期熔炉消耗（1/60 tick）的几十倍；而试玩 1015 的
+		// 修法规定「产出落不下就不扣矿脉、也不回充 minerals」，所以矿石必须真的
+		// 搬得走，矿机才能继续挖、矿物收入才转得起来。
+		//
+		// 这一条同时是个「鸡生蛋」：堆场本身要 60 矿物，而矿物只有矿机在挖时才有。
+		// 排在熔炉之后（此时 minerals 200–300、矿石已开始产出）刚好建得起；排在
+		// 电路板制造台之后就会因为「矿物不足：需要 60，当前 1」永远建不动——
+		// 矿机阻塞 → minerals 归零 → 堆场建不起来 → 矿机永远阻塞（实测 pt1011
+		// tick 19000 起 minerals 恒为 1、背包里只有 24 件，HQ 的 60 格已堆满）。
+		// 两座 1000 容量的建筑合计 2000 矿石 ≈ 2000 minerals，够整条开局链。
+		{btype: model.BuildingType("barracks")},
+		{btype: model.BuildingTypeSupplyStation},
 		{btype: model.BuildingTypeWindTurbine},
-		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_copper"},
 		{btype: model.BuildingTypeAssemblingMachineMk1, recipe: "circuit_board"},
 		{btype: model.BuildingTypeMiningMachine, node: stone[0]},
 		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_magnet"},
@@ -203,9 +279,6 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 		{btype: model.BuildingTypeAssemblingMachineMk1, recipe: "magnetic_coil"},
 		{btype: model.BuildingTypeWindTurbine},
 		{btype: model.BuildingTypeAssemblingMachineMk1, recipe: "circuit_board"},
-		{btype: model.BuildingType("barracks")},
-		{btype: model.BuildingTypeSupplyStation},
-		{btype: model.BuildingTypeWindTurbine},
 		{btype: model.BuildingTypeMatrixLab},
 		{btype: model.BuildingTypeAssemblingMachineMk1, recipe: "electromagnetic_matrix"},
 		{btype: model.BuildingTypeTeslaTower},
@@ -240,10 +313,17 @@ func (op *zeroOpening) run() {
 		if op.debugLog != nil && op.debugEvery > 0 && ws.Tick%op.debugEvery == 0 {
 			op.debugLog()
 		}
+		// 物流每 20 tick 一拍（UI 正常速度）。但兵营排产（`produce`）要等这一拍
+		// 把铁块/电路板送进兵营之后才可能成功，而排产命令本身受 30 tick 节拍限制：
+		// 若排产正好落在送料之前，这一轮必然被拒、只能等下一个 30 tick。实测
+		// pt1011 的兵营建成后（10713）到整局结束（75000）一个兵都没出来——
+		// 排产与送料的相位差让「兵营有料」的窗口永远错过（真人玩家看到兵营有料
+		// 立刻点造兵，不会干等 30 tick）。这里在排产之前补一拍物流。
 		if ws.Tick > 0 && ws.Tick%30 == 0 {
 			op.buildNext()
 			op.repairRecipes()
 			op.powerLink()
+			op.feedIndustry()
 			op.produceSoldier()
 			op.startResearch()
 		}
@@ -321,8 +401,18 @@ func (op *zeroOpening) observe() {
 }
 
 // buildNext 追一条建造命令（UI 正常速度：约 3 秒一条）。
+//
+// 电力优先于计划：修好试玩 1015 的采掘口径后，矿物收入 = 「矿石真正落地」的量，
+// 而采掘本身要电（`scaleByPowerRatio`）。电力缺口一旦出现，矿机停摆 → minerals
+// 归零 → 计划里下一步（兵营/补给站，60 矿物）再也建不起来，计划里排在后面的
+// 风机也就永远轮不到——整局从 tick 19000 卡死在 minerals=1（实测 pt1011）。
+// 真人玩家看到「电力不足」会先补一台风机；脚本在这里做同一件事：只要还有
+// 30 矿物、有机器无电、且施工队列空闲，就插一台风机。
 func (op *zeroOpening) buildNext() {
 	if op.next >= len(op.steps) {
+		return
+	}
+	if op.powerRescue() {
 		return
 	}
 	s := op.steps[op.next]
@@ -371,6 +461,52 @@ func (op *zeroOpening) buildNext() {
 		key = fmt.Sprintf("%s: %s @ %v", s.btype, res.Message, *pos)
 	}
 	op.buildFails[key]++
+}
+
+// powerRescue 电力告急时插建一台风机（返回 true 表示本 tick 已经在处理电力）。
+func (op *zeroOpening) powerRescue() bool {
+	ws := op.ws
+	if op.player.Resources.Minerals < 30 {
+		return false
+	}
+	if ws.Construction != nil {
+		for _, task := range ws.Construction.Tasks {
+			if task == nil || task.PlayerID != "p1" {
+				continue
+			}
+			if task.State == model.ConstructionPending || task.State == model.ConstructionInProgress {
+				return false // 施工队列不空闲，等它干完
+			}
+		}
+	}
+	short := false
+	for _, b := range ws.Buildings {
+		if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Storage == nil {
+			continue
+		}
+		if b.Runtime.State == model.BuildingWorkNoPower {
+			short = true
+			break
+		}
+	}
+	if !short {
+		return false
+	}
+	pos := op.buildSpot(model.BuildingTypeWindTurbine)
+	if pos == nil {
+		return false
+	}
+	res, _ := execCommand(op.core, model.CmdBuild, op.ws, "p1", model.Command{
+		Target:  model.CommandTarget{Layer: "planet", Position: pos},
+		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
+	})
+	if res.Code == model.CodeOK {
+		op.powerRescues++
+		op.lastBuildTick = op.ws.Tick
+		return true
+	}
+	op.buildFails[fmt.Sprintf("power_rescue: %s", res.Message)]++
+	return false
 }
 
 // repairRecipes 给「建好后没配好配方」的机器补上配方。
@@ -442,6 +578,32 @@ func (op *zeroOpening) collectBuildNeeds(needed map[string]bool, from int) {
 			}
 		}
 	}
+	// 当前步骤要的**中间品**（锭/线圈/电路板/磁铁/齿轮/石砖…）是建造的手搓件，
+	// 不能被 sweepInventory / relieveBackpack 当成「堆料」倒回产线或储物仓：
+	// 一倒回去，建造就永远缺那几件（实测 pt1011 的兵营缺 6 个铁块、缺到 378 次
+	// 回执都是「矿物不足」——铁块全被倒进了熔炉的输入口，背包里只剩 40 个
+	// 上限内的铜块）。
+	//
+	// 只保留「当前步骤 + 已排队施工 + 队列里接下来两步」真正要用的量；原矿不在
+	// 此列（原矿由矿机持续产出，堆料疏通要能倒走）。矩阵链研究期再额外保留矩阵
+	// 链的中间品：那时矩阵链是整局的终点，倒回去会让研究站断料。
+	needed[model.ItemIronIngot] = true
+	needed[model.ItemCopperIngot] = true
+	needed[model.ItemGear] = true
+	needed[model.ItemMagneticCoil] = true
+	needed[model.ItemCircuitBoard] = true
+	needed[model.ItemMagnet] = true
+	needed[model.ItemStoneBrick] = true
+}
+
+// matrixChainPriority 研究站已建、电磁学还没完成时，矩阵链是整局的终点：
+// 施工预留与背包疏通都要给它让路。
+func (op *zeroOpening) matrixChainPriority() bool {
+	if op.buildingOfType(model.BuildingTypeMatrixLab) == nil {
+		return false
+	}
+	tech := op.player.Tech
+	return tech == nil || tech.CompletedTechs["electromagnetism"] == 0
 }
 
 // dumpToIndustry 把背包里多出来的某物品送进一台「正缺这个料」的机器。
@@ -551,7 +713,13 @@ func (op *zeroOpening) candidateNodes(kind string, fallback *model.ResourceNodeS
 		nodes = append(nodes, node)
 		seen[node.ID] = true
 	}
+	// 采矿机落点分档（见 minerSiteTier）：先避开「覆盖框里有煤」的落点，
+	// 再按距家远近（近的接得上电、搬得回来）。
 	sort.Slice(nodes, func(i, j int) bool {
+		ti, tj := op.minerSiteTier(nodes[i], kind), op.minerSiteTier(nodes[j], kind)
+		if ti != tj {
+			return ti < tj
+		}
 		di, dj := op.ws.SurfaceDistance(op.home, nodes[i].Position), op.ws.SurfaceDistance(op.home, nodes[j].Position)
 		if di != dj {
 			return di < dj
@@ -563,6 +731,68 @@ func (op *zeroOpening) candidateNodes(kind string, fallback *model.ResourceNodeS
 	}
 	return nodes
 }
+
+// minerSiteTier 采矿机落点的优先档（小的优先）。判据是「覆盖框里有没有煤」，
+// 而不是纯度：
+//
+//   - 采矿机是 3×3 占地 + 1 圈覆盖，5×5 框内的矿脉**全部**会被采（每脉 8/tick）；
+//   - 试玩 1015 的修法把采掘改成「落不下就不扣矿脉、也不回充 minerals」，所以
+//     覆盖框里只要有**没有出口**的矿（煤：早期没有任何配方吃煤），它几 tick 就
+//     把机器主库存攒满，机器 `output_blocked`，矿物收入归零——连下一步要 120
+//     矿物的熔炉都建不出来（实测 pt1011 的两台矿机压在煤铜混合簇上，tick 12000
+//     起 minerals 恒为 83、整局停在第二座熔炉）。
+//   - 铁/铜/石都有熔炉出口，混在一起只是搬运累一点，不会把机器堵死。
+//
+// 于是先看「覆盖框里有没有煤」，再按距家远近。纯矿簇常常在 30–45 格外，靠
+// `powerLink` / `powerRescue` 补电塔接电——实测 seed 001 的纯铁矿在 45 格外
+// （100,146 一带），第一座矿机落过去以后 `power_out_of_range` 一直到 tick 6000
+// 都没通上电，开局链卡死在「矿机没通电」。所以「离家近且无煤」才是最好的落点，
+// 远方的纯矿簇只作兜底。
+func (op *zeroOpening) minerSiteTier(node *model.ResourceNodeState, kind string) int {
+	if node == nil {
+		return 3
+	}
+	near := op.ws.SurfaceDistance(op.home, node.Position) <= minerSiteRadius
+	coalFree := !op.coverageHasOre(node, model.ItemCoal)
+	switch {
+	case near && coalFree:
+		return 0
+	case coalFree:
+		return 1
+	case near:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// coverageHasOre 以 node 为锚点的 5×5 覆盖框里是否采得到 kind 这种矿。
+func (op *zeroOpening) coverageHasOre(node *model.ResourceNodeState, kind string) bool {
+	if node == nil {
+		return false
+	}
+	for dy := -1; dy < 4; dy++ {
+		for dx := -1; dx < 4; dx++ {
+			cell := op.ws.SurfaceOffset(node.Position, dx, dy)
+			if !op.ws.InBounds(cell.X, cell.Y) {
+				continue
+			}
+			id := op.ws.Grid[cell.Y][cell.X].ResourceNodeID
+			if id == "" {
+				continue
+			}
+			if other := op.ws.Resources[id]; other != nil && other.Kind == kind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// minerSiteRadius 采矿机落点的「就近」半径：电塔（`DefaultPowerLineRange = 3`）
+// 要从基地附近一路接过来，太远的矿点接不上电。实测 seed 001 的第一座矿机
+// 落在 45 格外的纯铁矿上，之后 `power_out_of_range` 一直到 tick 6000 都没通上电。
+const minerSiteRadius = 16
 
 // minerOriginFor 采矿机的建造锚点：以矿点为中心求最近的"整块可落位、且不把
 // 基地封死"的 3×3 原点；找不到返回 false（调用方换下一个矿点）。
@@ -582,6 +812,9 @@ func (op *zeroOpening) minerOriginFor(node *model.ResourceNodeState) (model.Posi
 	if !ok || !op.ws.FootprintFits(origin, fp, model.BuildingTypeMiningMachine, "") {
 		return model.Position{}, false
 	}
+	if op.spotCoversExecutor(origin, fp) {
+		return model.Position{}, false
+	}
 	if model.ValidateCollectorSite(op.ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
 		return model.Position{}, false
 	}
@@ -589,6 +822,31 @@ func (op *zeroOpening) minerOriginFor(node *model.ResourceNodeState) (model.Posi
 		return model.Position{}, false
 	}
 	return origin, true
+}
+
+// spotCoversExecutor 该占地是否罩住了自家地面单位（含机甲）。
+//
+// 建造不会把单位推出去：占地一落成，站在里面的单位就永久卡在建筑格上
+// （`buildObstacles` 把 `TileBuilding` 非空的格视为不可通行，寻路再也走不出去）。
+// 脚本选点时必须主动避开自家单位——真人玩家看到机甲站在那儿也不会把风机压上去。
+// 实测 seed 001：第二座风机 (53,142) 的 2×2 占地罩住机甲 (54,143)，此后机甲
+// 一格都动不了，手搓链断在第一座风机之后（整局只建成风机）。
+func (op *zeroOpening) spotCoversExecutor(origin model.Position, fp model.Footprint) bool {
+	tiles, err := op.ws.FootprintTiles(origin, fp)
+	if err != nil {
+		return true // 求不出占地就别选它
+	}
+	for id, u := range op.ws.Units {
+		if u == nil || u.HP <= 0 || u.OwnerID != "p1" || unitIsAir(op.ws, id) {
+			continue
+		}
+		for _, t := range tiles {
+			if t.X == u.Position.X && t.Y == u.Position.Y {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // buildSpot 基地附近的可建空位：与 botBuildSpotNear 同规则，但额外跳过资源格
@@ -640,6 +898,15 @@ func (op *zeroOpening) buildSpot(btype model.BuildingType) *model.Position {
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
 				continue
 			}
+			// 占地里不能站着自家机甲：建造**不会**把单位推出去，占地落成后
+			// 那台单位就永远卡在建筑格上（走不出去、也再走不回来）。实测
+			// seed 001 的第二座风机 (53,142) 的 2×2 占地正好罩住机甲
+			// (54,143)，之后机甲再也动不了：开局链停在「已建 3 座建筑」，
+			// 手搓链全断，整局 tick 75000 只建到风机（旧基线用 (53,142)
+			// 建的是 1×1 电塔，细分网格后 2×2 风机才第一次撞上这个问题）。
+			if op.spotCoversExecutor(candidate, fp) {
+				continue
+			}
 			c := candidate
 			return &c
 		}
@@ -670,12 +937,23 @@ func (op *zeroOpening) powerLink() {
 const soldierCap = 8
 
 // produceSoldier 兵营一建好就出兵（攒到 soldierCap 为止）。
+// 排产失败单独计数（不进 `buildFails`）：兵营缺料是常态（脚本要按缺口补料），
+// 而 `buildFails` 是「建造」的回执，混进来会让 `TestSkirmishFromZeroChainIsWalkable`
+// 把「缺 2 个铁块」误判成「建造长期失败且原因不是缺料」的死锁。
 func (op *zeroOpening) produceSoldier() {
 	barracks := op.buildingOfType(model.BuildingType("barracks"))
 	if barracks == nil || soldiersFull(op.ws, op.soldiers, soldierCap) {
 		return
 	}
-	produceSoldier(op.core, op.ws)
+	res := produceSoldier(op.core, op.ws)
+	if res.Code == model.CodeOK {
+		return
+	}
+	op.soldierFails++
+	if op.soldierFailReasons == nil {
+		op.soldierFailReasons = map[string]int{}
+	}
+	op.soldierFailReasons[res.Message]++
 }
 
 // rallySoldiers 新兵出列即到 HQ 周围 6 格站桩守家（hold：原地坚守，不追出去）。
@@ -745,8 +1023,8 @@ func (op *zeroOpening) feedIndustry() {
 	// 而研究站的「矩阵只收 OutputBuffer」——必须先取走 OutputBuffer 里的成品，
 	// 再取主库存里的余料（主库存只在「停机 + 缓冲空 + 余料」时才有东西），
 	// 否则会出现「取出的其实是主库存余料、产物还堵在 OutputBuffer 里」的死循环。
-	// cap 是「这一轮最多取多少」：矿机取矿要留量（否则机甲在 tick 22000
-	// 被背包里 12 铁/42 石/22 铜的余矿顶住，取不出熔炉的 136 铁块，手搓链断料）。
+	// 矿机取矿要留量：否则机甲会被背包里 12 铁/42 石/22 铜的余矿顶住，
+	// 取不出熔炉的 136 铁块，手搓链断料。
 	withdraw := func(b *model.Building, item string, cap int) {
 		if b == nil || b.Storage == nil {
 			return
@@ -841,11 +1119,24 @@ func (op *zeroOpening) feedIndustry() {
 		// 主库存最多装到 5/6，单种料最多占 2/3：留 1/6 给产物，同时保证
 		// 「一种料占满 2/3」时另一种料仍然进得来（实测电路板制造台主库存里
 		// 16 个铜锭正好等于 2/3 容量，load 的 room 归零，铁块永远喂不进去）。
+		//
+		// 但原矿的「单种上限」要按矿机的产量放宽：矿机 8/tick/脉，熔炉 1/60 tick，
+		// 2/3 容量（16）几 tick 就被填满，此后 load 全部落空、矿机一直阻塞
+		// （实测铁熔炉长期只有 2/3 上限的矿，矿机 48+8 全满）。原矿按「熔炉的
+		// 全部主库存空位」喂，脚本再用背包上限做总闸门。
 		room := st.Capacity*5/6 - st.UsedInventory()
+		itemRoom := st.Capacity*2/3 - st.ItemQuantity(item)
+		if isManuallyMinableOre(item) {
+			// 原矿另算：矿机 8/tick/脉、熔炉 1/60 tick，喂料必须一路喂到「容量 −
+			// 产出预留」而不是 5/6（实测 5/6 上限下熔炉长期停在 20/24，脚本的
+			// 喂料命令全部落空，矿机一直阻塞、矿物收入归零）。单种上限也放到整仓：
+			// 原矿只会被熔炉吃掉，不像中间品会跟另一种料抢槽位。
+			room = st.AvailableInventory()
+			itemRoom = st.Capacity - st.ItemQuantity(item)
+		}
 		if room <= 0 {
 			return
 		}
-		itemRoom := st.Capacity*2/3 - st.ItemQuantity(item)
 		if itemRoom <= 0 {
 			return
 		}
@@ -865,6 +1156,7 @@ func (op *zeroOpening) feedIndustry() {
 	sort.Strings(ids)
 	byRecipe := map[string][]*model.Building{}
 	var miners []*model.Building
+	var depots []*model.Building
 	var barracks, supply, lab *model.Building
 	for _, id := range ids {
 		b := ws.Buildings[id]
@@ -874,6 +1166,18 @@ func (op *zeroOpening) feedIndustry() {
 		switch b.Type {
 		case model.BuildingTypeMiningMachine:
 			miners = append(miners, b)
+		case model.BuildingTypeDepotMk1, model.BuildingTypeDepotMk2:
+			// 储物仓：脚本的「卸货场」。矿机阻塞时矿石总得有个去处，堆在背包里
+			// 会顶满 200 格、手搓与建造全停（实测铁/铜矿各 40 个上限仍把背包
+			// 顶到 150/200，熔炉的锭取不出来）。储物仓容量 300、reserve=0，
+			// 是矿石的天然堆场。
+			depots = append(depots, b)
+		case model.BuildingTypeBattlefieldAnalysisBase:
+			// 无配方的存储建筑（基站）同样是矿石的堆场：矿机覆盖多条矿脉，
+			// 产量远超早期熔炉的消耗（每台 1/60 tick），矿石必须有地方放，
+			// 否则矿机一阻塞就既不挖矿也不回充 minerals（试玩 1015 的修法），
+			// 开局链的矿物收入直接归零。
+			depots = append(depots, b)
 		case model.BuildingTypeArcSmelter, model.BuildingTypeAssemblingMachineMk1:
 			if b.Production != nil && b.Production.RecipeID != "" {
 				byRecipe[b.Production.RecipeID] = append(byRecipe[b.Production.RecipeID], b)
@@ -882,8 +1186,10 @@ func (op *zeroOpening) feedIndustry() {
 			lab = b
 		case model.BuildingType("barracks"):
 			barracks = b
+			depots = append(depots, b)
 		case model.BuildingTypeSupplyStation:
 			supply = b
+			depots = append(depots, b)
 		}
 	}
 	// 先取加工品（熔炉的锭、制造台的中间品），再取矿：背包只有 200 格，
@@ -894,13 +1200,18 @@ func (op *zeroOpening) feedIndustry() {
 	// 电路板制造台断料，整局从 tick 22000 卡到 45000）。攒够用量就留在机器里，
 	// 背包腾出来的空位留给下一座建筑要的料。
 	withdrawCap := map[string]int{
-		model.ItemIronIngot:             40,
-		model.ItemCopperIngot:           40,
+		// 锭的背包上限压到 16：背包是整局唯一的搬运缓冲，矿石必须搬得进来
+		// （见 oreBackpackTotalCap）。40/40 的锭 + 32 电路板会把 200 格占掉一半，
+		// 矿机取矿的额度归零后矿石再也搬不空、矿机阻塞、矿物收入停摆
+		// （实测 pt1011 tick 18000：铜矿机 output_blocked，minerals 卡在 33）。
+		// 16 个锭够当前建造步骤的手搓用量（最贵的一步 8 个铁块）。
+		model.ItemIronIngot:             16,
+		model.ItemCopperIngot:           16,
 		model.ItemMagnet:                20,
 		model.ItemMagneticCoil:          coilStockCap,
 		model.ItemCircuitBoard:          circuitBoardStockCap,
 		model.ItemGear:                  20,
-		model.ItemAmmoBullet:            300,
+		model.ItemAmmoBullet:            40,
 		model.ItemElectromagneticMatrix: 999,
 	}
 	for _, recipe := range []struct{ recipe, item string }{
@@ -924,28 +1235,101 @@ func (op *zeroOpening) feedIndustry() {
 			withdraw(b, recipe.item, allow)
 		}
 	}
-	// 矿机：矿石在开局阶段是手搓链的燃料，只在背包存量不足时补货，
-	// 免得把矿机刚挖的矿又原样取回来堆在背包里。
-	for _, m := range miners {
-		if player.Inventory[model.ItemIronOre] < 40 {
-			withdraw(m, model.ItemIronOre, 20)
-		}
-		if player.Inventory[model.ItemCopperOre] < 40 {
-			withdraw(m, model.ItemCopperOre, 20)
-		}
-		if player.Inventory[model.ItemStoneOre] < 40 {
-			withdraw(m, model.ItemStoneOre, 20)
+	// 熔炉的成品堵住自己的主库存时（`output_blocked`），必须把它取出来：
+	// 熔炉主库存被锭占满后不再进料、也不再产锭，整条手搓链（齿轮/电路板都要锭）
+	// 与矿石消耗一起停摆——实测 seed 001 的两台铜熔炉从 tick 16000 起
+	// `output_blocked`（inv 里 19 个铜锭 + 5 个铜矿），机甲此后 8000 tick 只能
+	// 手搓铁块，计划停在「制造台缺 8 个齿轮」这一步（回执 344 次），整局只走到
+	// 熔炉。`withdraw` 会把产物从 OutputBuffer 与主库存一起取出，正好解堵。
+	//
+	// 阻塞时把锭的背包上限放宽到 `blockedIngotCap`（平时 16）：锭就是被自己的
+	// 熔炉堵出来的，背包装得下就先接着（背包还留 20 格给矿石，见矿石那条上限）。
+	for _, recipe := range []struct{ recipe, item string }{
+		{"smelt_iron", model.ItemIronIngot},
+		{"smelt_copper", model.ItemCopperIngot},
+		{"smelt_magnet", model.ItemMagnet},
+		{"smelt_stone", model.ItemStoneBrick},
+	} {
+		for _, b := range byRecipe[recipe.recipe] {
+			if b == nil || b.Storage == nil || b.Runtime.StateReason != stateReasonOutputBlocked {
+				continue
+			}
+			allow := blockedIngotCap - player.Inventory[recipe.item]
+			if allow <= 0 {
+				continue
+			}
+			before := player.Inventory[recipe.item]
+			withdraw(b, recipe.item, allow)
+			// 取出来的锭立刻送回吃它的制造台（齿轮/电路板/磁线圈都要锭），
+			// 背包只当周转站：否则锭堆在背包里，手搓批次因背包满而不结算。
+			if moved := player.Inventory[recipe.item] - before; moved > 0 {
+				op.dumpToIndustry(recipe.item, moved)
+			}
 		}
 	}
+	// 矿机：矿石在开局阶段是手搓链的燃料，只在背包存量不足时补货，
+	// 免得把矿机刚挖的矿又原样取回来堆在背包里。**本地缓冲满的矿机必须清空**：
+	// 产出无处可放时矿机不再扣矿脉、也不再回充 minerals（试玩 1015 的修法），
+	// 真人玩家看到「产物阻塞」就会把矿取出来喂熔炉——脚本同理。清空要按「机器里
+	// 实际有的矿种」来做：一台压在铁铜混合簇上的矿机会被先攒满的铜堵住，
+	// 只按背包缺口取（铜已超上限）永远取不出铜，铁矿就再也挖不出来。
+	//
+	// 矿机是**唯一的**矿物收入来源：只要它在挖，minerals 就按实际产出回充，
+	// 不需要脚本搬运；它一堵住收入就停。所以这里把矿机的货直接取出来（取到背包
+	// 上限为止，超出的倒进储物仓），让它一直挖——而不是等背包缺料才补货。
+	type oreStack struct {
+		item string
+		qty  int
+	}
+	for _, m := range miners {
+		if m.Storage == nil {
+			continue
+		}
+		stacks := make([]oreStack, 0, 3)
+		for _, item := range minableOreItemIDs {
+			if qty := m.Storage.ItemQuantity(item); qty > 0 {
+				stacks = append(stacks, oreStack{item: item, qty: qty})
+			}
+		}
+		if len(stacks) == 0 {
+			continue
+		}
+		// 先把背包里的矿喂给正缺料的熔炉：熔炉消耗后腾出主库存，矿机才排得空。
+		op.feedOreToSmelters(byRecipe)
+		sort.Slice(stacks, func(i, j int) bool {
+			if stacks[i].qty != stacks[j].qty {
+				return stacks[i].qty > stacks[j].qty
+			}
+			return stacks[i].item < stacks[j].item
+		})
+		for _, s := range stacks {
+			// 矿石的去处：背包留一点自用（熔炉要料时喂得进去），其余倒进储物仓。
+			// 只搬「背包上限以内的量 + 储物仓装得下的量」，绝不把背包灌满——
+			// 背包满了手搓与建造全停（实测 200/200 时整局卡在「背包已满」）。
+			allow := oreBackpackCapFor(s.item) - player.Inventory[s.item]
+			if allow > 0 {
+				free := op.mechaCapacity() - 20 - op.inventoryUsed()
+				if free > 0 {
+					withdraw(m, s.item, min(s.qty, min(allow, free)))
+				}
+			}
+			op.dumpOreToDepotsFrom(m, depots, s.item)
+		}
+	}
+	// 储物仓里的矿也要回流：矿机阻塞时矿石先堆进储物仓（背包只有 200 格），
+	// 熔炉缺料时再从储物仓取出来喂——真人玩家的仓库→熔炉也是这么搬的。
+	// 少了这一步，储物仓会变成「只进不出」的死堆场（实测两座 1000 容量的
+	// 仓库被矿石填满后，矿机再也搬不空、矿物收入归零）。
+	op.drawOreFromDepots(depots, byRecipe)
 	// 喂料：每台熔炉吃满自己的矿（塞到 2/3 容量，留出产物位置）。
 	for _, b := range byRecipe["smelt_iron"] {
-		load(b, model.ItemIronOre, 20, true)
+		load(b, model.ItemIronOre, b.Storage.Capacity, true)
 	}
 	for _, b := range byRecipe["smelt_copper"] {
-		load(b, model.ItemCopperOre, 20, true)
+		load(b, model.ItemCopperOre, b.Storage.Capacity, true)
 	}
 	for _, b := range byRecipe["smelt_magnet"] {
-		load(b, model.ItemIronOre, 20, true)
+		load(b, model.ItemIronOre, b.Storage.Capacity, true)
 	}
 	// 制造台：每台按自己的配方喂料（多台同配方也各自喂）。
 	feedAssembler := func(recipeID string, inputs map[string]int) {
@@ -1018,6 +1402,11 @@ func (op *zeroOpening) feedIndustry() {
 	for _, b := range byRecipe["electromagnetic_matrix"] {
 		loadPair(b, model.ItemMagneticCoil, model.ItemCircuitBoard, 6)
 	}
+	// 兵营/补给站是两用建筑（堆场 + 自用料），但它们**不该由脚本从堆场里往外挤矿**：
+	// 试过「需要时把矿石取回背包腾地方」，结果是矿石从堆场搬进机甲背包，
+	// 背包被顶满、手搓链停摆，造兵反而更晚（实测 seed 001 的步兵从 11771 退到 73631）。
+	// 正确做法是让堆场**一开始就留出自用位**（见 depotOreRoom 的 depotSelfSupplyDivisor），
+	// 矿石永远不会把最后一格占满。
 	load(barracks, model.ItemIronIngot, 20, true)
 	load(barracks, model.ItemCircuitBoard, 10, true)
 	// 研究站不喂料：研究站吃的是「成品矩阵」，把磁线圈/电路板喂进去只会让
@@ -1031,6 +1420,111 @@ func (op *zeroOpening) feedIndustry() {
 	if lab != nil {
 		op.feedResearchMatrices(lab)
 	}
+	// 背包疏通：矿机与熔炉的产物不断流进背包，攒到容量上限后手搓与建造都会
+	// 因「背包已满」失败（实测 200/200 时采矿/手搓/施工全停，整局卡在
+	// 「矿物不足」）。真人玩家会把多余的矿倒进储物仓、把多余的锭倒进制造台。
+	// 每 20 tick（feedIndustry 的节拍）做一次，背包占 1/3 以上才动手。
+	if op.inventoryUsed() > op.mechaCapacity()/3 {
+		op.relieveBackpack(byRecipe, depots)
+	}
+	// 计划走完后机甲的唯一产出是「手动采矿」，而手动采矿的落点是背包——
+	// 背包满了机甲就彻底停摆（实测 seed 001 tick 23000 起背包 200/200，
+	// 机甲 `mine(iron_ore)` 永远 ready 不了，minerals 停在 3321 直到整局结束）。
+	// 真人玩家这时会把背包里的堆料倒进堆场/产线。`relieveBackpack` 只处理
+	// 施工用不到的物品，计划走完后没有任何施工，它应该能倒干净；这里的
+	// `relieveBackpackFull` 是兜底：把「产线已经吃不动」的成品（子弹、多余的
+	// 电路板/磁线圈/矩阵）倒进堆场，保证机甲永远有地方卸矿。
+	if op.inventoryUsed() >= op.mechaCapacity() {
+		op.relieveBackpackFull(depots)
+	}
+}
+
+// relieveBackpack 把背包里的「堆料」送回产线：矿石先喂熔炉（正缺料的），
+// 喂不下的倒进储物仓；中间品按各机器缺口倒回去；剩下的（如石头矿）也倒进
+// 储物仓。只处理当前建造步骤用不到的物品，避免把刚备好的料又送走。
+func (op *zeroOpening) relieveBackpack(byRecipe map[string][]*model.Building, depots []*model.Building) {
+	needed := map[string]bool{}
+	op.collectBuildNeeds(needed, op.next)
+	// 矿机取出来的矿石留在背包里只会顶满背包；产线要的料一律按缺口送回。
+	for _, item := range minableOreItemIDs {
+		op.feedOreToSmelters(byRecipe)
+		if op.player.Inventory[item] > oreBackpackCapFor(item) {
+			op.dumpOreToDepots(depots, item)
+		}
+	}
+	// 中间品与副产物倒回正缺料的机器（dumpToIndustry 只倒进吃这种料的机器）；
+	// 没有机器吃（例如电路板攒过头、石头矿）就倒进储物仓。
+	items := make([]string, 0, len(op.player.Inventory))
+	for item := range op.player.Inventory {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	for _, item := range items {
+		qty := op.player.Inventory[item]
+		if qty <= 0 || needed[item] {
+			continue
+		}
+		if qty <= midItemBackpackCap {
+			continue
+		}
+		before := qty
+		op.dumpToIndustry(item, qty)
+		if op.player.Inventory[item] >= before {
+			op.dumpOreToDepots(depots, item)
+		}
+	}
+}
+
+// midItemBackpackCap 中间品（锭/磁铁/电路板/线圈等）在背包里的上限：超过就
+// 倒回产线或储物仓，免得背包被「机器产出来、暂时用不上」的料顶满。
+const midItemBackpackCap = 40
+
+// relieveBackpackFull 背包满了以后的兜底疏通：把背包里的堆料倒进堆场。
+//
+// 与 relieveBackpack 的区别：它尊重 `needed`（当前建造步骤要用的手搓件不能倒走），
+// 而这里的前提是**建造计划已经走完**——没有任何施工在等料，背包里的一切都只是
+// 堆料。计划走完后机甲唯一的工作是手动采矿（产出落在背包里），背包一旦顶到
+// 200/200 机甲就彻底停摆（实测 seed 001 tick 23000–75000 背包恒为 200/200、
+// minerals 恒为 3321，机甲 `mine(iron_ore)` 永远 ready 不了）。
+//
+// 倒料按「先矿后料」的顺序：原矿只占 `oreBackpackCapFor` 那点额度（多出来的
+// 喂熔炉/倒堆场），中间品与成品（子弹、超量电路板/线圈/磁铁）整包倒堆场。
+func (op *zeroOpening) relieveBackpackFull(depots []*model.Building) {
+	// 1) 先把背包里的矿喂给缺料的熔炉（矿变成锭才有出口），喂不下的倒堆场。
+	op.feedOreToSmelters(op.byRecipeCache())
+	for _, item := range minableOreItemIDs {
+		if op.player.Inventory[item] > oreBackpackCapFor(item) {
+			op.dumpOreToDepots(depots, item)
+		}
+	}
+	// 2) 其余堆料（子弹、电路板、磁线圈、磁铁、石砖、锭…）整包倒堆场。
+	// 堆场满了就跳过，等堆场自己被 feedIndustry 抽干（矿喂熔炉、子弹进补给站）。
+	items := make([]string, 0, len(op.player.Inventory))
+	for item := range op.player.Inventory {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	for _, item := range items {
+		if op.player.Inventory[item] <= 0 || isManuallyMinableOre(item) {
+			continue
+		}
+		op.dumpOreToDepots(depots, item)
+	}
+}
+
+// byRecipeCache 按配方把 p1 的生产建筑分组的轻量快照（兜底疏通用）。
+func (op *zeroOpening) byRecipeCache() map[string][]*model.Building {
+	out := map[string][]*model.Building{}
+	for _, b := range op.ws.Buildings {
+		if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Storage == nil || b.Production == nil {
+			continue
+		}
+		if b.Production.RecipeID == "" {
+			continue
+		}
+		out[b.Production.RecipeID] = append(out[b.Production.RecipeID], b)
+	}
+	return out
 }
 
 // researchMatrixTarget 研究站里要攒的电磁矩阵数（电磁学 20 个 + 前置链的余量）。
@@ -1042,7 +1536,57 @@ const researchMatrixTarget = 24
 const (
 	coilStockCap         = 24
 	circuitBoardStockCap = 32
+	// oreBackpackCap 每种原矿在背包里的存量上限（按矿种分：铁/铜有熔炉做出口，
+	// 可以多存一点；石矿只供手搓石砖，少存）。
+	//
+	// 这个上限不是「经济模型」，而是「矿机→背包→熔炉」这条手动物流的流量控制：
+	// 修好试玩 1015 的采掘口径后，矿机只有在产物真的落地时才扣矿脉、才回充
+	// minerals，而一台 3×3 矿机压在铁铜混合簇上每 tick 会产 8×N 个矿——远超
+	// 熔炉的消耗速度（每台 1/60 tick）。矿机本地存储（48+8）几 tick 就满，此后
+	// 只有当脚本把矿取走、喂进熔炉（熔炉消耗后腾出主库存）才能继续挖。所以
+	// 「背包上限」实质上是「脚本允许多少矿滞留在矿机与熔炉之外」：给少了矿机
+	// 会一直阻塞（收入 0），给多了背包会被矿顶满（手搓与建造全停）。
+	oreBackpackCap = 12
+	// stoneOreBackpackCap 石矿在背包里的上限：石矿没有常驻熔炉（石砖只按建造
+	// 缺口手搓），存量大了纯占背包。
+	stoneOreBackpackCap = 8
+	// oreBackpackTotalCap 背包里**全部原矿**（不分矿种）的存量上限。矿机搬空的
+	// 额度受它约束：机甲背包是手搓链的唯一工作台，矿石把 200 格顶满后手搓批次
+	// 因「背包已满」不结算（`mecha.job.state = inventory_full`），齿轮/电路板
+	// 全部停产、建造随之停摆——实测 pt1011 的机甲卡在 200/200 矿石上，tick 11000
+	// 之后一座建筑都建不起来、minerals 恒为 35。
+	//
+	// 但也不能太小：修好 1015 的采掘口径后，矿物收入 = 「矿石真正落地」的量，
+	// 而开局唯一的大容量堆场（兵营/补给站，各 1000）本身要花 60 矿物才能建。
+	// 上限太小（80）时矿石无处可去 → 矿机阻塞 → minerals 停在 55 → 兵营永远
+	// 建不起来（实测 pt1011 tick 13000 起 minerals 恒为 55，`next=13` 卡死）。
+	// 110 让机甲先用手搓链与背包把矿物垫到能建堆场为止。
+	oreBackpackTotalCap = 110
+	// blockedIngotCap 熔炉 `output_blocked` 时允许滞留在背包里的锭数（平时 16）。
+	// 熔炉主库存被自己的锭占满后不再进料、也不再产锭，必须把锭取出来才解堵；
+	// 取出来的锭只能先放背包（命令系统只有「玩家 ↔ 建筑」两个方向），所以阻塞
+	// 期间放宽上限——背包还剩 200 − 110（矿石）− 20（手搓产出/建造扣料）≈ 70 格，
+	// 50 个锭不会把矿石的额度挤掉。实测 seed 001 的两台铜熔炉从 tick 16000 起
+	// `output_blocked`，机甲此后 8000 tick 手搓不出齿轮，整局停在熔炉。
+	blockedIngotCap = 50
 )
+
+// minableOreItemIDs 采矿机可能压到的原矿种类（手动可采的固体矿）。
+// 脚本的「矿机 → 背包 → 熔炉/储物仓」搬运必须按**矿机实际持有的矿种**来做：
+// pt1011 seed 的两台矿机覆盖的是煤矿（coal），写死铁/铜/石三种矿会让它们
+// 永远搬不空——矿机一阻塞就既不挖矿也不回充 minerals（试玩 1015 的修法），
+// 整局矿物收入归零（实测 tick 9000 后 minerals 恒为 10）。
+var minableOreItemIDs = []string{
+	model.ItemIronOre, model.ItemCopperOre, model.ItemStoneOre, model.ItemCoal,
+}
+
+// oreBackpackCapFor 某种原矿在背包里的存量上限。
+func oreBackpackCapFor(item string) int {
+	if item == model.ItemStoneOre {
+		return stoneOreBackpackCap
+	}
+	return oreBackpackCap
+}
 
 // feedResearchMatrices 把背包里的电磁矩阵送进研究站，直到站里攒够研究用量。
 func (op *zeroOpening) feedResearchMatrices(lab *model.Building) {
@@ -1164,11 +1708,21 @@ func (op *zeroOpening) nextMechaAction(exec *model.Unit) (mechaAction, bool) {
 // planForSteps 展开「当前步骤 + 已排队施工」缺的手搓件（含电塔的手搓预留）。
 func (op *zeroOpening) planForSteps(step int) []mechaAction {
 	need := map[string]int{}
-	if step < len(op.steps) {
-		if def, ok := model.BuildingDefinitionByID(op.steps[step].btype); ok {
-			for _, item := range def.BuildCost.Items {
-				need[item.ItemID] += item.Quantity
-			}
+	if step >= len(op.steps) {
+		// 建造计划已经走完：整条开局链都建好了，机甲没有「下一座建筑」要备料。
+		// 此时真人玩家的手是空的，机甲只会继续手动采矿把 minerals 顶到上限
+		// （矿物是建造与研究之外的唯一硬通货，也是矿机阻塞时的兜底收入）。
+		// 脚本若继续按「研究矩阵/兵营」的手搓清单排动作，机甲会一直手搓矩阵、
+		// 把背包顶到 200/200（实测 seed 001 tick 21000 走完计划后，机甲
+		// `mine(iron_ore)` 因背包已满永远 ready 不了，整局僵在 200/200 一动不动）。
+		//
+		// 手动采矿的落点是背包，背包满了同样什么都做不了，所以计划走完后由
+		// `feedIndustry` 的疏通逻辑负责把背包腾空（矿石倒进堆场），机甲只负责挖。
+		return []mechaAction{{ore: model.ItemIronOre, qty: 1}}
+	}
+	if def, ok := model.BuildingDefinitionByID(op.steps[step].btype); ok {
+		for _, item := range def.BuildCost.Items {
+			need[item.ItemID] += item.Quantity
 		}
 	}
 	// 已排队（未开工/施工中）的施工任务也要备料：施工扣料发生在开工那一刻。
@@ -1208,12 +1762,63 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 	for item := range need {
 		items = append(items, item)
 	}
-	sort.Strings(items)
+	// 物品顺序按「手搓链深度」降序：先排最深的中间品（齿轮/电路板/磁线圈 → 锭 →
+	// 原矿），**最后**才排原矿。planFor 对每个物品独立下钻，谁排在前面谁先占
+	// 机甲的下一批动作；把原矿排在前头（旧实现按字母序，"coal" < "copper_ingot"
+	// < "copper_ore" < "iron_ore" < …）会让机甲一直去手动采矿，中间品永远排不到
+	// 下一批动作——实测 seed 001 在 tick 12000 的下一步是铜熔炉（缺 4 电路板 +
+	// 4 铁块 + 2 磁线圈 + 2 石砖），计划里明明有 `craft(circuit_board)`，
+	// 机甲却因为 `mine(copper_ore)` 排在前面而永远 ready 不了，整局停在
+	// minerals=96、背包 154/200（`actions=[]`），第一座制造台再也建不起来。
+	//
+	// 排序键取「该物品在手搓链上能下钻到的最大层数」：越靠下游（越接近成品）
+	// 越先排。同深度按名字排序，保持确定性。
+	items = sortByHandcraftDepth(items, op.handcraftRecipeFor)
 	var actions []mechaAction
 	for _, item := range items {
 		op.planFor(item, need[item], &actions, 0)
 	}
 	return actions
+}
+
+// sortByHandcraftDepth 把物品按「手搓链深度」降序排：越接近成品越先排，
+// 原矿排最后。planFor 是「按物品逐个下钻」的，先排的物品会先占掉机甲的动作
+// 队列，所以顺序直接决定机甲先手搓什么（见 planForSteps 的调用点注释）。
+// 同深度按名字排序，保证确定性。
+func sortByHandcraftDepth(items []string, recipeFor func(string) (model.RecipeDefinition, bool)) []string {
+	depth := map[string]int{}
+	var itemDepth func(item string, level int) int
+	itemDepth = func(item string, level int) int {
+		if level > 5 {
+			return level
+		}
+		if d, ok := depth[item]; ok {
+			return d
+		}
+		recipe, ok := recipeFor(item)
+		if !ok {
+			depth[item] = level
+			return level
+		}
+		best := level
+		for _, in := range recipe.Inputs {
+			if d := itemDepth(in.ItemID, level+1); d > best {
+				best = d
+			}
+		}
+		depth[item] = best
+		return best
+	}
+	for _, item := range items {
+		itemDepth(item, 0)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if depth[items[i]] != depth[items[j]] {
+			return depth[items[i]] > depth[items[j]]
+		}
+		return items[i] < items[j]
+	})
+	return items
 }
 
 // collectBarracksNeeds 兵营里还缺多少「下一个兵」的料（兵营没通电/没建时跳过）。
@@ -1243,6 +1848,241 @@ func (op *zeroOpening) collectBarracksNeeds(need map[string]int) {
 			need[cost.ItemID] += short
 		}
 	}
+}
+
+// feedOreToSmelters 把背包里的矿石喂给「正缺这种料」的熔炉：矿机阻塞期间矿
+// 必须真的进熔炉变成锭，矿物收入才转得起来（试玩 1015 的修法：产出无处可放时
+// 矿机不挖矿也不回充 minerals，玩家看到「产物阻塞」就会把矿送去熔炉）。
+func (op *zeroOpening) feedOreToSmelters(byRecipe map[string][]*model.Building) {
+	for _, item := range minableOreItemIDs {
+		have := op.player.Inventory[item]
+		if have <= 0 {
+			continue
+		}
+		for _, recipeID := range []string{"smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"} {
+			recipe, ok := model.Recipe(recipeID)
+			if !ok {
+				continue
+			}
+			consumes := false
+			for _, in := range recipe.Inputs {
+				if in.ItemID == item {
+					consumes = true
+					break
+				}
+			}
+			if !consumes {
+				continue
+			}
+			for _, b := range byRecipe[recipeID] {
+				if b == nil || b.Storage == nil || !storageHasRoomFor(b.Storage, item) {
+					continue
+				}
+				// 填到「容量 − 产出预留」：喂料是给熔炉续料，不是倒进背包的堆料。
+				room := b.Storage.AvailableInventory()
+				if room <= 0 {
+					continue
+				}
+				n := min(have, room)
+				if n <= 0 {
+					continue
+				}
+				execCommand(op.core, model.CmdTransferItem, op.ws, "p1", model.Command{
+					Target:  model.CommandTarget{Layer: "planet", EntityID: b.ID},
+					Payload: map[string]any{"building_id": b.ID, "item_id": item, "quantity": n},
+				})
+				have -= n
+				if have <= 0 {
+					return
+				}
+			}
+		}
+	}
+}
+
+// drawOreFromDepots 把储物仓里的矿石取回背包（按熔炉的缺口裁剪），
+// 供随后的喂料命令送进熔炉。取量受背包空位限制，不会把背包灌满。
+func (op *zeroOpening) drawOreFromDepots(depots []*model.Building, byRecipe map[string][]*model.Building) {
+	for _, item := range minableOreItemIDs {
+		need := 0
+		for _, recipeID := range []string{"smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"} {
+			if !recipeConsumesItem(recipeID, item) {
+				continue
+			}
+			for _, b := range byRecipe[recipeID] {
+				if b == nil || b.Storage == nil || !storageHasRoomFor(b.Storage, item) {
+					continue
+				}
+				if room := b.Storage.AvailableInventory(); room > 0 {
+					need += room
+				}
+			}
+		}
+		need -= op.player.Inventory[item]
+		if need <= 0 {
+			continue
+		}
+		for _, depot := range depots {
+			if need <= 0 {
+				break
+			}
+			if depot == nil || depot.Storage == nil {
+				continue
+			}
+			have := depot.Storage.OutputQuantity(item)
+			if have <= 0 {
+				continue
+			}
+			free := op.mechaCapacity()*2/3 - op.inventoryUsed()
+			if free <= 0 {
+				return
+			}
+			n := min(have, min(need, free))
+			if n <= 0 {
+				continue
+			}
+			withdrawFromBuilding(op.core, op.ws, depot, item, n)
+			need -= n
+		}
+	}
+}
+
+// oreDemandFor 正缺这种矿的熔炉还能吃下多少（含背包现有的那一份）：
+// 矿机取矿的额度由「熔炉的胃口」决定，而不是背包上限——熔炉在炼锭时矿
+// 一直在被消耗，额度就会一直打开，矿机与矿物收入就不会停。
+func (op *zeroOpening) oreDemandFor(byRecipe map[string][]*model.Building, item string) int {
+	demand := 0
+	for _, recipeID := range []string{"smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"} {
+		if !recipeConsumesItem(recipeID, item) {
+			continue
+		}
+		for _, b := range byRecipe[recipeID] {
+			if b == nil || b.Storage == nil || !storageHasRoomFor(b.Storage, item) {
+				continue
+			}
+			// 熔炉只吃这一种矿，胃口 = 主库存的可用空位（容量 − 产出预留 − 已占用）。
+			if room := b.Storage.AvailableInventory(); room > 0 {
+				demand += room
+			}
+		}
+	}
+	return demand
+}
+
+// depotOreRoom 一座储物仓还能收多少该物品。**储物仓对矿石没有「一半容量」的
+// 限制**：这些堆场（兵营 / 补给站 / 储物仓）存在的意义就是给矿机当出口，矿石
+// 吃得越满、矿机的产出就越走得动。
+//
+// 旧实现只借一半容量堆矿（实测 seed 001 的兵营与补给站各停在 500/1000，共 1000
+// 格），矿机随即阻塞、矿物收入归零（试玩 1015 的修法：落不下就不扣矿脉），
+// 整局卡在「熔炉要 120 矿物、当前 1032」——矿石全卡在矿机与背包里。
+//
+// 但兵营 / 补给站是**两用**建筑：它们既要当堆场，又得吃自己的料（造兵要 2 铁块 +
+// 1 电路板、补给站要子弹），而喂料走的是 `load`，它的主库存上限是
+// `Capacity*5/6`。矿石只要堆到 833/1000 以上，`load` 的 room 就归零，造兵料
+// 一分都进不去（实测 pt1011 的兵营 tick 10713 建成、到 75000 一个步兵都没有，
+// 回执「缺少 2 个铁块」2139 次）。所以这两类堆场给自用料留 `Capacity/5` 格
+// （1000 容量里的 200 格 = 20%），矿石最多堆到 800/1000——对矿机出货毫无影响，
+// 兵营却永远装得下几个铁块。
+//
+// 注意这个「留位」**只作用于这两类两用建筑**：纯堆场（储物仓 / 战场分析基站）
+// 仍然是整仓堆矿。另外它不能改成「需要时才从堆场把矿挤回背包」——那条路（试过
+// `makeRoomInDepot`）会让矿石从堆场流进机甲背包、把背包顶满，手搓链反而更早
+// 停摆（实测 seed 001 的步兵从 tick 11771 退到 73631）。
+func depotOreRoom(depot *model.Building, item string) int {
+	if depot == nil || depot.Storage == nil || !storageHasRoomFor(depot.Storage, item) {
+		return 0
+	}
+	reserve := 0
+	switch depot.Type {
+	case model.BuildingType("barracks"), model.BuildingTypeSupplyStation:
+		reserve = depot.Storage.Capacity / depotSelfSupplyDivisor
+	}
+	room := depot.Storage.Capacity - reserve - depot.Storage.UsedInventory()
+	if room < 0 {
+		room = 0
+	}
+	return room
+}
+
+// depotSelfSupplyDivisor 两用堆场（兵营 / 补给站）给自用料留的空位比例
+// （容量 / 5）。喂料 `load` 的主库存上限是容量 ×5/6，留 1/5 才能保证
+// 「堆场被矿石堆满」时造兵料仍然进得去。
+const depotSelfSupplyDivisor = 5
+
+// dumpOreToDepots 把背包里某种矿倒进储物仓：矿机阻塞时矿石总要有去处，
+// 堆在背包里会顶满 200 格（手搓、建造、取锭全停）。储物仓无配方、reserve=0，
+// 是矿石的天然堆场。
+func (op *zeroOpening) dumpOreToDepots(depots []*model.Building, item string) {
+	op.dumpOreToDepotsFrom(nil, depots, item)
+}
+
+// dumpOreToDepotsFrom 把矿机 m 里超量的某种矿搬进储物仓：先取进背包（取到
+// 背包留 20 格为止），再把背包里超出上限的部分倒进储物仓。搬运必须经背包——
+// 命令系统只有「玩家 ↔ 建筑」两个方向——所以每一轮都「先腾背包、再取矿机」。
+func (op *zeroOpening) dumpOreToDepotsFrom(m *model.Building, depots []*model.Building, item string) {
+	// m 可以为 nil：那是「只把背包里超量的矿倒进储物仓」（relieveBackpack 用），
+	// 没有「从矿机取货」这一步。旧实现在这里对 nil 直接返回，于是背包疏通里的
+	// 倒仓调用全是空操作，背包被矿石顶满后手搓/建造/取锭全停（实测 pt1011 的
+	// 两台矿机各压 48 煤 + 37 铜，背包卡在 200/200，矿物收入从 tick 9000 起归零）。
+	if len(depots) == 0 || (m != nil && m.Storage == nil) {
+		return
+	}
+	cap := oreBackpackCapFor(item)
+	for i := 0; i < 16; i++ {
+		// 1) 背包里超出上限的矿先倒进储物仓，腾出背包。
+		for _, depot := range depots {
+			excess := op.player.Inventory[item] - cap
+			if excess <= 0 {
+				break
+			}
+			if depot == nil || depot.Storage == nil || !storageHasRoomFor(depot.Storage, item) {
+				continue
+			}
+			room := depotOreRoom(depot, item)
+			if room <= 0 {
+				continue
+			}
+			n := min(excess, room)
+			execCommand(op.core, model.CmdTransferItem, op.ws, "p1", model.Command{
+				Target:  model.CommandTarget{Layer: "planet", EntityID: depot.ID},
+				Payload: map[string]any{"building_id": depot.ID, "item_id": item, "quantity": n},
+			})
+		}
+		// 2) 背包还有空位就再取一批：储物仓暂时满了也要取，否则矿机一直阻塞、
+		// 矿物收入停摆（试玩 1015 的修法把「阻塞也扣矿」改成「不落地就不扣矿」
+		// 之后，矿机必须真的被搬空）。背包留 20 格给手搓产出与建造扣料，且
+		// **全部原矿**不超过 oreBackpackTotalCap——矿石把背包顶满会让手搓批次
+		// 卡在 inventory_full（见该常量的注释）。
+		if m == nil {
+			return
+		}
+		free := op.mechaCapacity() - 20 - op.inventoryUsed()
+		if free > 0 {
+			free = min(free, oreBackpackTotalCap-op.oreInBackpack())
+		}
+		if free <= 0 {
+			return
+		}
+		take := min(m.Storage.ItemQuantity(item), free)
+		if take <= 0 {
+			return
+		}
+		withdrawFromBuilding(op.core, op.ws, m, item, take)
+	}
+}
+
+// withdrawFromBuilding 从建筑取出 item 到机甲背包（测试脚本的搬运代劳）。
+func withdrawFromBuilding(core *GameCore, ws *model.WorldState, b *model.Building, item string, qty int) {
+	if b == nil || qty <= 0 {
+		return
+	}
+	execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
+		Target: model.CommandTarget{Layer: "planet", EntityID: b.ID},
+		Payload: map[string]any{
+			"building_id": b.ID, "item_id": item, "quantity": qty, "direction": "to_player",
+		},
+	})
 }
 
 // queuedConstructionItems 已排队（pending/active）施工任务还需要的手搓件
@@ -1436,6 +2276,15 @@ func runFromZeroMatch(t *testing.T, seed string) {
 		sort.Strings(keys)
 		t.Logf("seed=%s 建造失败回执：%s", seed, strings.Join(keys, " | "))
 	}
+	if op.soldierFails > 0 {
+		keys := make([]string, 0, len(op.soldierFailReasons))
+		for k := range op.soldierFailReasons {
+			keys = append(keys, fmt.Sprintf("%s ×%d", k, op.soldierFailReasons[k]))
+		}
+		sort.Strings(keys)
+		t.Logf("seed=%s 兵营排产被拒 %d 次（原因：%s）——兵营缺料是常态，不是死锁",
+			seed, op.soldierFails, strings.Join(keys, " | "))
+	}
 
 	// 1) 开局链（无死锁）：空背包必须能靠手搓链走到风机/矿机/熔炉/制造台/兵营/研究站。
 	bounds := []struct {
@@ -1613,6 +2462,15 @@ func (op *zeroOpening) inventoryUsed() int {
 		}
 	}
 	return used
+}
+
+// oreInBackpack 背包里全部原矿（手动可采的固体矿）的件数。
+func (op *zeroOpening) oreInBackpack() int {
+	total := 0
+	for _, item := range minableOreItemIDs {
+		total += op.player.Inventory[item]
+	}
+	return total
 }
 
 // mechaCapacity 机甲背包容量（默认 200，科技可提升）。

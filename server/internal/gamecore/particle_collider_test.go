@@ -133,18 +133,25 @@ func TestParticleColliderFullOutputIsAtomicAndSurvivesSave(t *testing.T) {
 	supplyProductionFixture(t, ws, b)
 	b.Storage.EnsureInventory()[model.ItemCriticalPhoton] = 4
 	settleProduction(ws)
-	// Leave room for the main output alone, not its hydrogen byproduct. The
-	// whole batch must remain pending; repeated attempts cannot duplicate it.
-	b.Storage.EnsureInventory()[model.ItemStoneOre] = b.Storage.Capacity - 2
-	b.Storage.EnsureInputBuffer()[model.ItemStoneOre] = b.Storage.InputBufferCapacity() - 2
+	// Leave room for neither product: 主输出的落点是输出缓冲 → 产出预留段，
+	// 把两处都占满（预留段用真正的成品占住，避免被 collectRecipeInputs 当成原料）。
+	// The whole batch must remain pending; repeated attempts cannot duplicate it.
+	fillProductLandingSpots(b.Storage, model.ItemAntimatter)
 	for i := 0; i < 125; i++ {
 		settleProduction(ws)
 	}
 	if len(b.Production.PendingOutputs) != 1 || len(b.Production.PendingByproducts) != 1 || b.Production.RemainingTicks != 0 {
 		t.Fatalf("blocked batch lost: %+v", b.Production)
 	}
-	if availableStorageItem(b.Storage, model.ItemCriticalPhoton) != 2 || b.ExportableItemQuantity(model.ItemAntimatter) != 0 || b.ExportableItemQuantity(model.ItemHydrogen) != 0 {
-		t.Fatalf("blocked output was partially committed or new inputs consumed: %+v", b.Storage)
+	// 不变量：没有凭空多出成品——输出缓冲/预留段里只有测试自己塞进去的那批。
+	if got := b.Storage.UsedOutputBuffer(); got != b.Storage.OutputBufferCapacity() {
+		t.Fatalf("blocked batch leaked into the output buffer: %d/%d %+v", got, b.Storage.OutputBufferCapacity(), b.Storage)
+	}
+	if got := b.Storage.Inventory[model.ItemAntimatter]; got != b.Storage.Reserve {
+		t.Fatalf("blocked batch leaked into the reserve: %d, reserve %d %+v", got, b.Storage.Reserve, b.Storage)
+	}
+	if availableStorageItem(b.Storage, model.ItemCriticalPhoton) != 2 {
+		t.Fatalf("blocked batch consumed future inputs: %+v", b.Storage)
 	}
 	save, err := core.ExportSaveFile("collider-blocked")
 	if err != nil {
@@ -166,8 +173,7 @@ func TestParticleColliderFullOutputIsAtomicAndSurvivesSave(t *testing.T) {
 	if resumed == nil || !reflect.DeepEqual(resumed.Production, b.Production) || !reflect.DeepEqual(resumed.Storage, b.Storage) {
 		t.Fatal("save/load changed pending batch or storage")
 	}
-	delete(resumed.Storage.Inventory, model.ItemStoneOre)
-	delete(resumed.Storage.InputBuffer, model.ItemStoneOre)
+	drainProductLandingSpots(resumed.Storage, model.ItemAntimatter)
 	resumed.Runtime.State = model.BuildingWorkRunning
 	supplyProductionFixture(t, restored.World(), resumed)
 	settleProduction(restored.World())

@@ -58,7 +58,7 @@ func TestEnergyExchangerChargeModeStallsWhenOutputFull(t *testing.T) {
 	}
 	// Fill the output buffer completely with full accumulators.
 	for {
-		accepted, _, err := exchanger.Storage.ReceiveOutput(model.ItemAccumulatorFull, 1)
+		accepted, _, err := exchanger.Storage.StoreProduct(model.ItemAccumulatorFull, 1)
 		if err != nil || accepted != 1 {
 			break
 		}
