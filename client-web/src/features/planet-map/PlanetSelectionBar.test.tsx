@@ -14,6 +14,8 @@ const { mockClient } = vi.hoisted(() => ({
     cmdMineResource: vi.fn().mockResolvedValue({ accepted: false, request_id: 'r-mine' }),
     cmdUpgrade: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-up' }),
     cmdDemolish: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-de' }),
+    cmdAutoHaul: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-auto' }),
+    cmdUnitOrder: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-order' }),
     fetchEventSnapshot: vi.fn().mockResolvedValue({ events: [] }),
   },
 }));
@@ -220,6 +222,89 @@ describe('PlanetSelectionBar', () => {
 
     await user.click(screen.getByRole('button', { name: '详情' }));
     expect(onShowDetail).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('运输机器人选中条（§2.1 全局自动模式）', () => {
+  beforeEach(() => {
+    resetPlanetViewStore();
+    vi.clearAllMocks();
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+  });
+
+  function autoPlanet(mode: 'auto' | 'route' | 'idle' = 'auto', task = true): PlanetRenderView {
+    const planet = makePlanet();
+    planet.units!['robot-1'] = {
+      id: 'robot-1',
+      type: 'transport_robot',
+      owner_id: 'p1',
+      position: { x: 3, y: 3, z: 0 },
+      hp: 60,
+      max_hp: 60,
+      attack: 0,
+      defense: 0,
+      attack_range: 0,
+      move_range: 0,
+      vision_range: 4,
+      haul: {
+        mode,
+        from_building_id: task ? 'b-1' : '',
+        to_building_id: task ? 'b-1' : '',
+        item_id: 'iron_ore',
+        phase: mode === 'idle' ? '' : task ? 'to_source' : 'idle',
+        delivered_total: 0,
+      },
+    } as never;
+    usePlanetViewStore.getState().setSelected({ kind: 'unit', id: 'robot-1', position: { x: 3, y: 3, z: 0 } });
+    usePlanetViewStore.getState().setSelectedUnits(['robot-1']);
+    return planet;
+  }
+
+  it('auto 模式下「自动搬运」高亮，点「设置运输」进入 haul 模式，点「停止」进入待命', async () => {
+    const user = userEvent.setup();
+    render(<PlanetSelectionBar catalog={catalog} planet={autoPlanet('auto', false)} />);
+
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('自动待命');
+    const autoButton = screen.getByRole('button', { name: '自动搬运' });
+    expect(autoButton.className).toContain('planet-selection-bar__active');
+
+    await user.click(screen.getByRole('button', { name: '设置运输' }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'haul' });
+
+    await user.click(screen.getByRole('button', { name: '停止' }));
+    expect(mockClient.cmdUnitOrder).toHaveBeenCalledWith('robot-1', 'stop');
+
+    await user.click(autoButton);
+    expect(mockClient.cmdAutoHaul).toHaveBeenCalledWith('robot-1');
+  });
+
+  it('自动模式有任务时显示「自动：送 铁矿 → 特斯拉塔」', () => {
+    render(<PlanetSelectionBar catalog={catalog} planet={autoPlanet('auto', true)} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    // b-1 在 catalog 里是特斯拉塔（测试目录只登记了这一条建筑）。
+    expect(bar).toHaveTextContent('自动：送 铁矿 → 特斯拉塔');
+  });
+
+  it('idle 模式显示已停止且「自动搬运」不高亮', () => {
+    render(<PlanetSelectionBar catalog={catalog} planet={autoPlanet('idle', false)} />);
+    expect(screen.getByTestId('planet-selection-bar')).toHaveTextContent('已停止（点「自动搬运」恢复）');
+    expect(screen.getByRole('button', { name: '自动搬运' }).className).not.toContain('planet-selection-bar__active');
+  });
+
+  it('多选机器人：自动搬运 / 设置运输 / 停止三个按钮，自动搬运一次带全部 entity_ids', async () => {
+    const user = userEvent.setup();
+    const planet = autoPlanet('auto', false);
+    planet.units!['robot-2'] = { ...planet.units!['robot-1'], id: 'robot-2' } as never;
+    usePlanetViewStore.getState().setSelectedUnits(['robot-1', 'robot-2']);
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+
+    await user.click(screen.getByRole('button', { name: '自动搬运 ✓' }));
+    expect(mockClient.cmdAutoHaul).toHaveBeenCalledWith(['robot-1', 'robot-2']);
   });
 });
 

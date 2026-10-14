@@ -340,20 +340,38 @@ export type UnitStance =
   | 'retreat';
 
 /**
- * 运输机器人往返路线（服务端 unit_order order=haul 的运行时状态）。
- * 无路线时不带 haul 字段。
+ * 运输机器人模式（§2.1）：auto 全局自动（出厂默认）、route 固定路线、idle 停止待命。
+ */
+export type TransportHaulMode = 'auto' | 'route' | 'idle';
+
+/**
+ * 运输机器人往返路线（服务端 unit_order order=haul/auto_haul/stop 的运行时状态）。
+ * 无任务时不带 from/to 字段，phase 为 idle。
  */
 export type TransportHaulPhase =
-  | 'to_source' | 'loading' | 'to_target' | 'unloading' | 'waiting_source' | 'waiting_target';
+  | 'to_source' | 'loading' | 'to_target' | 'unloading' | 'waiting_source' | 'waiting_target' | 'idle';
+
+/** 自动模式的一次在途认领（§2.1）；route/idle 模式下为空。 */
+export interface TransportHaulClaim {
+  supply_building_id?: string;
+  demand_building_id: string;
+  item_id: string;
+  quantity: number;
+}
 
 export interface TransportHaul {
+  mode: TransportHaulMode;
+  /** 当前任务的取货建筑；自动模式下由派单写入，车上带货改派时为空。 */
   from_building_id: string;
+  /** 当前任务的送货建筑。 */
   to_building_id: string;
-  /** 玩家指定的物品；未指定时服务端取终点当前能接收的第一种。 */
+  /** 玩家指定的物品（route 模式）；自动模式下是认领的物品。 */
   item_id?: string;
   phase: TransportHaulPhase;
   cargo?: ItemAmount;
   delivered_total: number;
+  /** 自动模式的在途认领（route/idle 模式不带）。 */
+  claim?: TransportHaulClaim;
 }
 
 export interface Unit {
@@ -1552,6 +1570,8 @@ export interface BuildingCatalogEntry {
   buildable: boolean;
   default_recipe_id?: string;
   requires_resource_node?: boolean;
+  /** 采集建筑占地外再覆盖几圈（服务端 CollectorCoverageCells 同口径）；非采集建筑无此字段。 */
+  coverage_radius?: number;
   can_produce_units?: boolean;
   unlock_tech?: string[];
   combat_range?: number;

@@ -253,7 +253,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `set_recipe`：recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.
 - `switch_active_planet`：F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。
 - `task_force_deploy`：at least one of system_id, planet_id, position, frontline_id, ground_order is expected at runtime
-- `unit_order`：R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。 haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
+- `unit_order`：R5 指令集：attack_move/patrol/retreat 需 target.position；guard/follow 需 payload.target_entity_id；stop 用 order=stop。 haul（运输机器人专用）：需 payload.from_building_id + payload.to_building_id，可选 payload.item_id 锁定单一物品；两端须为己方同行星建筑，起点能取货、终点能收货，进入固定路线模式。 auto_haul（运输机器人专用，出厂默认模式）：无参数，切回全局自动搬运——每 10 tick 按本行星缺料建筑打分派单，无需求时原地待命。stop 进入待命（不清空自动模式的出厂默认，但会停止搬运）。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 <!-- END GENERATED COMMANDS -->
 
 ## 5. 命令语义（表格之外的规则）

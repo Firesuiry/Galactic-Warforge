@@ -16,6 +16,7 @@ const { mockClient, submitMock } = vi.hoisted(() => ({
     cmdAttack: vi.fn(),
     cmdUnitOrder: vi.fn(),
     cmdHaul: vi.fn(),
+    cmdAutoHaul: vi.fn(),
     cmdSquadOrder: vi.fn(),
     cmdTaskForceDeploy: vi.fn(),
     fetchEventSnapshot: vi.fn(),

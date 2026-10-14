@@ -55,7 +55,7 @@ import {
 import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
 import { beltBufferSummary } from "@/features/planet-map/planet-logistics-flow";
 import { getItemColorValue } from "@/features/planet-map/item-colors";
-import { describeHaul, isTransportRobot, transportHaulRoute } from "@/features/planet-map/transport-haul";
+import { HAUL_MODE_LABELS, describeHaul, isTransportRobot, transportHaulMode, transportHaulTask } from "@/features/planet-map/transport-haul";
 import {
   PLANET_COMMAND_RECOVERY_EVENT_TYPES,
   usePlanetCommandStore,
@@ -1348,25 +1348,34 @@ export function PlanetEntityPanel({
               <dt>移动状态</dt>
               <dd>{unitIsMoving(unit) ? "移动中" : unit.stance === 'hold' ? "坚守" : "待命"}</dd>
             </div>
-            {/* 运输机器人（§4）：路线两端、阶段、载货与已送达累计。 */}
+            {/* 运输机器人（§2.1）：模式、当前任务两端、阶段、载货与已送达累计。 */}
             {isTransportRobot(unit) ? (
               <>
                 <div>
-                  <dt>运输阶段</dt>
-                  <dd>{describeHaul(unit, (itemId) => getItemDisplayName(catalog, itemId)) ?? '未设路线（选中条「设置运输」）'}</dd>
+                  <dt>运输模式</dt>
+                  <dd>{HAUL_MODE_LABELS[transportHaulMode(unit) ?? 'auto']}（{describeHaul(
+                    unit,
+                    (itemId) => getItemDisplayName(catalog, itemId),
+                    (buildingId) => {
+                      const building = planet.buildings?.[buildingId];
+                      return building ? getBuildingDisplayName(catalog, building.type) : undefined;
+                    },
+                  ) ?? '自动待命'}）</dd>
                 </div>
                 <div>
                   <dt>起点 / 终点</dt>
                   <dd>
                     {(() => {
-                      const route = transportHaulRoute(unit);
-                      if (!route) return '-';
-                      const from = planet.buildings?.[route.from_building_id];
-                      const to = planet.buildings?.[route.to_building_id];
+                      const task = transportHaulTask(unit);
+                      if (!task) return '-';
+                      const from = planet.buildings?.[task.from_building_id];
+                      const to = planet.buildings?.[task.to_building_id];
                       const label = (buildingId: string, building: typeof from) => building
                         ? `${getBuildingDisplayName(catalog, building.type)} (${buildingId})`
                         : `${buildingId}（已不存在）`;
-                      return `${label(route.from_building_id, from)} → ${label(route.to_building_id, to)}`;
+                      // 自动模式车上带货改派时没有取货端，显示「车上」。
+                      const fromLabel = task.from_building_id ? label(task.from_building_id, from) : '车上（改派）';
+                      return `${fromLabel} → ${label(task.to_building_id, to)}`;
                     })()}
                   </dd>
                 </div>

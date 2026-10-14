@@ -11,7 +11,7 @@ import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
-import { tileNormal, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -30,7 +30,7 @@ import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCata
 import { getItemColorValue } from './item-colors';
 import { isOwnStalledBuilding } from './power-status';
 import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
-import { transportCargo, transportHaulRoute, haulPhaseLabel } from './transport-haul';
+import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from './transport-haul';
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
@@ -483,12 +483,14 @@ export class PlanetThreeScene {
         move(`unit:${unit.id}`, unit.type, faction, unit.position, 'units', .72);
         // 血条（C2）：头顶 billboard，受击比例实时更新，按阵营着色；中立黑雾头顶挂「中立」标签
         this.syncUnitBar(this.moving.get(`unit:${unit.id}`), unit, faction);
-        // 运输机器人车顶货物方块：有货才显示，颜色取物品配色表。
+        // 运输机器人车顶货物方块：载货期间（装货/运送/卸货）都显示，颜色取物品配色表。
         const robot = this.moving.get(`unit:${unit.id}`)?.group.getObjectByName('transport-robot-cargo');
         if (robot instanceof THREE.Mesh) {
           const cargo = transportCargo(unit);
           robot.visible = Boolean(cargo);
           if (cargo) {
+            // 货箱材质是这台机器人独有的（IndustrialModels.unit 里为运输机器人单独克隆），
+            // 直接写色不会波及底盘/全场铜件——共享材质池被写色过一次，全场都会跟着变。
             const material = robot.material as THREE.MeshStandardMaterial;
             material.color.set(getItemColorValue(cargo.item_id, getItemCatalogEntry(this.data.catalog, cargo.item_id)?.color));
           }
@@ -812,8 +814,8 @@ export class PlanetThreeScene {
   /** 地块描边：贴地色带（WebGL 线宽恒 1px，近景几乎看不见）。 */
   private tileOutline(tile: TilePoint, color: string) {
     const size = this.data!.planet.surface.face_size;
-    const face = surfaceFace(tile, size);
-    const loop = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => tileNormal({ x: tile.x + x, y: tile.y + y }, size, face));
+    // 四角 = 相邻 cell 中心方向（tileQuad）：框就是 1 cell，不多不少。
+    const loop = tileQuad(tile, size);
     const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + this.tileScale() * 0.06, this.tileScale() * 0.045), this.markMaterial(color, 0.95));
     mesh.renderOrder = 12;
     return mesh;
@@ -937,9 +939,10 @@ export class PlanetThreeScene {
   }
 
   /**
-   * 运输机器人路线虚线：选中（单选或多选集合）的机器人若带 haul 路线，
-   * 画起点建筑 → 终点建筑的贴地虚线（同一条路线只画一次，颜色取机器人阵营色）。
-   * 签名只含端点与阵营，数据刷新不重建几何。
+   * 运输机器人任务虚线：选中（单选或多选集合）的机器人若有当前任务（自动模式的
+   * 派单任务或固定路线），画起点建筑 → 终点建筑的贴地虚线（同一条任务只画一次，
+   * 颜色取机器人阵营色），并在机器人旁挂一颗中文胶囊（自动模式：「自动：送 铁矿 → 电弧熔炉」）。
+   * 签名只含端点、阵营与文案，数据刷新不重建几何。
    */
   private updateHaulRoutes() {
     const planet = this.data?.planet;
@@ -950,56 +953,70 @@ export class PlanetThreeScene {
     }
     const selectedIds = new Set<string>(interaction.selectedUnits ?? []);
     if (interaction.selected?.kind === 'unit') selectedIds.add(interaction.selected.id);
-    const routes: { from: Position; to: Position; color: string; phase: string; unitId: string }[] = [];
+    const routes: { from: Position | null; to: Position; color: string; label: string; unitId: string }[] = [];
     const seen = new Set<string>();
     for (const id of selectedIds) {
       const unit = planet.units?.[id];
-      const haul = transportHaulRoute(unit);
-      if (!haul || !unit) continue;
-      const key = `${haul.from_building_id}->${haul.to_building_id}`;
+      const task = transportHaulTask(unit);
+      if (!task || !unit) continue;
+      const key = `${task.from_building_id}->${task.to_building_id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const from = planet.buildings?.[haul.from_building_id];
-      const to = planet.buildings?.[haul.to_building_id];
-      if (!from || !to) continue;
+      const to = planet.buildings?.[task.to_building_id];
+      if (!to) continue;
+      // 自动模式车上带货改派时没有取货端：只画终点与胶囊。
+      const from = task.from_building_id ? planet.buildings?.[task.from_building_id] : undefined;
+      if (task.from_building_id && !from) continue;
+      const mode = transportHaulMode(unit);
+      const label = mode === 'auto'
+        ? describeAutoHaul(unit, (itemId) => this.data?.catalog?.items?.find((item) => item.id === itemId)?.name ?? itemId,
+            (buildingId) => {
+              const building = planet.buildings?.[buildingId];
+              return building ? this.data?.catalog?.buildings?.find((entry) => entry.id === building.type)?.name ?? building.type : undefined;
+            })
+        : haulPhaseLabel(task.phase);
       routes.push({
-        from: from.position,
+        from: from ? from.position : null,
         to: to.position,
         color: `#${FACTION_COLOR[unitFaction(unit, this.data?.playerId, this.data?.darkFogHostile ?? false)].toString(16).padStart(6, '0')}`,
-        phase: haul.phase,
+        label,
         unitId: id,
       });
     }
-    const signature = JSON.stringify(routes.map(route => [route.from.x, route.from.y, route.to.x, route.to.y, route.color, route.phase]));
+    const signature = JSON.stringify(routes.map(route => [route.from?.x ?? -1, route.from?.y ?? -1, route.to.x, route.to.y, route.color, route.label]));
     if (signature === this.haulRouteSignature) return;
     this.haulRouteSignature = signature;
     this.clearMarks(this.haulRoutes);
     this.haulLabels = [];
     const size = this.tileScale();
     for (const route of routes) {
-      const a = this.normal(route.from.x, route.from.y), b = this.normal(route.to.x, route.to.y);
-      // 贴地弧线：沿球面插值并抬 0.12 格，避免埋进地形/建筑底座。
-      const points = Array.from({ length: 33 }, (_, i) => a.clone().lerp(b, i / 32).normalize().multiplyScalar(RADIUS + size * .12));
-      // 虚线：LineDashedMaterial 需要 computeLineDistances，段长按 cell 尺寸给。
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({
-        color: route.color, dashSize: size * .55, gapSize: size * .35, transparent: true, opacity: .95, depthWrite: false, toneMapped: false,
-      }));
-      line.computeLineDistances();
-      line.renderOrder = 18;
-      this.haulRoutes.add(line);
-      for (const endpoint of [route.from, route.to]) {
+      const b = this.normal(route.to.x, route.to.y);
+      if (route.from) {
+        const a = this.normal(route.from.x, route.from.y);
+        // 贴地弧线：沿球面插值并抬 0.12 格，避免埋进地形/建筑底座。
+        const points = Array.from({ length: 33 }, (_, i) => a.clone().lerp(b, i / 32).normalize().multiplyScalar(RADIUS + size * .12));
+        // 虚线：LineDashedMaterial 需要 computeLineDistances，段长按 cell 尺寸给。
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, new THREE.LineDashedMaterial({
+          color: route.color, dashSize: size * .55, gapSize: size * .35, transparent: true, opacity: .95, depthWrite: false, toneMapped: false,
+        }));
+        line.computeLineDistances();
+        line.renderOrder = 18;
+        this.haulRoutes.add(line);
+      }
+      // 端点建筑占地框：有取货端就框两端，改派任务只框终点。
+      const endpoints = route.from ? [route.from, route.to] : [route.to];
+      for (const endpoint of endpoints) {
         this.haulRoutes.add(this.tileOutline({ x: Math.round(endpoint.x), y: Math.round(endpoint.y) }, route.color));
       }
-      // 阶段中文（前往取货/装货中/…）：机器人旁的小号胶囊标签（字号与单位名牌同量级，
-      // 不再是一块压住半屏的大牌子）；位置每帧跟着机器人走（见 updateHaulLabels）。
-      const label = haulPhaseLabel(route.phase);
-      if (label) {
-        const sprite = new THREE.Sprite(this.haulLabelMaterial(label));
+      // 任务中文（自动模式「自动：送 铁矿 → 电弧熔炉」/ 固定路线阶段）：机器人旁的小号
+      // 胶囊标签（字号与单位名牌同量级）；位置每帧跟着机器人走（见 updateHaulLabels）。
+      if (route.label) {
+        const sprite = new THREE.Sprite(this.haulLabelMaterial(route.label));
         sprite.renderOrder = 24;
         // 胶囊锚点在左端：贴着机器人向右展开，像单位名牌一样不盖住机器人本体。
         sprite.center.set(0, .5);
-        sprite.scale.set(size * .64, size * .16, 1);
+        sprite.scale.set(size * Math.max(.64, route.label.length * .19), size * .16, 1);
         this.haulRoutes.add(sprite);
         this.haulLabels.push({ sprite, unitId: route.unitId });
       }

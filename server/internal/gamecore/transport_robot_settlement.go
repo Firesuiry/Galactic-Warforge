@@ -12,7 +12,7 @@ import (
 // 与配送器（distributor）的区别：路线由玩家用 unit_order order=haul 显式指定，
 // 不消耗能量、不占配送器槽位，运力必须远小于传送带（一趟 4 件、往返几十 tick）。
 //
-// 规则（设计文档 §2）：
+// 规则（设计文档 §2 固定路线 / §2.1 全局自动）：
 //   - 起点/终点都是己方同行星建筑；起点要能取货，终点要能收货；
 //   - 走到建筑**占地外圈的相邻空 cell** 才能装卸（细分网格后建筑是多格占地）；
 //   - 装货走 ExportableItemQuantity（输出缓存 + 主库存，反馈料除外）；
@@ -20,6 +20,10 @@ import (
 //     研究站只收矩阵、物流站需先配槽位）——本文件不复制那套判定，只复用；
 //   - 起点无货在起点等（waiting_source），终点收不下在终点等（waiting_target）；
 //   - 任一端建筑消失：清空路线、停下、发一条中文事件。
+//
+// 两种模式共用本文件的状态机，只有「任务从哪来 / 跑完一趟去哪」不同：
+// route 模式的任务由玩家写死、跑完掉头回起点；auto 模式的任务由 auto_haul.go
+// 每 10 tick 派单，跑完（或无处可送）释放认领、回到空闲等下一次派单。
 //
 // 移动本身由 settleUnitMovement 负责（机器人就是普通世界单位，按路径逐 tick
 // 前进）；本文件只做「到没到外圈」的判定与装卸。
@@ -72,17 +76,23 @@ func countTransportRobots(ws *model.WorldState, playerID string) (alive, queued 
 	return alive, queued
 }
 
-// settleTransportRobots 推进所有运输机器人的装卸与路线循环。
+// settleTransportRobots 推进所有运输机器人的装卸与路线循环（含自动模式派单）。
 func settleTransportRobots(ws *model.WorldState) []*model.GameEvent {
 	if ws == nil || len(ws.Units) == 0 {
 		return nil
 	}
 	var events []*model.GameEvent
+	robots := make([]*model.Unit, 0, len(ws.Units))
 	for _, id := range haulIDs(ws) {
 		robot := ws.Units[id]
 		if robot == nil || robot.HP <= 0 || robot.Haul == nil {
 			continue
 		}
+		robots = append(robots, robot)
+	}
+	// 自动模式：先按当前认领给空闲机器人派单，再逐台推进行程。
+	events = append(events, settleAutoHaul(ws, robots)...)
+	for _, robot := range robots {
 		events = append(events, settleTransportRobot(ws, robot)...)
 	}
 	return events
@@ -91,13 +101,18 @@ func settleTransportRobots(ws *model.WorldState) []*model.GameEvent {
 // settleTransportRobot 结算一台运输机器人的一 tick。
 func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.GameEvent {
 	haul := robot.Haul
-	if haul.FromBuildingID == "" || haul.ToBuildingID == "" {
+	// 待命（stop / 自动模式暂无需求）：没有任务，不移动、不装卸。
+	if haul.Mode == model.HaulModeIdle || haul.FromBuildingID == "" && haul.ToBuildingID == "" {
+		return nil
+	}
+	// 终点是任务成立的必要条件；取货端可以为空（自动模式下货已在车上改派）。
+	if haul.ToBuildingID == "" {
 		return nil
 	}
 	source := ws.Buildings[haul.FromBuildingID]
 	target := ws.Buildings[haul.ToBuildingID]
-	if reason := haulEndpointLost(source, target, robot.OwnerID); reason != "" {
-		return abortHaul(robot, reason)
+	if reason := haulEndpointLost(source, haul.FromBuildingID, target, haul.ToBuildingID, robot.OwnerID); reason != "" {
+		return abortHaul(ws, robot, reason)
 	}
 
 	switch haul.Phase {
@@ -127,6 +142,19 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		return haulResumeFromWait(ws, robot, source, model.HaulPhaseToSource, model.HaulPhaseLoading)
 	case model.HaulPhaseWaitingTarget:
 		return haulResumeFromWait(ws, robot, target, model.HaulPhaseToTarget, model.HaulPhaseUnloading)
+	case model.HaulPhaseIdle, "":
+		// 自动模式空闲：等下一次派单（派单在 settleAutoHaul 里）。
+		// route 模式不该出现在这里（路线刚下达时下面的 default 分支会补阶段）。
+		if haul.Mode == model.HaulModeAuto {
+			haul.Phase = model.HaulPhaseIdle
+			return nil
+		}
+		if haul.CargoQuantity() > 0 {
+			haul.Phase = model.HaulPhaseToTarget
+		} else {
+			haul.Phase = model.HaulPhaseToSource
+		}
+		return nil
 	default:
 		// 路线刚下达（或阶段丢失）：车上还有货就先去终点，否则从起点开始。
 		if haul.CargoQuantity() > 0 {
@@ -138,34 +166,58 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 	}
 }
 
-// haulEndpointLost 检查路线两端是否仍然可用，返回中文原因（空串表示正常）。
-func haulEndpointLost(source, target *model.Building, ownerID string) string {
-	if source == nil {
+// haulEndpointLost 检查任务两端是否仍然可用，返回中文原因（空串表示正常）。
+// sourceID 为空（自动模式下货已在车上、没有取货端）时跳过起点检查。
+func haulEndpointLost(source *model.Building, sourceID string, target *model.Building, targetID, ownerID string) string {
+	if sourceID != "" && source == nil {
 		return "运输起点建筑已不存在（拆除或被摧毁），运输路线已清空"
+	}
+	if targetID == "" {
+		return "运输终点建筑已不存在（拆除或被摧毁），运输路线已清空"
 	}
 	if target == nil {
 		return "运输终点建筑已不存在（拆除或被摧毁），运输路线已清空"
 	}
-	if source.OwnerID != ownerID || target.OwnerID != ownerID {
+	if sourceID != "" && source.OwnerID != ownerID {
 		return "运输路线的起点或终点已不属于本玩家，运输路线已清空"
 	}
-	if source.HP <= 0 || target.HP <= 0 {
+	if target.OwnerID != ownerID {
+		return "运输路线的起点或终点已不属于本玩家，运输路线已清空"
+	}
+	if sourceID != "" && source.HP <= 0 {
 		return "运输路线的起点或终点已被摧毁，运输路线已清空"
 	}
-	if source.ID == target.ID {
+	if target.HP <= 0 {
+		return "运输路线的起点或终点已被摧毁，运输路线已清空"
+	}
+	if sourceID != "" && sourceID == targetID {
 		return "运输起点与终点是同一座建筑，运输路线已清空"
 	}
 	return ""
 }
 
 // abortHaul 端点消失：清空路线、停下机器人并发一条中文事件。
-// 车上的货留在车上（不凭空消失），玩家重新指定路线后继续用。
-func abortHaul(robot *model.Unit, reason string) []*model.GameEvent {
-	robot.Haul.ClearHaul()
+//
+// 车上的货留在车上（不凭空消失）：route 模式下玩家重新指定路线后继续用；
+// auto 模式下立刻按「带在身上的货去哪」重新派单（另一台缺同种原料的建筑，
+// 否则最近的仓储，都没有就带着货待命，见 §2.1）。
+func abortHaul(ws *model.WorldState, robot *model.Unit, reason string) []*model.GameEvent {
+	haul := robot.Haul
+	cargoItem := ""
+	if haul != nil {
+		cargoItem = haul.Cargo.ItemID
+	}
+	if haul != nil && haul.Mode == model.HaulModeAuto {
+		// 释放认领：本趟的供给/需求都不再算在途量，其它机器人可以接手。
+		haul.ClearRoute()
+		haul.Phase = model.HaulPhaseIdle
+	} else if haul != nil {
+		haul.ClearHaul()
+	}
 	robot.ClearMovement()
 	robot.ClearEngagement()
 	robot.Stance = model.UnitStanceIdle
-	return []*model.GameEvent{{
+	events := []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: robot.OwnerID,
 		Payload: map[string]any{
@@ -176,6 +228,17 @@ func abortHaul(robot *model.Unit, reason string) []*model.GameEvent {
 			"message":     fmt.Sprintf("%s：%s", unitDisplayName(robot), reason),
 		},
 	}}
+	// 自动模式：带着的货改送别处（车上的货不能凭空消失）。
+	if haul != nil && haul.Mode == model.HaulModeAuto && cargoItem != "" && ws != nil {
+		if claim := haulDeliveryFallback(ws, robot, cargoItem); claim != nil {
+			haul.Claim = claim
+			haul.ToBuildingID = claim.DemandBuildingID
+			haul.ItemID = claim.ItemID
+			haul.Phase = model.HaulPhaseToTarget
+			events = append(events, haulTaskEvent(robot, "auto_haul_deliver"))
+		}
+	}
+	return events
 }
 
 // haulTravelTo 行进阶段：到达建筑占地外圈即切到装卸阶段，否则按需重规划路径。
@@ -284,17 +347,39 @@ func haulLoadAtSource(ws *model.WorldState, robot *model.Unit) []*model.GameEven
 	}
 	available := haulPickupQuantity(source, itemID)
 	if available <= 0 {
+		// 自动模式：供给端已经取空（或被别的机器人抢空）→ 释放认领、等下一次派单。
+		if haul.Mode == model.HaulModeAuto {
+			haulClearTask(robot)
+			return nil
+		}
 		haul.Phase = model.HaulPhaseWaitingSource
 		return nil
 	}
 	taken, _, err := source.Storage.Provide(itemID, min(capacity, available))
 	if err != nil || taken <= 0 {
+		if haul.Mode == model.HaulModeAuto {
+			haulClearTask(robot)
+			return nil
+		}
 		haul.Phase = model.HaulPhaseWaitingSource
 		return nil
 	}
 	haul.Load(itemID, taken)
+	// 自动模式：按实际取到量修正认领（取不到 4 件时不能继续占着供给的余量）。
+	haulTrimClaim(haul, taken)
 	haul.Phase = model.HaulPhaseToTarget
 	return []*model.GameEvent{haulCargoEvent(robot, taken)}
+}
+
+// haulTrimClaim 按实际取到的件数修正自动模式的认领量（§2.1「按实际取到量修正认领」）。
+func haulTrimClaim(haul *model.UnitHaulState, taken int) {
+	if haul == nil || haul.Claim == nil || haul.Mode != model.HaulModeAuto {
+		return
+	}
+	if taken <= 0 || taken >= haul.Claim.Quantity {
+		return
+	}
+	haul.Claim.Quantity = taken
 }
 
 // haulUnloadAtTarget 在终点卸货：接收规则与 transfer_item to_building 完全一致。
@@ -305,7 +390,7 @@ func haulUnloadAtTarget(ws *model.WorldState, robot *model.Unit) []*model.GameEv
 		return nil
 	}
 	if haul.CargoQuantity() <= 0 {
-		haul.Phase = model.HaulPhaseToSource
+		haulCompleteDelivery(robot)
 		return nil
 	}
 	itemID := haul.Cargo.ItemID
@@ -323,8 +408,21 @@ func haulUnloadAtTarget(ws *model.WorldState, robot *model.Unit) []*model.GameEv
 		haul.Phase = model.HaulPhaseWaitingTarget
 		return events
 	}
-	haul.Phase = model.HaulPhaseToSource
+	events = append(events, haulCompleteDelivery(robot)...)
 	return events
+}
+
+// haulCompleteDelivery 送达完成：释放认领，再决定去哪。
+//   - route 模式：掉头回起点（原有往返语义）；
+//   - auto 模式：回到空闲等下一次派单（§2.1「回到空闲等下一次派单」）。
+func haulCompleteDelivery(robot *model.Unit) []*model.GameEvent {
+	haul := robot.Haul
+	if haul.Mode == model.HaulModeAuto {
+		haulClearTask(robot)
+		return []*model.GameEvent{haulTaskEvent(robot, "auto_haul_done")}
+	}
+	haul.Phase = model.HaulPhaseToSource
+	return nil
 }
 
 // haulCargoEvent 装/卸一条事件（客户端据此更新车顶货物与进度）。

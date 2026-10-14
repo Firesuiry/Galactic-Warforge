@@ -174,7 +174,8 @@ func unitStatsFromDefinition(def UnitDefinition) Unit {
 		u.Cargo = make(ItemInventory)
 	}
 	if def.ID == UnitTypeTransportRobot {
-		u.Haul = &UnitHaulState{}
+		// §2.1：出厂默认是全局自动模式。
+		u.Haul = &UnitHaulState{Mode: HaulModeAuto, Phase: HaulPhaseIdle}
 	}
 	if def.Mecha != nil {
 		u.Mecha = newMechaState(*def.Mecha)

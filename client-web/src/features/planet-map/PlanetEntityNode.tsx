@@ -19,7 +19,7 @@ import type {
 import { Icon } from '@/common/Icon';
 import { unitIsMoving, unitMoveDestination, getBuildingCatalogEntry, getBuildingDisplayName, getBuildingFootprint, toTilePoint } from '@/features/planet-map/model';
 import { getItemColorValue } from '@/features/planet-map/item-colors';
-import { transportCargo, transportHaulRoute } from '@/features/planet-map/transport-haul';
+import { transportCargo, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
 import { getResourceColor } from '@/features/planet-map/visible-entities';
 
 /**
@@ -115,7 +115,7 @@ export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps
   // 细分网格：单位占 1 cell（旧实现按 0.44 格画，cell 化后同一比例只是 0.44 cell）。
   const sizeFactor = simplify ? 0.32 : 0.44;
   const cargo = transportCargo(unit);
-  const haul = transportHaulRoute(unit);
+  const haul = transportHaulTask(unit);
   return (
     <div
       className="entity-node entity-node--unit"
@@ -138,6 +138,7 @@ export function UnitNode({ unit, playerId, simplify, isSelected }: UnitNodeProps
       data-max-hp={unit.max_hp}
       data-is-moving={unitIsMoving(unit) ? 'true' : 'false'}
       data-target-pos={(() => { const dest = unitMoveDestination(unit); return dest ? `${dest.x},${dest.y}` : undefined; })()}
+      data-haul-mode={transportHaulMode(unit) ?? undefined}
       data-haul-phase={haul?.phase}
       data-haul-from={haul?.from_building_id}
       data-haul-to={haul?.to_building_id}

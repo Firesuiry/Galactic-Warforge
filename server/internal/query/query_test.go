@@ -711,3 +711,45 @@ func TestAgentBriefingFiltersCommandsByPermission(t *testing.T) {
 		t.Fatalf("expected build+move only, got %v", briefing.AvailableCommands)
 	}
 }
+
+// PlanetScene 的实体必须克隆：响应在**世界锁之外**编码（gateway 在查询返回后
+// 才 json.Encode），直接把活的 Building/Unit/Resource 指针交出去，会和结算协程
+// 并发读写同一张 map（production/conveyor/storage），高 tick 率下就是
+// "concurrent map iteration and map write" 直接崩服。这里模拟「查询返回后再改世界」，
+// 视图必须保持返回那一刻的快照。
+func TestPlanetSceneReturnsSnapshotIndependentOfLiveWorld(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 64, 64)
+	smelter := &model.Building{
+		ID: "b-smelter", Type: model.BuildingTypeArcSmelter, OwnerID: "p1",
+		Position: model.Position{X: 5, Y: 5},
+		Runtime:  model.BuildingRuntime{State: model.BuildingWorkRunning},
+		Storage:  &model.StorageState{Inventory: model.ItemInventory{"iron_ore": 4}},
+		Conveyor: &model.ConveyorState{Output: model.ConveyorEast, Buffer: []model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 3}}},
+	}
+	ws.Buildings[smelter.ID] = smelter
+	ws.Units["u-1"] = &model.Unit{ID: "u-1", OwnerID: "p1", Position: model.Position{X: 6, Y: 6}, Cargo: model.ItemInventory{"iron_ore": 2}}
+	ws.Resources["r-1"] = &model.ResourceNodeState{ID: "r-1", PlanetID: planetID, Position: model.Position{X: 7, Y: 7}, Remaining: 10}
+
+	view, ok := ql.PlanetScene(ws, "p1", planetID, PlanetSceneRequest{X: 0, Y: 0, Width: 16, Height: 16})
+	if !ok {
+		t.Fatal("expected planet scene view")
+	}
+	// 编码前世界继续结算：改了活的实体，视图里的快照不能跟着变。
+	smelter.Storage.Inventory["iron_ore"] = 99
+	smelter.Conveyor.Buffer[0].Quantity = 99
+	ws.Units["u-1"].Cargo["iron_ore"] = 99
+	ws.Resources["r-1"].Remaining = 99
+
+	if got := view.Buildings["b-smelter"]; got == nil || got.Storage.Inventory["iron_ore"] != 4 {
+		t.Fatalf("scene building storage followed the live world: %+v", got)
+	}
+	if got := view.Buildings["b-smelter"].Conveyor.Buffer[0].Quantity; got != 3 {
+		t.Fatalf("scene conveyor followed the live world: %d", got)
+	}
+	if got := view.Units["u-1"].Cargo["iron_ore"]; got != 2 {
+		t.Fatalf("scene unit cargo followed the live world: %d", got)
+	}
+	if got := view.Resources[0].Remaining; got != 10 {
+		t.Fatalf("scene resource followed the live world: %d", got)
+	}
+}

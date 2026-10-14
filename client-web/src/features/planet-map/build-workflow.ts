@@ -397,9 +397,11 @@ function buildTileAssessment(input: {
     height: Math.max(1, entry?.footprint?.height ?? 1),
   };
   if (input.rotation === 90 || input.rotation === 270) [footprint.width, footprint.height] = [footprint.height, footprint.width];
-  // 采集建筑（requires_resource_node）必须压在资源点上，与服务端校验对齐：
-  // 资源格不算阻挡，但锚点格必须命中资源点，否则本地拦截。
+  // 采集建筑（requires_resource_node）与 ValidateCollectorSite 对齐：覆盖范围是
+  // 「占地 + max(1, coverage_radius) 圈」，**范围里任意一格**有矿即合法，锚点格
+  // 本身不必是矿（3×3 矿机覆盖 5×5，锚点常落在矿脉外圈）。
   const requiresResourceNode = entry?.requires_resource_node === true;
+  const collectorRings = requiresResourceNode ? Math.max(1, entry?.coverage_radius ?? 1) : 0;
   const isFoundation = input.buildingType === "foundation";
   const isDistributor = input.buildingType === "logistics_distributor";
   const canPrepareTerrain = (terrain: string) => isFoundation && ["water", "lava", "blocked"].includes(terrain);
@@ -441,6 +443,16 @@ function buildTileAssessment(input: {
     });
     return { footprint, anchor, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0 && missingItems.length === 0, blockedTiles, unexploredTiles, missingItems, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
   }
+
+  // 覆盖格（占地 + 采集圈）：锚点判断与阻挡扫描共用，避免两处坐标推导漂移。
+  const footprintCells: { x: number; y: number }[] = [];
+  for (let dy = -collectorRings; dy < footprint.height + collectorRings; dy += 1) {
+    for (let dx = -collectorRings; dx < footprint.width + collectorRings; dx += 1) {
+      const { x, y } = surfaceOffset(input.selectedPosition, dx, dy, input.planet.map_width / 3);
+      footprintCells.push({ x, y });
+    }
+  }
+  const footprintCellKeys = new Set(footprintCells.map((cell) => `${cell.x},${cell.y}`));
 
   for (let dy = 0; dy < footprint.height; dy += 1) {
     for (let dx = 0; dx < footprint.width; dx += 1) {
@@ -496,20 +508,16 @@ function buildTileAssessment(input: {
     input.selectedPosition.x,
     input.selectedPosition.y,
   );
-  if (
-    requiresResourceNode
-    && !findBlockingResource(
-      resources,
-      input.selectedPosition.x,
-      input.selectedPosition.y,
-    )
-  ) {
-    blockedTiles.push({
-      x: input.selectedPosition.x,
-      y: input.selectedPosition.y,
-      terrain: primaryTerrain,
-      reason: "missing_resource",
-    });
+  if (requiresResourceNode) {
+    const covered = footprintCells.some((cell) => findBlockingResource(resources, cell.x, cell.y));
+    if (!covered) {
+      blockedTiles.push({
+        x: input.selectedPosition.x,
+        y: input.selectedPosition.y,
+        terrain: primaryTerrain,
+        reason: "missing_resource",
+      });
+    }
   }
   const blockingBuildingId = blockedTiles.find(
     (tile) => tile.reason === "building",

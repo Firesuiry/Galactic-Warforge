@@ -65,6 +65,8 @@ func assignHaulRoute(ws *model.WorldState, playerID string, robot *model.Unit, p
 		}
 	}
 
+	robot.Haul.Mode = model.HaulModeRoute
+	robot.Haul.Claim = nil
 	robot.Haul.FromBuildingID = source.ID
 	robot.Haul.ToBuildingID = target.ID
 	robot.Haul.ItemID = itemID
@@ -85,6 +87,28 @@ func assignHaulRoute(ws *model.WorldState, playerID string, robot *model.Unit, p
 	}
 	return fmt.Sprintf("%s已开始运输：%s → %s（%s，每趟最多 %d 件）",
 		unitDisplayName(robot), buildingDisplayName(source), buildingDisplayName(target), itemLabel, haulCargoCapacity), nil
+}
+
+// assignAutoHaul 把运输机器人切回全局自动模式（§2.1，出厂默认就是它）：
+// 清掉当前任务与认领，回到空闲，等下一次派单（每 10 tick 一次）。
+//
+// 车上的货保留：自动模式的派单会优先把它送给另一台缺同种原料的建筑。
+func assignAutoHaul(robot *model.Unit) (string, *model.CommandResult) {
+	if robot.Type != model.UnitTypeTransportRobot || robot.Haul == nil {
+		return "", &model.CommandResult{
+			Status:  model.StatusFailed,
+			Code:    model.CodeInvalidTarget,
+			Message: fmt.Sprintf("%s不是运输机器人，只有运输机器人可以执行 auto_haul（自动搬运）指令", unitDisplayName(robot)),
+		}
+	}
+	robot.Haul.SetMode(model.HaulModeAuto)
+	robot.Haul.Phase = model.HaulPhaseIdle
+	robot.ClearMovement()
+	robot.ClearEngagement()
+	robot.Stance = model.UnitStanceIdle
+	robot.OrderPos = nil
+	robot.GuardTargetID = ""
+	return fmt.Sprintf("%s已切回自动搬运：自动寻找本行星缺料的建筑并送料（无需求时原地待命）", unitDisplayName(robot)), nil
 }
 
 // haulItemIntakeRejection 结构性拒收原因：终点「永远收不下」这种物品。

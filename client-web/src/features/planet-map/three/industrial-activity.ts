@@ -28,6 +28,21 @@ export interface ActivitySource {
   altitude?: number;
 }
 
+/**
+ * 物品配色 hex → `THREE.Color`（线性工作色）。
+ *
+ * `new THREE.Color(hex)` 走的是 `setHex(hex, SRGBColorSpace)`（three r152+ 的默认），
+ * 写进 `setColorAt` 前必须显式按 sRGB 解释一次；否则同一物品在带上（实例色）
+ * 与详情面板色块（CSS）会是两个颜色。这里统一成一个入口，避免两处写法漂移。
+ */
+export function itemColor(hex: string): THREE.Color {
+  if (typeof hex !== 'string') {
+    throw new TypeError(`itemColor 只接受 hex 字符串，收到 ${Object.prototype.toString.call(hex)}：` +
+      '把已经转换过的 THREE.Color 再传进来会做第二次 sRGB → 线性转换，浅色物品会被压成纯白。');
+  }
+  return new THREE.Color().setStyle(hex, THREE.SRGBColorSpace);
+}
+
 /** No synthetic production: these fields come from Building runtime/conveyor and runtime logistics views. */
 export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   const sources: ActivitySource[] = [];
@@ -35,6 +50,8 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   const visible = (position: TilePoint) => Boolean(fog && getFogState(fog, Math.round(position.x), Math.round(position.y)).visible);
   // 物品配色走客户端配色表（item-colors）：服务端目录只按大类给色，矿石/材料各自同色，
   // 细分网格后带上每格都要能分辨物品，不能再用目录色。目录色作为兜底。
+  // 这里只产出 hex 字符串；sRGB → 线性的转换在 update() 里由 itemColor() 统一做一次
+  // （转换两次会把线性值再当 sRGB 解释一遍，浅色物品直接裁到纯白）。
   const itemColors = new Map(data.catalog?.items?.map(item => [item.id, getItemColorValue(item.id, item.color)]));
   const definitions = new Map(data.catalog?.buildings?.map(building => [building.id, building]));
   const resources = new Map(data.planet.resources?.map(resource => [`${resource.position.x}:${resource.position.y}`, resource]));
@@ -108,7 +125,9 @@ export const BELT_CARGO_MAX_PER_STACK = 3;
 /** Two draw calls at most: instanced physical cargo plus a single soft particle cloud. */
 export class IndustrialActivity {
   private readonly group = new THREE.Group();
-  private readonly cargo = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: .64, metalness: .25 }), LIMIT);
+  // 带上方块用**非金属**材质：metalness .25 会让实例色几乎全部来自环境反射（env 强度 .32），
+  // 铁块/石材这类浅色物品会被压成同一种白；固有色才是「一眼看出物品」的依据。
+  private readonly cargo = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: .72, metalness: .05 }), LIMIT);
   private readonly particles: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private readonly positions = new Float32Array(LIMIT * 3);
   private readonly colors = new Float32Array(LIMIT * 3);
@@ -173,7 +192,7 @@ export class IndustrialActivity {
       if (source.kind === 'cargo') indices.set(key, stackIndex + 1);
       const prior = this.observations.get(source.id);
       if (source.kind === 'flight') nextObservations.set(source.id, normal.clone());
-      const base = { source, color: new THREE.Color(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
+      const base = { source, color: itemColor(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
         path: source.buildingId ? paths.get(source.buildingId) : undefined,
         prior: source.kind === 'flight' && prior && prior.distanceToSquared(normal) > 1e-12 ? prior : undefined };
       if (source.kind !== 'cargo') { entries.push({ ...base, stackQuantity: 1, cargoIndex: 0, cargoCount: 1 }); continue; }
