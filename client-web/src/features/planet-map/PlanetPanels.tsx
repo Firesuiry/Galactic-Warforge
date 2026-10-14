@@ -1836,6 +1836,117 @@ export function PlanetDebugPanel({
             调试面板
             <small className="debug-panel__hint">（{DEBUG_PANEL_HOTKEY_LABEL} 显示/隐藏）</small>
           </div>
+
+          <div className="debug-panel__section">
+            <div className="section-title">狂飙模式 / 快进</div>
+            {adminAllowed ? (
+              <div className="debug-panel__advance">
+                <div className="debug-panel__advance-row">
+                  <label className="toggle-pill">
+                    <input
+                      checked={advanceForm.mode === "ticks"}
+                      name="advance-mode"
+                      onChange={() => patchAdvanceForm({ mode: "ticks" })}
+                      type="radio"
+                    />
+                    <span>推进 tick 数</span>
+                  </label>
+                  <input
+                    aria-label="快进 tick 数"
+                    className="debug-panel__advance-input"
+                    disabled={advanceForm.mode !== "ticks"}
+                    onChange={(event) => patchAdvanceForm({ ticks: event.target.value })}
+                    type="text"
+                    value={advanceForm.ticks}
+                  />
+                </div>
+                <div className="debug-panel__advance-row">
+                  <label className="toggle-pill">
+                    <input
+                      checked={advanceForm.mode === "to_tick"}
+                      name="advance-mode"
+                      onChange={() => patchAdvanceForm({ mode: "to_tick" })}
+                      type="radio"
+                    />
+                    <span>推进到 tick</span>
+                  </label>
+                  <input
+                    aria-label="快进目标 tick"
+                    className="debug-panel__advance-input"
+                    disabled={advanceForm.mode !== "to_tick"}
+                    onChange={(event) => patchAdvanceForm({ toTick: event.target.value })}
+                    type="text"
+                    value={advanceForm.toTick}
+                  />
+                </div>
+                <div className="debug-panel__advance-stops">
+                  <label className="toggle-pill">
+                    <input
+                      checked={advanceForm.stopOn.underAttack}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, underAttack: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>受袭即停</span>
+                  </label>
+                  <label className="toggle-pill">
+                    <input
+                      checked={advanceForm.stopOn.criticalAlert}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, criticalAlert: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>关键警报即停</span>
+                  </label>
+                  <label className="toggle-pill">
+                    <input
+                      checked={advanceForm.stopOn.gameOver}
+                      onChange={(event) =>
+                        patchAdvanceForm({
+                          stopOn: { ...advanceForm.stopOn, gameOver: event.target.checked },
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>对局结束即停</span>
+                  </label>
+                </div>
+                <div className="debug-panel__advance-row">
+                  <button
+                    className="secondary-button"
+                    disabled={advanceBusy}
+                    onClick={() => {
+                      void startAdvance();
+                    }}
+                    type="button"
+                  >
+                    {advanceBusy ? "快进中…" : "开始快进"}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      void cancelAdvance();
+                    }}
+                    type="button"
+                  >
+                    取消快进
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="subtle-text">
+                快进需要 admin 身份（当前账号不是 admin）。多人对局里也只有 admin 可以快进。
+              </p>
+            )}
+            {advanceError ? <p className="error-text">{advanceError}</p> : null}
+            {advanceResult ? <p className="subtle-text">{advanceResult}</p> : null}
+          </div>
           <dl className="planet-kv-list">
             <div>
               <dt>当前 tick</dt>
@@ -1950,117 +2061,6 @@ export function PlanetDebugPanel({
             ) : null}
           </div>
           {shareMessage ? <p className="subtle-text">{shareMessage}</p> : null}
-
-          <div className="debug-panel__section">
-            <div className="section-title">狂飙模式 / 快进</div>
-            {adminAllowed ? (
-              <div className="debug-panel__advance">
-                <div className="debug-panel__advance-row">
-                  <label className="toggle-pill">
-                    <input
-                      checked={advanceForm.mode === "ticks"}
-                      name="advance-mode"
-                      onChange={() => patchAdvanceForm({ mode: "ticks" })}
-                      type="radio"
-                    />
-                    <span>推进 tick 数</span>
-                  </label>
-                  <input
-                    aria-label="快进 tick 数"
-                    className="debug-panel__advance-input"
-                    disabled={advanceForm.mode !== "ticks"}
-                    onChange={(event) => patchAdvanceForm({ ticks: event.target.value })}
-                    type="text"
-                    value={advanceForm.ticks}
-                  />
-                </div>
-                <div className="debug-panel__advance-row">
-                  <label className="toggle-pill">
-                    <input
-                      checked={advanceForm.mode === "to_tick"}
-                      name="advance-mode"
-                      onChange={() => patchAdvanceForm({ mode: "to_tick" })}
-                      type="radio"
-                    />
-                    <span>推进到 tick</span>
-                  </label>
-                  <input
-                    aria-label="快进目标 tick"
-                    className="debug-panel__advance-input"
-                    disabled={advanceForm.mode !== "to_tick"}
-                    onChange={(event) => patchAdvanceForm({ toTick: event.target.value })}
-                    type="text"
-                    value={advanceForm.toTick}
-                  />
-                </div>
-                <div className="debug-panel__advance-stops">
-                  <label className="toggle-pill">
-                    <input
-                      checked={advanceForm.stopOn.underAttack}
-                      onChange={(event) =>
-                        patchAdvanceForm({
-                          stopOn: { ...advanceForm.stopOn, underAttack: event.target.checked },
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    <span>受袭即停</span>
-                  </label>
-                  <label className="toggle-pill">
-                    <input
-                      checked={advanceForm.stopOn.criticalAlert}
-                      onChange={(event) =>
-                        patchAdvanceForm({
-                          stopOn: { ...advanceForm.stopOn, criticalAlert: event.target.checked },
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    <span>关键警报即停</span>
-                  </label>
-                  <label className="toggle-pill">
-                    <input
-                      checked={advanceForm.stopOn.gameOver}
-                      onChange={(event) =>
-                        patchAdvanceForm({
-                          stopOn: { ...advanceForm.stopOn, gameOver: event.target.checked },
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    <span>对局结束即停</span>
-                  </label>
-                </div>
-                <div className="debug-panel__advance-row">
-                  <button
-                    className="secondary-button"
-                    disabled={advanceBusy}
-                    onClick={() => {
-                      void startAdvance();
-                    }}
-                    type="button"
-                  >
-                    {advanceBusy ? "快进中…" : "开始快进"}
-                  </button>
-                  <button
-                    className="secondary-button"
-                    onClick={() => {
-                      void cancelAdvance();
-                    }}
-                    type="button"
-                  >
-                    取消快进
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="subtle-text">
-                快进需要 admin 身份（当前账号不是 admin）。多人对局里也只有 admin 可以快进。
-              </p>
-            )}
-            {advanceError ? <p className="error-text">{advanceError}</p> : null}
-            {advanceResult ? <p className="subtle-text">{advanceResult}</p> : null}
-          </div>
         </div>
       ) : null}
     </div>

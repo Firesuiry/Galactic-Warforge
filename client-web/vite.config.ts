@@ -39,6 +39,7 @@ export default defineConfig({
       '/events': createProxyEntry(),
       '/alerts': createProxyEntry(),
       '/commands': createProxyEntry(),
+      '/admin': createProxyEntry(),
       '/save': createProxyEntry(),
       '/replay': createProxyEntry(),
       '/rollback': createProxyEntry(),

@@ -503,7 +503,9 @@
   background:#060c16eb;
   -webkit-backdrop-filter:blur(10px);
   backdrop-filter:blur(10px);
-  max-height:min(52vh,420px);
+  /* 狂飙模式控件排在面板最前，这里要保证「停止条件 + 开始/取消」一屏内可见
+     （52vh 时按钮正好被折在下面，玩家会以为没有开始按钮）。 */
+  max-height:min(64vh,560px);
   overflow:auto;
 }
 
