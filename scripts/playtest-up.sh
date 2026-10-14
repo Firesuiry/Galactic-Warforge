@@ -15,7 +15,10 @@
 set -euo pipefail
 
 WORKTREE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MAIN_REPO="$(git -C "$WORKTREE" worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+# awk 命中第一行就 exit，会提前关掉管道让 git 收到 SIGPIPE；在 `set -o pipefail`
+# 下这一步会返回 141，再被 `set -e` 当成启动失败（整脚本静默退出，什么都没打印）。
+# `|| true` 把这个「假失败」吃掉，只保留取到的路径。
+MAIN_REPO="$(git -C "$WORKTREE" worktree list --porcelain | awk '/^worktree /{print $2; exit}' || true)"
 GO_BIN_DIR="${GO_BIN_DIR:-/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin}"
 export PATH="$GO_BIN_DIR:$PATH"
 
