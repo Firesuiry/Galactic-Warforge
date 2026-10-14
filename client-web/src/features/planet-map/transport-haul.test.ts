@@ -81,6 +81,31 @@ describe('运输机器人契约（§4）', () => {
     } as never);
     expect(transportCargo(zero)).toBeNull();
   });
+
+  it('卸货阶段服务端已把 cargo 扣空，车顶仍显示这一趟的货物（按 item_id 兜底 1 件）', () => {
+    // 服务端 haulUnloadAtTarget 每 tick 扣减，卸完即清空 cargo；玩家眼里这一趟还没结束。
+    const unloading = robot({
+      haul: { from_building_id: 'b1', to_building_id: 'b2', item_id: 'copper_ore', phase: 'unloading', cargo: { item_id: '', quantity: 0 }, delivered_total: 7 },
+    } as never);
+    expect(transportCargo(unloading)).toEqual({ item_id: 'copper_ore', quantity: 1 });
+    // 终点收不下、货还在车上：照实显示剩余件数。
+    const waiting = robot({
+      haul: { from_building_id: 'b1', to_building_id: 'b2', item_id: 'copper_ore', phase: 'waiting_target', cargo: { item_id: 'copper_ore', quantity: 2 }, delivered_total: 7 },
+    } as never);
+    expect(transportCargo(waiting)).toEqual({ item_id: 'copper_ore', quantity: 2 });
+    // 空车返程 / 前往取货：车顶无货。
+    const returning = robot({
+      haul: { from_building_id: 'b1', to_building_id: 'b2', item_id: 'copper_ore', phase: 'to_source', cargo: { item_id: '', quantity: 0 }, delivered_total: 7 },
+    } as never);
+    expect(transportCargo(returning)).toBeNull();
+  });
+
+  it('卸货中的摘要不写渲染兜底的「载 ×1」', () => {
+    const unloading = robot({
+      haul: { from_building_id: 'b1', to_building_id: 'b2', item_id: 'iron_ingot', phase: 'unloading', cargo: { item_id: '', quantity: 0 }, delivered_total: 7 },
+    } as never);
+    expect(describeHaul(unloading, label)).toBe('卸货中 · 已送达 7 · 运送 铁块');
+  });
 });
 
 describe('「设置运输」草稿与命令前置条件', () => {

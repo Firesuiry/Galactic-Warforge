@@ -69,3 +69,34 @@ it('maps all eight exact cube corners to the final or first tile of the Z face',
     expect(surfaceTile({x,y,z},n)).toEqual({x:(z>0?0:2*n)+(x*z>0?n-1:0),y:y>0?0:n-1});
   }
 });
+
+import { tileQuad } from './projection';
+describe('1 cell 贴地四边形（选中框）', () => {
+  it('四角落在相邻 cell 中心方向上，与 tileFrame 的格子边界一致', () => {
+    const size = 288;
+    for (const tile of [{ x: 44, y: 140 }, { x: 0, y: 0 }, { x: size - 1, y: size - 1 }, { x: size, y: size * 2 - 1 }]) {
+      const quad = tileQuad(tile, size);
+      expect(quad).toHaveLength(4);
+      const offsets = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]];
+      quad.forEach((corner, index) => {
+        // 每个角就是「相邻格中心」的单位方向：1 cell 的框不会外扩成外接四边形。
+        expect(corner.length()).toBeCloseTo(1, 12);
+        // 跨面角点用中心格所在面投影（选中框不跨面画，与服务端 FootprintTiles 的约定一致）。
+        const expected = tileNormal({ x: tile.x + offsets[index][0], y: tile.y + offsets[index][1] }, size, surfaceFace(tile, size));
+        expect(corner.dot(expected)).toBeCloseTo(1, 12);
+      });
+      // 框的四条边 ≈ 一格宽（相邻格中心间距）：等角投影下格宽随纬度略变，
+      // 取中心格为基准，四边都应在 ±20% 内——外接四边形会是 √2 倍（+41%），会被这条挡下。
+      const center = tileNormal(tile, size);
+      const step = Math.min(
+        tileNormal({ x: tile.x + 1, y: tile.y }, size).distanceTo(center),
+        tileNormal({ x: tile.x, y: tile.y + 1 }, size).distanceTo(center),
+      );
+      const edges = [quad[1].distanceTo(quad[0]), quad[2].distanceTo(quad[1]), quad[3].distanceTo(quad[2]), quad[0].distanceTo(quad[3])];
+      for (const edge of edges) {
+        expect(edge).toBeGreaterThan(step * .8);
+        expect(edge).toBeLessThan(step * 1.2);
+      }
+    }
+  });
+});

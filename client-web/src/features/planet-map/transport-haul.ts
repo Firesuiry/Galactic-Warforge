@@ -41,11 +41,22 @@ export function transportHaulRoute(unit: Unit | undefined | null): TransportHaul
   return unit.haul;
 }
 
-/** 车顶货物（有货才画）：无 haul / 无 cargo / 数量 ≤ 0 时为 null。 */
+/**
+ * 车顶货物：**载货期间**（装货/运送/卸货）都要看得见，无货（未设路线 / 空车返程）时为 null。
+ *
+ * 卸货阶段服务端每 tick 把已卸的量从 cargo 里扣掉，卸完即清空 `cargo`（车上确实没货了），
+ * 但玩家眼里这一趟还没结束、车顶的货还在往下卸——所以 quantity ≤ 0 时按 `item_id` 兜底显示 1 件，
+ * 颜色与运送中的货物一致，直到货物真的交给终点、机器人掉头回起点为止。
+ * `waiting_target`（终点收不下，货留在车上）服务端本来就保留 cargo，走正常分支。
+ */
 export function transportCargo(unit: Unit | undefined | null) {
-  const cargo = transportHaulRoute(unit)?.cargo;
-  if (!cargo || !cargo.item_id || (cargo.quantity ?? 0) <= 0) return null;
-  return cargo;
+  const route = transportHaulRoute(unit);
+  if (!route) return null;
+  const cargo = route.cargo;
+  if (cargo?.item_id && (cargo.quantity ?? 0) > 0) return cargo;
+  const delivering = route.phase === 'unloading' || route.phase === 'waiting_target';
+  if (delivering && route.item_id) return { item_id: route.item_id, quantity: 1 };
+  return null;
 }
 
 /** 选中条的一句话摘要：「前往取货 · 已送达 12 · 铁块 ×4」。 */
@@ -53,8 +64,10 @@ export function describeHaul(unit: Unit | undefined | null, label: (itemId: stri
   const route = transportHaulRoute(unit);
   if (!route) return null;
   const parts = [haulPhaseLabel(route.phase), `已送达 ${route.delivered_total ?? 0}`];
-  const cargo = transportCargo(unit);
-  if (cargo) parts.push(`载 ${label(cargo.item_id)} ×${cargo.quantity}`);
+  const cargo = route.cargo;
+  // 卸货阶段服务端已把货从 cargo 扣空：摘要不写「载 ×1」（那是渲染用的兜底），
+  // 只在车上真的有货时写载量。
+  if (cargo?.item_id && (cargo.quantity ?? 0) > 0) parts.push(`载 ${label(cargo.item_id)} ×${cargo.quantity}`);
   else if (route.item_id) parts.push(`运送 ${label(route.item_id)}`);
   return parts.join(' · ');
 }
