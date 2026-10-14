@@ -132,6 +132,15 @@ export const PLANET_HOME_ZOOM_INDEX = 7;
 export const PLANET_FOCUS_FIT_ZOOM = -1;
 /** 自适应选档的目标占屏比：地图内容占视口短边 ~70%（可接受区间 60-80%）。 */
 export const PLANET_FIT_TARGET_OCCUPANCY = 0.7;
+/**
+ * 首次进入时的「能看清产线」下限（px/cell）。
+ *
+ * 试玩 1015 §6-7：288×288 的遭遇战行星在 16px/cell 回家档下整图 4608px，
+ * 远超视口，只能看到基地附近十几格；整图缩到 70% 占屏要 ~3px/cell，
+ * 那时 3×3 建筑只有 9px，看不清是什么。首次进入的取景目标是「基地 + 周围
+ * 一屏产线」，所以选档优先保证每格至少这么多像素。
+ */
+export const MIN_PLANET_HOME_FOCUS_TILE_SIZE = 16;
 /** scene 档缺省 cell 边长（px/cell），与默认缩放档一致。 */
 export const DEFAULT_PLANET_SCENE_TILE_SIZE = 16;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
@@ -238,9 +247,10 @@ export function resolvePlanetZoomIndex(scale: number) {
 
 /**
  * 小行星初始相机自适应选档（PLANET_FOCUS_FIT_ZOOM 的结算）：
- * - 大行星（回家档下世界像素已超视口）行为不变，直接返回 fallback；
- * - 小行星在"整图可入视口"的 scene 档中，挑选占屏比（max(世界宽/视口宽, 世界高/视口高)）
- *   最接近 70% 的一档——离散翻倍档位无法精确命中 60-80% 区间时取最近可行解；
+ * - 大行星（整图放不进视口）行为不变，直接返回 fallback（回家档 16px/cell）；
+ * - 小图在"整图可入视口、且每格 ≥ MIN_PLANET_HOME_FOCUS_TILE_SIZE"的 scene 档中，
+ *   挑选占屏比（max(世界宽/视口宽, 世界高/视口高)）最接近 70% 的一档——
+ *   离散翻倍档位无法精确命中 60-80% 区间时取最近可行解；
  * - 视口/地图尺寸异常时返回 fallback。
  */
 export function resolvePlanetFitZoomIndex(
@@ -253,16 +263,6 @@ export function resolvePlanetFitZoomIndex(
   if (viewportWidth <= 0 || viewportHeight <= 0 || mapWidth <= 0 || mapHeight <= 0) {
     return fallbackZoomIndex;
   }
-  const fallbackTileSize = getPlanetRenderTileSize(
-    fallbackZoomIndex,
-    viewportWidth,
-    viewportHeight,
-    mapWidth,
-    mapHeight,
-  );
-  if (mapWidth * fallbackTileSize > viewportWidth || mapHeight * fallbackTileSize > viewportHeight) {
-    return fallbackZoomIndex; // 大行星：维持回家档
-  }
   let bestIndex = -1;
   let bestScore = Number.POSITIVE_INFINITY;
   for (let index = 0; index < PLANET_ZOOM_LEVELS.length; index += 1) {
@@ -272,8 +272,13 @@ export function resolvePlanetFitZoomIndex(
     const tileSize = getPlanetRenderTileSize(index, viewportWidth, viewportHeight, mapWidth, mapHeight);
     const worldWidth = mapWidth * tileSize;
     const worldHeight = mapHeight * tileSize;
+    // 必须整图入视口（不触发环绕/裁切）；低于可读下限的档一律不选——整图缩到
+    // 70% 占屏的档在 288×288 行星上是 3px/cell，3×3 建筑只有 9px，看不清（1015 §6-7）。
     if (worldWidth > viewportWidth || worldHeight > viewportHeight) {
-      continue; // 必须整图入视口（不触发环绕/裁切）
+      continue;
+    }
+    if (tileSize < MIN_PLANET_HOME_FOCUS_TILE_SIZE) {
+      continue;
     }
     const occupancy = Math.max(worldWidth / viewportWidth, worldHeight / viewportHeight);
     const score = Math.abs(occupancy - PLANET_FIT_TARGET_OCCUPANCY);
@@ -282,7 +287,13 @@ export function resolvePlanetFitZoomIndex(
       bestIndex = index;
     }
   }
-  return bestIndex >= 0 ? bestIndex : fallbackZoomIndex;
+  // 小图：选「整图入视口且每格 ≥ 16px」里最接近 70% 占屏的一档。
+  if (bestIndex >= 0) {
+    return bestIndex;
+  }
+  // 大行星（回家档下整图已超视口）：固定回家档，取景交给 base 聚焦 + 围绕视口的场景窗口
+  // （16px/cell：3×3 熔炉 48px、5×5 HQ 80px，与旧「48px/tile」观感一致）。
+  return fallbackZoomIndex;
 }
 
 export interface PlanetSceneWindow {
