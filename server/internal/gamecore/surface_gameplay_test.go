@@ -130,6 +130,7 @@ func TestSurfaceSorterAndIOAcrossRotatedSeam(t *testing.T) {
 	if !ok || id.id != belt.ID {
 		t.Fatal("sorter failed to insert across rotated seam")
 	}
+	// 取货端不再要求带尾正对分拣器：带子反向也照样能取。
 	belt.Conveyor.Output = forward.Opposite()
 	id, ok = sorterFindEndpoint(ws, sorter, model.ConveyorNorth, 1, true)
 	if !ok || id.id != belt.ID {

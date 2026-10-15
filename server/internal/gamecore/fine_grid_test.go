@@ -211,8 +211,8 @@ func TestFineGridSorterConnectsToAnyFootprintCell(t *testing.T) {
 	target.X = origin.X + 2
 	target.Y = origin.Y + 1 // 占地内、非锚点
 	sorterPos, _ := ws.SurfaceStep(target, model.ConveyorEast)
+	// 分拣器朝向 90°（背面=西、正面=东）：取货端从西侧沿轴扫，正好扫进熔炉占地。
 	sorter := newSorterBuilding("sorter", sorterPos)
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
 	sorter.Sorter.Range = 3
 	attachBuilding(ws, sorter)
 

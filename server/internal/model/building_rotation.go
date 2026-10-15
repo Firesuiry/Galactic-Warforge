@@ -57,6 +57,20 @@ func ApplyBuildingRotation(b *Building, rotation PlanRotation) {
 	}
 }
 
+// PlanRotationForDirection 是 SorterFacing 的逆：把「正面朝向」换算成建造 rotation。
+func PlanRotationForDirection(dir ConveyorDirection) PlanRotation {
+	switch dir {
+	case ConveyorEast:
+		return PlanRotation90
+	case ConveyorSouth:
+		return PlanRotation180
+	case ConveyorWest:
+		return PlanRotation270
+	default:
+		return PlanRotation0
+	}
+}
+
 // PlanRotation describes footprint rotation in degrees.
 type PlanRotation string
 

@@ -67,43 +67,51 @@ func settleSorters(ws *model.WorldState) {
 		grabStacks := 1 + int(model.TechEffectValue(ws.Players[building.OwnerID], "sorter_grab_stacks"))
 		pileGrab := building.Type == model.BuildingTypePileSorter
 
-		for _, out := range outputs {
-			target := ws.Buildings[out.id]
+		// 一次往返只选一条「取货端 → 放货端」路线：近的优先（DSP 里长臂就是慢）。
+		best := -1
+		bestIn, bestOut := -1, -1
+		for oi := range outputs {
+			target := ws.Buildings[outputs[oi].id]
 			if target == nil {
 				continue
 			}
-			for _, in := range inputs {
-				if in.id == out.id {
+			for ii := range inputs {
+				if inputs[ii].id == outputs[oi].id {
 					continue
 				}
-				source := ws.Buildings[in.id]
-				if source == nil {
+				if ws.Buildings[inputs[ii].id] == nil {
 					continue
 				}
-				qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
-				if qty <= 0 {
+				span := inputs[ii].steps + outputs[oi].steps
+				if best >= 0 && span >= best {
 					continue
 				}
-				sequence := int64(1)
-				if sorter.LastTransfer != nil {
-					sequence = sorter.LastTransfer.Sequence + 1
-				}
-				sorter.LastTransfer = &model.SorterTransfer{
-					Tick: ws.Tick, Sequence: sequence,
-					SourceID: source.ID, TargetID: target.ID,
-					SourcePosition: source.Position, TargetPosition: target.Position,
-					ItemID: itemID, Quantity: qty,
-				}
-				// 往返周期 = cycle_ticks × 端点距离格数（端点落在不同格子上才计距离，
-				// 两端同格时按 1 格算，避免零周期）。
-				distance := max(1, in.steps+out.steps)
-				sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*distance)
-				break
-			}
-			if sorter.NextTripTick > ws.Tick {
-				break
+				best, bestIn, bestOut = span, ii, oi
 			}
 		}
+		if best < 0 {
+			continue
+		}
+		in, out := inputs[bestIn], outputs[bestOut]
+		source, target := ws.Buildings[in.id], ws.Buildings[out.id]
+
+		qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
+		if qty <= 0 {
+			continue
+		}
+		sequence := int64(1)
+		if sorter.LastTransfer != nil {
+			sequence = sorter.LastTransfer.Sequence + 1
+		}
+		sorter.LastTransfer = &model.SorterTransfer{
+			Tick: ws.Tick, Sequence: sequence,
+			SourceID: source.ID, TargetID: target.ID,
+			SourcePosition: source.Position, TargetPosition: target.Position,
+			ItemID: itemID, Quantity: qty,
+		}
+		// 往返周期 = cycle_ticks × 端点距离格数（两端点落在不同格子上才计距离，
+		// 两端同格时按 1 格算，避免零周期）。
+		sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*max(1, best))
 	}
 }
 

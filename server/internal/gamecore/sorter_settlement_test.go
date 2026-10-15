@@ -6,18 +6,16 @@ import (
 	"siliconworld/internal/model"
 )
 
-func TestSorterMovesItemsWithinRangeAndSpeed(t *testing.T) {
+func TestSorterTakesFromAnyPassingBeltCell(t *testing.T) {
+	// 取货端不要求带尾正对分拣器：只要扫到一条运行中的带子就能从它上面取货。
 	ws := model.NewWorldState("planet-1", 5)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	input := newConveyorBuilding("in", model.Position{X: 0, Y: 0}, model.ConveyorEast)
-	output := newConveyorBuilding("out", model.Position{X: 4, Y: 0}, model.ConveyorEast)
-	sorter := newSorterBuilding("s1", model.Position{X: 2, Y: 0})
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
-	sorter.Sorter.Speed = 2
-	sorter.Sorter.Range = 2
-	sorter.Sorter.Normalize()
+	// 输入带朝东（背对分拣器），输出带在东侧朝东。
+	input := newConveyorBuilding("in", model.Position{X: 1, Y: 2}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 3, Y: 2}, model.ConveyorEast)
+	sorter := newSorterBuilding("s1", model.Position{X: 2, Y: 2}) // 朝向 90°：背面西、正面东
+	sorter.Sorter.Range = 1
 
 	attachBuilding(ws, input)
 	attachBuilding(ws, output)
@@ -29,11 +27,11 @@ func TestSorterMovesItemsWithinRangeAndSpeed(t *testing.T) {
 
 	settleSorters(ws)
 
-	if got := input.Conveyor.TotalItems(); got != 1 {
-		t.Fatalf("expected input items 1, got %d", got)
+	if got := input.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("expected input items 2 after one trip, got %d", got)
 	}
-	if got := output.Conveyor.TotalItems(); got != 2 {
-		t.Fatalf("expected output items 2, got %d", got)
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("expected output items 1, got %d", got)
 	}
 }
 
@@ -41,81 +39,239 @@ func TestSorterFilterRespectsFrontStack(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	input := newConveyorBuilding("in", model.Position{X: 0, Y: 0}, model.ConveyorEast)
-	output := newConveyorBuilding("out", model.Position{X: 2, Y: 0}, model.ConveyorEast)
-	sorter := newSorterBuilding("s1", model.Position{X: 1, Y: 0})
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
-	sorter.Sorter.Speed = 3
+	input := newConveyorBuilding("in", model.Position{X: 0, Y: 1}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 2, Y: 1}, model.ConveyorEast)
+	sorter := newSorterBuilding("s1", model.Position{X: 1, Y: 1})
 	sorter.Sorter.Range = 1
 	sorter.Sorter.Filter = model.SorterFilter{
 		Mode:  model.SorterFilterAllow,
 		Items: []string{model.ItemIronOre},
 	}
-	sorter.Sorter.Normalize()
 
 	attachBuilding(ws, input)
 	attachBuilding(ws, output)
 	attachBuilding(ws, sorter)
 
-	if _, _, err := input.Conveyor.Insert(model.ItemIronOre, 1); err != nil {
-		t.Fatalf("insert into belt: %v", err)
-	}
 	if _, _, err := input.Conveyor.Insert(model.ItemCopperOre, 2); err != nil {
-		t.Fatalf("insert into belt: %v", err)
+		t.Fatalf("insert copper: %v", err)
+	}
+	if _, _, err := input.Conveyor.Insert(model.ItemIronOre, 1); err != nil {
+		t.Fatalf("insert iron: %v", err)
 	}
 
 	settleSorters(ws)
 
-	if got := output.Conveyor.TotalItems(); got != 1 {
-		t.Fatalf("expected output items 1, got %d", got)
+	if got := output.Conveyor.TotalItems(); got != 0 {
+		t.Fatalf("filtered front stack must not move, got %d", got)
 	}
-	if got := input.Conveyor.TotalItems(); got != 2 {
-		t.Fatalf("expected input items 2, got %d", got)
+	if got := input.Conveyor.TotalItems(); got != 3 {
+		t.Fatalf("expected input unchanged, got %d", got)
 	}
 }
 
-func TestSorterPriorityOrder(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 3)
+func TestSorterReachFollowsRange(t *testing.T) {
+	// Range 决定沿朝向轴扫几格：mk1=1 扫不到 2 格外的带子。
+	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	inputNorth := newConveyorBuilding("in-n", model.Position{X: 1, Y: 0}, model.ConveyorSouth)
-	inputWest := newConveyorBuilding("in-w", model.Position{X: 0, Y: 1}, model.ConveyorEast)
-	outputEast := newConveyorBuilding("out-e", model.Position{X: 2, Y: 1}, model.ConveyorEast)
-	outputSouth := newConveyorBuilding("out-s", model.Position{X: 1, Y: 2}, model.ConveyorSouth)
-	sorter := newSorterBuilding("s1", model.Position{X: 1, Y: 1})
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorNorth, model.ConveyorWest}
-	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast, model.ConveyorSouth}
-	sorter.Sorter.Speed = 1
-	sorter.Sorter.Range = 1
-	sorter.Sorter.Normalize()
-
-	attachBuilding(ws, inputNorth)
-	attachBuilding(ws, inputWest)
-	attachBuilding(ws, outputEast)
-	attachBuilding(ws, outputSouth)
+	// 分拣器朝向 90°（背面西、正面东）：背面 2 格是 farInput，正面 1 格是 output。
+	farInput := newConveyorBuilding("in", model.Position{X: 0, Y: 3}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 3, Y: 3}, model.ConveyorEast)
+	sorter := newSorterBuilding("s1", model.Position{X: 2, Y: 3})
+	attachBuilding(ws, farInput)
+	attachBuilding(ws, output)
 	attachBuilding(ws, sorter)
+	farInput.Conveyor.Insert(model.ItemIronOre, 1)
 
-	if _, _, err := inputNorth.Conveyor.Insert(model.ItemIronOre, 1); err != nil {
-		t.Fatalf("insert into belt: %v", err)
-	}
-	if _, _, err := inputWest.Conveyor.Insert(model.ItemIronOre, 1); err != nil {
-		t.Fatalf("insert into belt: %v", err)
-	}
-
+	sorter.Sorter.Range = 1
 	settleSorters(ws)
+	if got := output.Conveyor.TotalItems(); got != 0 {
+		t.Fatalf("range 1 must not reach a belt 2 cells away, moved %d", got)
+	}
 
-	if got := outputEast.Conveyor.TotalItems(); got != 1 {
-		t.Fatalf("expected east output items 1, got %d", got)
+	sorter.Sorter.Range = 2
+	settleSorters(ws)
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("range 2 must reach the belt, moved %d", got)
 	}
-	if got := outputSouth.Conveyor.TotalItems(); got != 0 {
-		t.Fatalf("expected south output items 0, got %d", got)
+}
+
+func TestSorterFacingFollowsRotation(t *testing.T) {
+	for _, tc := range []struct {
+		rotation model.PlanRotation
+		back     model.ConveyorDirection
+		front    model.ConveyorDirection
+	}{
+		{model.PlanRotation0, model.ConveyorSouth, model.ConveyorNorth},
+		{model.PlanRotation90, model.ConveyorWest, model.ConveyorEast},
+		{model.PlanRotation180, model.ConveyorNorth, model.ConveyorSouth},
+		{model.PlanRotation270, model.ConveyorEast, model.ConveyorWest},
+	} {
+		t.Run(string(tc.rotation), func(t *testing.T) {
+			ws := model.NewWorldState("planet-1", 8)
+			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+			sorter := newSorterBuilding("sorter", model.Position{X: 4, Y: 4})
+			sorter.Rotation = tc.rotation
+			back, front := model.SorterFacingAxis(sorter.Rotation)
+			if back != tc.back || front != tc.front {
+				t.Fatalf("rotation %s: axis = %s→%s, want %s→%s", tc.rotation, back, front, tc.back, tc.front)
+			}
+			backPos, _ := ws.SurfaceStep(sorter.Position, back)
+			frontPos, _ := ws.SurfaceStep(sorter.Position, front)
+			input := newConveyorBuilding("in", backPos, tc.front)
+			output := newConveyorBuilding("out", frontPos, tc.front)
+			attachBuilding(ws, input)
+			attachBuilding(ws, output)
+			attachBuilding(ws, sorter)
+			input.Conveyor.Insert(model.ItemIronOre, 1)
+
+			settleSorters(ws)
+
+			if got := output.Conveyor.TotalItems(); got != 1 {
+				t.Fatalf("rotation %s: item did not travel back→front, output=%d", tc.rotation, got)
+			}
+			if got := input.Conveyor.TotalItems(); got != 0 {
+				t.Fatalf("rotation %s: source kept %d items", tc.rotation, got)
+			}
+		})
 	}
-	if got := inputNorth.Conveyor.TotalItems(); got != 0 {
-		t.Fatalf("expected north input items 0, got %d", got)
+}
+
+func TestSorterTripCycleMatchesCycleTicksAndDistance(t *testing.T) {
+	// 往返周期 = cycle_ticks × 端点距离格数（mk1 的 cycle_ticks = 6）。
+	ws := model.NewWorldState("planet-1", 6)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	input := newConveyorBuilding("in", model.Position{X: 1, Y: 2}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 3, Y: 2}, model.ConveyorEast)
+	sorter := newSorterBuilding("sorter", model.Position{X: 2, Y: 2})
+	attachBuilding(ws, input)
+	attachBuilding(ws, output)
+	attachBuilding(ws, sorter)
+	if sorter.Sorter.CycleTicks != 6 {
+		t.Fatalf("mk1 cycle_ticks = %d, want 6", sorter.Sorter.CycleTicks)
 	}
-	if got := inputWest.Conveyor.TotalItems(); got != 1 {
-		t.Fatalf("expected west input items 1, got %d", got)
+	// 两端点各距 1 格 → 距离 2 → 周期 12 tick。
+	input.Conveyor.Insert(model.ItemIronOre, 40)
+
+	ws.Tick = 100
+	settleSorters(ws)
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("first trip must move exactly one item, got %d", got)
+	}
+	if sorter.Sorter.NextTripTick != 112 {
+		t.Fatalf("next trip tick = %d, want 112", sorter.Sorter.NextTripTick)
+	}
+	for tick := int64(101); tick < 112; tick++ {
+		ws.Tick = tick
+		settleSorters(ws)
+	}
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("sorter tripped before its cycle elapsed, output=%d", got)
+	}
+	ws.Tick = 112
+	settleSorters(ws)
+	if got := output.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("sorter must trip again at tick 112, output=%d", got)
+	}
+
+	// 一 tick 内搬动 12 件需要 12 个周期：60 tick 内最多 5 次往返（t=100/112/124/136/148）。
+	ws.Tick = 0
+	sorter.Sorter.NextTripTick = 0
+	output.Conveyor.Take(output.Conveyor.TotalItems())
+	ws.Tick = 100
+	for tick := int64(100); tick <= 160; tick++ {
+		ws.Tick = tick
+		settleSorters(ws)
+	}
+	if got := output.Conveyor.TotalItems(); got != 6 {
+		t.Fatalf("mk1 throughput over 60 ticks = %d items, want 6 (cycle 12)", got)
+	}
+}
+
+func TestSorterTransferReflectsActualMovement(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 5)
+	ws.Tick = 12
+	input := newConveyorBuilding("in", model.Position{X: 1, Y: 2}, model.ConveyorEast)
+	output := newConveyorBuilding("out", model.Position{X: 3, Y: 2}, model.ConveyorEast)
+	sorter := newSorterBuilding("sorter", model.Position{X: 2, Y: 2})
+	output.Conveyor.MaxStack = 1
+	for _, b := range []*model.Building{input, output, sorter} {
+		attachBuilding(ws, b)
+	}
+	// 目标带已满：搬不动，就不该记 transfer，也不该推进往返周期。
+	output.Conveyor.Insert(model.ItemCopperOre, 1)
+	input.Conveyor.Insert(model.ItemIronOre, 3)
+	settleSorters(ws)
+	if sorter.Sorter.LastTransfer != nil {
+		t.Fatalf("blocked sorter must not record a transfer: %+v", sorter.Sorter.LastTransfer)
+	}
+	if sorter.Sorter.NextTripTick != 0 {
+		t.Fatalf("blocked sorter must not consume its cycle: %d", sorter.Sorter.NextTripTick)
+	}
+
+	output.Conveyor.Take(1)
+	settleSorters(ws)
+	transfer := sorter.Sorter.LastTransfer
+	if transfer == nil || transfer.Tick != 12 || transfer.Sequence != 1 || transfer.Quantity != 1 || transfer.ItemID != model.ItemIronOre {
+		t.Fatalf("expected record of one actual item, got %+v", transfer)
+	}
+	if transfer.SourceID != input.ID || transfer.TargetID != output.ID || transfer.SourcePosition != input.Position || transfer.TargetPosition != output.Position {
+		t.Fatalf("expected actual source and destination, got %+v", transfer)
+	}
+	if input.Conveyor.TotalItems() != 2 || output.Conveyor.TotalItems() != 1 {
+		t.Fatal("transfer record must correspond to inventory movement")
+	}
+	// 两端点各距 1 格 → 距离 2 → mk1 周期 12 tick。
+	if sorter.Sorter.NextTripTick != 24 {
+		t.Fatalf("next trip tick = %d, want 24", sorter.Sorter.NextTripTick)
+	}
+
+	ws.Tick = 13
+	output.Conveyor.Take(1)
+	settleSorters(ws)
+	if sorter.Sorter.LastTransfer != transfer {
+		t.Fatal("trip inside the cycle must not refresh the transfer record")
+	}
+
+	ws.Tick = 24
+	settleSorters(ws)
+	if got := sorter.Sorter.LastTransfer; got == transfer || got.Tick != 24 || got.Sequence != 2 || got.Quantity != 1 {
+		t.Fatalf("expected next trip after the cycle to advance sequence, got %+v", got)
+	}
+}
+
+func TestSorterDoesNotReportOrMoveWhenInactive(t *testing.T) {
+	for _, scenario := range []string{"paused", "no_power", "idle", "error", "empty", "filtered"} {
+		t.Run(scenario, func(t *testing.T) {
+			ws := model.NewWorldState("planet-1", 5)
+			ws.Tick = 20
+			input := newConveyorBuilding("in", model.Position{X: 1, Y: 2}, model.ConveyorEast)
+			output := newConveyorBuilding("out", model.Position{X: 3, Y: 2}, model.ConveyorEast)
+			sorter := newSorterBuilding("sorter", model.Position{X: 2, Y: 2})
+			for _, b := range []*model.Building{input, output, sorter} {
+				attachBuilding(ws, b)
+			}
+			input.Conveyor.Insert(model.ItemIronOre, 2)
+			switch scenario {
+			case "paused", "no_power", "idle", "error":
+				sorter.Runtime.State = model.BuildingWorkState(scenario)
+			case "empty":
+				input.Conveyor.Take(2)
+			case "filtered":
+				sorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemCopperOre}}
+			}
+			initialItems := input.Conveyor.TotalItems()
+			settleSorters(ws)
+			if input.Conveyor.TotalItems() != initialItems || output.Conveyor.TotalItems() != 0 || sorter.Sorter.LastTransfer != nil {
+				t.Fatalf("inactive sorter moved or recorded items: %+v", sorter.Sorter.LastTransfer)
+			}
+			oldTransfer := &model.SorterTransfer{Tick: 3, Sequence: 1, Quantity: 1}
+			sorter.Sorter.LastTransfer = oldTransfer
+			settleSorters(ws)
+			if sorter.Sorter.LastTransfer != oldTransfer {
+				t.Fatal("inactive sorter must not refresh historical transfer")
+			}
+		})
 	}
 }
 
@@ -140,6 +296,8 @@ func newConveyorBuilding(id string, pos model.Position, output model.ConveyorDir
 	return b
 }
 
+// newSorterBuilding 造一台朝向 90°（正面=东、背面=西）的 Mk.I 分拣器：
+// 与「西边来货、东边出货」的既有夹具一致。其它朝向直接改 Rotation。
 func newSorterBuilding(id string, pos model.Position) *model.Building {
 	profile := model.BuildingProfileFor(model.BuildingTypeSorterMk1, 1)
 	b := &model.Building{
@@ -147,6 +305,7 @@ func newSorterBuilding(id string, pos model.Position) *model.Building {
 		Type:        model.BuildingTypeSorterMk1,
 		OwnerID:     "p1",
 		Position:    pos,
+		Rotation:    model.PlanRotation90,
 		Runtime:     profile.Runtime,
 		VisionRange: profile.VisionRange,
 		MaxHP:       profile.MaxHP,
@@ -171,84 +330,5 @@ func attachBuilding(ws *model.WorldState, b *model.Building) {
 		key := model.TileKey(b.Position.X, b.Position.Y)
 		ws.TileBuilding[key] = b.ID
 		ws.Grid[b.Position.Y][b.Position.X].BuildingID = b.ID
-	}
-}
-
-func TestSorterTransferReflectsActualMovement(t *testing.T) {
-	ws := model.NewWorldState("planet-1", 5)
-	ws.Tick = 12
-	input := newConveyorBuilding("in", model.Position{X: 0, Y: 2}, model.ConveyorEast)
-	output := newConveyorBuilding("out", model.Position{X: 2, Y: 2}, model.ConveyorEast)
-	sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 2})
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
-	sorter.Sorter.Speed = 3
-	output.Conveyor.MaxStack = 1
-	for _, b := range []*model.Building{input, output, sorter} {
-		attachBuilding(ws, b)
-	}
-	input.Conveyor.Insert(model.ItemIronOre, 3)
-	settleSorters(ws)
-	transfer := sorter.Sorter.LastTransfer
-	if transfer == nil || transfer.Tick != 12 || transfer.Sequence != 1 || transfer.Quantity != 1 || transfer.ItemID != model.ItemIronOre {
-		t.Fatalf("expected record of one actual item constrained by target capacity, got %+v", transfer)
-	}
-	if transfer.SourceID != input.ID || transfer.TargetID != output.ID || transfer.SourcePosition != input.Position || transfer.TargetPosition != output.Position {
-		t.Fatalf("expected actual source and destination, got %+v", transfer)
-	}
-	if input.Conveyor.TotalItems() != 2 || output.Conveyor.TotalItems() != 1 {
-		t.Fatal("transfer record must correspond to inventory movement")
-	}
-	ws.Tick++
-	settleSorters(ws)
-	if sorter.Sorter.LastTransfer != transfer {
-		t.Fatal("blocked output must not refresh the transfer record")
-	}
-	output.Conveyor.Take(1)
-	ws.Tick++
-	settleSorters(ws)
-	if got := sorter.Sorter.LastTransfer; got == transfer || got.Tick != 14 || got.Sequence != 2 || got.Quantity != 1 {
-		t.Fatalf("expected next actual movement to advance sequence, got %+v", got)
-	}
-}
-
-func TestSorterDoesNotReportOrMoveWhenInactive(t *testing.T) {
-	for _, scenario := range []string{"paused", "no_power", "idle", "error", "empty", "wrong_source_direction", "wrong_target_direction", "filtered"} {
-		t.Run(scenario, func(t *testing.T) {
-			ws := model.NewWorldState("planet-1", 5)
-			ws.Tick = 20
-			input := newConveyorBuilding("in", model.Position{X: 0, Y: 2}, model.ConveyorEast)
-			output := newConveyorBuilding("out", model.Position{X: 2, Y: 2}, model.ConveyorEast)
-			sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 2})
-			sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-			sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
-			for _, b := range []*model.Building{input, output, sorter} {
-				attachBuilding(ws, b)
-			}
-			input.Conveyor.Insert(model.ItemIronOre, 2)
-			switch scenario {
-			case "paused", "no_power", "idle", "error":
-				sorter.Runtime.State = model.BuildingWorkState(scenario)
-			case "empty":
-				input.Conveyor.Take(2)
-			case "wrong_source_direction":
-				input.Conveyor.Output = model.ConveyorWest
-			case "wrong_target_direction":
-				output.Conveyor.Output = model.ConveyorWest
-			case "filtered":
-				sorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemCopperOre}}
-			}
-			initialItems := input.Conveyor.TotalItems()
-			settleSorters(ws)
-			if input.Conveyor.TotalItems() != initialItems || output.Conveyor.TotalItems() != 0 || sorter.Sorter.LastTransfer != nil {
-				t.Fatalf("inactive sorter moved or recorded items: %+v", sorter.Sorter.LastTransfer)
-			}
-			oldTransfer := &model.SorterTransfer{Tick: 3, Sequence: 1, Quantity: 1}
-			sorter.Sorter.LastTransfer = oldTransfer
-			settleSorters(ws)
-			if sorter.Sorter.LastTransfer != oldTransfer {
-				t.Fatal("inactive sorter must not refresh historical transfer")
-			}
-		})
 	}
 }

@@ -15,6 +15,8 @@ func newPileSorterBuilding(id string, pos model.Position) *model.Building {
 		Type:        model.BuildingTypePileSorter,
 		OwnerID:     "p1",
 		Position:    pos,
+		// 与 newSorterBuilding 同朝向（90°：背面西、正面东），沿用「西进东出」夹具。
+		Rotation:    model.PlanRotation90,
 		Runtime:     profile.Runtime,
 		VisionRange: profile.VisionRange,
 		MaxHP:       profile.MaxHP,
@@ -32,8 +34,6 @@ func sorterTechFixture(t *testing.T, sorter *model.Building) (*model.WorldState,
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	input := newConveyorBuilding("in", model.Position{X: 0, Y: 0}, model.ConveyorEast)
 	output := newConveyorBuilding("out", model.Position{X: 2, Y: 0}, model.ConveyorEast)
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-	sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
 	sorter.Sorter.Range = 1
 	sorter.Sorter.Normalize()
 	attachBuilding(ws, input)
@@ -42,15 +42,14 @@ func sorterTechFixture(t *testing.T, sorter *model.Building) (*model.WorldState,
 	return ws, input, output
 }
 
-func TestPileSorterLiftsWholePilesPerGrab(t *testing.T) {
+func TestPileSorterLiftsWholePilesPerTrip(t *testing.T) {
 	ws, input, output := sorterTechFixture(t, newPileSorterBuilding("sorter", model.Position{X: 1, Y: 0}))
-	ws.Buildings["sorter"].Sorter.Speed = 1
 	input.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 4}})
 
 	settleSorters(ws)
 
 	if got := output.Conveyor.TotalItems(); got != 4 {
-		t.Fatalf("pile sorter must lift the whole 4x pile in one grab, moved %d", got)
+		t.Fatalf("pile sorter must lift the whole 4x pile in one trip, moved %d", got)
 	}
 	if got := input.Conveyor.TotalItems(); got != 0 {
 		t.Fatalf("source retained %d items", got)
@@ -61,26 +60,24 @@ func TestPileSorterLiftsWholePilesPerGrab(t *testing.T) {
 	}
 }
 
-func TestOrdinarySorterPeelsSingleItemsFromPile(t *testing.T) {
+func TestOrdinarySorterMovesOneItemPerTrip(t *testing.T) {
 	sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 0})
-	sorter.Sorter.Speed = 3
 	ws, input, output := sorterTechFixture(t, sorter)
 	input.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 4}})
 
 	settleSorters(ws)
 
-	if got := output.Conveyor.TotalItems(); got != 3 {
-		t.Fatalf("ordinary sorter must peel one item per grab (speed 3), moved %d", got)
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("ordinary sorter must move exactly one item per trip, moved %d", got)
 	}
-	if got := input.Conveyor.TotalItems(); got != 1 {
+	if got := input.Conveyor.TotalItems(); got != 3 {
 		t.Fatalf("source retained %d items", got)
 	}
 }
 
-func TestSorterCargoStackingRaisesStacksPerGrab(t *testing.T) {
-	t.Run("ordinary_sorter_peels_more_per_grab", func(t *testing.T) {
+func TestSorterCargoStackingRaisesItemsPerTrip(t *testing.T) {
+	t.Run("ordinary_sorter_carries_more_stacks", func(t *testing.T) {
 		sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 0})
-		sorter.Sorter.Speed = 2
 		ws, input, output := sorterTechFixture(t, sorter)
 		grantTechs(ws, "p1", "sorter_cargo_stacking")
 		ws.Players["p1"].Tech.CompletedTechs["sorter_cargo_stacking"] = 2
@@ -88,17 +85,16 @@ func TestSorterCargoStackingRaisesStacksPerGrab(t *testing.T) {
 
 		settleSorters(ws)
 
-		// 2 grabs x (1 + 2) stacks = 6 items.
-		if got := output.Conveyor.TotalItems(); got != 6 {
-			t.Fatalf("stacking level 2 must move 6 items with speed 2, moved %d", got)
+		// 一次往返 x (1 + 2) stacks = 3 items。
+		if got := output.Conveyor.TotalItems(); got != 3 {
+			t.Fatalf("stacking level 2 must move 3 items per trip, moved %d", got)
 		}
-		if got := input.Conveyor.TotalItems(); got != 2 {
+		if got := input.Conveyor.TotalItems(); got != 5 {
 			t.Fatalf("source retained %d items", got)
 		}
 	})
-	t.Run("pile_sorter_lifts_multiple_piles_per_grab", func(t *testing.T) {
+	t.Run("pile_sorter_lifts_multiple_piles_per_trip", func(t *testing.T) {
 		ws, input, output := sorterTechFixture(t, newPileSorterBuilding("sorter", model.Position{X: 1, Y: 0}))
-		ws.Buildings["sorter"].Sorter.Speed = 1
 		grantTechs(ws, "p1", "sorter_cargo_stacking")
 		input.Conveyor.AppendStacks([]model.ItemStack{
 			{ItemID: model.ItemIronOre, Quantity: 4},
@@ -107,23 +103,22 @@ func TestSorterCargoStackingRaisesStacksPerGrab(t *testing.T) {
 
 		settleSorters(ws)
 
-		// 1 grab x (1 + 1) piles = two whole 4x piles.
+		// 一次往返 x (1 + 1) piles = 两整堆。
 		if got := output.Conveyor.TotalItems(); got != 8 {
-			t.Fatalf("stacking level 1 pile sorter must lift 2 piles in one grab, moved %d", got)
+			t.Fatalf("stacking level 1 pile sorter must lift 2 piles per trip, moved %d", got)
 		}
 	})
-	t.Run("unresearched_stacking_keeps_single_stack_grabs", func(t *testing.T) {
+	t.Run("unresearched_stacking_keeps_single_stack_trips", func(t *testing.T) {
 		sorter := newSorterBuilding("sorter", model.Position{X: 1, Y: 0})
-		sorter.Sorter.Speed = 2
 		ws, input, output := sorterTechFixture(t, sorter)
 		input.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 8}})
 
 		settleSorters(ws)
 
-		if got := output.Conveyor.TotalItems(); got != 2 {
-			t.Fatalf("unresearched sorter must move speed(2) items, moved %d", got)
+		if got := output.Conveyor.TotalItems(); got != 1 {
+			t.Fatalf("unresearched sorter must move 1 item per trip, moved %d", got)
 		}
-		if got := input.Conveyor.TotalItems(); got != 6 {
+		if got := input.Conveyor.TotalItems(); got != 7 {
 			t.Fatalf("source retained %d items", got)
 		}
 	})

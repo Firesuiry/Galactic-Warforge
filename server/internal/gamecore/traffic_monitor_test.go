@@ -320,15 +320,13 @@ func TestTrafficMonitorCapturesEveryRealBeltExitPath(t *testing.T) {
 		source := newConveyorBuilding("source", model.Position{X: 1, Y: 1}, model.ConveyorEast)
 		sink := newConveyorBuilding("sink", model.Position{X: 3, Y: 1}, model.ConveyorEast)
 		sorter := newSorterBuilding("arm", model.Position{X: 2, Y: 1})
-		sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
-		sorter.Sorter.OutputDirections = []model.ConveyorDirection{model.ConveyorEast}
-		sorter.Sorter.Speed = 2
 		attachBuilding(ws, source)
 		attachBuilding(ws, sink)
 		attachBuilding(ws, sorter)
 		source.Conveyor.Insert(model.ItemIronOre, 3)
 		settleSorters(ws)
-		if count(ws, source.ID) != 2 || sink.Conveyor.TotalItems() != 2 {
+		// 一次往返只搬 1 件（第 16 轮契约 §2），但该件必须计入皮带流出量。
+		if count(ws, source.ID) != 1 || sink.Conveyor.TotalItems() != 1 {
 			t.Fatal("sorter departure not measured")
 		}
 	})

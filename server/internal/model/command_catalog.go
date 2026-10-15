@@ -44,8 +44,9 @@ var commandSpecs = []CommandStructureSpec{
 	{
 		Type:                  CmdConfigureSorter,
 		RequiredTargetFields:  []string{"entity_id"},
-		RequiredPayloadFields: []string{"filter_mode", "filter_items"},
-		Constraints:           []string{"分拣器方向由建造朝向决定（背面取货、正面放货），不再接受 input_directions / output_directions：传了就拒绝（第 16 轮契约 §2）。"},
+		RequiredPayloadFields: []string{},
+		OptionalPayloadFields: []string{"filter_mode", "filter_items"},
+		Constraints:           []string{"只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。"},
 	},
 	{
 		Type:                  CmdConfigureTrafficMonitor,
