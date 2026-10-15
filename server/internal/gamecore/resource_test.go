@@ -260,11 +260,14 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 	if miner.Runtime.Functions.Energy != nil {
 		miner.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
-	// 细分网格：采矿机 3×3（x1..3,y1..3），传送带贴在东侧外圈、方向背离建筑。
+	// 细分网格：采矿机 3×3（x1..3,y1..3）。第 16 轮契约 §3 起仓储不再与皮带直连，
+	// 采集类仍直连皮带：矿机 → 带子 → 分拣器 → 仓库。
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
+	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, miner)
 	attachBuilding(ws, belt)
+	attachBuilding(ws, sorter)
 	attachBuilding(ws, depot)
 
 	ws.Resources["r1"] = &model.ResourceNodeState{
@@ -279,11 +282,14 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 		CurrentYield: 8,
 	}
 	ws.Grid[1][1].ResourceNodeID = "r1"
-	settleResources(ws)
-	settleStorage(ws)
-	settleBuildingIO(ws)
-	settleBuildingIO(ws)
-	settleStorage(ws)
+	for tick := 0; tick < 40; tick++ {
+		ws.Tick++
+		settleResources(ws)
+		settleStorage(ws)
+		settleConveyors(ws)
+		settleSorters(ws)
+		settleBuildingIO(ws)
+	}
 
 	if got := depot.Storage.OutputQuantity(model.ItemTitaniumOre); got == 0 {
 		t.Fatalf("expected depot to receive titanium ore, got %d", got)
@@ -307,9 +313,11 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 		pump.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
+	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, pump)
 	attachBuilding(ws, belt)
+	attachBuilding(ws, sorter)
 	attachBuilding(ws, depot)
 
 	ws.Resources["r1"] = &model.ResourceNodeState{
@@ -326,11 +334,14 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 	}
 	ws.Grid[1][1].ResourceNodeID = "r1"
 
-	settleResources(ws)
-	settleStorage(ws)
-	settleBuildingIO(ws)
-	settleBuildingIO(ws)
-	settleStorage(ws)
+	for tick := 0; tick < 40; tick++ {
+		ws.Tick++
+		settleResources(ws)
+		settleStorage(ws)
+		settleConveyors(ws)
+		settleSorters(ws)
+		settleBuildingIO(ws)
+	}
 
 	if got := depot.Storage.OutputQuantity(model.ItemWater); got == 0 {
 		t.Fatalf("expected depot to receive water, got %d", got)
@@ -354,9 +365,11 @@ func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
 		extractor.Runtime.Functions.Energy.ConsumePerTick = 0
 	}
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
-	depot := newDepotBuilding("depot", model.Position{X: 5, Y: 1})
+	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, extractor)
 	attachBuilding(ws, belt)
+	attachBuilding(ws, sorter)
 	attachBuilding(ws, depot)
 
 	ws.Resources["r1"] = &model.ResourceNodeState{
@@ -372,11 +385,14 @@ func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
 	}
 	ws.Grid[1][1].ResourceNodeID = "r1"
 
-	settleResources(ws)
-	settleStorage(ws)
-	settleBuildingIO(ws)
-	settleBuildingIO(ws)
-	settleStorage(ws)
+	for tick := 0; tick < 40; tick++ {
+		ws.Tick++
+		settleResources(ws)
+		settleStorage(ws)
+		settleConveyors(ws)
+		settleSorters(ws)
+		settleBuildingIO(ws)
+	}
 
 	if got := depot.Storage.OutputQuantity(model.ItemCrudeOil); got == 0 {
 		t.Fatalf("expected depot to receive crude oil, got %d", got)

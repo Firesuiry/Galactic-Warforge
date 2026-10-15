@@ -1,8 +1,10 @@
 package gamecore
 
 import (
-	"siliconworld/internal/model"
+	"strings"
 	"testing"
+
+	"siliconworld/internal/model"
 )
 
 func TestPhase1ExecutorRespawnsOnlyAtLivingHQ(t *testing.T) {
@@ -95,8 +97,9 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 	machine.Runtime.Params.IOPorts = []model.IOPort{{ID: "in", Direction: model.PortInput}, {ID: "out", Direction: model.PortOutput}}
 	attachBuilding(ws, source)
 	attachBuilding(ws, arm)
+	attachBuilding(ws, machine) // 整块占地都要登记，分拣器才能扫到非锚点 cell
 	gc := &GameCore{}
-	cmd := model.Command{Target: model.CommandTarget{EntityID: arm.ID}, Payload: map[string]any{"input_directions": []string{"west"}, "output_directions": []string{"east"}, "filter_items": []string{"iron_ore"}}}
+	cmd := model.Command{Target: model.CommandTarget{EntityID: arm.ID}, Payload: map[string]any{"filter_mode": "allow", "filter_items": []string{"iron_ore"}}}
 	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeOK {
 		t.Fatalf("configure: %+v", res)
 	}
@@ -105,24 +108,24 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 	if availableStorageItem(machine.Storage, "iron_ore") != 1 || source.Conveyor.TotalItems() != 2 {
 		t.Fatal("belt to machine transfer lost or failed")
 	}
+	// 方向由建造朝向决定：传方向字段必须被拒绝，且不部分修改已生效的过滤。
 	cmd.Payload["output_directions"] = []string{"west"}
-	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code == model.CodeOK {
-		t.Fatal("overlapping directions accepted")
+	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeValidationFailed || !strings.Contains(res.Message, "方向") {
+		t.Fatalf("direction payload must be rejected with a clear reason: %+v", res)
 	}
-	if arm.Sorter.OutputDirections[0] != model.ConveyorEast {
-		t.Fatal("invalid config partially mutated sorter")
+	if len(arm.Sorter.Filter.Items) != 1 || arm.Sorter.Filter.Items[0] != model.ItemIronOre {
+		t.Fatal("rejected config partially mutated sorter")
 	}
-	// Reverse direction and extract finished products, never the machine input stock.
-	cmd.Payload = map[string]any{"input_directions": []string{"east"}, "output_directions": []string{"west"}, "filter_items": []string{"iron_ingot"}}
-	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeOK {
-		t.Fatalf("reverse: %+v", res)
-	}
-	source.Conveyor.Output = model.ConveyorWest
-	source.Conveyor.Input = model.ConveyorEast
+	// 机器东侧再装一台分拣器（背面=西=机器、正面=东=带子）把成品抽出来：
+	// 同一栋机器要用两台朝向相反的分拣器才能既进料又出货（DSP 布局）。
+	drain := newConveyorBuilding("drain", model.Position{X: 7, Y: 2}, model.ConveyorEast)
+	reverse := newSorterBuilding("reverse", model.Position{X: 6, Y: 2})
+	reverse.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemIronIngot}}
+	attachBuilding(ws, drain)
+	attachBuilding(ws, reverse)
 	machine.Storage.OutputBuffer = model.ItemInventory{"iron_ingot": 2}
-	before := source.Conveyor.TotalItems()
 	settleSorters(ws)
-	if source.Conveyor.TotalItems() != before+1 || machine.Storage.OutputBuffer["iron_ingot"] != 1 {
+	if drain.Conveyor.TotalItems() != 1 || machine.Storage.OutputBuffer["iron_ingot"] != 1 {
 		t.Fatal("machine to belt transfer failed")
 	}
 }

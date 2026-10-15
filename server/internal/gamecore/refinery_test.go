@@ -100,27 +100,46 @@ func TestRefineryFeedbackOutputBackpressureIsAtomic(t *testing.T) {
 }
 
 func TestRefinerySeparatesOilAndHydrogenOverRepeatedBatches(t *testing.T) {
-	ws := model.NewWorldState("planet", 8)
+	ws := model.NewWorldState("planet", 12)
 	b := newProductionTestBuilding("refinery", model.BuildingTypeOilRefinery, model.Position{X: 3, Y: 3}, "oil_fractionation")
-	// 细分网格：精炼厂 3×3（x3..5,y3..5）。输入带贴南侧外圈朝北（指向占地）；
-	// 主产物带贴北侧外圈朝北、副产物带贴西侧外圈朝西（都背离占地）。
-	input := newConveyorBuilding("input", model.Position{X: 4, Y: 6}, model.ConveyorNorth)
-	oil := newConveyorBuilding("oil", model.Position{X: 4, Y: 2}, model.ConveyorNorth)
-	hydrogen := newConveyorBuilding("hydrogen", model.Position{X: 2, Y: 4}, model.ConveyorWest)
-	for _, building := range []*model.Building{b, input, oil, hydrogen} {
+	// 细分网格：精炼厂 3×3（x3..5,y3..5）。第 16 轮契约起精炼厂不再与皮带直连：
+	//   - 进料：带子 (4,8) → 分拣器 (4,7)（背南面北）→ 占地 (4,6)；
+	//   - 主产物：分拣器 (7,4)（背西面东）→ 带子 (8,4)；
+	//   - 副产物：分拣器 (4,1)（背南面北）→ 带子 (4,0)。
+	// 出货分拣器必须带过滤（否则会把精炼厂主库存里的原料也一起抽走——分拣器
+	// 对建筑取货取的是 ExportableItemQuantity，不过滤就等于「什么都搬」）。
+	input := newConveyorBuilding("input", model.Position{X: 4, Y: 8}, model.ConveyorNorth)
+	feeder := newSorterBuilding("feeder", model.Position{X: 4, Y: 7})
+	feeder.Rotation = model.PlanRotation0 // 背面南（带子）、正面北（精炼厂）
+	feeder.Sorter.Range = 2
+	feeder.Sorter.CycleTicks = 1
+	oil := newConveyorBuilding("oil", model.Position{X: 8, Y: 4}, model.ConveyorEast)
+	oilSorter := newSorterBuilding("oil-sorter", model.Position{X: 7, Y: 4})
+	oilSorter.Sorter.Range = 2
+	oilSorter.Sorter.CycleTicks = 1
+	oilSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemRefinedOil}}
+	hydrogen := newConveyorBuilding("hydrogen", model.Position{X: 4, Y: 0}, model.ConveyorNorth)
+	hydrogenSorter := newSorterBuilding("hydrogen-sorter", model.Position{X: 4, Y: 1})
+	hydrogenSorter.Rotation = model.PlanRotation0
+	hydrogenSorter.Sorter.Range = 2
+	hydrogenSorter.Sorter.CycleTicks = 1
+	hydrogenSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemHydrogen}}
+	for _, building := range []*model.Building{b, input, feeder, oil, oilSorter, hydrogen, hydrogenSorter} {
 		attachBuilding(ws, building)
 	}
 	totals := model.ItemInventory{}
 	acceptedCrude := 0
-	for tick := 0; tick < 800; tick++ {
-		if tick < 10 {
+	for tick := 0; tick < 3000; tick++ {
+		ws.Tick = int64(tick)
+		if input.Conveyor.TotalItems() < 4 {
 			accepted, _, err := input.Conveyor.Insert(model.ItemCrudeOil, 2)
 			if err != nil {
 				t.Fatal(err)
 			}
 			acceptedCrude += accepted
 		}
-		settleBuildingIO(ws)
+		settleConveyors(ws)
+		settleSorters(ws)
 		settleProduction(ws)
 		settleStorage(ws)
 		for _, out := range []*model.Building{oil, hydrogen} {
@@ -136,8 +155,11 @@ func TestRefinerySeparatesOilAndHydrogenOverRepeatedBatches(t *testing.T) {
 			}
 		}
 	}
-	// Input delivery is capped at two batches; account for every accepted item.
-	if totals[model.ItemRefinedOil] == 0 || totals[model.ItemRefinedOil] != acceptedCrude || totals[model.ItemRefinedOil] != 2*totals[model.ItemHydrogen] {
+	// 进料全部经分拣器，产出的油与氢按 2:1 分流到各自带子，谁也不串味。
+	if totals[model.ItemRefinedOil] == 0 || totals[model.ItemHydrogen] == 0 {
+		t.Fatalf("精炼厂产线没有出货: %+v（进料 %d）", totals, acceptedCrude)
+	}
+	if totals[model.ItemRefinedOil] != 2*totals[model.ItemHydrogen] {
 		t.Fatalf("unbalanced refining outputs: %+v", totals)
 	}
 }

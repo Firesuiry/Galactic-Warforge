@@ -9,8 +9,9 @@ import (
 
 func TestSorterTransferCloneIsolationAndJSON(t *testing.T) {
 	original := &model.SorterState{
-		InputDirections: []model.ConveyorDirection{model.ConveyorWest},
-		Filter:          model.SorterFilter{Items: []string{model.ItemIronOre}},
+		CycleTicks: 6,
+		Range:      2,
+		Filter:     model.SorterFilter{Items: []string{model.ItemIronOre}},
 		LastTransfer: &model.SorterTransfer{
 			Tick: 10, Sequence: 2, SourceID: "source", TargetID: "target",
 			SourcePosition: model.Position{X: 1, Y: 2},
@@ -32,9 +33,9 @@ func TestSorterTransferCloneIsolationAndJSON(t *testing.T) {
 			}
 			cloned.LastTransfer.Quantity = 9
 			cloned.LastTransfer.SourcePosition.X = 9
-			cloned.InputDirections[0] = model.ConveyorNorth
+			cloned.Range = 3
 			cloned.Filter.Items[0] = model.ItemCopperOre
-			if original.LastTransfer.Quantity != 1 || original.LastTransfer.SourcePosition.X != 1 || original.InputDirections[0] != model.ConveyorWest || original.Filter.Items[0] != model.ItemIronOre {
+			if original.LastTransfer.Quantity != 1 || original.LastTransfer.SourcePosition.X != 1 || original.Range != 2 || original.Filter.Items[0] != model.ItemIronOre {
 				t.Fatal("modifying a sorter snapshot mutated live world state")
 			}
 		})

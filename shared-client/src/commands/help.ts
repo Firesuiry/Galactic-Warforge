@@ -78,7 +78,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   squad_order: { usage: '<squad_id> <attack|defend|retreat|resupply> [<x> <y>] [--planet <id>]', desc: '军团指令；resupply 自动前往最近补给站' },
   dissolve_squad: { usage: '<squad_id> [--planet <id>]', desc: '解散军团，单位保留当前指令' },
   set_rally_point:{usage:'<building_id> <x> <y> [--planet <id>]',desc:'设置出厂单位集结点'},
-  configure_sorter: { usage: '<building_id> --inputs west --outputs east [--mode allow|deny] [--items iron_ore] [--planet <id>]', desc: '设置分拣器方向和物品过滤' },
+  configure_sorter: { usage: '<building_id> [--mode allow|deny] [--items iron_ore] [--planet <id>]', desc: '配置分拣器物品过滤（方向由建造朝向决定）' },
   configure_splitter: { usage: '<building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]', desc: '完整替换分流器端口、优先级和物品过滤；省略可选项即清除' },
   cancel_mecha_job: { usage: '<executor_id> [--planet <planet_id>]', desc: '取消机甲任务并返还未完成批次原料' },
   refuel_mecha: { usage: '<executor_id> <fuel_item_id> [count] [--planet <planet_id>]', desc: 'Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full' },

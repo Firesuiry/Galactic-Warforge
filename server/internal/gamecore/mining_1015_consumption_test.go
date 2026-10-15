@@ -17,18 +17,22 @@ func TestMinerBeltSmelterKeepsVeinConsumptionEqualToOutput(t *testing.T) {
 	// 采矿机 3×3（x6..8,y6..8）覆盖 5×5 框（含外扩 1 圈）：外圈 16 条铁矿脉。
 	miner := newMiningTestBuilding("miner", model.BuildingTypeMiningMachine, model.Position{X: 6, Y: 6}, 8)
 	smelter := newProductionTestBuilding("smelter", model.BuildingTypeArcSmelter, model.Position{X: 0, Y: 5}, "smelt_iron")
-	// 输出带从矿机西侧外圈 (5,7) 一路向西到熔炉东侧外圈 (3,7)：
-	// (3,7) 朝西指向熔炉占地内的 (2,7)，即熔炉输入口。
+	// 输出带从矿机西侧外圈 (5,7) 一路向西到熔炉东侧外圈 (3,7)。第 16 轮契约 §3
+	// 起熔炉不再与皮带直连：(3,7) 上放一台朝向 270°（背面东、正面西）的分拣器，
+	// 从 (4,7) 的带子上取矿、投进熔炉占地内的 (2,7)。
 	belts := []*model.Building{
 		newConveyorBuilding("belt-5", model.Position{X: 5, Y: 7}, model.ConveyorWest),
 		newConveyorBuilding("belt-4", model.Position{X: 4, Y: 7}, model.ConveyorWest),
-		newConveyorBuilding("belt-3", model.Position{X: 3, Y: 7}, model.ConveyorWest),
 	}
+	feeder := newSorterBuilding("feeder", model.Position{X: 3, Y: 7})
+	feeder.Rotation = model.PlanRotation270
+	feeder.Sorter.Range = 1
 	attachBuilding(ws, miner)
 	attachBuilding(ws, smelter)
 	for _, b := range belts {
 		attachBuilding(ws, b)
 	}
+	attachBuilding(ws, feeder)
 
 	veinRemaining := func() int {
 		total := 0
@@ -63,6 +67,7 @@ func TestMinerBeltSmelterKeepsVeinConsumptionEqualToOutput(t *testing.T) {
 		ws.Tick++
 		settleResources(ws)
 		settleConveyors(ws)
+		settleSorters(ws)
 		settleBuildingIO(ws)
 		settleProduction(ws)
 		settleStorage(ws)

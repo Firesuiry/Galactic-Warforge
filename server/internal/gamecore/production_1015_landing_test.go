@@ -24,12 +24,20 @@ func TestProductionKeepsGrowingWithBeltFeedAndSlowDownstreamPickup(t *testing.T)
 	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
-	// 熔炉 3×3（x3..5,y3..5）：西侧外圈 (2,4) 朝东 = 输入带，东侧外圈 (6,4)
-	// 朝东（背离占地）= 输出带。
+	// 熔炉 3×3（x3..5,y3..5）。第 16 轮契约 §3 起熔炉不再与皮带直连：
+	// 进料「带 (1,4) → 分拣器 (2,4)（背西面东）→ 占地 (3,4)」，
+	// 出货「分拣器 (6,4)（背西面东）→ 带 (7,4)」。
 	furnace := newProductionTestBuilding("furnace", model.BuildingTypeArcSmelter, model.Position{X: 3, Y: 3}, "smelt_iron")
-	input := newConveyorBuilding("input", model.Position{X: 2, Y: 4}, model.ConveyorEast)
-	output := newConveyorBuilding("output", model.Position{X: 6, Y: 4}, model.ConveyorEast)
-	for _, b := range []*model.Building{furnace, input, output} {
+	input := newConveyorBuilding("input", model.Position{X: 1, Y: 4}, model.ConveyorEast)
+	feeder := newSorterBuilding("feeder", model.Position{X: 2, Y: 4})
+	feeder.Sorter.Range = 2
+	feeder.Sorter.CycleTicks = 1
+	output := newConveyorBuilding("output", model.Position{X: 7, Y: 4}, model.ConveyorEast)
+	drain := newSorterBuilding("drain", model.Position{X: 6, Y: 4})
+	drain.Sorter.Range = 2
+	drain.Sorter.CycleTicks = 1
+	drain.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemIronIngot}}
+	for _, b := range []*model.Building{furnace, input, feeder, output, drain} {
 		attachBuilding(ws, b)
 	}
 	// 输出带容量有限（等价于「下游取货慢」）：只在有空位时才被取走。
@@ -57,7 +65,7 @@ func TestProductionKeepsGrowingWithBeltFeedAndSlowDownstreamPickup(t *testing.T)
 			produced += countStacks(output.Conveyor.Take(output.Conveyor.TotalItems()))
 		}
 
-		settleBuildingIO(ws)
+		settleSorters(ws)
 		settleProduction(ws)
 		settleStorage(ws)
 

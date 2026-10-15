@@ -425,19 +425,24 @@ func TestLocalAndInterstellarDispatchShareDemandAndPickupReservations(t *testing
 func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 	for _, itemID := range []string{model.ItemLogisticsDrone, model.ItemLogisticsVessel} {
 		t.Run(itemID, func(t *testing.T) {
-			ws := model.NewWorldState("planet-1", 12)
+			ws := model.NewWorldState("planet-1", 16)
 			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: make(model.ItemInventory)}
 			grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 			core := &GameCore{}
-			// 细分网格：制造台 3×3（x3..5）、运输站 5×5。输出带贴在制造台东侧
-			// 外圈（朝东背离），运输站放在带子东侧，其西侧外圈正好吃到这条带子。
+			// 细分网格：制造台 3×3（x3..5）、运输站 5×5（x8..12）。第 16 轮契约 §3
+			// 起制造台不再与皮带直连：出货走「分拣器 (6,4)（背西面东）→ 带 (7,4)」，
+			// 带子朝东指向运输站西侧外圈，即站点的皮带输入口。
 			factory := newBuilding("factory", model.BuildingTypeAssemblingMachineMk1, "p1", model.Position{X: 3, Y: 3})
 			factory.Production.RecipeID = itemID
 			factory.Runtime.State = model.BuildingWorkRunning
 			attachBuilding(ws, factory)
-			belt := newConveyorBuilding("belt", model.Position{X: 6, Y: 4}, model.ConveyorEast)
+			drain := newSorterBuilding("drain", model.Position{X: 6, Y: 4})
+			drain.Sorter.Range = 1
+			drain.Sorter.CycleTicks = 1
+			attachBuilding(ws, drain)
+			belt := newConveyorBuilding("belt", model.Position{X: 7, Y: 4}, model.ConveyorEast)
 			attachBuilding(ws, belt)
-			station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 7, Y: 2})
+			station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 8, Y: 2})
 			attachBuilding(ws, station)
 			if err := station.LogisticsStation.UpsertSetting(model.LogisticsStationItemSetting{ItemID: itemID, Mode: model.LogisticsStationModeNone}); err != nil {
 				t.Fatal(err)
@@ -461,6 +466,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 				ws.Tick++
 				settleProduction(ws)
 				settleStorage(ws)
+				settleSorters(ws)
 				settleBuildingIO(ws)
 				settleLogisticsStationIO(ws)
 			}

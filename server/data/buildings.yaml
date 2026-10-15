@@ -40,6 +40,7 @@ buildings:
         - {item_id: iron_ingot, quantity: 4}
         - {item_id: magnetic_coil, quantity: 2}
     buildable: true
+    direct_belt_io: true
     requires_resource_node: true
     profile: {max_hp_base: 150, max_hp_per_level: 50, vision_range: 2, level_bonus: {collect_yield: 3}}
     runtime:
@@ -65,6 +66,7 @@ buildings:
         - {item_id: super_magnetic_ring, quantity: 10}
         - {item_id: titanium_alloy, quantity: 20}
     buildable: true
+    direct_belt_io: true
     requires_resource_node: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
@@ -89,6 +91,7 @@ buildings:
         - {item_id: iron_ingot, quantity: 8}
         - {item_id: stone_brick, quantity: 4}
     buildable: true
+    direct_belt_io: true
     requires_resource_node: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
@@ -113,6 +116,7 @@ buildings:
         - {item_id: steel, quantity: 12}
         - {item_id: stone_brick, quantity: 12}
     buildable: true
+    direct_belt_io: true
     requires_resource_node: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
@@ -133,6 +137,7 @@ buildings:
     build_cost:
       items: [{item_id: reinforced_thruster, quantity: 20}, {item_id: super_magnetic_ring, quantity: 50}]
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
       params: {energy_consume: 4, connection_points: [{id: power, kind: power, capacity: 1}]}
@@ -146,6 +151,7 @@ buildings:
     footprint: {width: 1, height: 1}
     build_cost: {items: [{item_id: gear, quantity: 1}, {item_id: iron_ingot, quantity: 2}]}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 2, stack_limit: 2}}}
   - id: conveyor_belt_mk2
@@ -155,6 +161,7 @@ buildings:
     footprint: {width: 1, height: 1}
     build_cost: {items: [{item_id: electromagnetic_turbine, quantity: 1}]}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 4, stack_limit: 2}}}
   - id: conveyor_belt_mk3
@@ -164,6 +171,7 @@ buildings:
     footprint: {width: 1, height: 1}
     build_cost: {items: [{item_id: graphene, quantity: 1}, {item_id: super_magnetic_ring, quantity: 1}]}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 6, stack_limit: 3}}}
   - id: splitter
@@ -174,6 +182,7 @@ buildings:
     build_cost:
       items: [{item_id: circuit_board, quantity: 1}, {item_id: gear, quantity: 2}, {item_id: iron_ingot, quantity: 3}]
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 6, stack_limit: 24}}}
   - id: automatic_piler
@@ -188,6 +197,7 @@ buildings:
         - {item_id: steel, quantity: 3}
         - {item_id: super_magnetic_ring, quantity: 1}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime: {functions: {transport: {throughput: 2, stack_limit: 4}}}
   - id: traffic_monitor
@@ -202,6 +212,7 @@ buildings:
         - {item_id: glass, quantity: 1}
         - {item_id: iron_ingot, quantity: 3}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
       params: {energy_consume: 1, connection_points: [{id: power, kind: power, capacity: 1}]}
@@ -240,7 +251,7 @@ buildings:
     build_cost: {items: [{item_id: circuit_board, quantity: 1}, {item_id: iron_ingot, quantity: 1}]}
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
-    runtime: {functions: {sorter: {speed: 1, range: 1}}}
+    runtime: {functions: {sorter: {cycle_ticks: 6, range: 1}}}
   - id: sorter_mk2
     name: 高速分拣器 Mk.II
     category: transport
@@ -249,7 +260,7 @@ buildings:
     build_cost: {items: [{item_id: motor, quantity: 1}]}
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
-    runtime: {functions: {sorter: {speed: 2, range: 2}}}
+    runtime: {functions: {sorter: {cycle_ticks: 3, range: 2}}}
   - id: sorter_mk3
     name: 极速分拣器 Mk.III
     category: transport
@@ -258,7 +269,7 @@ buildings:
     build_cost: {items: [{item_id: electromagnetic_turbine, quantity: 1}]}
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
-    runtime: {functions: {sorter: {speed: 3, range: 3}}}
+    runtime: {functions: {sorter: {cycle_ticks: 2, range: 3}}}
   - id: pile_sorter
     name: 集装分拣器
     category: transport
@@ -268,7 +279,7 @@ buildings:
       items: [{item_id: processor, quantity: 1}, {item_id: super_magnetic_ring, quantity: 1}]
     buildable: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
-    runtime: {functions: {sorter: {speed: 4, range: 3}}}
+    runtime: {functions: {sorter: {cycle_ticks: 2, range: 3}}}
   - id: logistics_distributor
     name: 物流配送器
     category: logistics_hub
@@ -296,6 +307,7 @@ buildings:
         - {item_id: steel, quantity: 40}
         - {item_id: titanium_ingot, quantity: 40}
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
       params: {energy_consume: 1, capacity: 600, connection_points: [{id: power, kind: power, capacity: 1}]}
@@ -308,6 +320,7 @@ buildings:
     build_cost:
       items: [{item_id: particle_container, quantity: 20}, {item_id: titanium_alloy, quantity: 40}]
     buildable: true
+    direct_belt_io: true
     profile: {max_hp_base: 100, max_hp_per_level: 20, vision_range: 2}
     runtime:
       params: {energy_consume: 2, capacity: 2500, connection_points: [{id: power, kind: power, capacity: 1}]}

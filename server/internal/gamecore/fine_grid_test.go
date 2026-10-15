@@ -152,9 +152,10 @@ func TestFineGridBuildIndexesWholeFootprint(t *testing.T) {
 	}
 }
 
-// 2) 传送带只要指向占地外圈的任一 cell 就是输入口——包括"贴着 3×3 熔炉的
-// 非锚点边"那种旧规则下接不上的位置。
-func TestFineGridIOAcceptsBeltOnAnyRingCell(t *testing.T) {
+// 2) 分拣器（取货端）只要扫到占地外圈的任一 cell 就算连上——包括"贴着 3×3
+// 仓库的非锚点边"那种旧规则下接不上的位置。第 16 轮契约起仓储不再与皮带直连，
+// 这里走真实入口：带 → 分拣器 → 仓库。
+func TestFineGridSorterFeedsDepotOnAnyRingCell(t *testing.T) {
 	core, ws := fineGridCore(t)
 	origin := flatBuildSpot(t, ws, model.BuildingTypeDepotMk1, model.Position{X: 10, Y: 10})
 	depot := buildAndReturn(t, core, ws, model.BuildingTypeDepotMk1, origin)
@@ -168,13 +169,11 @@ func TestFineGridIOAcceptsBeltOnAnyRingCell(t *testing.T) {
 	// 永远接不到它，只有"外圈一圈 cell"规则才能把它算成输入口。
 	var cell model.Position
 	for _, candidate := range ring {
-		dir, ok := facing[candidate]
-		if !ok {
+		if _, ok := facing[candidate]; !ok {
 			continue
 		}
 		if candidate.Y != origin.Y && candidate.X != origin.X {
 			cell = candidate
-			_ = dir
 			break
 		}
 	}
@@ -182,20 +181,29 @@ func TestFineGridIOAcceptsBeltOnAnyRingCell(t *testing.T) {
 		t.Fatal("no off-axis ring cell found")
 	}
 
-	// 传送带就落在该环格上，输出方向指向占地内部（= 该环格的 facing）。
-	belt := newConveyorBuilding("belt", cell, facing[cell])
+	// 分拣器放在该环格外侧，正面（放货端）朝仓库；背面（取货端）外侧再放一条带子。
+	outward := facing[cell] // 从环格指向占地的方向
+	sorterPos, _ := ws.SurfaceStep(cell, outward)
+	sorter := newSorterBuilding("sorter", sorterPos)
+	sorter.Rotation = model.PlanRotationForDirection(outward)
+	sorter.Sorter.Range = 1
+	beltPos, _ := ws.SurfaceStep(sorterPos, outward.Opposite())
+	belt := newConveyorBuilding("belt", beltPos, outward)
+	attachBuilding(ws, sorter)
 	attachBuilding(ws, belt)
+
 	if _, _, err := belt.Conveyor.Insert(model.ItemIronOre, 3); err != nil {
 		t.Fatalf("insert belt: %v", err)
 	}
 
 	settleBuildingIO(ws)
+	settleSorters(ws)
 
-	if got := belt.Conveyor.TotalItems(); got != 1 {
+	if got := belt.Conveyor.TotalItems(); got != 2 {
 		t.Fatalf("ring belt kept %d items, want 1 moved into depot", got)
 	}
-	if got := depot.Storage.UsedInputBuffer(); got != 2 {
-		t.Fatalf("depot input buffer %d, want 2 (belt fed the off-axis ring cell %+v)", got, cell)
+	if got := depot.Storage.UsedInputBuffer(); got != 1 {
+		t.Fatalf("depot input buffer %d, want 1 (sorter fed the off-axis ring cell %+v)", got, cell)
 	}
 }
 
@@ -210,8 +218,8 @@ func TestFineGridSorterConnectsToAnyFootprintCell(t *testing.T) {
 	target.X = origin.X + 2
 	target.Y = origin.Y + 1 // 占地内、非锚点
 	sorterPos, _ := ws.SurfaceStep(target, model.ConveyorEast)
+	// 分拣器朝向 90°（背面=西、正面=东）：取货端从西侧沿轴扫，正好扫进熔炉占地。
 	sorter := newSorterBuilding("sorter", sorterPos)
-	sorter.Sorter.InputDirections = []model.ConveyorDirection{model.ConveyorWest}
 	sorter.Sorter.Range = 3
 	attachBuilding(ws, sorter)
 

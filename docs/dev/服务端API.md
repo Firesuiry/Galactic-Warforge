@@ -193,7 +193,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `configure_logistics_slot` | planet | `entity_id` | `scope`, `item_id`, `mode`, `local_storage`, `remove?` | `configure_logistics_slot` | 配置物流物品槽；remove移除无库存、无端口或在途引用的空槽 |
 | `configure_logistics_station` | planet | `entity_id` | `input_priority?`, `output_priority?`, `drone_capacity?`, `interstellar?`, `belt_ports?` | `configure_logistics_station` | Configure logistics station capacity, priority and interstellar switches |
 | `configure_mecha_logistics` | planet | `entity_id` | `requests` | `configure_mecha_logistics` | 替换机甲配送请求，最多 8 项，none 清空 |
-| `configure_sorter` | planet | `entity_id` | `input_directions`, `output_directions`, `filter_mode?`, `filter_items?` | `configure_sorter` | 设置分拣器方向和物品过滤 |
+| `configure_sorter` | planet | `entity_id` | `filter_mode?`, `filter_items?` | `configure_sorter` | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | planet | `entity_id` | `input_directions`, `output_directions`, `input_priority?`, `output_priority?`, `output_filters?` | `configure_splitter` | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | planet | `entity_id` | `target_belt_id`, `window_ticks`, `minimum_items_per_tick`, `alerts_enabled` | `configure_traffic_monitor` | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
 | `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
@@ -244,6 +244,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
 - `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。
+- `configure_sorter`：只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
@@ -344,7 +345,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 5.6 物流
 
 - 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。
-- 分拣器按“抓”结算：每 tick 抓取次数 = `speed`，mk1–3 每抓剥 1 件，`pile_sorter` 整堆；`sorter_cargo_stacking` 每级 +1 每抓堆数。`configure_sorter`：方向非空、合法、不重叠，过滤 `allow|deny`，失败原子拒绝。仅 `running` 时搬运；`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
+- 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（`sorter_mk1/2/3` 的 `range` = 1/2/3，`pile_sorter` = 3）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
+- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
+- `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
+- 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
 - 自动集装机 `automatic_piler`（`integrated_logistics` 解锁，吞吐 2）：把散货压成 2x 堆（`sorter_cargo_integration` 后 4x），出货每吞吐单位一整堆，满仓背压。
 - 分流器 `splitter`：独立 runtime 6 件/tick、缓存 24 件；默认西进、东/南/北出。`configure_splitter` **完整替换**配置：省略优先级或传 `""` 清除，省略过滤或传 `{}` 清除；方向仅 `north|east|south|west`，输入输出各非空且互斥。优先级为“可用优先”：优先口不可用时尝试其他合格口；未过滤出口也可接收过滤物品；全部堵塞时留在缓存，不丢不复制。`input_cursor` / `output_cursor` 为轮转游标，`transferred_items` / `last_transfer_tick` 为统计；重配只重置游标。
 - `configure_traffic_monitor`（耗电 1）：完整替换配置，绑定球面相邻己方 Mk.I/II/III 皮带（空字符串清绑定），`window_ticks` 1..600，`minimum_items_per_tick` 0..60。`building.traffic_monitor` 含 `state`（`sampling|flowing|idle|low_flow|blocked|unconfigured|no_power|paused|target_missing|target_inactive`）、`samples[]`、`items_per_tick`、`total_items`、`alert_active` 等；告警变化时发 `traffic_monitor_alert`。

@@ -63,16 +63,24 @@ func TestAssemblerTiersBeltIOPowerAndBackpressure(t *testing.T) {
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			ws := model.NewWorldState("planet", 12)
-			// 细分网格：制造台 3×3（x3..5,y3..5），输入带贴西侧外圈朝东，
-			// 输出带贴东侧外圈朝东（背离占地）。
+			// 细分网格：制造台 3×3（x3..5,y3..5）。第 16 轮契约 §3 起制造台不再与
+			// 皮带直连：进料「带 (1,4) → 分拣器 (2,4)（背西面东）→ 占地 (3,4)」，
+			// 出货「分拣器 (6,4)（背西面东）→ 带 (7,4)」。
 			b := newProductionTestBuilding("assembler", tc.kind, model.Position{X: 3, Y: 3}, "gear")
-			input := newConveyorBuilding("input", model.Position{X: 2, Y: 4}, model.ConveyorEast)
-			output := newConveyorBuilding("output", model.Position{X: 6, Y: 4}, model.ConveyorEast)
-			for _, building := range []*model.Building{b, input, output} {
+			input := newConveyorBuilding("input", model.Position{X: 1, Y: 4}, model.ConveyorEast)
+			feeder := newSorterBuilding("feeder", model.Position{X: 2, Y: 4})
+			feeder.Sorter.Range = 2
+			feeder.Sorter.CycleTicks = 1
+			output := newConveyorBuilding("output", model.Position{X: 7, Y: 4}, model.ConveyorEast)
+			drain := newSorterBuilding("drain", model.Position{X: 6, Y: 4})
+			drain.Sorter.Range = 2
+			drain.Sorter.CycleTicks = 1
+			drain.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemGear}}
+			for _, building := range []*model.Building{b, input, feeder, output, drain} {
 				attachBuilding(ws, building)
 			}
 			input.Conveyor.Insert(model.ItemIronIngot, 1)
-			settleBuildingIO(ws)
+			settleSorters(ws)
 			settleProduction(ws)
 			if input.Conveyor.TotalItems() != 0 || availableStorageItem(b.Storage, model.ItemIronIngot) != 0 || b.Production.RemainingTicks != tc.duration {
 				t.Fatalf("input not consumed once at tier speed: input=%d storage=%+v production=%+v", input.Conveyor.TotalItems(), b.Storage, b.Production)
@@ -96,23 +104,25 @@ func TestAssemblerTiersBeltIOPowerAndBackpressure(t *testing.T) {
 				ws.Tick++
 				settleProduction(ws)
 				settleStorage(ws)
-				settleBuildingIO(ws)
+				settleSorters(ws)
 			}
 			if len(b.Production.PendingOutputs) != 1 || b.Production.RemainingTicks != 0 || b.ExportableItemQuantity(model.ItemGear) != storedBefore {
 				t.Fatalf("blocked production lost or duplicated its pending output: %+v %+v", b.Production, b.Storage)
 			}
 			drainProductLandingSpots(b.Storage, model.ItemGear)
 			output.Conveyor.Take(output.Conveyor.TotalItems())
+			drain.Sorter.NextTripTick = 0
 			settleProduction(ws)
 			settleStorage(ws)
-			settleBuildingIO(ws)
+			settleSorters(ws)
 			if output.Conveyor.TotalItems() != 1 || output.Conveyor.Buffer[0].ItemID != model.ItemGear || len(b.Production.PendingOutputs) != 0 {
 				t.Fatalf("unblocking must export exactly one gear: %+v %+v", output.Conveyor, b.Production)
 			}
 			for i := 0; i < tc.duration+2; i++ {
+				ws.Tick++
 				settleProduction(ws)
 				settleStorage(ws)
-				settleBuildingIO(ws)
+				settleSorters(ws)
 			}
 			if output.Conveyor.TotalItems() != 1 {
 				t.Fatal("empty input created extra output")
