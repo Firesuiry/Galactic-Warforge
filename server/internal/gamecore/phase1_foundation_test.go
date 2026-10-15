@@ -1,8 +1,10 @@
 package gamecore
 
 import (
-	"siliconworld/internal/model"
+	"strings"
 	"testing"
+
+	"siliconworld/internal/model"
 )
 
 func TestPhase1ExecutorRespawnsOnlyAtLivingHQ(t *testing.T) {
@@ -108,8 +110,8 @@ func TestPhase1SorterMachineIOAndAtomicConfiguration(t *testing.T) {
 	}
 	// 方向由建造朝向决定：传方向字段必须被拒绝，且不部分修改已生效的过滤。
 	cmd.Payload["output_directions"] = []string{"west"}
-	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeValidationFailed {
-		t.Fatal("direction payload must be rejected")
+	if res, _ := execCommand(gc, model.CmdConfigureSorter, ws, "p1", cmd); res.Code != model.CodeValidationFailed || !strings.Contains(res.Message, "方向") {
+		t.Fatalf("direction payload must be rejected with a clear reason: %+v", res)
 	}
 	if len(arm.Sorter.Filter.Items) != 1 || arm.Sorter.Filter.Items[0] != model.ItemIronOre {
 		t.Fatal("rejected config partially mutated sorter")
