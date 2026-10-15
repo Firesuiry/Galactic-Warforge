@@ -2,7 +2,7 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
 
 /**
  * 临时验收（2026-07-18 批次2 修复：web-08/12/13/14）：
- * - web-08：顶栏矿产位显示 resources.minerals（建设资金），而非背包矿石库存；
+ * - web-08（第 16 轮契约改写）：顶栏资金位已删，只剩「电网结余」（只读），背包库存走 title；
  * - web-12：建造卡片名统一中文（无 snake_case 裸 ID）；
  * - web-14：选中建筑出现库存摘要 + 自动切到"选中对象"页签展示本地存储；
  * - web-13：toast 文案本地化（单测覆盖，浏览器端抽查顶栏告警文案）。
@@ -35,22 +35,17 @@ async function findOwnedBuildingId(request: APIRequestContext, buildingType: str
   return match!.id!;
 }
 
-test('顶栏矿产位显示 minerals 余额，建造卡片名全部本地化', async ({ page }) => {
+test('顶栏只展示电网结余（无资金位），建造卡片名全部本地化', async ({ page }) => {
   await installSession(page);
   await page.goto(`${WEB_ENTRY}/planet/planet-1-1`);
 
-  // web-08：顶栏矿产 chip 是建设资金（数字），title 提示背包库存
-  const mineralChip = page.locator('.top-nav__chip[title*="建设资金（矿石）"]');
-  await expect(mineralChip).toBeVisible({ timeout: 30_000 });
-  await expect(mineralChip).not.toContainText('暂无矿石库存');
-  // summary 首拉到达前 chip 可能是占位值，轮询到真实余额再断言
-  await expect.poll(async () => {
-    const balanceText = (await mineralChip.textContent()) ?? '';
-    return Number(balanceText.replace(/\D/g, ''));
-  }, { timeout: 15_000 }).toBeGreaterThan(0);
+  // web-08（第 16 轮契约）：资金位已删，顶栏那一格是「电网结余」只读展示，背包库存收进 title。
+  const powerChip = page.locator('.top-nav__chip[title*="电网结余"]');
+  await expect(powerChip).toBeVisible({ timeout: 30_000 });
+  await expect(powerChip).toContainText(/背包库存/);
 
   // web-12：建造卡片名无 snake_case 裸 ID（§3.2 复核后格子里不再写名称，
-  // 可读名在 aria-label 的第一段：`${name} · 矿 30 · …`）
+  // 可读名在 aria-label 的第一段：`${name} · 铁块 2/6 · …`）
   await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
   const cardNames = (await page.locator('.planet-build-card').evaluateAll((nodes) => nodes
     .map((node) => node.getAttribute('aria-label')?.split(' · ')[0] ?? '')))
@@ -62,9 +57,9 @@ test('顶栏矿产位显示 minerals 余额，建造卡片名全部本地化', a
   // 格子里只剩图标，中文名在 aria-label 里（不再用 hasText 找卡片）
   await expect(page.locator('.planet-build-card[data-building-id="wind_turbine"]')).toHaveAttribute('aria-label', /^风力涡轮机/);
 
-  // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）
+  // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）：只有物品造价，没有资金项
   const windCard = page.locator('.planet-build-card[data-building-id="wind_turbine"]');
-  await expect(windCard).toHaveAttribute('aria-label', /风力涡轮机 · 矿 \d+/);
+  await expect(windCard).toHaveAttribute('aria-label', /风力涡轮机 · 物品（背包有\/需要）：/);
   await expect(windCard).toBeEnabled();
 });
 

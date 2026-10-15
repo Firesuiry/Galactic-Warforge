@@ -8,6 +8,7 @@ import {
   describeFlowText,
   describeLogisticsDetail,
   directionVector,
+  isOmnidirectionalLogistics,
   logisticsArrows,
   resolveLogisticsDirection,
   sorterGhostDirections,
@@ -19,9 +20,9 @@ const belt = (id: string, x: number, y: number, output: string, input?: string, 
   conveyor: { input: input ?? 'west', output } as Building['conveyor'],
 } as Building);
 
-const sorter = (id: string, x: number, y: number, inputs: string[], outputs: string[], filter?: string[]): Building => ({
-  id, type: 'sorter_mk1', position: { x, y, z: 0 }, owner_id: 'p',
-  sorter: { input_directions: inputs, output_directions: outputs, speed: 1, range: 1, filter: { mode: 'allow', items: filter ?? [] } } as unknown as BuildingSorterState,
+const sorter = (id: string, x: number, y: number, rotation?: '0' | '90' | '180' | '270', filter?: string[]): Building => ({
+  id, type: 'sorter_mk1', position: { x, y, z: 0 }, owner_id: 'p', rotation,
+  sorter: { cycle_ticks: 6, range: 1, filter: { mode: 'allow', items: filter ?? [] } } as unknown as BuildingSorterState,
 } as Building);
 
 const splitter = (id: string, x: number, y: number, inputs: string[], outputs: string[]): Building => ({
@@ -51,25 +52,24 @@ describe('物流方向推导', () => {
     expect(describeFlowText(turn)).toBe('西→南');
   });
 
-  it('分拣器：每个取料×放料组合一支箭头，多组合不塌缩成一条', () => {
-    const one = sorter('s1', 4, 4, ['west'], ['east']);
-    expect(logisticsArrows(one)).toEqual({ arrows: [{ from: 'west', to: 'east' }], omnidirectional: false });
-    const two = sorter('s2', 4, 4, ['west', 'north'], ['east']);
-    expect(logisticsArrows(two).arrows).toEqual([{ from: 'west', to: 'east' }, { from: 'north', to: 'east' }]);
-    expect(describeFlowText(two)).toBe('西→东、北→东');
-    // 同侧取放（from === to）不是一条合法搬运线，不画箭头。
-    expect(logisticsArrows(sorter('s3', 4, 4, ['west'], ['west'])).arrows).toEqual([]);
+  it('分拣器：方向完全由 rotation 决定，取货端=背面、放货端=正面（第 16 轮契约 §2）', () => {
+    // 锚点与服务端 model.SorterFacing 一致：0°=北、90°=东、180°=南、270°=西。
+    expect(logisticsArrows(sorter('s0', 4, 4, '0'))).toEqual({ arrows: [{ from: 'south', to: 'north' }], omnidirectional: false });
+    expect(logisticsArrows(sorter('s90', 4, 4, '90'))).toEqual({ arrows: [{ from: 'west', to: 'east' }], omnidirectional: false });
+    expect(logisticsArrows(sorter('s180', 4, 4, '180'))).toEqual({ arrows: [{ from: 'north', to: 'south' }], omnidirectional: false });
+    expect(logisticsArrows(sorter('s270', 4, 4, '270'))).toEqual({ arrows: [{ from: 'east', to: 'west' }], omnidirectional: false });
+    // rotation 缺失按 0 处理（服务端 normalizePlanRotation 同样落到 "0"）。
+    expect(logisticsArrows(sorter('s-missing', 4, 4))).toEqual({ arrows: [{ from: 'south', to: 'north' }], omnidirectional: false });
+    expect(resolveLogisticsDirection(sorter('s90', 4, 4, '90'))).toBe('east');
+    expect(describeFlowText(sorter('s90', 4, 4, '90'))).toBe('西→东');
+    // 分拣器永远有单一方向：不存在「四向皆可」。
+    expect(isOmnidirectionalLogistics(sorter('s90', 4, 4, '90'))).toBe(false);
   });
 
-  it('分拣器：服务端四向默认值按 rotation 收成单一「取 → 放」（第 16 轮契约）', () => {
-    const all = ['north', 'east', 'south', 'west'];
-    const east = sorter('s4', 4, 4, all, all);
-    expect(logisticsArrows(east)).toEqual({ arrows: [{ from: 'west', to: 'east' }], omnidirectional: false });
-    expect(resolveLogisticsDirection(east)).toBe('east');
-    expect(describeFlowText(east)).toBe('西→东');
-    // rotation 决定正面（放货端）：90° = 南，背面 = 北
-    const south = { ...sorter('s5', 4, 4, all, all), rotation: '90' } as Building;
-    expect(logisticsArrows(south)).toEqual({ arrows: [{ from: 'north', to: 'south' }], omnidirectional: false });
+  it('分拣器：状态还没到达（只有 type）时不猜方向，画方向未定', () => {
+    const bare = { id: 's', type: 'sorter_mk2', position: { x: 4, y: 4, z: 0 }, owner_id: 'p', rotation: '180' } as Building;
+    expect(logisticsArrows(bare)).toEqual({ arrows: [], omnidirectional: false });
+    expect(describeFlowText(bare)).toContain('方向未定');
   });
 
   it('分流器：一进多出各画一支，走 splitter 而非 conveyor', () => {
@@ -139,20 +139,20 @@ describe('建造 ghost 朝向', () => {
     expect(buildGhostDirection('conveyor_belt_mk1', undefined, 0)).toBeNull();
   });
 
-  it('其他建筑用 rotation（0° = 东，每档顺时针 90°，与服务端 SorterState 同向）', () => {
-    expect(buildGhostDirection('sorter_mk1', 'auto', 0)).toBe('east');
-    expect(buildGhostDirection('sorter_mk1', 'auto', 90)).toBe('south');
-    expect(buildGhostDirection('arc_smelter', 'auto', 180)).toBe('west');
-    expect(buildGhostDirection('arc_smelter', 'auto', 270)).toBe('north');
+  it('其他建筑用 rotation（0° = 北，与服务端 model.SorterFacing 同一张锚点表）', () => {
+    expect(buildGhostDirection('sorter_mk1', 'auto', 0)).toBe('north');
+    expect(buildGhostDirection('sorter_mk1', 'auto', 90)).toBe('east');
+    expect(buildGhostDirection('arc_smelter', 'auto', 180)).toBe('south');
+    expect(buildGhostDirection('arc_smelter', 'auto', 270)).toBe('west');
   });
 
   it('分拣器 ghost 给出「取 → 放」两端（背面取货、正面放货）', () => {
-    expect(sorterGhostDirections('sorter_mk1', 0)).toEqual({ from: 'west', to: 'east' });
-    expect(sorterGhostDirections('sorter_mk1', 90)).toEqual({ from: 'north', to: 'south' });
-    expect(sorterGhostDirections('sorter_mk1', 180)).toEqual({ from: 'east', to: 'west' });
-    expect(sorterGhostDirections('sorter_mk1', 270)).toEqual({ from: 'south', to: 'north' });
-    // rotation 缺失按 0 处理（与 3D 场景 rotateY(-rotation) 同口径）
-    expect(sorterGhostDirections('sorter_mk1', undefined)).toEqual({ from: 'west', to: 'east' });
+    expect(sorterGhostDirections('sorter_mk1', 0)).toEqual({ from: 'south', to: 'north' });
+    expect(sorterGhostDirections('sorter_mk1', 90)).toEqual({ from: 'west', to: 'east' });
+    expect(sorterGhostDirections('sorter_mk1', 180)).toEqual({ from: 'north', to: 'south' });
+    expect(sorterGhostDirections('sorter_mk1', 270)).toEqual({ from: 'east', to: 'west' });
+    // rotation 缺失按 0 处理（与服务端 normalizePlanRotation 同口径）
+    expect(sorterGhostDirections('sorter_mk1', undefined)).toEqual({ from: 'south', to: 'north' });
     // 非分拣器不画取放端
     expect(sorterGhostDirections('conveyor_belt_mk1', 0)).toBeNull();
     expect(sorterGhostDirections('arc_smelter', 90)).toBeNull();

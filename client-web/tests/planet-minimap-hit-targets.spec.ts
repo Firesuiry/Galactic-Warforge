@@ -108,15 +108,14 @@ function selectableUnits(scene: ScenePayload): SceneUnit[] {
 }
 
 /**
- * 兵营（60 矿石 + 20 能量 + 铁块 8 + 电路板 4）的建造成本是否已不足。
+ * 兵营（铁块 8 + 电路板 4，第 16 轮契约去掉资金维度后只剩物品）的建造成本是否已不足。
  *
  * 全量套件串行跑在同一个战争服上：前面的用例（行星 3D、建造工作流、产线规划）会从背包里
  * 花掉铁块与电路板，而这张战争图上没有铁矿来源（planet-three.spec.ts 有同样注释），
  * 花光后兵营只会一直排队等料（insufficient_materials），永远建不起来。
  */
-function materialsShort(wallet: { minerals: number; inventory: Record<string, number> }): boolean {
-  return wallet.minerals < 60
-    || (wallet.inventory.iron_ingot ?? 0) < 8
+function materialsShort(wallet: { inventory: Record<string, number> }): boolean {
+  return (wallet.inventory.iron_ingot ?? 0) < 8
     || (wallet.inventory.circuit_board ?? 0) < 4;
 }
 
@@ -133,7 +132,7 @@ async function constructionTasks(request: APIRequestContext): Promise<string[]> 
 }
 
 /** p1 当前的资源与背包（判断建造成本是否够用）。 */
-async function playerWallet(request: APIRequestContext): Promise<{ minerals: number; energy: number; inventory: Record<string, number> }> {
+async function playerWallet(request: APIRequestContext): Promise<{ energy: number; inventory: Record<string, number> }> {
   const response = await request.get('/state/summary', {
     headers: { Authorization: 'Bearer key_player_1' },
   });
@@ -141,7 +140,6 @@ async function playerWallet(request: APIRequestContext): Promise<{ minerals: num
   const summary = await response.json();
   const player = summary.players?.p1 ?? {};
   return {
-    minerals: player.resources?.minerals ?? 0,
     energy: player.resources?.energy ?? 0,
     inventory: player.inventory ?? {},
   };
@@ -257,7 +255,7 @@ async function ensureTwoOwnUnits(request: APIRequestContext): Promise<boolean> {
     expect(
       barracks,
       `兵营应在数秒内建成（落点 ${JSON.stringify(site)}；最后一次回执 ${lastResult}；`
-      + `资源 矿石 ${wallet.minerals} / 铁块 ${wallet.inventory.iron_ingot ?? 0} / 电路板 ${wallet.inventory.circuit_board ?? 0}；`
+      + `资源 电网结余 ${wallet.energy} / 铁块 ${wallet.inventory.iron_ingot ?? 0} / 电路板 ${wallet.inventory.circuit_board ?? 0}；`
       + `施工任务 ${JSON.stringify(tasks.map((task) => [task.building_type, task.state, task.wait_reason]))}；`
       + `现有建筑 ${JSON.stringify(Object.values(latest.buildings ?? {}).map((b) => `${b.type}@${b.position.x},${b.position.y}`))}）`,
     ).toBeTruthy();

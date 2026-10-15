@@ -19,6 +19,8 @@ import { Texture } from 'pixi.js';
 
 import type { Building, PlanRotation } from '@shared/types';
 
+import { ROTATION_FACING, rotationTurns } from '@/features/planet-map/logistics-direction';
+
 // ---------- 原型（archetype）与类型映射 ----------
 
 export type BuildingArchetype = 'tower' | 'dome' | 'furnace' | 'depot' | 'belt' | 'special';
@@ -45,21 +47,14 @@ export function resolveConveyorBeltDirection(
 
 /**
  * 分拣器方向解析（第 16 轮契约）：方向完全由建筑 rotation 决定——背面取货、正面放货。
- * 优先用服务端 sorter 配置里的单一输出方向；服务端还没改造（下发四向默认值）时
- * 退回 rotation 推导，保证机械臂与方向纹始终指向真实放货端。
+ * 服务端 `SorterState` 已不再下发方向字段，这里与 `logistics-direction.ROTATION_FACING`
+ * 用同一张锚点表（0°=北、90°=东、180°=南、270°=西），保证 2D 方向纹、机械臂与
+ * 服务端扫端点的方向一致。
  */
 export function resolveSorterDirection(
-  building: { rotation?: PlanRotation; sorter?: { input_directions?: string[]; output_directions?: string[] } },
+  building: { rotation?: PlanRotation },
 ): BeltDirection {
-  const output = building.sorter?.output_directions;
-  if (output?.length === 1) {
-    const single = output[0];
-    if (single === 'north' || single === 'south' || single === 'west' || single === 'east') {
-      return single;
-    }
-  }
-  const turns = ((Math.round(Number(building.rotation ?? 0) / 90) % 4) + 4) % 4;
-  return (['east', 'south', 'west', 'north'] as BeltDirection[])[turns];
+  return ROTATION_FACING[rotationTurns(building.rotation)];
 }
 
 /**

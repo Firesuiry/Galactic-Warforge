@@ -8,11 +8,11 @@ import { usePlanetCommandStore } from '@/features/planet-commands/store';
 const { client } = vi.hoisted(() => ({ client: { cmdConfigureSorter: vi.fn(), fetchEventSnapshot: vi.fn() } }));
 vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
 vi.mock('@/hooks/use-session', () => ({ useSessionSnapshot: () => ({ playerId: 'p1', playerKey: 'key', serverUrl: 'http://test.local' }) }));
-/** 服务端按建造朝向下发单向取/放（第 16 轮契约：背面取货、正面放货）。 */
+/** 服务端 `SorterState` 已不含方向字段：取/放端只由 rotation 推出（背面取货、正面放货）。 */
 const building: Building = {
   id: 'sorter-1', type: 'sorter_mk1', owner_id: 'p1', position: { x: 2, y: 2, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 4, rotation: '90',
   runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 1, height: 1 } }, functions: {}, state: 'running' },
-  sorter: { input_directions: ['north'], output_directions: ['south'], speed: 1, range: 1, filter: { mode: 'allow', items: ['iron_ore'] } },
+  sorter: { cycle_ticks: 6, range: 1, filter: { mode: 'allow', items: ['iron_ore'] } },
 };
 const catalog = { items: [{ id: 'iron_ore', name: '铁矿石' }, { id: 'copper_ore', name: '铜矿石' }] } as CatalogView;
 function show(value = building, canControl = true) {
@@ -25,16 +25,16 @@ beforeEach(() => {
   usePlanetCommandStore.getState().resetForPlanet('planet-1-1');
 });
 
-it('shows the read-only direction and current filter', () => {
+it('shows the read-only direction derived from rotation and the current filter', () => {
   show();
-  // 方向只读展示「背面取货 → 正面放货」，不再是可编辑的四向下拉。
-  expect(screen.getByTestId('sorter-direction')).toHaveTextContent('背面 北 → 正面 南');
+  // 方向只读展示「背面取货 → 正面放货」，由 rotation 推出（90° → 正面东），不再是可编辑的四向下拉。
+  expect(screen.getByTestId('sorter-direction')).toHaveTextContent('背面 西 → 正面 东');
   expect(screen.queryByLabelText('北侧方向')).toBeNull();
   expect(screen.getByLabelText('过滤模式')).toHaveValue('allow');
   expect(screen.getByLabelText('过滤物品')).toHaveValue(['iron_ore']);
 });
 
-it('submits only the filter and echoes the server directions unchanged', async () => {
+it('submits only the filter — direction never enters the payload', async () => {
   show();
   fireEvent.change(screen.getByLabelText('过滤模式'), { target: { value: 'deny' } });
   const items = screen.getByLabelText('过滤物品');
@@ -42,7 +42,7 @@ it('submits only the filter and echoes the server directions unchanged', async (
   fireEvent.change(items);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '应用分拣设置' })); });
   expect(client.cmdConfigureSorter).toHaveBeenCalledWith('sorter-1', {
-    input_directions: ['north'], output_directions: ['south'], filter_mode: 'deny', filter_items: [],
+    filter_mode: 'deny', filter_items: [],
   }, 'planet-1-1');
   expect(usePlanetCommandStore.getState().journal[0].commandType).toBe('configure_sorter');
 });

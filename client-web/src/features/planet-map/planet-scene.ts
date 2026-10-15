@@ -2787,31 +2787,31 @@ export class PlanetScene {
             .stroke({ width: 2, color: COLOR_GHOST_OK, alpha: 0.95 });
         }
       }
-      return;
-    }
-
-    // 分拣器 ghost：取 → 放 两端箭头（第 16 轮契约：背面取货、正面放货，方向跟 rotation 走）。
-    if (!overviewMode && mode.kind === 'build' && hoveredTile && isSorterBuilding({ type: mode.buildingType })) {
-      const routes = sorterGhostDirections(mode.buildingType, mode.rotation);
-      if (routes) {
-        const cx = this.pxTileX(hoveredTile.x) + ts / 2;
-        const cy = this.pxTileY(hoveredTile.y) + ts / 2;
-        for (const [direction, color, width] of [
-          [routes.from, COLOR_GHOST_TAKE, 2.5],
-          [routes.to, COLOR_GHOST_OK, 2.5],
-        ] as [typeof routes.to, number, number][]) {
-          const vector = directionVector(direction);
-          const half = ts * 0.34;
-          const wing = ts * 0.18;
-          const tipX = cx + vector.x * half;
-          const tipY = cy + vector.y * half;
-          g.moveTo(cx - vector.x * half, cy - vector.y * half)
-            .lineTo(tipX, tipY)
-            .moveTo(tipX, tipY)
-            .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
-            .moveTo(tipX, tipY)
-            .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
-            .stroke({ width, color, alpha: 0.95 });
+      // 分拣器幽灵：取 → 放 两端箭头（第 16 轮契约：背面取货、正面放货，方向跟 rotation 走）。
+      // 与传送带箭头同处一个分支：幽灵 footprint 画完后立刻叠方向，不再另开一个永远走不到的
+      // 分支（原先的判断在 assessment 存在时被上面的 return 短路，箭头根本画不出来）。
+      if (isSorterBuilding({ type: mode.buildingType })) {
+        const routes = sorterGhostDirections(mode.buildingType, mode.rotation);
+        if (routes) {
+          const cx = this.pxTileX(hoveredTile.x) + (assessment.footprint.width / 2) * ts;
+          const cy = this.pxTileY(hoveredTile.y) + (assessment.footprint.height / 2) * ts;
+          for (const [direction, color] of [
+            [routes.from, COLOR_GHOST_TAKE],
+            [routes.to, COLOR_GHOST_OK],
+          ] as [typeof routes.to, number][]) {
+            const vector = directionVector(direction);
+            const half = ts * 0.34;
+            const wing = ts * 0.18;
+            const tipX = cx + vector.x * half;
+            const tipY = cy + vector.y * half;
+            g.moveTo(cx - vector.x * half, cy - vector.y * half)
+              .lineTo(tipX, tipY)
+              .moveTo(tipX, tipY)
+              .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
+              .moveTo(tipX, tipY)
+              .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
+              .stroke({ width: 2.5, color, alpha: 0.95 });
+          }
         }
       }
       return;

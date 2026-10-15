@@ -12,29 +12,26 @@
  *
  * 数据口径全部来自服务端：传送带 conveyor.input/output（建成时 construction.go
  * 已把 auto 落成实方向）；分拣器**方向完全由建筑 rotation 决定**（第 16 轮契约：
- * 背面取货、正面放货，`sorter.input_directions/output_directions` 由服务端按旋转
- * 写死成单向后下发，客户端不再自造四向）；分流器仍用 splitter.input/output_directions。
- * 缺失即「未配置」，绝不替玩家猜一个方向。
+ * 背面取货、正面放货，服务端 `SorterState` 已不再保存方向，只留 `rotation`，
+ * 客户端用同一张锚点表推导，不再读已删除的 `input_directions/output_directions`）；
+ * 分流器仍用 splitter.input/output_directions。缺失即「未配置」，绝不替玩家猜一个方向。
  */
 
 import { surfaceStep } from '@shared/surface';
-import type { Building, CatalogView, ConveyorDirection } from '@shared/types';
+import type { Building, CatalogView, ConveyorDirection, PlanRotation } from '@shared/types';
 
 import { getBuildingDisplayName, getBuildingFootprint, toTilePoint, type TilePoint } from './model';
 
 export type CardinalDirection = 'north' | 'east' | 'south' | 'west';
 
-export const CARDINAL_DIRECTIONS: readonly CardinalDirection[] = ['north', 'east', 'south', 'west'];
-
 /**
- * rotation 档位 → 正面朝向（0/90/180/270 → 东/南/西/北，顺时针）。
+ * rotation 档位 → 正面朝向。
  *
- * 与服务端 `SorterState` 的约定一致：rotation=0 时正面（放货端）朝东、背面（取货端）朝西。
- * 服务端契约（docs/guide/实物经济与分拣器.md §2）落地后，同一份方向也会随
- * `sorter.input_directions/output_directions` 下发；客户端优先用服务端数据，
- * 只有拿到四向皆可（服务端尚未改造）时才退回 rotation 推导。
+ * 锚点与服务端 `model.SorterFacing` 完全一致（`server/internal/model/sorter.go`）：
+ * rotation=0 → 北、90 → 东、180 → 南、270 → 西。正面 = 放货端，背面（正面反向）= 取货端。
+ * 分拣器只有这一个方向来源：服务端按它扫端点，客户端按它画箭头与机械臂。
  */
-export const ROTATION_FACING: readonly CardinalDirection[] = ['east', 'south', 'west', 'north'];
+export const ROTATION_FACING: readonly CardinalDirection[] = ['north', 'east', 'south', 'west'];
 
 export const DIRECTION_NAMES: Record<CardinalDirection, string> = { north: '北', east: '东', south: '南', west: '西' };
 
@@ -98,9 +95,9 @@ function arrowsFromPairs(inputs: readonly CardinalDirection[], outputs: readonly
  * 非物流建筑返回空（omnidirectional=false）。
  *
  * 分拣器（第 16 轮契约 §2）：方向**完全由建筑 rotation 决定**——背面取货、正面放货，
- * 沿朝向轴向前后各找 range 格。服务端也按旋转写死成单向下发，客户端不再读
- * `sorter.input_directions/output_directions`（那两个字段在服务端只剩记录作用），
- * 也就不存在「四向皆可」这种状态。分流器仍是真正的四向设备，不套用这条规则。
+ * 沿朝向轴向前后各找 range 格。服务端 `SorterState` 已删掉方向字段（只留 rotation），
+ * 客户端按同一张锚点表（ROTATION_FACING）推导，不再有「四向皆可」这种状态。
+ * 分流器仍是真正的四向设备，不套用这条规则。
  */
 export function logisticsArrows(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): LogisticsArrows {
   if (building.splitter) {
@@ -247,9 +244,9 @@ export function buildGhostDirection(
   return ROTATION_FACING[rotationTurns(rotation)];
 }
 
-/** rotation（度）→ 0..3 档位。 */
-export function rotationTurns(rotation: number | undefined): number {
-  return ((Math.round((rotation ?? 0) / 90) % 4) + 4) % 4;
+/** rotation（服务端下发的度数字符串或建造模式里的数字）→ 0..3 档位。 */
+export function rotationTurns(rotation: PlanRotation | number | undefined): number {
+  return ((Math.round(Number(rotation ?? 0) / 90) % 4) + 4) % 4;
 }
 
 /**

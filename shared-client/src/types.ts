@@ -205,11 +205,20 @@ export interface SorterTransfer {
   quantity: number;
 }
 
+/**
+ * 分拣器运行时状态（第 16 轮契约 §2，对齐服务端 `model.SorterState`）。
+ *
+ * 方向不在状态里：取货端固定为建造朝向 rotation 的背面、放货端为正面，
+ * 客户端用 `logistics-direction.ROTATION_FACING` 从 rotation 推导，与服务端
+ * `model.SorterFacing` 同一张锚点表。
+ */
 export interface BuildingSorterState {
-  input_directions?: ConveyorDirection[];
-  output_directions?: ConveyorDirection[];
-  speed: number;
+  /** 往返周期系数：往返周期 = cycle_ticks × 两端点距离格数（mk1/mk2/mk3 = 6/3/2）。 */
+  cycle_ticks: number;
+  /** 沿朝向轴前后各扫几格找端点（mk1/mk2/mk3 = 1/2/3）。 */
   range: number;
+  /** 下一次允许往返的最早 tick（0 = 随时可搬）。 */
+  next_trip_tick?: number;
   filter?: {
     mode?: 'allow' | 'deny';
     items?: string[];

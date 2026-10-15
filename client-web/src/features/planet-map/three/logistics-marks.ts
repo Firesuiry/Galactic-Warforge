@@ -141,8 +141,9 @@ function tint(hex: string): [number, number, number] {
 }
 
 /**
- * 分拣器/分流器顶面箭头：从取料侧指向放料侧（方向全部来自服务端 sorter/splitter 配置）。
- * 四向皆可的建筑画四条中心向外的短箭头（枢纽标记），不猜单一流向。
+ * 分拣器/分流器顶面箭头：从取料侧指向放料侧。
+ * 分拣器方向由 rotation 推出（背面取货、正面放货，第 16 轮契约）；分流器仍读它自己的端口配置。
+ * 四向皆可的分流器画四条中心向外的短箭头（枢纽标记），不猜单一流向。
  */
 export class LogisticsDirectionMarks {
   readonly group = new THREE.Group();
@@ -164,7 +165,7 @@ export class LogisticsDirectionMarks {
   refresh(buildings: readonly Building[], faceSize: number, radius: number): boolean {
     const sorters = buildings.filter(building => Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type)));
     const signature = JSON.stringify([faceSize, radius, sorters.map(building => [building.id, building.position,
-      building.rotation, building.sorter?.input_directions, building.sorter?.output_directions, building.sorter?.filter?.items,
+      building.rotation, building.sorter?.filter?.items,
       building.splitter?.input_directions, building.splitter?.output_directions])]);
     if (signature === this.signature) return false;
     this.signature = signature;
