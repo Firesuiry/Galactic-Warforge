@@ -90,7 +90,7 @@ func Encode(snap *Snapshot) ([]byte, error) {
 		snap.Version = CurrentVersion
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格与去资金经济两次改动都改变了状态语义，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	if snap.Timestamp.IsZero() {
 		snap.Timestamp = time.Now().UTC()
@@ -116,7 +116,7 @@ func Decode(data []byte) (*Snapshot, error) {
 		return nil, errors.New("snapshot version required")
 	}
 	if snap.Version != CurrentVersion {
-		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格后坐标语义已改变，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
+		return nil, fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格与去资金经济两次改动都改变了状态语义，旧存档无法加载，请开新局", snap.Version, CurrentVersion)
 	}
 	return &snap, nil
 }
