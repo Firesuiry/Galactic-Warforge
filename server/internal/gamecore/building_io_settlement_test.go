@@ -220,3 +220,46 @@ func totalStorageItems(storage *model.StorageState) int {
 	}
 	return storage.UsedInventory() + storage.UsedInputBuffer() + storage.UsedOutputBuffer()
 }
+
+// 白名单数据驱动：只有 buildings.yaml 里标了 direct_belt_io 的建筑类型能直连皮带。
+// 白名单就是「采集类 + 物流站 + 带上设备」，生产 / 仓储 / 研究 / 发电 / 军事一律
+// 不在其中——它们是第 16 轮契约 §3 要求必须经分拣器进出货的对象。
+func TestBuildingIODirectBeltWhitelistMatchesCatalog(t *testing.T) {
+	want := map[model.BuildingType]bool{
+		model.BuildingTypeMiningMachine:                true,
+		model.BuildingTypeAdvancedMiningMachine:        true,
+		model.BuildingTypeWaterPump:                    true,
+		model.BuildingTypeOilExtractor:                 true,
+		model.BuildingTypeOrbitalCollector:             true,
+		model.BuildingTypeConveyorBeltMk1:              true,
+		model.BuildingTypeConveyorBeltMk2:              true,
+		model.BuildingTypeConveyorBeltMk3:              true,
+		model.BuildingTypeSplitter:                     true,
+		model.BuildingTypeAutomaticPiler:               true,
+		model.BuildingTypeTrafficMonitor:               true,
+		model.BuildingTypePlanetaryLogisticsStation:    true,
+		model.BuildingTypeInterstellarLogisticsStation: true,
+	}
+	for btype := range want {
+		if !model.BuildingHasDirectBeltIO(btype) {
+			t.Errorf("%s 应保留直连皮带 IO", btype)
+		}
+	}
+	for _, btype := range []model.BuildingType{
+		model.BuildingTypeDepotMk1,
+		model.BuildingTypeArcSmelter,
+		model.BuildingTypeAssemblingMachineMk1,
+		model.BuildingTypeChemicalPlant,
+		model.BuildingTypeOilRefinery,
+		model.BuildingTypeMatrixLab,
+		model.BuildingTypeWindTurbine,
+		model.BuildingTypeThermalPowerPlant,
+		model.BuildingTypeBattlefieldAnalysisBase,
+		model.BuildingType("barracks"),
+		model.BuildingTypeEMRailEjector,
+	} {
+		if model.BuildingHasDirectBeltIO(btype) {
+			t.Errorf("%s 不该直连皮带（必须经分拣器）", btype)
+		}
+	}
+}
