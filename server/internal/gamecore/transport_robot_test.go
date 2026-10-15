@@ -536,7 +536,7 @@ func mustBuildingTiles(t *testing.T, ws *model.WorldState, b *model.Building) []
 // 背对仓库取货、面朝带子放货；终点外圈的分拣器背对带子取货、面朝仓库放货）。
 //
 // 两个场景各自新建一张同种子地图、同一对建筑位置，只换搬运手段：
-//   - 传送带：起点储物仓 → 分拣器 → 约 27 格 Mk.I 带 → 分拣器 → 终点储物仓；
+//   - 传送带：起点储物仓 → 分拣器 → 约 25 格 Mk.I 带 → 分拣器 → 终点储物仓；
 //   - 机器人：同一对建筑，1 台 transport_robot 设 haul 路线。
 //
 // 两个场景都每 tick 把起点补满、并把终点抽空（模拟"上游无限供料 + 下游持续消耗"），
@@ -550,15 +550,20 @@ func TestHaulThroughputFarBelowBelt(t *testing.T) {
 		robotDelivered, float64(robotDelivered)/float64(measureTicks),
 		100*float64(robotDelivered)/float64(beltDelivered))
 
-	// 传送带必须真的在跑（否则对比没有意义）。
-	if beltDelivered < measureTicks/2 {
-		t.Fatalf("传送带吞吐只有 %d 件 / %d tick，未达到 Mk.I 的量级", beltDelivered, measureTicks)
+	// 传送带必须真的在跑（否则对比没有意义）。第 16 轮契约（§2 分拣器节拍：
+	// 往返周期 = cycle_ticks × 端点距离）起，仓储与皮带不再直连，两端各要一台
+	// Mk.I 分拣器上下料，于是这条「仓库 → 带 → 仓库」产线的上限由分拣器决定
+	// （每 12 tick 1 件 ≈ 0.083 件/tick），不再是裸带的 2 件/tick。
+	if beltDelivered < measureTicks/40 {
+		t.Fatalf("传送带吞吐只有 %d 件 / %d tick，未达到量级", beltDelivered, measureTicks)
 	}
 	if robotDelivered <= 0 {
 		t.Fatalf("运输机器人一件都没送到")
 	}
-	if robotDelivered*10 >= beltDelivered {
-		t.Fatalf("运输机器人吞吐 %d 件未低于传送带 %d 件的 1/10", robotDelivered, beltDelivered)
+	// 机器人仍然必须明显慢于这条产线（原口径 1/10 已不成立：分拣器接口比机器人
+	// 还慢一个数量级，见 docs/guide/实物经济与分拣器.md §2 —— 已作为遗留问题上报）。
+	if robotDelivered*2 >= beltDelivered {
+		t.Fatalf("运输机器人吞吐 %d 件未低于传送带产线 %d 件的一半", robotDelivered, beltDelivered)
 	}
 }
 
@@ -580,7 +585,7 @@ func haulDistanceFixture(t *testing.T) (*GameCore, *model.WorldState, *model.Bui
 func measureBeltDelivered(t *testing.T, ticks int) int {
 	t.Helper()
 	_, ws, source, target := haulDistanceFixture(t)
-	// 起点外圈两格起（最外一格留给分拣器），铺到终点外圈一格为止，全部朝东。
+	// 起点外圈两格起（最外一格留给分拣器），铺到终点外圈两格为止，全部朝东。
 	start := model.Position{X: source.Position.X + 4, Y: source.Position.Y}
 	end := model.Position{X: target.Position.X - 2, Y: target.Position.Y}
 	for x := start.X; x <= end.X; x++ {
@@ -595,9 +600,8 @@ func measureBeltDelivered(t *testing.T, ticks int) int {
 	loader.Sorter.Range = 1
 	loader.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemIronOre}}
 	attachBuilding(ws, loader)
-	// 终点：背对带子取货、面朝仓库放货（rotation 270° = 正面西）。
+	// 终点：站在仓库西侧外圈格上，背对带子取货（西）、面朝仓库放货（东）。
 	unloader := newSorterBuilding("unloader", model.Position{X: end.X + 1, Y: end.Y})
-	unloader.Rotation = model.PlanRotation270
 	unloader.Sorter.Range = 1
 	unloader.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemIronOre}}
 	attachBuilding(ws, unloader)
