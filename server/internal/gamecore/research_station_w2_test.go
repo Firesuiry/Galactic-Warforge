@@ -138,7 +138,6 @@ func TestVerticalStackedLabsShareStorageAndThroughput(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 	grantTechs(ws, "p1", "electromagnetism", "electromagnetic_matrix_technology", "vertical_construction")
 	grantAllItems(ws, "p1", 100)
@@ -228,7 +227,6 @@ func TestVerticalStackLimitFollowsTechLevel(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 	grantTechs(ws, "p1", "electromagnetic_matrix_technology")
 	grantAllItems(ws, "p1", 100)

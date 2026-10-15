@@ -62,7 +62,6 @@ func TestOrbitalCollectorBuildAdmittedOnGasGiant(t *testing.T) {
 
 	grantTechs(ws, "p1", "gas_giants")
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 100000
 	player.Resources.Energy = 100000
 	// 故意不发放建造物品：若通过气态巨星校验，应在物品成本处失败。
 	pos := model.Position{X: 0, Y: 0}

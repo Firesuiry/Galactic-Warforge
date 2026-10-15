@@ -153,9 +153,6 @@ func TestAdvancedMiningMachineMinesMultipleVeins(t *testing.T) {
 	if got := totalStorageItems(miner.Storage); got != 48 {
 		t.Fatalf("expected 48 total ore stored, got %d", got)
 	}
-	if got := ws.Players["p1"].Resources.Minerals; got != 24 {
-		t.Fatalf("expected minerals kickback 24 (0.5*48), got %d", got)
-	}
 }
 
 // F2: mining_machine 只采自身覆盖范围内的脉（占地 + 1 圈），范围外的脉不受影响。
@@ -211,9 +208,6 @@ func TestAdvancedMiningMachineNoVeinsNoOutput(t *testing.T) {
 
 	if got := totalStorageItems(miner.Storage); got != 0 {
 		t.Fatalf("expected no ore without veins, got %d", got)
-	}
-	if got := ws.Players["p1"].Resources.Minerals; got != 0 {
-		t.Fatalf("expected no minerals without veins, got %d", got)
 	}
 }
 

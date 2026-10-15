@@ -33,7 +33,6 @@ func fineGridCore(t *testing.T) (*GameCore, *model.WorldState) {
 	core := New(cfg, mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed), queue.New(), NewEventBus(), nil)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 100000
 	player.Resources.Energy = 100000
 	grantAllItems(ws, "p1", 500)
 	grantTechs(ws, "p1",

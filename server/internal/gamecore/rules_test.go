@@ -46,8 +46,9 @@ func TestInitialPlayerResources(t *testing.T) {
 	if p1 == nil {
 		t.Fatal("player p1 not found")
 	}
-	if p1.Resources.Minerals < 100 {
-		t.Errorf("expected minerals >= 100, got %d", p1.Resources.Minerals)
+	// 第 16 轮起玩家没有开局资源池（建造料在背包里），默认新局背包为空。
+	if p1.Resources.Energy != 0 {
+		t.Errorf("expected no starter resource pool, got %+v", p1.Resources)
 	}
 	if !p1.IsAlive {
 		t.Error("player p1 should be alive at start")
@@ -125,11 +126,13 @@ func TestUnitStats(t *testing.T) {
 }
 
 func TestBuildCost(t *testing.T) {
-	m, e := model.BuildingCost(model.BuildingTypeMiningMachine)
-	if m <= 0 {
-		t.Errorf("mining machine should cost minerals")
+	def, ok := model.BuildingDefinitionByID(model.BuildingTypeMiningMachine)
+	if !ok {
+		t.Fatal("mining machine definition missing")
 	}
-	_ = e
+	if len(def.BuildCost.Items) == 0 {
+		t.Error("mining machine should cost items")
+	}
 }
 
 func TestSurfaceDistance(t *testing.T) {

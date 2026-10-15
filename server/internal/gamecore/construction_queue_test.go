@@ -155,17 +155,16 @@ func TestConstructionMaterialReservation(t *testing.T) {
 
 	// Give player some resources
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 1000
-	player.Resources.Energy = 500
+	grantAllItems(ws, "p1", 100)
 
 	pos1, _ := findTwoOpenTiles(ws)
 
-	// Build a solar_panel (costs minerals and energy)
+	// Build a solar_panel（第 16 轮起成本只有物品）。
 	def, ok := model.BuildingDefinitionByID("solar_panel")
 	if !ok {
 		t.Fatalf("solar_panel building definition not found")
 	}
-	mCost := def.BuildCost.Minerals
+	wantItems := def.BuildCost.Items
 
 	cmd := model.Command{
 		Type:   model.CmdBuild,
@@ -182,11 +181,8 @@ func TestConstructionMaterialReservation(t *testing.T) {
 	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
 	// They are only deducted when construction completes (via settleConstructionQueue).
 	// The reservation is created to lock the materials, but player keeps them until completion.
-	if player.Resources.Minerals != 1000 {
-		t.Fatalf("expected minerals 1000 after build (no deduction yet), got %d", player.Resources.Minerals)
-	}
-	if player.Resources.Energy != 500 {
-		t.Fatalf("expected energy 500 after build (no deduction yet), got %d", player.Resources.Energy)
+	if !player.HasItems(wantItems) {
+		t.Fatalf("expected items untouched after build (no deduction yet), got %+v", player.Inventory)
 	}
 
 	// Verify material reservation was created (locks the materials but doesn't deduct)
@@ -198,8 +194,8 @@ func TestConstructionMaterialReservation(t *testing.T) {
 	if reservation == nil {
 		t.Fatalf("expected material reservation for task %s", taskID)
 	}
-	if reservation.Minerals != mCost {
-		t.Fatalf("expected reservation minerals %d, got %d", mCost, reservation.Minerals)
+	if len(reservation.Items) != len(wantItems) {
+		t.Fatalf("expected reservation items %+v, got %+v", wantItems, reservation.Items)
 	}
 	if reservation.Source.Type != model.MaterialSourceLocal {
 		t.Fatalf("expected source type LOCAL, got %v", reservation.Source.Type)
@@ -212,8 +208,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 
 	// Give player some resources
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 1000
-	player.Resources.Energy = 500
+	grantAllItems(ws, "p1", 100)
 
 	pos1, _ := findTwoOpenTiles(ws)
 
@@ -230,8 +225,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 	}
 
 	taskID := ws.Construction.Order[0]
-	mineralsBeforeCancel := player.Resources.Minerals
-	energyBeforeCancel := player.Resources.Energy
+	invBeforeCancel := player.Inventory.Clone()
 
 	// Cancel the construction
 	cancelCmd := model.Command{
@@ -248,11 +242,8 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
 	// When a pending task is cancelled, there are no resources to refund because
 	// they were never deducted - they were just locked.
-	if player.Resources.Minerals != mineralsBeforeCancel {
-		t.Fatalf("expected minerals %d after cancel (no deduction happened), got %d", mineralsBeforeCancel, player.Resources.Minerals)
-	}
-	if player.Resources.Energy != energyBeforeCancel {
-		t.Fatalf("expected energy %d after cancel (no deduction happened), got %d", energyBeforeCancel, player.Resources.Energy)
+	if len(player.Inventory) != len(invBeforeCancel) {
+		t.Fatalf("expected inventory %+v after cancel (no deduction happened), got %+v", invBeforeCancel, player.Inventory)
 	}
 
 	// Verify reservation was removed
@@ -267,8 +258,7 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 
 	// Give player some resources
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 1000
-	player.Resources.Energy = 500
+	grantAllItems(ws, "p1", 100)
 
 	pos1, _ := findTwoOpenTiles(ws)
 
@@ -298,12 +288,11 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 		t.Fatalf("expected cancel to execute, got %s (%s)", cancelRes.Status, cancelRes.Message)
 	}
 
-	// T078: With deduct-at-completion, after cancel resources are still 1000
+	// T078: With deduct-at-completion, after cancel the items are still there
 	// (no deduction happened, so no refund)
-	mineralsAfterCancel := player.Resources.Minerals
-	energyAfterCancel := player.Resources.Energy
-	if mineralsAfterCancel != 1000 {
-		t.Fatalf("expected minerals 1000 after cancel, got %d", mineralsAfterCancel)
+	invAfterCancel := player.Inventory.Clone()
+	if !player.HasItems(ws.Construction.Tasks[taskID].Cost.Items) {
+		t.Fatalf("expected items untouched after cancel, got %+v", player.Inventory)
 	}
 
 	// Restore the construction
@@ -320,11 +309,8 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 
 	// T078: With deduct-at-completion, restore only re-creates the reservation.
 	// Resources are still not deducted (deduction happens at completion).
-	if player.Resources.Minerals != mineralsAfterCancel {
-		t.Fatalf("expected minerals %d after restore (no deduction), got %d", mineralsAfterCancel, player.Resources.Minerals)
-	}
-	if player.Resources.Energy != energyAfterCancel {
-		t.Fatalf("expected energy %d after restore (no deduction), got %d", energyAfterCancel, player.Resources.Energy)
+	if len(player.Inventory) != len(invAfterCancel) {
+		t.Fatalf("expected inventory %+v after restore (no deduction), got %+v", invAfterCancel, player.Inventory)
 	}
 
 	// Verify reservation was re-created
@@ -339,11 +325,9 @@ func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
 	core := newConstructionTestCore(t, 2, 2)
 	ws := core.world
 
-	// Give player just enough minerals for the reservation check at enqueue
-	// but not enough that we want to allow it to start
+	// 给足建造物品，好让 enqueue 时的预留检查通过。
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 1000
-	player.Resources.Energy = 500
+	grantAllItems(ws, "p1", 100)
 
 	pos1, _ := findTwoOpenTiles(ws)
 
@@ -367,8 +351,8 @@ func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
 		t.Fatalf("expected task to be pending, got %s", task.State)
 	}
 
-	// Now consume all minerals so materials become insufficient before the tick runs
-	player.Resources.Minerals = 0
+	// 现在把背包清空，让材料在 tick 之前变得不足。
+	player.Inventory = model.ItemInventory{}
 
 	// Process a tick - task should NOT start because materials are insufficient
 	core.processTick()

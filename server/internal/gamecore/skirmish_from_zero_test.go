@@ -466,7 +466,9 @@ func (op *zeroOpening) buildNext() {
 // powerRescue 电力告急时插建一台风机（返回 true 表示本 tick 已经在处理电力）。
 func (op *zeroOpening) powerRescue() bool {
 	ws := op.ws
-	if op.player.Resources.Minerals < 30 {
+	// 第 16 轮起建造门槛是背包物品（矿池已删除）：风机要齿轮/铁块/磁线圈。
+	def, ok := model.BuildingDefinitionByID(model.BuildingTypeWindTurbine)
+	if !ok || !op.player.HasItems(def.BuildCost.Items) {
 		return false
 	}
 	if ws.Construction != nil {

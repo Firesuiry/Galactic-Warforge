@@ -138,7 +138,7 @@ func TestSplitterBuildInitializesTransportWithoutElectricity(t *testing.T) {
 	core := newConstructionTestCore(t, 2, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
-	before := ws.Players["p1"].Resources
+	before := ws.Players["p1"].Inventory.Clone()
 	result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "splitter", "direction": "east"}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("build: %+v", result)
@@ -163,8 +163,14 @@ func TestSplitterBuildInitializesTransportWithoutElectricity(t *testing.T) {
 	if err := s.Splitter.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if ws.Players["p1"].Resources.Minerals != before.Minerals-20 || ws.Players["p1"].Resources.Energy != before.Energy-10 {
-		t.Fatal("wrong splitter construction cost")
+	def, ok := model.BuildingDefinitionByID(model.BuildingTypeSplitter)
+	if !ok {
+		t.Fatal("splitter definition missing")
+	}
+	for _, item := range def.BuildCost.Items {
+		if got := before[item.ItemID] - ws.Players["p1"].Inventory[item.ItemID]; got != item.Quantity {
+			t.Fatalf("wrong splitter construction cost for %s: spent %d, want %d", item.ItemID, got, item.Quantity)
+		}
 	}
 }
 

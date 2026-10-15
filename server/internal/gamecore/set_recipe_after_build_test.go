@@ -15,7 +15,6 @@ func TestSetRecipeAfterConstructionOnSmelterAndAssembler(t *testing.T) {
 	grantTechs(ws, "p1", "solar_collection", "basic_assembling_processes")
 	grantAllItems(ws, "p1", 200)
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 5000
 	player.Resources.Energy = 5000
 
 	buildAndComplete := func(btype model.BuildingType, recipeID string) *model.Building {

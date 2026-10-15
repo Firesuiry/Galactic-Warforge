@@ -45,9 +45,7 @@ func BenchmarkTickThroughput(b *testing.B) {
 
 	// Give players resources
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
-	ws.Players["p2"].Resources.Minerals = 100000
 	ws.Players["p2"].Resources.Energy = 100000
 	ws.RUnlock()
 
@@ -68,7 +66,6 @@ func BenchmarkBuildCommand(b *testing.B) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
 	ws.RUnlock()
 
@@ -92,7 +89,6 @@ func BenchmarkTickWithBuildings(b *testing.B) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
 	ws.RUnlock()
 
@@ -122,7 +118,6 @@ func BenchmarkLogisticsChain(b *testing.B) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
 	ws.RUnlock()
 
@@ -177,7 +172,6 @@ func TestPerformanceTargetTickP95(t *testing.T) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
 	ws.RUnlock()
 
@@ -215,7 +209,6 @@ func TestPerformanceCommandLatency(t *testing.T) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 100000
 	ws.Players["p1"].Resources.Energy = 100000
 	ws.RUnlock()
 

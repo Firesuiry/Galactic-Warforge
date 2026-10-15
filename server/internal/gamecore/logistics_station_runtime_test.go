@@ -249,7 +249,7 @@ func TestLogisticsStationConstructionInitializesEmptyFiniteInventoryAndEnergy(t 
 		t.Run(string(kind), func(t *testing.T) {
 			core := newConstructionTestCore(t, 2, 2)
 			ws := core.world
-			ws.Players["p1"].Resources = model.Resources{Minerals: 1000, Energy: 1000}
+			ws.Players["p1"].Resources = model.Resources{Energy: 1000}
 			pos, _ := findTwoOpenTiles(ws)
 			result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(kind)}})
 			if result.Status != model.StatusExecuted {

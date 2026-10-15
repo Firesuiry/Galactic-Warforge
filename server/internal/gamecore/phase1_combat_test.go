@@ -88,7 +88,6 @@ func TestPhase1ProductionConsumesMaterialsAndWaits(t *testing.T) {
 	b.Runtime.Params.EnergyConsume = 0
 	b.Runtime.Functions.Energy.ConsumePerTick = 0
 	cmd := model.Command{Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"unit_type": "soldier"}}
-	ws.Players["p1"].Resources.Minerals = 99999
 	if res, _ := execCommand(gc, model.CmdProduce, ws, "p1", cmd); res.Code != model.CodeInsufficientResource {
 		t.Fatalf("abstract currency bought a unit: %+v", res)
 	}

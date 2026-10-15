@@ -19,7 +19,6 @@ func TestUpgradeJobProgress(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 1)
 	player := ws.Players[building.OwnerID]
-	player.Resources.Minerals = 1000
 	player.Resources.Energy = 1000
 	grantAllItems(ws, building.OwnerID, 100)
 
@@ -60,8 +59,8 @@ func TestUpgradeJobProgress(t *testing.T) {
 		t.Fatalf("expected running state after upgrade, got %s", building.Runtime.State)
 	}
 
-	if player.Resources.Minerals >= 1000 || player.Resources.Energy >= 1000 {
-		t.Fatalf("expected upgrade cost deducted")
+	if player.Inventory[model.ItemCircuitBoard] >= 100 || player.Inventory[model.ItemIronIngot] >= 100 {
+		t.Fatalf("expected upgrade item cost deducted, got %+v", player.Inventory)
 	}
 }
 
@@ -77,8 +76,7 @@ func TestDemolishJobRefund(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player := ws.Players[building.OwnerID]
-	player.Resources.Minerals = 0
-	player.Resources.Energy = 0
+	player.Inventory = model.ItemInventory{}
 
 	cmd := model.Command{
 		Type:   model.CmdDemolish,
@@ -91,16 +89,16 @@ func TestDemolishJobRefund(t *testing.T) {
 	if building.Job == nil || building.Job.Type != model.BuildingJobDemolish {
 		t.Fatalf("expected demolish job")
 	}
-	if player.Resources.Minerals != 0 || player.Resources.Energy != 0 {
-		t.Fatalf("expected no refund before completion")
+	if player.InventoryCount() != 0 {
+		t.Fatalf("expected no item refund before completion, got %+v", player.Inventory)
 	}
 
 	settleBuildingJobs(ws)
 	if _, ok := ws.Buildings[building.ID]; ok {
 		t.Fatalf("expected building removed after demolish")
 	}
-	if player.Resources.Minerals == 0 && player.Resources.Energy == 0 {
-		t.Fatalf("expected refund after demolish completion")
+	if player.InventoryCount() == 0 {
+		t.Fatalf("expected item refund after demolish completion")
 	}
 }
 
@@ -120,8 +118,6 @@ func TestUpgradeConsumesItems(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 1)
 	player := ws.Players[building.OwnerID]
-	player.Resources.Minerals = 1000
-	player.Resources.Energy = 1000
 	player.Inventory = model.ItemInventory{model.ItemGear: 2}
 
 	cmd := model.Command{
@@ -152,8 +148,6 @@ func TestDemolishRefundItems(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player := ws.Players[building.OwnerID]
-	player.Resources.Minerals = 0
-	player.Resources.Energy = 0
 	player.Inventory = model.ItemInventory{}
 
 	cmd := model.Command{
@@ -178,7 +172,7 @@ func newTestWorldWithBuilding(btype model.BuildingType, level int) (*model.World
 	ws := model.NewWorldState("planet-test", 6)
 	player := &model.PlayerState{
 		PlayerID:  "p1",
-		Resources: model.Resources{Minerals: 1000, Energy: 1000},
+		Resources: model.Resources{Energy: 1000},
 		IsAlive:   true,
 	}
 	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("u-1", 1, 10, 2, 0))
@@ -250,8 +244,6 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player := ws.Players[building.OwnerID]
-	player.Resources.Minerals = 0
-	player.Resources.Energy = 0
 	unit := ws.Units["u-1"]
 	model.SyncMechaCapabilities(unit, player)
 	capacity := unit.Mecha.InventoryCapacity
@@ -276,8 +268,6 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	player.Inventory = model.ItemInventory{}
 	ws2, gc2, building2 := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player2 := ws2.Players[building2.OwnerID]
-	player2.Resources.Minerals = 0
-	player2.Resources.Energy = 0
 	player2.Inventory = model.ItemInventory{}
 	cmd2 := model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: building2.ID}}
 	if res, _ := execCommand(gc2, model.CmdDemolish, ws2, building2.OwnerID, cmd2); res.Code != model.CodeOK {
