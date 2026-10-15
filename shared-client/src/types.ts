@@ -2522,4 +2522,11 @@ export interface RollbackResponse {
 
 export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; /** 终点是否在玩家已探索范围内（目标可以在未探索区，服务端照常按真实地形寻路）。 */ explored: boolean; path: Position[]; waypoints: Position[] }
 
-export interface SorterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }
+// SorterConfig 是 client-web 的 SorterControls 仍在用的完整形状（含方向）。
+// 第 16 轮契约 §2 起服务端 configure_sorter 只接受过滤字段——方向由建造朝向决定
+// （背面取货、正面放货），传 input_directions / output_directions 一律拒绝；CLI 用
+// SorterFilterConfig（见下）而不是这个类型。方向字段随契约 §4 的客户端改造一起删。
+export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }
+
+// SorterFilterConfig 是服务端 configure_sorter 真正接受的载荷（第 16 轮契约 §2）。
+export interface SorterFilterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }
