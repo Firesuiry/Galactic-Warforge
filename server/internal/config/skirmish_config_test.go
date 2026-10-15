@@ -29,7 +29,7 @@ func TestSkirmishConfigPaceAndTimeLimit(t *testing.T) {
 
 // 遭遇战开局物资包（第 16 轮：去掉资金维度后是实物）：数量够「3 风机 + 2 矿机 +
 // 1 熔炉 + 若干电塔 + 20 传送带 + 4 分拣器」，双方同一份；bot 是 easy 难度。
-func TestSkirmishStartsWithoutKit(t *testing.T) {
+func TestSkirmishStartsWithItemKit(t *testing.T) {
 	cfg, err := Load(filepath.Join("..", "..", "config-skirmish.yaml"))
 	if err != nil {
 		t.Fatalf("load config-skirmish: %v", err)
