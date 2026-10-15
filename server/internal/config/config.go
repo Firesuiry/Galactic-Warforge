@@ -20,10 +20,10 @@ type BootstrapItemConfig struct {
 	Quantity int    `yaml:"quantity" json:"quantity"`
 }
 
+// PlayerBootstrapConfig 是玩家开局物资包。第 16 轮起没有 minerals/energy：
+// 开局物资一律以 Items 形式直接进背包（绕过背包上限，见 applyPlayerBootstrap）。
 type PlayerBootstrapConfig struct {
-	Minerals       int                   `yaml:"minerals" json:"minerals"`
-	Energy         int                   `yaml:"energy" json:"energy"`
-	Inventory      []BootstrapItemConfig `yaml:"inventory,omitempty" json:"inventory,omitempty"`
+	Items          []BootstrapItemConfig `yaml:"items,omitempty" json:"items,omitempty"`
 	CompletedTechs []string              `yaml:"completed_techs,omitempty" json:"completed_techs,omitempty"`
 }
 

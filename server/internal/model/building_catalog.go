@@ -79,10 +79,9 @@ type Footprint struct {
 }
 
 // BuildCost describes the construction cost of a building.
+// 第 16 轮起只有 items：minerals/energy 两个字段已删除，建造与升级一律扣背包物品。
 type BuildCost struct {
-	Minerals int          `json:"minerals" yaml:"minerals,omitempty"`
-	Energy   int          `json:"energy" yaml:"energy,omitempty"`
-	Items    []ItemAmount `json:"items,omitempty" yaml:"items,omitempty"`
+	Items []ItemAmount `json:"items,omitempty" yaml:"items,omitempty"`
 }
 
 // BuildingDefinition defines immutable data for a building type.
@@ -203,9 +202,6 @@ func validateBuildingDefinition(def BuildingDefinition, recipeByID func(string) 
 	}
 	if def.Footprint.Width <= 0 || def.Footprint.Height <= 0 {
 		return fmt.Errorf("building %s has invalid footprint", def.ID)
-	}
-	if def.BuildCost.Minerals < 0 || def.BuildCost.Energy < 0 {
-		return fmt.Errorf("building %s has negative build cost", def.ID)
 	}
 	for _, item := range def.BuildCost.Items {
 		if item.ItemID == "" || item.Quantity <= 0 {

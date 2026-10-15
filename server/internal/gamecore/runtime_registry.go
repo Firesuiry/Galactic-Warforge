@@ -28,7 +28,7 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 			PlayerID:  p.PlayerID,
 			TeamID:    p.TeamID,
 			Role:      p.Role,
-			Resources: model.Resources{Minerals: 200, Energy: 100},
+
 			IsAlive:   true,
 			Tech:      tech,
 			Stats:     model.NewPlayerStats(p.PlayerID),

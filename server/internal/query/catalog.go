@@ -105,7 +105,7 @@ func (ql *Layer) Catalog(pace float64) *CatalogView {
 			Category:             def.Category,
 			Subcategory:          def.Subcategory,
 			Footprint:            def.Footprint,
-			BuildCost:            model.BuildCost{Minerals: def.BuildCost.Minerals, Energy: def.BuildCost.Energy, Items: buildCostItems},
+			BuildCost:            model.BuildCost{Items: buildCostItems},
 			Buildable:            def.Buildable,
 			DefaultRecipeID:      def.DefaultRecipeID,
 			RequiresResourceNode: def.RequiresResourceNode,

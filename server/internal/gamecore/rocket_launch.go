@@ -158,9 +158,6 @@ func (gc *GameCore) settleAutoLaunch(ws *model.WorldState) []*model.GameEvent {
 		if player == nil || !player.IsAlive {
 			continue
 		}
-		if lm.EnergyPerLaunch > 0 && player.Resources.Energy < lm.EnergyPerLaunch {
-			continue
-		}
 		var evt *model.GameEvent
 		switch b.Type {
 		case model.BuildingTypeEMRailEjector:
@@ -196,18 +193,6 @@ func (gc *GameCore) launchSystemID(ws *model.WorldState) string {
 	return planet.SystemID
 }
 
-// chargeLaunchEnergy deducts the per-launch energy cost from the owner's
-// reserve. Callers have already verified the reserve covers the cost.
-func chargeLaunchEnergy(player *model.PlayerState, energyPerLaunch int) {
-	if player == nil || energyPerLaunch <= 0 {
-		return
-	}
-	player.Resources.Energy -= energyPerLaunch
-	if player.Resources.Energy < 0 {
-		player.Resources.Energy = 0
-	}
-}
-
 func (gc *GameCore) autoLaunchSolarSail(ws *model.WorldState, b *model.Building, player *model.PlayerState, lm *model.LaunchModule) *model.GameEvent {
 	if b.Storage == nil {
 		return nil
@@ -219,7 +204,6 @@ func (gc *GameCore) autoLaunchSolarSail(ws *model.WorldState, b *model.Building,
 	if err != nil || provided != 1 {
 		return nil
 	}
-	chargeLaunchEnergy(player, lm.EnergyPerLaunch)
 
 	orbitRadius := 1.0
 	if orbitRadius < lm.OrbitRadiusMin {
@@ -285,7 +269,6 @@ func (gc *GameCore) autoLaunchRocket(ws *model.WorldState, b *model.Building, pl
 	if err != nil || provided != 1 {
 		return nil
 	}
-	chargeLaunchEnergy(player, lm.EnergyPerLaunch)
 
 	layer := &state.Layers[layerIndex]
 	layer.RocketLaunches++

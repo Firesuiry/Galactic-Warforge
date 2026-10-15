@@ -35,7 +35,6 @@ func finalizePowerSettlement(ws *model.WorldState, receiverViews map[string]mode
 			VisibilityScope: playerID,
 			Payload: map[string]any{
 				"player_id": playerID,
-				"minerals":  player.Resources.Minerals,
 				"energy":    player.Resources.Energy,
 			},
 		})

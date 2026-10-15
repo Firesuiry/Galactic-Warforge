@@ -30,17 +30,8 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 
-		maintenance := b.Runtime.Params.MaintenanceCost
 		totalEnergyCost := model.PowerDemandForBuilding(b)
 		powerRatio := 1.0
-
-		if maintenance.Minerals > 0 && player.Resources.Minerals < maintenance.Minerals {
-			if evt := applyBuildingState(b, model.BuildingWorkError, stateReasonFault); evt != nil {
-				evt.Payload["cause"] = "maintenance_insufficient"
-				events = append(events, evt)
-			}
-			continue
-		}
 
 		if totalEnergyCost > 0 {
 			powered, reason, alloc := buildingPowerAvailability(b, coverage, allocations)
@@ -63,11 +54,6 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 			events = append(events, evt)
 		}
 
-		oldM := player.Resources.Minerals
-
-		player.Resources.Minerals -= maintenance.Minerals
-
-		minerals := 0
 		if b.Runtime.Functions.Collect != nil {
 			syncCollectorResourceKind(ws, b)
 			collectYield := b.Runtime.Functions.Collect.YieldPerTick
@@ -76,46 +62,15 @@ func settleResources(ws *model.WorldState) []*model.GameEvent {
 				// 先规划、按实际落地量提交：采掘产物落「输出缓冲 → 主库存」
 				// （见 StorageState.StoreCollectorProduct），落不下的矿种不扣矿脉。
 				// 旧实现无条件按全速扣矿，缓冲满后 8 个节点被抽干而矿石从未落地
-				// （试玩 1015）。minerals 回充同样按实际产出计。
+				// （试玩 1015）。第 16 轮起采矿机只产出矿石实物（不再回充矿物池），
+				// 输出缓冲满了就停采。
 				if b.Storage == nil {
 					continue
 				}
 				plan := planMiningExtraction(ws, player, b, collectYield)
 				stored := storeMiningOutputs(b, miningPlanByItem(plan), productionSnapshot)
-				if mined := commitMiningExtraction(plan, stored); mined > 0 {
-					// 回充按实际落地的量计（本地缓冲满就少挖，不凭空产矿）。
-					minerals = collectMineralsKickback(b.Runtime.Functions.Collect, mined)
-				}
-			} else {
-				minerals = scaleByPowerRatio(collectYield, powerRatio)
+				commitMiningExtraction(plan, stored)
 			}
-		}
-		player.Resources.Minerals += minerals
-		if minerals > 0 && productionSnapshot != nil {
-			productionSnapshot.RecordBuildingOutputs(b, []model.ItemAmount{{
-				ItemID:   model.ProductionStatMinerals,
-				Quantity: minerals,
-			}})
-		}
-
-		// Cap resources to avoid integer overflow
-		if player.Resources.Minerals > 10000 {
-			player.Resources.Minerals = 10000
-		}
-		if player.Resources.Minerals < 0 {
-			player.Resources.Minerals = 0
-		}
-
-		if oldM != player.Resources.Minerals {
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtResourceChanged,
-				VisibilityScope: b.OwnerID,
-				Payload: map[string]any{
-					"player_id": b.OwnerID,
-					"minerals":  player.Resources.Minerals,
-					"energy":    player.Resources.Energy,
-				},
-			})
 		}
 	}
 
@@ -180,17 +135,6 @@ func scaleByPowerRatio(value int, ratio float64) int {
 		return value
 	}
 	return scaled
-}
-
-// collectMineralsKickback converts mined output into minerals credited to the
-// owning player's pool, according to the collector's MineralsKickback ratio.
-// Callers pass the amount extracted from the resource node (not just what
-// fitted into local storage) so full buffers do not halt construction income.
-func collectMineralsKickback(module *model.CollectModule, mined int) int {
-	if module == nil || mined <= 0 || module.MineralsKickback <= 0 {
-		return 0
-	}
-	return int(float64(mined) * module.MineralsKickback)
 }
 
 // veinsUtilizationTechID 矿物利用科技（DSP：每级 +10% 采矿产能、-6% 矿脉消耗）。

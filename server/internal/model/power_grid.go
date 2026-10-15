@@ -428,7 +428,7 @@ func needsPowerConnection(building *Building) bool {
 		return false
 	}
 	params := building.Runtime.Params
-	if params.EnergyConsume > 0 || params.EnergyGenerate > 0 || params.MaintenanceCost.Energy > 0 {
+	if params.EnergyConsume > 0 || params.EnergyGenerate > 0 {
 		return true
 	}
 	if building.Runtime.Functions.Energy != nil {

@@ -7,68 +7,68 @@ import (
 
 // dspBuildingCostAlignment 冻结 DSP（develop_tools/dsp-catalog/scope.json，
 // cat=buildings 且 inPlanet）建筑合成配方并入 SW BuildCost 的期望值。
-// minerals/energy 维持对齐前有效值（F8 起在 buildings.yaml 中显式填写），
-// items 为 DSP 配方物品输入（数量一致，按 id 排序）。
+// 第 16 轮去掉资金维度后 BuildCost 只剩 items（DSP 配方物品输入，数量一致，
+// 按 id 排序）；minerals/energy 两个字段已从模型与 data/buildings.yaml 删除。
 // DSP 配方中以建筑为输入的进阶链（如 conveyor-belt-2 消耗 3 个 conveyor-belt-1）
 // 在 SW 中不作为物品存在，按政策不并入 Items。
 var dspBuildingCostAlignment = map[BuildingType]BuildCost{
-	BuildingTypeAccumulator:                  {Minerals: 40, Energy: 20, Items: []ItemAmount{{ItemID: "crystal_silicon", Quantity: 3}, {ItemID: "iron_ingot", Quantity: 6}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
-	BuildingTypeAdvancedMiningMachine:        {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "frame_material", Quantity: 10}, {ItemID: "grating_crystal", Quantity: 40}, {ItemID: "quantum_chip", Quantity: 4}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}}},
-	BuildingTypeArcSmelter:                   {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 4}, {ItemID: "magnetic_coil", Quantity: 2}, {ItemID: "stone_brick", Quantity: 2}}},
-	BuildingTypeArtificialStar:               {Minerals: 90, Energy: 30, Items: []ItemAmount{{ItemID: "annihilation_constraint_sphere", Quantity: 10}, {ItemID: "frame_material", Quantity: 20}, {ItemID: "quantum_chip", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}}},
-	BuildingTypeAssemblingMachineMk1:         {Minerals: 100, Energy: 50, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "gear", Quantity: 8}, {ItemID: "iron_ingot", Quantity: 4}}},
-	BuildingTypeAssemblingMachineMk2:         {Minerals: 240, Energy: 120, Items: []ItemAmount{{ItemID: "graphene", Quantity: 8}, {ItemID: "processor", Quantity: 4}}},
-	BuildingTypeAssemblingMachineMk3:         {Minerals: 360, Energy: 180, Items: []ItemAmount{{ItemID: "particle_broadband", Quantity: 8}, {ItemID: "quantum_chip", Quantity: 2}}},
-	BuildingTypeAutomaticPiler:               {Minerals: 20, Energy: 10, Items: []ItemAmount{{ItemID: "gear", Quantity: 4}, {ItemID: "processor", Quantity: 2}, {ItemID: "steel", Quantity: 3}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
-	BuildingTypeChemicalPlant:                {Minerals: 140, Energy: 70, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "glass", Quantity: 8}, {ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 8}}},
-	BuildingTypeConveyorBeltMk1:              {Minerals: 4, Energy: 0, Items: []ItemAmount{{ItemID: "gear", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 2}}},
-	BuildingTypeConveyorBeltMk2:              {Minerals: 8, Energy: 0, Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 1}}},
-	BuildingTypeConveyorBeltMk3:              {Minerals: 12, Energy: 0, Items: []ItemAmount{{ItemID: "graphene", Quantity: 1}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
-	BuildingTypeBattlefieldAnalysisBase:      {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 18}, {ItemID: "engine", Quantity: 12}, {ItemID: "microcrystalline_component", Quantity: 6}, {ItemID: "steel", Quantity: 12}}},
-	BuildingTypeGaussTurret:                  {Minerals: 80, Energy: 30, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 8}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "magnetic_coil", Quantity: 4}}},
-	BuildingTypeImplosionCannon:              {Minerals: 100, Energy: 40, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 10}, {ItemID: "motor", Quantity: 8}, {ItemID: "steel", Quantity: 10}, {ItemID: "super_magnetic_ring", Quantity: 2}}},
-	BuildingTypeJammerTower:                  {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "copper_ingot", Quantity: 12}, {ItemID: "diamond", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 9}, {ItemID: "processor", Quantity: 3}}},
-	BuildingTypeLaserTurret:                  {Minerals: 100, Energy: 40, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "photon_combiner", Quantity: 9}, {ItemID: "plasma_exciter", Quantity: 6}, {ItemID: "steel", Quantity: 9}}},
-	BuildingTypeMissileTurret:                {Minerals: 100, Energy: 40, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 12}, {ItemID: "engine", Quantity: 6}, {ItemID: "motor", Quantity: 6}, {ItemID: "steel", Quantity: 8}}},
-	BuildingTypePlanetaryShieldGenerator:     {Minerals: 500, Energy: 250, Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 20}, {ItemID: "particle_container", Quantity: 5}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 5}}},
-	BuildingTypePlasmaTurret:                 {Minerals: 100, Energy: 40, Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 5}, {ItemID: "processor", Quantity: 5}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}, {ItemID: "titanium_glass", Quantity: 10}}},
-	BuildingTypeSRPlasmaTurret:               {Minerals: 300, Energy: 150, Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 5}, {ItemID: "processor", Quantity: 5}, {ItemID: "steel", Quantity: 15}, {ItemID: "super_magnetic_ring", Quantity: 5}}},
-	BuildingTypeSignalTower:                  {Minerals: 50, Energy: 20, Items: []ItemAmount{{ItemID: "crystal_silicon", Quantity: 6}, {ItemID: "steel", Quantity: 12}}},
-	BuildingTypeEMRailEjector:                {Minerals: 260, Energy: 130, Items: []ItemAmount{{ItemID: "gear", Quantity: 20}, {ItemID: "processor", Quantity: 5}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 10}}},
-	BuildingTypeEnergyExchanger:              {Minerals: 180, Energy: 80, Items: []ItemAmount{{ItemID: "particle_container", Quantity: 8}, {ItemID: "processor", Quantity: 40}, {ItemID: "steel", Quantity: 40}, {ItemID: "titanium_alloy", Quantity: 40}}},
-	BuildingTypeFractionator:                 {Minerals: 100, Energy: 60, Items: []ItemAmount{{ItemID: "glass", Quantity: 4}, {ItemID: "processor", Quantity: 1}, {ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
-	BuildingTypeGeothermalPowerStation:       {Minerals: 90, Energy: 30, Items: []ItemAmount{{ItemID: "copper_ingot", Quantity: 20}, {ItemID: "photon_combiner", Quantity: 4}, {ItemID: "steel", Quantity: 15}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
-	BuildingTypeInterstellarLogisticsStation: {Minerals: 280, Energy: 140, Items: []ItemAmount{{ItemID: "particle_container", Quantity: 20}, {ItemID: "titanium_alloy", Quantity: 40}}},
-	BuildingTypeLogisticsDistributor:         {Minerals: 40, Energy: 20, Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 8}, {ItemID: "plasma_exciter", Quantity: 4}, {ItemID: "processor", Quantity: 4}}},
-	BuildingTypeMatrixLab:                    {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "glass", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "magnetic_coil", Quantity: 4}}},
-	BuildingTypeMiniFusionPowerPlant:         {Minerals: 90, Energy: 30, Items: []ItemAmount{{ItemID: "carbon_nanotube", Quantity: 8}, {ItemID: "processor", Quantity: 4}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 12}}},
-	BuildingTypeMiniatureParticleCollider:    {Minerals: 120, Energy: 60, Items: []ItemAmount{{ItemID: "frame_material", Quantity: 20}, {ItemID: "graphene", Quantity: 10}, {ItemID: "processor", Quantity: 8}, {ItemID: "super_magnetic_ring", Quantity: 25}, {ItemID: "titanium_alloy", Quantity: 20}}},
-	BuildingTypeMiningMachine:                {Minerals: 50, Energy: 20, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 2}, {ItemID: "iron_ingot", Quantity: 4}, {ItemID: "magnetic_coil", Quantity: 2}}},
-	BuildingTypeOilExtractor:                 {Minerals: 80, Energy: 30, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 4}, {ItemID: "steel", Quantity: 12}, {ItemID: "stone_brick", Quantity: 12}}},
-	BuildingTypeOilRefinery:                  {Minerals: 140, Energy: 70, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 6}, {ItemID: "steel", Quantity: 10}, {ItemID: "stone_brick", Quantity: 10}}},
-	BuildingTypeOrbitalCollector:             {Minerals: 200, Energy: 80, Items: []ItemAmount{{ItemID: "reinforced_thruster", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 50}}},
-	BuildingTypePlaneSmelter:                 {Minerals: 180, Energy: 90, Items: []ItemAmount{{ItemID: "frame_material", Quantity: 5}, {ItemID: "monopole_magnet", Quantity: 15}, {ItemID: "plane_filter", Quantity: 4}}},
-	BuildingTypePlanetaryLogisticsStation:    {Minerals: 160, Energy: 80, Items: []ItemAmount{{ItemID: "particle_container", Quantity: 20}, {ItemID: "processor", Quantity: 40}, {ItemID: "steel", Quantity: 40}, {ItemID: "titanium_ingot", Quantity: 40}}},
-	BuildingTypeQuantumChemicalPlant:         {Minerals: 220, Energy: 110, Items: []ItemAmount{{ItemID: "quantum_chip", Quantity: 3}, {ItemID: "strange_matter", Quantity: 3}, {ItemID: "titanium_glass", Quantity: 10}}},
-	BuildingTypeRayReceiver:                  {Minerals: 260, Energy: 130, Items: []ItemAmount{{ItemID: "photon_combiner", Quantity: 10}, {ItemID: "processor", Quantity: 5}, {ItemID: "silicon_ingot", Quantity: 20}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 20}}},
-	BuildingTypeSatelliteSubstation:          {Minerals: 80, Energy: 40, Items: []ItemAmount{{ItemID: "frame_material", Quantity: 2}, {ItemID: "super_magnetic_ring", Quantity: 10}}},
-	BuildingTypeSolarPanel:                   {Minerals: 40, Energy: 0, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 5}, {ItemID: "copper_ingot", Quantity: 10}, {ItemID: "silicon_ingot", Quantity: 10}}},
-	BuildingTypeSorterMk1:                    {Minerals: 6, Energy: 0, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 1}}},
-	BuildingTypeSorterMk2:                    {Minerals: 10, Energy: 0, Items: []ItemAmount{{ItemID: "motor", Quantity: 1}}},
-	BuildingTypeSorterMk3:                    {Minerals: 14, Energy: 0, Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 1}}},
-	BuildingTypePileSorter:                   {Minerals: 40, Energy: 20, Items: []ItemAmount{{ItemID: "processor", Quantity: 1}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
-	BuildingTypeSplitter:                     {Minerals: 20, Energy: 10, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 1}, {ItemID: "gear", Quantity: 2}, {ItemID: "iron_ingot", Quantity: 3}}},
-	BuildingTypeSprayCoater:                  {Minerals: 60, Energy: 30, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "microcrystalline_component", Quantity: 2}, {ItemID: "plasma_exciter", Quantity: 2}, {ItemID: "steel", Quantity: 4}}},
-	BuildingTypeDepotMk1:                     {Minerals: 60, Energy: 20, Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 4}, {ItemID: "stone_brick", Quantity: 4}}},
-	BuildingTypeDepotMk2:                     {Minerals: 60, Energy: 20, Items: []ItemAmount{{ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 8}}},
-	BuildingTypeStorageTank:                  {Minerals: 60, Energy: 20, Items: []ItemAmount{{ItemID: "glass", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
-	BuildingTypeTeslaTower:                   {Minerals: 20, Energy: 10, Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 2}, {ItemID: "magnetic_coil", Quantity: 1}}},
-	BuildingTypeThermalPowerPlant:            {Minerals: 90, Energy: 30, Items: []ItemAmount{{ItemID: "gear", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 10}, {ItemID: "magnetic_coil", Quantity: 4}, {ItemID: "stone_brick", Quantity: 4}}},
-	BuildingTypeTrafficMonitor:               {Minerals: 40, Energy: 20, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 2}, {ItemID: "glass", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 3}}},
-	BuildingTypeVerticalLaunchingSilo:        {Minerals: 260, Energy: 130, Items: []ItemAmount{{ItemID: "frame_material", Quantity: 30}, {ItemID: "graviton_lens", Quantity: 20}, {ItemID: "quantum_chip", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 80}}},
-	BuildingTypeWaterPump:                    {Minerals: 80, Energy: 30, Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "motor", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
-	BuildingTypeWindTurbine:                  {Minerals: 30, Energy: 0, Items: []ItemAmount{{ItemID: "gear", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 6}, {ItemID: "magnetic_coil", Quantity: 3}}},
-	BuildingTypeWirelessPowerTower:           {Minerals: 40, Energy: 20, Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 3}}},
+	BuildingTypeAccumulator:                  {Items: []ItemAmount{{ItemID: "crystal_silicon", Quantity: 3}, {ItemID: "iron_ingot", Quantity: 6}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
+	BuildingTypeAdvancedMiningMachine:        {Items: []ItemAmount{{ItemID: "frame_material", Quantity: 10}, {ItemID: "grating_crystal", Quantity: 40}, {ItemID: "quantum_chip", Quantity: 4}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}}},
+	BuildingTypeArcSmelter:                   {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 4}, {ItemID: "magnetic_coil", Quantity: 2}, {ItemID: "stone_brick", Quantity: 2}}},
+	BuildingTypeArtificialStar:               {Items: []ItemAmount{{ItemID: "annihilation_constraint_sphere", Quantity: 10}, {ItemID: "frame_material", Quantity: 20}, {ItemID: "quantum_chip", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}}},
+	BuildingTypeAssemblingMachineMk1:         {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "gear", Quantity: 8}, {ItemID: "iron_ingot", Quantity: 4}}},
+	BuildingTypeAssemblingMachineMk2:         {Items: []ItemAmount{{ItemID: "graphene", Quantity: 8}, {ItemID: "processor", Quantity: 4}}},
+	BuildingTypeAssemblingMachineMk3:         {Items: []ItemAmount{{ItemID: "particle_broadband", Quantity: 8}, {ItemID: "quantum_chip", Quantity: 2}}},
+	BuildingTypeAutomaticPiler:               {Items: []ItemAmount{{ItemID: "gear", Quantity: 4}, {ItemID: "processor", Quantity: 2}, {ItemID: "steel", Quantity: 3}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
+	BuildingTypeChemicalPlant:                {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "glass", Quantity: 8}, {ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 8}}},
+	BuildingTypeConveyorBeltMk1:              {Items: []ItemAmount{{ItemID: "gear", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 2}}},
+	BuildingTypeConveyorBeltMk2:              {Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 1}}},
+	BuildingTypeConveyorBeltMk3:              {Items: []ItemAmount{{ItemID: "graphene", Quantity: 1}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
+	BuildingTypeBattlefieldAnalysisBase:      {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 18}, {ItemID: "engine", Quantity: 12}, {ItemID: "microcrystalline_component", Quantity: 6}, {ItemID: "steel", Quantity: 12}}},
+	BuildingTypeGaussTurret:                  {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 8}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "magnetic_coil", Quantity: 4}}},
+	BuildingTypeImplosionCannon:              {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 10}, {ItemID: "motor", Quantity: 8}, {ItemID: "steel", Quantity: 10}, {ItemID: "super_magnetic_ring", Quantity: 2}}},
+	BuildingTypeJammerTower:                  {Items: []ItemAmount{{ItemID: "copper_ingot", Quantity: 12}, {ItemID: "diamond", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 9}, {ItemID: "processor", Quantity: 3}}},
+	BuildingTypeLaserTurret:                  {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "photon_combiner", Quantity: 9}, {ItemID: "plasma_exciter", Quantity: 6}, {ItemID: "steel", Quantity: 9}}},
+	BuildingTypeMissileTurret:                {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 12}, {ItemID: "engine", Quantity: 6}, {ItemID: "motor", Quantity: 6}, {ItemID: "steel", Quantity: 8}}},
+	BuildingTypePlanetaryShieldGenerator:     {Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 20}, {ItemID: "particle_container", Quantity: 5}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 5}}},
+	BuildingTypePlasmaTurret:                 {Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 5}, {ItemID: "processor", Quantity: 5}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 20}, {ItemID: "titanium_glass", Quantity: 10}}},
+	BuildingTypeSRPlasmaTurret:               {Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 5}, {ItemID: "processor", Quantity: 5}, {ItemID: "steel", Quantity: 15}, {ItemID: "super_magnetic_ring", Quantity: 5}}},
+	BuildingTypeSignalTower:                  {Items: []ItemAmount{{ItemID: "crystal_silicon", Quantity: 6}, {ItemID: "steel", Quantity: 12}}},
+	BuildingTypeEMRailEjector:                {Items: []ItemAmount{{ItemID: "gear", Quantity: 20}, {ItemID: "processor", Quantity: 5}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 10}}},
+	BuildingTypeEnergyExchanger:              {Items: []ItemAmount{{ItemID: "particle_container", Quantity: 8}, {ItemID: "processor", Quantity: 40}, {ItemID: "steel", Quantity: 40}, {ItemID: "titanium_alloy", Quantity: 40}}},
+	BuildingTypeFractionator:                 {Items: []ItemAmount{{ItemID: "glass", Quantity: 4}, {ItemID: "processor", Quantity: 1}, {ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
+	BuildingTypeGeothermalPowerStation:       {Items: []ItemAmount{{ItemID: "copper_ingot", Quantity: 20}, {ItemID: "photon_combiner", Quantity: 4}, {ItemID: "steel", Quantity: 15}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
+	BuildingTypeInterstellarLogisticsStation: {Items: []ItemAmount{{ItemID: "particle_container", Quantity: 20}, {ItemID: "titanium_alloy", Quantity: 40}}},
+	BuildingTypeLogisticsDistributor:         {Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 8}, {ItemID: "plasma_exciter", Quantity: 4}, {ItemID: "processor", Quantity: 4}}},
+	BuildingTypeMatrixLab:                    {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 4}, {ItemID: "glass", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "magnetic_coil", Quantity: 4}}},
+	BuildingTypeMiniFusionPowerPlant:         {Items: []ItemAmount{{ItemID: "carbon_nanotube", Quantity: 8}, {ItemID: "processor", Quantity: 4}, {ItemID: "super_magnetic_ring", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 12}}},
+	BuildingTypeMiniatureParticleCollider:    {Items: []ItemAmount{{ItemID: "frame_material", Quantity: 20}, {ItemID: "graphene", Quantity: 10}, {ItemID: "processor", Quantity: 8}, {ItemID: "super_magnetic_ring", Quantity: 25}, {ItemID: "titanium_alloy", Quantity: 20}}},
+	BuildingTypeMiningMachine:                {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 2}, {ItemID: "iron_ingot", Quantity: 4}, {ItemID: "magnetic_coil", Quantity: 2}}},
+	BuildingTypeOilExtractor:                 {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 4}, {ItemID: "steel", Quantity: 12}, {ItemID: "stone_brick", Quantity: 12}}},
+	BuildingTypeOilRefinery:                  {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 6}, {ItemID: "steel", Quantity: 10}, {ItemID: "stone_brick", Quantity: 10}}},
+	BuildingTypeOrbitalCollector:             {Items: []ItemAmount{{ItemID: "reinforced_thruster", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 50}}},
+	BuildingTypePlaneSmelter:                 {Items: []ItemAmount{{ItemID: "frame_material", Quantity: 5}, {ItemID: "monopole_magnet", Quantity: 15}, {ItemID: "plane_filter", Quantity: 4}}},
+	BuildingTypePlanetaryLogisticsStation:    {Items: []ItemAmount{{ItemID: "particle_container", Quantity: 20}, {ItemID: "processor", Quantity: 40}, {ItemID: "steel", Quantity: 40}, {ItemID: "titanium_ingot", Quantity: 40}}},
+	BuildingTypeQuantumChemicalPlant:         {Items: []ItemAmount{{ItemID: "quantum_chip", Quantity: 3}, {ItemID: "strange_matter", Quantity: 3}, {ItemID: "titanium_glass", Quantity: 10}}},
+	BuildingTypeRayReceiver:                  {Items: []ItemAmount{{ItemID: "photon_combiner", Quantity: 10}, {ItemID: "processor", Quantity: 5}, {ItemID: "silicon_ingot", Quantity: 20}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 20}}},
+	BuildingTypeSatelliteSubstation:          {Items: []ItemAmount{{ItemID: "frame_material", Quantity: 2}, {ItemID: "super_magnetic_ring", Quantity: 10}}},
+	BuildingTypeSolarPanel:                   {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 5}, {ItemID: "copper_ingot", Quantity: 10}, {ItemID: "silicon_ingot", Quantity: 10}}},
+	BuildingTypeSorterMk1:                    {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 1}}},
+	BuildingTypeSorterMk2:                    {Items: []ItemAmount{{ItemID: "motor", Quantity: 1}}},
+	BuildingTypeSorterMk3:                    {Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 1}}},
+	BuildingTypePileSorter:                   {Items: []ItemAmount{{ItemID: "processor", Quantity: 1}, {ItemID: "super_magnetic_ring", Quantity: 1}}},
+	BuildingTypeSplitter:                     {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 1}, {ItemID: "gear", Quantity: 2}, {ItemID: "iron_ingot", Quantity: 3}}},
+	BuildingTypeSprayCoater:                  {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "microcrystalline_component", Quantity: 2}, {ItemID: "plasma_exciter", Quantity: 2}, {ItemID: "steel", Quantity: 4}}},
+	BuildingTypeDepotMk1:                     {Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 4}, {ItemID: "stone_brick", Quantity: 4}}},
+	BuildingTypeDepotMk2:                     {Items: []ItemAmount{{ItemID: "steel", Quantity: 8}, {ItemID: "stone_brick", Quantity: 8}}},
+	BuildingTypeStorageTank:                  {Items: []ItemAmount{{ItemID: "glass", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
+	BuildingTypeTeslaTower:                   {Items: []ItemAmount{{ItemID: "iron_ingot", Quantity: 2}, {ItemID: "magnetic_coil", Quantity: 1}}},
+	BuildingTypeThermalPowerPlant:            {Items: []ItemAmount{{ItemID: "gear", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 10}, {ItemID: "magnetic_coil", Quantity: 4}, {ItemID: "stone_brick", Quantity: 4}}},
+	BuildingTypeTrafficMonitor:               {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "gear", Quantity: 2}, {ItemID: "glass", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 3}}},
+	BuildingTypeVerticalLaunchingSilo:        {Items: []ItemAmount{{ItemID: "frame_material", Quantity: 30}, {ItemID: "graviton_lens", Quantity: 20}, {ItemID: "quantum_chip", Quantity: 10}, {ItemID: "titanium_alloy", Quantity: 80}}},
+	BuildingTypeWaterPump:                    {Items: []ItemAmount{{ItemID: "circuit_board", Quantity: 2}, {ItemID: "motor", Quantity: 4}, {ItemID: "iron_ingot", Quantity: 8}, {ItemID: "stone_brick", Quantity: 4}}},
+	BuildingTypeWindTurbine:                  {Items: []ItemAmount{{ItemID: "gear", Quantity: 1}, {ItemID: "iron_ingot", Quantity: 6}, {ItemID: "magnetic_coil", Quantity: 3}}},
+	BuildingTypeWirelessPowerTower:           {Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 3}}},
 }
 
 // dspBuildingUnlockTechAlignment 冻结 DSP 建筑配方的解锁科技（scope.json
@@ -160,6 +160,19 @@ var dspPendingItemIDs = map[string]bool{
 	"titanium_glass":      true,
 }
 
+// sameItems 比较两组已排序的物品清单。
+func sameItems(a, b []ItemAmount) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func sortedItems(items []ItemAmount) []ItemAmount {
 	out := append([]ItemAmount(nil), items...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ItemID < out[j].ItemID })
@@ -184,10 +197,6 @@ func TestDSPBuildingBuildCostAlignment(t *testing.T) {
 		if !ok {
 			t.Errorf("building %s missing from catalog", id)
 			continue
-		}
-		if def.BuildCost.Minerals != want.Minerals || def.BuildCost.Energy != want.Energy {
-			t.Errorf("building %s cost minerals/energy = (%d,%d), want (%d,%d)",
-				id, def.BuildCost.Minerals, def.BuildCost.Energy, want.Minerals, want.Energy)
 		}
 		gotItems := sortedItems(def.BuildCost.Items)
 		wantItems := sortedItems(want.Items)

@@ -1,7 +1,5 @@
 package model
 
-const ProductionStatMinerals = "minerals"
-
 // ProductionSettlementSnapshot is the authoritative per-tick production settlement result.
 type ProductionSettlementSnapshot struct {
 	Tick    int64                               `json:"tick"`

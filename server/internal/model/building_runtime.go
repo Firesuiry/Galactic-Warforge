@@ -72,19 +72,12 @@ type IOPort struct {
 	AllowedItems []string      `json:"allowed_items,omitempty" yaml:"allowed_items,omitempty"`
 }
 
-// MaintenanceCost represents recurring upkeep costs per tick.
-type MaintenanceCost struct {
-	Minerals int `json:"minerals" yaml:"minerals,omitempty"`
-	Energy   int `json:"energy" yaml:"energy,omitempty"`
-}
-
 // BuildingRuntimeParams defines shared runtime parameters for a building.
 type BuildingRuntimeParams struct {
 	EnergyConsume    int               `json:"energy_consume" yaml:"energy_consume,omitempty"`
 	EnergyGenerate   int               `json:"energy_generate" yaml:"energy_generate,omitempty"`
 	PowerPriority    int               `json:"power_priority" yaml:"power_priority,omitempty"`
 	Capacity         int               `json:"capacity" yaml:"capacity,omitempty"`
-	MaintenanceCost  MaintenanceCost   `json:"maintenance_cost" yaml:"maintenance_cost,omitempty"`
 	Footprint        Footprint         `json:"footprint" yaml:"footprint,omitempty"`
 	ConnectionPoints []ConnectionPoint `json:"connection_points,omitempty" yaml:"connection_points,omitempty"`
 	IOPorts          []IOPort          `json:"io_ports,omitempty" yaml:"io_ports,omitempty"`
@@ -130,11 +123,6 @@ type CollectModule struct {
 	AllowedResources []string `json:"allowed_resources,omitempty" yaml:"allowed_resources,omitempty"`
 	ResourceKind     string   `json:"resource_kind,omitempty" yaml:"resource_kind,omitempty"`
 	YieldPerTick     int      `json:"yield_per_tick" yaml:"yield_per_tick,omitempty"`
-	// MineralsKickback is the amount of minerals credited to the owner's pool
-	// per unit of mined resource stored in the building's local storage.
-	// It keeps the minerals-based construction economy funded while the
-	// mined items themselves flow into the item/logistics economy.
-	MineralsKickback float64 `json:"minerals_kickback,omitempty" yaml:"minerals_kickback,omitempty"`
 	// CoverageRadius 采集覆盖半径（切比雪夫距离，格）：0 只采所在格矿脉，>0 多脉同采。
 	CoverageRadius int `json:"coverage_radius,omitempty" yaml:"coverage_radius,omitempty"`
 }
@@ -330,9 +318,6 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition, baseDef Bu
 	}
 	if def.Params.PowerPriority < 0 {
 		return fmt.Errorf("building runtime %s has negative power priority", def.ID)
-	}
-	if def.Params.MaintenanceCost.Minerals < 0 || def.Params.MaintenanceCost.Energy < 0 {
-		return fmt.Errorf("building runtime %s has negative maintenance cost", def.ID)
 	}
 	seenConn := map[string]struct{}{}
 	for _, conn := range def.Params.ConnectionPoints {

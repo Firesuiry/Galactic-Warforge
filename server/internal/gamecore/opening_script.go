@@ -171,29 +171,6 @@ func (s *ScriptedOpening) claimNewBuilding(ws *model.WorldState, btype model.Bui
 	return ""
 }
 
-// scriptWaitForMinerals 报告脚本是否该停下来等矿物池攒够下一栋建筑的矿物消耗。
-//
-// 矿机每 tick 只回充 1 点矿物（minerals_kickback=1，按实际落地的矿计），而电弧
-// 熔炉一座要 120、研究站/矩阵链更高——第 4 座熔炉起必然入不敷出。真人这时也是
-// 干等矿池涨，所以脚本直接空转等，而不是反复下发注定被拒的建造命令。
-//
-// 例外：发电（风机）不设门槛。矿池的长期收入靠矿机，而矿机没电就是死局；
-// 实测把风机也拦下来时，矿池涨到 120 而矿机长期 no_power，两边一起卡死。
-func scriptWaitForMinerals(player *model.PlayerState, btype model.BuildingType) bool {
-	if player == nil {
-		return false
-	}
-	switch btype {
-	case model.BuildingTypeWindTurbine, model.BuildingTypeTeslaTower:
-		return false
-	}
-	def, ok := model.BuildingDefinitionByID(btype)
-	if !ok {
-		return false
-	}
-	return player.Resources.Minerals < def.BuildCost.Minerals
-}
-
 // refuel 核心能量低时烧煤（煤是手动采矿的副产品，开局就能采到）。
 func (s *ScriptedOpening) refuel(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) (model.Command, bool) {
 	if unit.Mecha.Energy >= 20 || unit.Mecha.Job != nil {
@@ -251,19 +228,15 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		if !ok || s.built[s.beltRoleFor(step.role)] == "" {
 			return model.Command{}, false
 		}
+		// 第 16 轮起建造门槛只剩「背包物品够不够」（scriptMaterialsReady）：
+		// 不够时脚本会先去手搓/采矿，不再等一个已经不存在的矿物池。
 		if !scriptMaterialsReady(player, step.btype) {
-			return model.Command{}, false
-		}
-		if scriptWaitForMinerals(player, step.btype) {
 			return model.Command{}, false
 		}
 		s.awaiting = true
 		return BuildCommand(link.Target.X, link.Target.Y, step.btype, step.recipe, model.ConveyorAuto), true
 	}
 	if !scriptMaterialsReady(player, step.btype) {
-		return model.Command{}, false
-	}
-	if scriptWaitForMinerals(player, step.btype) {
 		return model.Command{}, false
 	}
 	unit := executorUnitFor(ws, s.PlayerID)
@@ -541,7 +514,7 @@ var scriptOreItems = []string{model.ItemIronOre, model.ItemCopperOre, model.Item
 // scriptCraftOrder 手搓顺序：先中间件（齿轮/电路板/磁线圈），再熔炼（锭/磁铁）。
 var scriptCraftOrder = []string{"gear", "circuit_board", "magnetic_coil", "smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"}
 
-// scriptMaterialsReady 背包里是否已经凑齐这栋建筑的全部物品材料（矿物与能量另算）。
+// scriptMaterialsReady 背包里是否已经凑齐这栋建筑的全部物品材料（第 16 轮起这是唯一的建造门槛）。
 func scriptMaterialsReady(player *model.PlayerState, btype model.BuildingType) bool {
 	for _, missing := range scriptMissingItems(player, btype) {
 		if missing > 0 {
@@ -551,7 +524,7 @@ func scriptMaterialsReady(player *model.PlayerState, btype model.BuildingType) b
 	return true
 }
 
-// scriptMissingItems 返回建造这栋建筑还缺的物品与数量（只算物品，不算矿物/能量）。
+// scriptMissingItems 返回建造这栋建筑还缺的物品与数量。
 func scriptMissingItems(player *model.PlayerState, btype model.BuildingType) map[string]int {
 	out := map[string]int{}
 	def, ok := model.BuildingDefinitionByID(btype)

@@ -12,8 +12,10 @@ import (
 
 // CurrentVersion 细分网格（1 格 = 3×3 cell）后坐标语义改变，旧存档一律拒绝加载，
 // 不写兼容层（与当年 cube_sphere 迁移同样处理）。版本 1 = 旧网格；
-// 版本 3 = 快照只存地形游程与资源差异（可由地图配置 + seed 重建的部分不入快照）。
-const CurrentVersion = 3
+// 版本 3 = 快照只存地形游程与资源差异（可由地图配置 + seed 重建的部分不入快照）；
+// 版本 4 = 第 16 轮去掉资金维度（Resources.Minerals/BuildCost.minerals 等字段消失，
+// 开局物资包改走 bootstrap.items）。
+const CurrentVersion = 4
 
 // Snapshot captures a tick-level world snapshot with versioned payload.
 type Snapshot struct {

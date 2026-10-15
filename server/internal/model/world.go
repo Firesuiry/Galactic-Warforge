@@ -10,10 +10,11 @@ import (
 	"siliconworld/internal/terrain"
 )
 
-// Resources holds player resource counts
+// Resources holds player resource counts. 第 16 轮起矿物不再是玩家级货币：
+// 一切消耗都是实物（PlayerState.Inventory）。Energy 只保留为电网结余的只读展示
+// （power_settlement 每 tick 写入），不再参与建造/升级/发射的扣费。
 type Resources struct {
-	Minerals int `json:"minerals"`
-	Energy   int `json:"energy"`
+	Energy int `json:"energy"`
 }
 
 // PlayerState holds per-player game state

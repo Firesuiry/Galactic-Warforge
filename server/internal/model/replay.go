@@ -17,7 +17,8 @@ type ReplayDigest struct {
 	Buildings            int    `json:"buildings"`
 	Units                int    `json:"units"`
 	Resources            int    `json:"resources"`
-	TotalMinerals        int    `json:"total_minerals"`
+	// TotalEnergy 是各玩家 resources.energy（电网结余）之和，只作一致性对照；
+	// 第 16 轮去掉资金维度后不再是可花费的货币。
 	TotalEnergy          int    `json:"total_energy"`
 	ResourceRemaining    int64  `json:"resource_remaining"`
 	EntityCounter        int64  `json:"entity_counter"`

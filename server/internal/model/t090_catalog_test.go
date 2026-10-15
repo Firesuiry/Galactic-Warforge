@@ -141,10 +141,10 @@ func TestT091BuildingsAreBuildableAndRuntimeBacked(t *testing.T) {
 		techID    string
 		buildCost BuildCost
 	}{
-		{btype: BuildingTypeJammerTower, techID: "signal_tower", buildCost: BuildCost{Minerals: 120, Energy: 60}},
-		{btype: BuildingTypeSRPlasmaTurret, techID: "plasma_turret", buildCost: BuildCost{Minerals: 300, Energy: 150}},
-		{btype: BuildingTypePlanetaryShieldGenerator, techID: "planetary_shield", buildCost: BuildCost{Minerals: 500, Energy: 250}},
-		{btype: BuildingTypeSelfEvolutionLab, techID: "self_evolution", buildCost: BuildCost{Minerals: 400, Energy: 200}},
+		{btype: BuildingTypeJammerTower, techID: "signal_tower", buildCost: BuildCost{Items: []ItemAmount{{ItemID: "copper_ingot", Quantity: 12}, {ItemID: "diamond", Quantity: 6}, {ItemID: "plasma_exciter", Quantity: 9}, {ItemID: "processor", Quantity: 3}}}},
+		{btype: BuildingTypeSRPlasmaTurret, techID: "plasma_turret", buildCost: BuildCost{Items: []ItemAmount{{ItemID: "plasma_exciter", Quantity: 5}, {ItemID: "processor", Quantity: 5}, {ItemID: "steel", Quantity: 15}, {ItemID: "super_magnetic_ring", Quantity: 5}}}},
+		{btype: BuildingTypePlanetaryShieldGenerator, techID: "planetary_shield", buildCost: BuildCost{Items: []ItemAmount{{ItemID: "electromagnetic_turbine", Quantity: 20}, {ItemID: "particle_container", Quantity: 5}, {ItemID: "steel", Quantity: 20}, {ItemID: "super_magnetic_ring", Quantity: 5}}}},
+		{btype: BuildingTypeSelfEvolutionLab, techID: "self_evolution", buildCost: BuildCost{Items: []ItemAmount{{ItemID: "dark_fog_matrix", Quantity: 20}, {ItemID: "graphene", Quantity: 20}, {ItemID: "processor", Quantity: 10}, {ItemID: "quantum_chip", Quantity: 4}}}},
 	}
 
 	for _, tc := range cases {
@@ -155,8 +155,8 @@ func TestT091BuildingsAreBuildableAndRuntimeBacked(t *testing.T) {
 		if !def.Buildable {
 			t.Fatalf("expected %s to be buildable", tc.btype)
 		}
-		if def.BuildCost.Minerals != tc.buildCost.Minerals || def.BuildCost.Energy != tc.buildCost.Energy {
-			t.Fatalf("expected %s build cost %+v, got %+v", tc.btype, tc.buildCost, def.BuildCost)
+		if got, want := sortedItems(def.BuildCost.Items), sortedItems(tc.buildCost.Items); !sameItems(got, want) {
+			t.Fatalf("expected %s build cost %+v, got %+v", tc.btype, want, got)
 		}
 		if !techUnlocksBuilding(t, tc.techID, tc.btype) {
 			t.Fatalf("expected tech %s to unlock %s", tc.techID, tc.btype)

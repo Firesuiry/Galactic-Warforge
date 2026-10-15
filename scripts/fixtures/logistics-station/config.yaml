@@ -30,8 +30,7 @@ players:
     - strange_matter
     - distribution_logistics
     - planetary_logistics
-    energy: 20000
-    inventory:
+    items:
     - item_id: circuit_board
       quantity: 120
     - item_id: processor
@@ -86,7 +85,6 @@ players:
       quantity: 4
     - item_id: logistics_vessel
       quantity: 3
-    minerals: 20000
   executor:
     build_efficiency: 1.0
     concurrent_tasks: 2
@@ -123,8 +121,7 @@ players:
     - strange_matter
     - distribution_logistics
     - planetary_logistics
-    energy: 20000
-    inventory:
+    items:
     - item_id: circuit_board
       quantity: 120
     - item_id: processor
@@ -179,7 +176,6 @@ players:
       quantity: 4
     - item_id: logistics_vessel
       quantity: 3
-    minerals: 20000
   executor:
     build_efficiency: 1.0
     concurrent_tasks: 2

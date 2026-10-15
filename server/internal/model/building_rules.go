@@ -103,9 +103,7 @@ func BuildingUpgradeCost(btype BuildingType, level int) BuildCost {
 	}
 	factor := mult * float64(level)
 	return BuildCost{
-		Minerals: scaleCost(def.BuildCost.Minerals, factor),
-		Energy:   scaleCost(def.BuildCost.Energy, factor),
-		Items:    scaleItemAmounts(def.BuildCost.Items, factor),
+		Items: scaleItemAmounts(def.BuildCost.Items, factor),
 	}
 }
 
@@ -126,17 +124,8 @@ func BuildingDemolishRefundWithRate(btype BuildingType, level int, refundRate fl
 	}
 	factor := float64(level) * refundRate
 	return BuildCost{
-		Minerals: scaleCost(def.BuildCost.Minerals, factor),
-		Energy:   scaleCost(def.BuildCost.Energy, factor),
-		Items:    scaleItemAmounts(def.BuildCost.Items, factor),
+		Items: scaleItemAmounts(def.BuildCost.Items, factor),
 	}
-}
-
-func scaleCost(base int, factor float64) int {
-	if base == 0 || factor == 0 {
-		return 0
-	}
-	return int(math.Ceil(float64(base) * factor))
 }
 
 func scaleItemAmounts(items []ItemAmount, factor float64) []ItemAmount {

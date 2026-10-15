@@ -511,7 +511,8 @@ func botCheapestTurret(player *model.PlayerState, requireAfford bool) (model.Bui
 		if requireAfford && !botCanAffordBuild(player, def) {
 			continue
 		}
-		score := def.BuildCost.Minerals*10000 + def.BuildCost.Energy*100
+		// 第 16 轮起成本只有物品：按物品总件数排序（越便宜越优先）。
+		score := 0
 		for _, item := range def.BuildCost.Items {
 			score += item.Quantity
 		}
@@ -1186,7 +1187,7 @@ func botAdjacentFreeTile(ws *model.WorldState, center model.Position, selfID str
 // 选址：补的风机必须落进"己方已带电电网"的无线覆盖内。细分网格后
 // botBuildSpotNear 从半径 9 起扫，风机（2×2）会落在 HQ 的电感应塔覆盖（12）之外，
 // 发出来的电送不进电网 → HQ 长期 no_power → starved 恒真 → bot 无限补风机
-// （实测旧局 332 座风机、minerals/energy 归零，而电网里始终 0 供电）。
+// （实测旧局 332 座风机、能源池归零，而电网里始终 0 供电）。
 func (gc *GameCore) botPower(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey, issue func(model.Command) bool) bool {
 	starved := false
 	for _, b := range ctx.buildings {
@@ -1317,10 +1318,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 	if !ok {
 		return false
 	}
-	if player.Resources.Minerals < def.BuildCost.Minerals || player.Resources.Energy < def.BuildCost.Energy {
-		return false
-	}
-	if _, short := missingItem(player.Inventory, def.BuildCost.Items); short {
+	if !botCanAffordBuild(player, def) {
 		return false
 	}
 	// 找一台附近没有己方矿机的矿点（必须在建造可达范围内：基地半径或执行体操作范围）。
@@ -1336,8 +1334,8 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 	// 于是矿机被丢到 24 格外的远矿点上——见下面的选址注释。
 	//
 	// 距离优先还让开局矿机落在基地旁的开局补矿簇上（地图生成时放在 HQ 边上、
-	// 天然接进基地电网），不必先拉一串电塔；矿机一通电，minerals 就按
-	// minerals_kickback 自增长，后续建造才有钱。
+	// 天然接进基地电网），不必先拉一串电塔；矿机产出的矿石实物由传送带/分拣器
+	// 送进熔炉，成为后续建造的料。
 	kindRank := map[string]int{
 		model.ItemIronOre:   0,
 		model.ItemCopperOre: 1,
@@ -1398,7 +1396,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 			continue
 		}
 		// 建造半径 ≠ 电力半径：矿机只有 line 接口，落在电塔无线覆盖之外会一直
-		// no_power、不产矿也拿不到 minerals 回充，只能靠 botPowerLink 一座座塔
+		// no_power 就完全不产矿，只能靠 botPowerLink 一座座塔
 		// 拉过去。这里**不能**直接跳过够不着的矿点：botIndustry 在
 		// `minerCount < minerTarget` 时提前返回，而 botPowerLink 就在 botIndustry
 		// 里——跳过会让「没矿机 → 不拉线 → 永远够不着 → 没矿机」死锁
@@ -1464,10 +1462,7 @@ func (gc *GameCore) botAssembler(ws *model.WorldState, playerID string, tuning b
 	if !ok {
 		return false
 	}
-	if player.Resources.Minerals < def.BuildCost.Minerals || player.Resources.Energy < def.BuildCost.Energy {
-		return false
-	}
-	if _, short := missingItem(player.Inventory, def.BuildCost.Items); short {
+	if !botCanAffordBuild(player, def) {
 		return false
 	}
 	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeAssemblingMachineMk1)
@@ -1689,11 +1684,11 @@ func botPreferMecha(soldiers, mechas int, tuning botTuning) bool {
 	return mechas*tuning.mechaEvery < soldiers
 }
 
+// botCanAffordBuild 报告 bot 背包里的物品是否够建这栋建筑（第 16 轮起唯一的门槛：
+// 没有矿物/能量货币可查）。不够时调用方应当先去手搓或从自己建筑的输出缓冲取货
+// ——bot 的取货重做属于后续任务，这里只保证门槛语义正确。
 func botCanAffordBuild(player *model.PlayerState, def model.BuildingDefinition) bool {
 	if player == nil {
-		return false
-	}
-	if player.Resources.Minerals < def.BuildCost.Minerals || player.Resources.Energy < def.BuildCost.Energy {
 		return false
 	}
 	_, short := missingItem(player.Inventory, def.BuildCost.Items)

@@ -30,7 +30,7 @@ battlefield:
   #   研究站 16233，比 seed 001 慢 1500–3000 tick；tick 45000 时建造队列还没推进到
   #   矩阵制造台（「制造台缺 4 个电路板」972 次），电磁学未开工。
   #   节奏瓶颈是机甲手搓（20 tick/件），齿轮最紧（每台制造台 8 个齿轮全手搓）；
-  #   4 矿机与后续建筑靠 minerals 回充滚动，脚本已按「先手搓当前建造步骤」排序。
+  #   4 矿机与后续建筑靠矿机产出的矿石实物滚动，脚本已按「先手搓当前建造步骤」排序。
   #
   # bot 首攻（bot_first_attack_tick 60000）：脚本节奏下 bot 约 tick 30019 就能
   # 攒够兵（当时是 normal 档 attackAt=6），而试玩节奏要 ~60000 才有兵营与步兵；
@@ -71,17 +71,25 @@ players:
       operate_range: 18
       concurrent_tasks: 2
       research_boost: 0.0
-    # 无开局物资包（2026-10-10）：背包为空，minerals/energy 只留「第一座矿机通电前」
-    # 的启动量——建造要花 minerals/energy，而两者在「矿机通电」之前没有任何产出
-    # 途径（矿机的 minerals 回充、风机的 energy 盈余都要通电才跑），必须留一点，
-    # 否则双方都会卡在「有矿机、没电、没矿物」的死锁里（实测 200 矿物时 bot 正好
-    # 把 3 风机 + 2 矿机建完就归零，连 20 矿物的电塔都建不起，整局冻结在 tick 12000）。
-    # 400 = 3 风机(30×3) + 2 矿机(50×2) + 2 座电塔(20×2) 的余量：第一座矿机一通电，
-    # minerals 就按 mining_machine 的 minerals_kickback=1 自增长（每挖 1 单位矿回充
-    # 1 点，8/tick/台），此后不再需要发料。双方同一份：bot 也没有物资包。
+    # 开局物资包（第 16 轮：去掉资金维度后改为实物）。数量 = 「3 风机 + 2 矿机 +
+    # 1 熔炉 + 3 电塔 + 20 传送带 + 4 分拣器」的合成料，再加约 20% 余量：
+    #   gear 27→32、circuit_board 12→15、iron_ingot 80→96、
+    #   magnetic_coil 18→22、stone_brick 2→3
+    # （原始用量由 data/buildings.yaml 的 build_cost.items 累加得到，
+    # 见 docs/guide/实物经济与分拣器.md §1）。开局物资直接进背包（绕过背包上限），
+    # 之后靠机甲采矿 / 手搓 / 熔炉产出续上。双方同一份：bot 也是这份料。
     bootstrap: &skirmish_kit
-      minerals: 400
-      energy: 100
+      items:
+        - item_id: gear
+          quantity: 32
+        - item_id: circuit_board
+          quantity: 15
+        - item_id: iron_ingot
+          quantity: 96
+        - item_id: magnetic_coil
+          quantity: 22
+        - item_id: stone_brick
+          quantity: 3
   - player_id: "p2"
     key: "key_player_2"
     team_id: "team-2"
