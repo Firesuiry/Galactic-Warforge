@@ -2790,6 +2790,7 @@ export class PlanetScene {
       // 分拣器幽灵：取 → 放 两端箭头（第 16 轮契约：背面取货、正面放货，方向跟 rotation 走）。
       // 与传送带箭头同处一个分支：幽灵 footprint 画完后立刻叠方向，不再另开一个永远走不到的
       // 分支（原先的判断在 assessment 存在时被上面的 return 短路，箭头根本画不出来）。
+      // 每支只画「从格心朝该侧」的半支，两支背向分开、不在格心叠成叉。
       if (isSorterBuilding({ type: mode.buildingType })) {
         const routes = sorterGhostDirections(mode.buildingType, mode.rotation);
         if (routes) {
@@ -2800,11 +2801,12 @@ export class PlanetScene {
             [routes.to, COLOR_GHOST_OK],
           ] as [typeof routes.to, number][]) {
             const vector = directionVector(direction);
-            const half = ts * 0.34;
-            const wing = ts * 0.18;
-            const tipX = cx + vector.x * half;
-            const tipY = cy + vector.y * half;
-            g.moveTo(cx - vector.x * half, cy - vector.y * half)
+            const tailX = cx + vector.x * ts * 0.1;
+            const tailY = cy + vector.y * ts * 0.1;
+            const tipX = cx + vector.x * ts * 0.36;
+            const tipY = cy + vector.y * ts * 0.36;
+            const wing = ts * 0.16;
+            g.moveTo(tailX, tailY)
               .lineTo(tipX, tipY)
               .moveTo(tipX, tipY)
               .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
