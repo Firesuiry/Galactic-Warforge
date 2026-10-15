@@ -28,8 +28,8 @@ func SyncBuildingSorter(building *Building) {
 		return
 	}
 	if building.Runtime.Functions.Sorter != nil {
-		if building.Runtime.Functions.Sorter.Speed > 0 {
-			building.Sorter.Speed = building.Runtime.Functions.Sorter.Speed
+		if building.Runtime.Functions.Sorter.CycleTicks > 0 {
+			building.Sorter.CycleTicks = building.Runtime.Functions.Sorter.CycleTicks
 		}
 		if building.Runtime.Functions.Sorter.Range > 0 {
 			building.Sorter.Range = building.Runtime.Functions.Sorter.Range
@@ -39,22 +39,20 @@ func SyncBuildingSorter(building *Building) {
 }
 
 func defaultSorterState(runtime BuildingRuntime) *SorterState {
-	speed := 1
+	cycleTicks := defaultSorterCycleTicks
 	sortRange := 1
 	if runtime.Functions.Sorter != nil {
-		if runtime.Functions.Sorter.Speed > 0 {
-			speed = runtime.Functions.Sorter.Speed
+		if runtime.Functions.Sorter.CycleTicks > 0 {
+			cycleTicks = runtime.Functions.Sorter.CycleTicks
 		}
 		if runtime.Functions.Sorter.Range > 0 {
 			sortRange = runtime.Functions.Sorter.Range
 		}
 	}
 	state := &SorterState{
-		InputDirections:  append([]ConveyorDirection(nil), defaultSorterDirections...),
-		OutputDirections: append([]ConveyorDirection(nil), defaultSorterDirections...),
-		Speed:            speed,
-		Range:            sortRange,
-		Filter:           SorterFilter{Mode: SorterFilterAllow},
+		CycleTicks: cycleTicks,
+		Range:      sortRange,
+		Filter:     SorterFilter{Mode: SorterFilterAllow},
 	}
 	state.Normalize()
 	return state

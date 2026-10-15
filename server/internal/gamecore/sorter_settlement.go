@@ -1,17 +1,24 @@
 package gamecore
 
 import (
+	"log"
 	"sort"
 
 	"siliconworld/internal/model"
 )
 
 type sorterLink struct {
-	id   string
-	dir  model.ConveyorDirection
-	port string
+	id    string
+	dir   model.ConveyorDirection
+	port  string
+	steps int
 }
 
+// settleSorters 结算全部分拣器（第 16 轮契约 §2，DSP 口径）。
+//
+// 分拣器有朝向：背面取货、正面放货，沿朝向轴前后各扫 Range 格。
+// 节拍：一次往返搬 1 件（集装 / 叠层科技提高每次件数），往返周期 =
+// cycle_ticks × 两端点距离格数。没搬动就不推进周期，下一 tick 再试。
 func settleSorters(ws *model.WorldState) {
 	if ws == nil {
 		return
@@ -39,7 +46,10 @@ func settleSorters(ws *model.WorldState) {
 			continue
 		}
 		sorter := building.Sorter
-		if sorter.Speed <= 0 || sorter.Range <= 0 {
+		if sorter.CycleTicks <= 0 || sorter.Range <= 0 {
+			continue
+		}
+		if sorter.NextTripTick > ws.Tick {
 			continue
 		}
 
@@ -52,25 +62,17 @@ func settleSorters(ws *model.WorldState) {
 			continue
 		}
 
-		// Each grab lifts up to grabStacks stacks: ordinary sorters peel one
-		// item per stack while the pile sorter lifts whole piles. The
-		// sorter_cargo_stacking tech raises the stacks per grab via its
-		// catalog sorter_grab_stacks effect.
+		// 一次往返搬的件数：普通分拣器剥 maxStacks 个栈各 1 件，集装分拣器整堆抬。
+		// sorter_cargo_stacking 科技通过目录里的 sorter_grab_stacks 效果提高每趟栈数。
 		grabStacks := 1 + int(model.TechEffectValue(ws.Players[building.OwnerID], "sorter_grab_stacks"))
 		pileGrab := building.Type == model.BuildingTypePileSorter
-		remaining := sorter.Speed
+
 		for _, out := range outputs {
-			if remaining <= 0 {
-				break
-			}
 			target := ws.Buildings[out.id]
 			if target == nil {
 				continue
 			}
 			for _, in := range inputs {
-				if remaining <= 0 {
-					break
-				}
 				if in.id == out.id {
 					continue
 				}
@@ -78,20 +80,8 @@ func settleSorters(ws *model.WorldState) {
 				if source == nil {
 					continue
 				}
-				moved := 0
-				movedItemID := ""
-				for remaining > 0 {
-					qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
-					if qty <= 0 {
-						break
-					}
-					if movedItemID == "" {
-						movedItemID = itemID
-					}
-					moved += qty
-					remaining--
-				}
-				if moved <= 0 {
+				qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
+				if qty <= 0 {
 					continue
 				}
 				sequence := int64(1)
@@ -102,14 +92,22 @@ func settleSorters(ws *model.WorldState) {
 					Tick: ws.Tick, Sequence: sequence,
 					SourceID: source.ID, TargetID: target.ID,
 					SourcePosition: source.Position, TargetPosition: target.Position,
-					ItemID: movedItemID, Quantity: moved,
+					ItemID: itemID, Quantity: qty,
 				}
+				// 往返周期 = cycle_ticks × 端点距离格数（端点落在不同格子上才计距离，
+				// 两端同格时按 1 格算，避免零周期）。
+				distance := max(1, in.steps+out.steps)
+				sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*distance)
+				break
+			}
+			if sorter.NextTripTick > ws.Tick {
+				break
 			}
 		}
 	}
 }
 
-// sorterGrabOnce performs a single grab: up to maxStacks stacks from the front
+// sorterGrabOnce performs a single trip: up to maxStacks stacks from the front
 // of the source buffer. Ordinary sorters take one item per stack; pile
 // sorters lift each stack whole. Returns items moved and the first item ID.
 func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, sourcePort, targetPort string, sorter *model.SorterState, maxStacks int, pileGrab bool) (int, string) {
@@ -175,24 +173,69 @@ func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, source
 			take = got
 			cargo = []model.ItemStack{{ItemID: itemID, Quantity: take}}
 		}
+		if len(cargo) == 0 {
+			break
+		}
+		taken := 0
+		for _, stack := range cargo {
+			taken += stack.Quantity
+		}
 		if target.Conveyor != nil {
 			target.Conveyor.AppendStacks(cargo)
 		} else {
-			// Preview and commit run serially within this tick; no other producer can fill the port between them.
-			inserted, _, _ := model.StoragePortInput(target, targetPort, itemID, take)
-			if inserted != take {
-				panic("sorter storage preview/commit mismatch")
+			// 预览与提交在本 tick 内串行，中间没有别的生产者；万一仍对不上
+			// （端口被别的路径改过），跳过本次搬运并把货退回来源，不再 panic。
+			inserted, _, _ := model.StoragePortInput(target, targetPort, itemID, taken)
+			if inserted != taken {
+				log.Printf("[WARN] sorter storage preview/commit mismatch: target=%s port=%s item=%s want=%d got=%d", target.ID, targetPort, itemID, taken, inserted)
+				returnSourceItems(source, sourcePort, cargo, taken-inserted)
+				taken = inserted
+				if taken <= 0 {
+					break
+				}
 			}
 		}
 		if source.Conveyor != nil {
-			recordConveyorDeparture(ws, source, take)
+			recordConveyorDeparture(ws, source, taken)
 		}
-		moved += take
+		moved += taken
 		if firstItem == "" {
 			firstItem = itemID
 		}
 	}
 	return moved, firstItem
+}
+
+// returnSourceItems puts the surplus back where it came from after a partial
+// commit, so a mismatch never destroys cargo.
+func returnSourceItems(source *model.Building, sourcePort string, cargo []model.ItemStack, surplus int) {
+	if source == nil || surplus <= 0 {
+		return
+	}
+	rest := make([]model.ItemStack, 0, len(cargo))
+	remaining := surplus
+	for i := len(cargo) - 1; i >= 0 && remaining > 0; i-- {
+		stack := cargo[i]
+		if stack.Quantity <= 0 {
+			continue
+		}
+		give := min(stack.Quantity, remaining)
+		stack.Quantity = give
+		rest = append(rest, stack)
+		remaining -= give
+	}
+	if len(rest) == 0 {
+		return
+	}
+	if source.Conveyor != nil {
+		source.Conveyor.PrependStacks(rest)
+		return
+	}
+	for _, stack := range rest {
+		if _, _, err := model.StoragePortInput(source, sourcePort, stack.ItemID, stack.Quantity); err != nil {
+			log.Printf("[WARN] sorter rollback failed: source=%s port=%s item=%s qty=%d: %v", source.ID, sourcePort, stack.ItemID, stack.Quantity, err)
+		}
+	}
 }
 
 func allowsItem(items []string, item string) bool {
@@ -207,12 +250,16 @@ func allowsItem(items []string, item string) bool {
 	return false
 }
 
+// sorterInputEndpoints 是取货端：背面（朝向的反方向）沿轴扫 Range 格。
 func sorterInputEndpoints(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
-	return sorterEndpoints(ws, sorter, state.InputDirections, state.Range, true)
+	back, _ := model.SorterFacingAxis(sorter.Rotation)
+	return sorterEndpoints(ws, sorter, []model.ConveyorDirection{back}, state.Range, true)
 }
 
+// sorterOutputEndpoints 是放货端：正面沿轴扫 Range 格。
 func sorterOutputEndpoints(ws *model.WorldState, sorter *model.Building, state *model.SorterState) []sorterLink {
-	return sorterEndpoints(ws, sorter, state.OutputDirections, state.Range, false)
+	_, front := model.SorterFacingAxis(sorter.Rotation)
+	return sorterEndpoints(ws, sorter, []model.ConveyorDirection{front}, state.Range, false)
 }
 
 func sorterEndpoints(
@@ -255,10 +302,15 @@ func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.
 			if !conveyorActive(target) || target.Splitter != nil {
 				return sorterLink{}, false
 			}
-			if forInput && !sorterCanTakeFromConveyor(target, dir) || !forInput && !sorterCanInsertToConveyor(target, dir) {
+			// 取货端可以从任意路过的带格上取（不要求带尾正对分拣器）；
+			// 放货端仍要求该格能接受这一侧插入。
+			if forInput && !sorterCanTakeFromConveyor(target) {
 				return sorterLink{}, false
 			}
-			return sorterLink{id: targetID, dir: dir}, true
+			if !forInput && !sorterCanInsertToConveyor(target, dir) {
+				return sorterLink{}, false
+			}
+			return sorterLink{id: targetID, dir: dir, steps: step}, true
 		}
 		if target.Storage != nil {
 			// 分拣器连到建筑占地内任一 cell 即算连上（多格建筑不再是"必须正中锚点"）：
@@ -268,7 +320,7 @@ func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.
 			}
 			for _, port := range sortedIOPorts(target.Runtime.Params.IOPorts) {
 				if (forInput && (port.Direction == model.PortOutput || port.Direction == model.PortBoth)) || (!forInput && (port.Direction == model.PortInput || port.Direction == model.PortBoth)) {
-					return sorterLink{id: targetID, dir: dir, port: port.ID}, true
+					return sorterLink{id: targetID, dir: dir, port: port.ID, steps: step}, true
 				}
 			}
 		}
@@ -277,15 +329,10 @@ func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.
 	return sorterLink{}, false
 }
 
-func sorterCanTakeFromConveyor(conveyorBuilding *model.Building, dir model.ConveyorDirection) bool {
-	if conveyorBuilding == nil || conveyorBuilding.Conveyor == nil {
-		return false
-	}
-	output := conveyorBuilding.Conveyor.Output
-	if !output.Valid() || output == model.ConveyorAuto {
-		return false
-	}
-	return output == dir.Opposite()
+// sorterCanTakeFromConveyor：运行中的传送带格都能被取货（DSP 口径：带子上
+// 任何路过的物品都能被分拣器取走，不要求带尾朝向分拣器）。
+func sorterCanTakeFromConveyor(conveyorBuilding *model.Building) bool {
+	return conveyorActive(conveyorBuilding) && conveyorBuilding.Conveyor != nil
 }
 
 func sorterCanInsertToConveyor(conveyorBuilding *model.Building, dir model.ConveyorDirection) bool {

@@ -35,13 +35,18 @@ type SorterTransfer struct {
 }
 
 // SorterState tracks runtime sorter configuration.
+//
+// 分拣器不再保存方向：取货端固定在建造朝向的背面、放货端在正面（见
+// SorterFacing / ApplyBuildingRotation），沿该轴前后各扫 Range 格。配置命令
+// 只能改 Filter。
 type SorterState struct {
-	InputDirections  []ConveyorDirection `json:"input_directions,omitempty"`
-	OutputDirections []ConveyorDirection `json:"output_directions,omitempty"`
-	Speed            int                 `json:"speed"`
-	Range            int                 `json:"range"`
-	Filter           SorterFilter        `json:"filter,omitempty"`
-	LastTransfer     *SorterTransfer     `json:"last_transfer,omitempty"`
+	// CycleTicks 是往返周期系数：往返周期 = CycleTicks × 两端点距离格数。
+	CycleTicks int `json:"cycle_ticks"`
+	Range      int `json:"range"`
+	// NextTripTick 是下一次允许往返的最早 tick（0 表示随时可搬）。
+	NextTripTick int64          `json:"next_trip_tick,omitempty"`
+	Filter       SorterFilter   `json:"filter,omitempty"`
+	LastTransfer *SorterTransfer `json:"last_transfer,omitempty"`
 }
 
 // Clone returns a deep copy of the sorter state.
@@ -50,8 +55,6 @@ func (s *SorterState) Clone() *SorterState {
 		return nil
 	}
 	out := *s
-	out.InputDirections = append([]ConveyorDirection(nil), s.InputDirections...)
-	out.OutputDirections = append([]ConveyorDirection(nil), s.OutputDirections...)
 	out.Filter.Items = append([]string(nil), s.Filter.Items...)
 	out.Filter.Tags = append([]string(nil), s.Filter.Tags...)
 	if s.LastTransfer != nil {
@@ -76,13 +79,14 @@ func (s *SorterState) Normalize() {
 	if s == nil {
 		return
 	}
-	s.InputDirections = normalizeSorterDirections(s.InputDirections)
-	s.OutputDirections = normalizeSorterDirections(s.OutputDirections)
-	if s.Speed <= 0 {
-		s.Speed = 1
+	if s.CycleTicks <= 0 {
+		s.CycleTicks = defaultSorterCycleTicks
 	}
 	if s.Range <= 0 {
 		s.Range = 1
+	}
+	if s.NextTripTick < 0 {
+		s.NextTripTick = 0
 	}
 	s.Filter.normalize()
 }
@@ -140,30 +144,28 @@ func normalizeSorterTag(tag string) string {
 	return tag
 }
 
-var defaultSorterDirections = []ConveyorDirection{
-	ConveyorNorth,
-	ConveyorEast,
-	ConveyorSouth,
-	ConveyorWest,
+// defaultSorterCycleTicks 是未配置 cycle_ticks 时的往返周期系数（= Mk.I 的节拍）。
+const defaultSorterCycleTicks = 6
+
+// SorterFacing 返回分拣器的放货端方向：建造朝向 rotation 的「正面」。
+// 与 rotateOffset 同向：0°=北、90°=东、180°=南、270°=西。
+func SorterFacing(rotation PlanRotation) ConveyorDirection {
+	switch normalizePlanRotation(rotation) {
+	case PlanRotation90:
+		return ConveyorEast
+	case PlanRotation180:
+		return ConveyorSouth
+	case PlanRotation270:
+		return ConveyorWest
+	default:
+		return ConveyorNorth
+	}
 }
 
-func normalizeSorterDirections(dirs []ConveyorDirection) []ConveyorDirection {
-	seen := make(map[ConveyorDirection]struct{}, len(dirs))
-	normalized := make([]ConveyorDirection, 0, len(dirs))
-	for _, dir := range dirs {
-		if !dir.Valid() || dir == ConveyorAuto {
-			continue
-		}
-		if _, ok := seen[dir]; ok {
-			continue
-		}
-		seen[dir] = struct{}{}
-		normalized = append(normalized, dir)
-	}
-	if len(normalized) == 0 {
-		normalized = append([]ConveyorDirection(nil), defaultSorterDirections...)
-	}
-	return normalized
+// SorterFacingAxis 返回分拣器沿朝向轴的 (取货端, 放货端)：背面取货、正面放货。
+func SorterFacingAxis(rotation PlanRotation) (ConveyorDirection, ConveyorDirection) {
+	front := SorterFacing(rotation)
+	return front.Opposite(), front
 }
 
 func normalizeStringList(items []string) []string {

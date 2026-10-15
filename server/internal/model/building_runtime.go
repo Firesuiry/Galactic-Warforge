@@ -151,10 +151,11 @@ type TransportModule struct {
 	StackLimit int `json:"stack_limit" yaml:"stack_limit,omitempty"`
 }
 
-// SorterModule handles sorter throughput and range.
+// SorterModule handles sorter reach and cycle time. CycleTicks 是往返周期系数：
+// 往返周期 = CycleTicks × 两端点距离格数（DSP 口径：mk1/mk2/mk3 = 6/3/2）。
 type SorterModule struct {
-	Speed int `json:"speed" yaml:"speed,omitempty"`
-	Range int `json:"range" yaml:"range,omitempty"`
+	CycleTicks int `json:"cycle_ticks" yaml:"cycle_ticks,omitempty"`
+	Range      int `json:"range" yaml:"range,omitempty"`
 }
 
 // SprayModule handles spray coating throughput.
@@ -417,7 +418,7 @@ func validateBuildingRuntimeDefinition(def BuildingRuntimeDefinition, baseDef Bu
 		}
 	}
 	if def.Functions.Sorter != nil {
-		if def.Functions.Sorter.Speed < 0 || def.Functions.Sorter.Range < 0 {
+		if def.Functions.Sorter.CycleTicks < 0 || def.Functions.Sorter.Range < 0 {
 			return fmt.Errorf("building runtime %s sorter module invalid", def.ID)
 		}
 	}

@@ -51,12 +51,9 @@ func ApplyBuildingRotation(b *Building, rotation PlanRotation) {
 		c.ReagentDirection = RotateDirection(c.ReagentDirection, rotation)
 	}
 	if s := b.Sorter; s != nil {
-		for i, d := range s.InputDirections {
-			s.InputDirections[i] = RotateDirection(d, rotation)
-		}
-		for i, d := range s.OutputDirections {
-			s.OutputDirections[i] = RotateDirection(d, rotation)
-		}
+		// 分拣器的取/放端直接由 Rotation 派生（SorterFacingAxis），状态里不再存方向，
+		// 旋转时无需改写任何字段。
+		s.Normalize()
 	}
 }
 

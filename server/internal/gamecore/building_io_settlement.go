@@ -31,6 +31,12 @@ func settleBuildingIO(ws *model.WorldState) {
 		if building == nil || building.Storage == nil || building.Type == model.BuildingTypeSprayCoater {
 			continue
 		}
+		// 只有 direct_belt_io 的建筑能直接和相邻传送带换货（第 16 轮契约 §3）：
+		// 采集类、物流站、分流器 / 叠层器 / 流速监测器这类带上设备。其余建筑
+		// （生产、研究、仓储、发电燃料口、HQ、兵营、炮塔……）一律经分拣器进出货。
+		if !model.BuildingHasDirectBeltIO(building.Type) {
+			continue
+		}
 		ports := sortedIOPorts(building.Runtime.Params.IOPorts)
 		if len(ports) == 0 {
 			continue
