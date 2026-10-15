@@ -106,6 +106,8 @@ func TestRefinerySeparatesOilAndHydrogenOverRepeatedBatches(t *testing.T) {
 	//   - 进料：带子 (4,8) → 分拣器 (4,7)（背南面北）→ 占地 (4,6)；
 	//   - 主产物：分拣器 (7,4)（背西面东）→ 带子 (8,4)；
 	//   - 副产物：分拣器 (4,1)（背南面北）→ 带子 (4,0)。
+	// 出货分拣器必须带过滤（否则会把精炼厂主库存里的原料也一起抽走——分拣器
+	// 对建筑取货取的是 ExportableItemQuantity，不过滤就等于「什么都搬」）。
 	input := newConveyorBuilding("input", model.Position{X: 4, Y: 8}, model.ConveyorNorth)
 	feeder := newSorterBuilding("feeder", model.Position{X: 4, Y: 7})
 	feeder.Rotation = model.PlanRotation0 // 背面南（带子）、正面北（精炼厂）
@@ -115,17 +117,20 @@ func TestRefinerySeparatesOilAndHydrogenOverRepeatedBatches(t *testing.T) {
 	oilSorter := newSorterBuilding("oil-sorter", model.Position{X: 7, Y: 4})
 	oilSorter.Sorter.Range = 2
 	oilSorter.Sorter.CycleTicks = 1
+	oilSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemRefinedOil}}
 	hydrogen := newConveyorBuilding("hydrogen", model.Position{X: 4, Y: 0}, model.ConveyorNorth)
 	hydrogenSorter := newSorterBuilding("hydrogen-sorter", model.Position{X: 4, Y: 1})
 	hydrogenSorter.Rotation = model.PlanRotation0
 	hydrogenSorter.Sorter.Range = 2
 	hydrogenSorter.Sorter.CycleTicks = 1
+	hydrogenSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: []string{model.ItemHydrogen}}
 	for _, building := range []*model.Building{b, input, feeder, oil, oilSorter, hydrogen, hydrogenSorter} {
 		attachBuilding(ws, building)
 	}
 	totals := model.ItemInventory{}
 	acceptedCrude := 0
 	for tick := 0; tick < 3000; tick++ {
+		ws.Tick = int64(tick)
 		if input.Conveyor.TotalItems() < 4 {
 			accepted, _, err := input.Conveyor.Insert(model.ItemCrudeOil, 2)
 			if err != nil {
