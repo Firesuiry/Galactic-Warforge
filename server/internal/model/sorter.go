@@ -44,8 +44,8 @@ type SorterState struct {
 	CycleTicks int `json:"cycle_ticks"`
 	Range      int `json:"range"`
 	// NextTripTick 是下一次允许往返的最早 tick（0 表示随时可搬）。
-	NextTripTick int64          `json:"next_trip_tick,omitempty"`
-	Filter       SorterFilter   `json:"filter,omitempty"`
+	NextTripTick int64           `json:"next_trip_tick,omitempty"`
+	Filter       SorterFilter    `json:"filter,omitempty"`
 	LastTransfer *SorterTransfer `json:"last_transfer,omitempty"`
 }
 

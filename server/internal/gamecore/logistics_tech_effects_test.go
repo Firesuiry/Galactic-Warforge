@@ -11,10 +11,10 @@ import (
 func newPileSorterBuilding(id string, pos model.Position) *model.Building {
 	profile := model.BuildingProfileFor(model.BuildingTypePileSorter, 1)
 	b := &model.Building{
-		ID:          id,
-		Type:        model.BuildingTypePileSorter,
-		OwnerID:     "p1",
-		Position:    pos,
+		ID:       id,
+		Type:     model.BuildingTypePileSorter,
+		OwnerID:  "p1",
+		Position: pos,
 		// 与 newSorterBuilding 同朝向（90°：背面西、正面东），沿用「西进东出」夹具。
 		Rotation:    model.PlanRotation90,
 		Runtime:     profile.Runtime,
