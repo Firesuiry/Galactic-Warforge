@@ -140,8 +140,8 @@ func TestPowerShortageRefreshesNoPowerReasonWhenCoverageBecomesUnderPower(t *tes
 func newPowerTestWorld() *model.WorldState {
 	ws := model.NewWorldState("p1", 8)
 	ws.Players["p1"] = &model.PlayerState{
-		PlayerID: "p1",
-		IsAlive:  true,
+		PlayerID:  "p1",
+		IsAlive:   true,
 		Resources: model.Resources{Energy: 20},
 	}
 	return ws

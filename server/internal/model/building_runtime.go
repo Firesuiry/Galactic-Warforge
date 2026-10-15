@@ -249,7 +249,9 @@ type ShieldModule struct {
 
 // LaunchModule handles launch-related parameters for EM Rail Ejector and Vertical Launching Silo.
 type LaunchModule struct {
-	EnergyPerLaunch int     `json:"energy_per_launch" yaml:"energy_per_launch,omitempty"`     // energy consumed per launch
+	// EnergyPerLaunch 是一次发射的电网负载读数：第 16 轮起 energy 不再是可花货币，
+	// 发射不再从玩家储备扣能，该值只作展示与后续电网建模用。
+	EnergyPerLaunch int     `json:"energy_per_launch" yaml:"energy_per_launch,omitempty"`
 	SuccessRate     float64 `json:"success_rate" yaml:"success_rate,omitempty"`               // launch success probability (0-1)
 	OrbitRadiusMin  float64 `json:"orbit_radius_min" yaml:"orbit_radius_min,omitempty"`       // minimum orbit radius in AU
 	OrbitRadiusMax  float64 `json:"orbit_radius_max" yaml:"orbit_radius_max,omitempty"`       // maximum orbit radius in AU

@@ -123,8 +123,9 @@ func hasDysonScaffold(layer model.DysonLayer) bool {
 // no mutable countdown state is needed and behavior is identical after a
 // save/restore cycle: building b fires on tick T when
 // (T + phase(b.ID)) % LaunchInterval == 0. Each launch consumes one loaded
-// item and EnergyPerLaunch from the owner's energy reserve; a building that
-// is unpowered, underfunded or empty simply skips its slot.
+// item; 第 16 轮起 energy 不再是可花的货币，`EnergyPerLaunch` 只作为发射建筑的
+// 电网 demand 由供电结算体现（见 PowerDemandForBuilding），发射本身不再扣玩家
+// 的 energy 储备——断电建筑仍然不发射。
 func (gc *GameCore) settleAutoLaunch(ws *model.WorldState) []*model.GameEvent {
 	if gc == nil || ws == nil {
 		return nil

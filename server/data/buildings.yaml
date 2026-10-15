@@ -1115,6 +1115,8 @@ buildings:
         storage: {capacity: 20, slots: 1, buffer: 6, input_priority: 2}
         energy: {consume_per_tick: 30}
         launch:
+          # 第 16 轮起 energy 不再可花：发射的电力成本由 energy_consume/电网 demand
+          # 体现，energy_per_launch 只作为一次发射的额外电网负载读数保留。
           energy_per_launch: 300
           success_rate: 0.95
           orbit_radius_min: 0.5
@@ -1149,6 +1151,7 @@ buildings:
         storage: {capacity: 20, slots: 1, buffer: 6, input_priority: 2, output_priority: 1}
         energy: {consume_per_tick: 50}
         launch:
+          # 同上：energy_per_launch 是电网负载读数，不再从玩家 energy 储备扣。
           energy_per_launch: 500
           success_rate: 0.9
           orbit_radius_min: 0.5

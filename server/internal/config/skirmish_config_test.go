@@ -38,11 +38,11 @@ func TestSkirmishStartsWithoutKit(t *testing.T) {
 		t.Fatalf("skirmish needs p1/p2, got %d players", len(cfg.Players))
 	}
 	kitWant := map[string]int{
-		"gear":           32,
-		"circuit_board":  15,
-		"iron_ingot":     96,
-		"magnetic_coil":  22,
-		"stone_brick":    3,
+		"gear":          32,
+		"circuit_board": 15,
+		"iron_ingot":    96,
+		"magnetic_coil": 22,
+		"stone_brick":   3,
 	}
 	for _, pc := range cfg.Players {
 		got := map[string]int{}

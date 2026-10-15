@@ -11,12 +11,12 @@ type ReplayRequest struct {
 
 // ReplayDigest summarizes a world state for consistency checks.
 type ReplayDigest struct {
-	Tick                 int64  `json:"tick"`
-	Players              int    `json:"players"`
-	AlivePlayers         int    `json:"alive_players"`
-	Buildings            int    `json:"buildings"`
-	Units                int    `json:"units"`
-	Resources            int    `json:"resources"`
+	Tick         int64 `json:"tick"`
+	Players      int   `json:"players"`
+	AlivePlayers int   `json:"alive_players"`
+	Buildings    int   `json:"buildings"`
+	Units        int   `json:"units"`
+	Resources    int   `json:"resources"`
 	// TotalEnergy 是各玩家 resources.energy（电网结余）之和，只作一致性对照；
 	// 第 16 轮去掉资金维度后不再是可花费的货币。
 	TotalEnergy          int    `json:"total_energy"`
