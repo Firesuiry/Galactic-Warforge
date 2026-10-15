@@ -34,12 +34,14 @@ describe('3D 物流方向标记', () => {
     marks.dispose();
   });
 
-  it('四向皆可的分拣器画枢纽标记（4 条向外箭头），不猜单一流向', () => {
+  it('服务端四向默认值按 rotation 收成单支箭头（第 16 轮契约：背面取货、正面放货）', () => {
     const marks = new LogisticsDirectionMarks();
-    const hub = sorter('hub', 4, 4, ['north', 'east', 'south', 'west'], ['north', 'east', 'south', 'west']);
-    marks.refresh([hub], 16, 100);
-    const mesh = marks.group.children[0] as THREE.Mesh;
-    expect(mesh.geometry.getAttribute('position').count).toBe(4 * 6);
+    const all = ['north', 'east', 'south', 'west'];
+    marks.refresh([sorter('hub', 4, 4, all, all)], 16, 100);
+    // 单支箭头 × 6 顶点，而不是四条向外的枢纽标记。
+    expect((marks.group.children[0] as THREE.Mesh).geometry.getAttribute('position').count).toBe(6);
+    // rotation 变化 → 签名变化 → 重建（方向跟着转）
+    expect(marks.refresh([{ ...sorter('hub', 4, 4, all, all), rotation: '90' } as Building], 16, 100)).toBe(true);
     marks.dispose();
   });
 

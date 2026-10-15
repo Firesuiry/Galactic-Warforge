@@ -2517,4 +2517,8 @@ export interface RollbackResponse {
 
 export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; /** 终点是否在玩家已探索范围内（目标可以在未探索区，服务端照常按真实地形寻路）。 */ explored: boolean; path: Position[]; waypoints: Position[] }
 
-export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }
+/**
+ * configure_sorter 的载荷（第 16 轮契约 §2）：只配过滤，不含方向——
+ * 分拣器朝向由建造时的 rotation 决定（背面取货、正面放货），服务端忽略方向字段。
+ */
+export interface SorterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }

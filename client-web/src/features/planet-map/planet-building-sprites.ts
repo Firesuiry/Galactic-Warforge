@@ -17,7 +17,7 @@
 
 import { Texture } from 'pixi.js';
 
-import type { Building } from '@shared/types';
+import type { Building, PlanRotation } from '@shared/types';
 
 // ---------- 原型（archetype）与类型映射 ----------
 
@@ -41,6 +41,25 @@ export function resolveConveyorBeltDirection(
     return output;
   }
   return 'east';
+}
+
+/**
+ * 分拣器方向解析（第 16 轮契约）：方向完全由建筑 rotation 决定——背面取货、正面放货。
+ * 优先用服务端 sorter 配置里的单一输出方向；服务端还没改造（下发四向默认值）时
+ * 退回 rotation 推导，保证机械臂与方向纹始终指向真实放货端。
+ */
+export function resolveSorterDirection(
+  building: { rotation?: PlanRotation; sorter?: { input_directions?: string[]; output_directions?: string[] } },
+): BeltDirection {
+  const output = building.sorter?.output_directions;
+  if (output?.length === 1) {
+    const single = output[0];
+    if (single === 'north' || single === 'south' || single === 'west' || single === 'east') {
+      return single;
+    }
+  }
+  const turns = ((Math.round(Number(building.rotation ?? 0) / 90) % 4) + 4) % 4;
+  return (['east', 'south', 'west', 'north'] as BeltDirection[])[turns];
 }
 
 /**

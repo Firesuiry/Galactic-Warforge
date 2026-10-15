@@ -34,6 +34,7 @@ import {
   nextBeltDirection,
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
+import { isSorterBuilding } from '@/features/planet-map/logistics-direction';
 import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
@@ -403,7 +404,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               </span>
             ) : (
               <span className="planet-build-bar__hint">
-                放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
+                {isSorterBuilding({ type: activeBuildingType ?? '' })
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上青色箭头 = 取货端，琥珀 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                  : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
             <button

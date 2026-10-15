@@ -14,7 +14,7 @@ const catalog: CatalogView = {
     { id: 'iron_ingot', name: '铁块' },
     { id: 'gear', name: '齿轮' },
     { id: 'circuit_board', name: '电路板' },
-  ],
+  ] as never,
   buildings: [
     {
       id: 'wind_turbine',

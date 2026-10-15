@@ -164,7 +164,7 @@ export class LogisticsDirectionMarks {
   refresh(buildings: readonly Building[], faceSize: number, radius: number): boolean {
     const sorters = buildings.filter(building => Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type)));
     const signature = JSON.stringify([faceSize, radius, sorters.map(building => [building.id, building.position,
-      building.sorter?.input_directions, building.sorter?.output_directions, building.sorter?.filter?.items,
+      building.rotation, building.sorter?.input_directions, building.sorter?.output_directions, building.sorter?.filter?.items,
       building.splitter?.input_directions, building.splitter?.output_directions])]);
     if (signature === this.signature) return false;
     this.signature = signature;

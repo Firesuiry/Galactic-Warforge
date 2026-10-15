@@ -11,8 +11,10 @@
  * 共用，避免多套实现各自猜方向。
  *
  * 数据口径全部来自服务端：传送带 conveyor.input/output（建成时 construction.go
- * 已把 auto 落成实方向），分拣器/分流器 sorter|splitter.input_directions/output_directions
- * （ApplyBuildingRotation 已按建造旋转改写）。缺失即「未配置」，绝不替玩家猜一个方向。
+ * 已把 auto 落成实方向）；分拣器**方向完全由建筑 rotation 决定**（第 16 轮契约：
+ * 背面取货、正面放货，`sorter.input_directions/output_directions` 由服务端按旋转
+ * 写死成单向后下发，客户端不再自造四向）；分流器仍用 splitter.input/output_directions。
+ * 缺失即「未配置」，绝不替玩家猜一个方向。
  */
 
 import { surfaceStep } from '@shared/surface';
@@ -23,6 +25,16 @@ import { getBuildingDisplayName, getBuildingFootprint, toTilePoint, type TilePoi
 export type CardinalDirection = 'north' | 'east' | 'south' | 'west';
 
 export const CARDINAL_DIRECTIONS: readonly CardinalDirection[] = ['north', 'east', 'south', 'west'];
+
+/**
+ * rotation 档位 → 正面朝向（0/90/180/270 → 东/南/西/北，顺时针）。
+ *
+ * 与服务端 `SorterState` 的约定一致：rotation=0 时正面（放货端）朝东、背面（取货端）朝西。
+ * 服务端契约（docs/guide/实物经济与分拣器.md §2）落地后，同一份方向也会随
+ * `sorter.input_directions/output_directions` 下发；客户端优先用服务端数据，
+ * 只有拿到四向皆可（服务端尚未改造）时才退回 rotation 推导。
+ */
+export const ROTATION_FACING: readonly CardinalDirection[] = ['east', 'south', 'west', 'north'];
 
 export const DIRECTION_NAMES: Record<CardinalDirection, string> = { north: '北', east: '东', south: '南', west: '西' };
 
@@ -84,13 +96,19 @@ function arrowsFromPairs(inputs: readonly CardinalDirection[], outputs: readonly
 /**
  * 物流建筑的有向箭头（传送带 / 分拣器 / 分流器通用）。
  * 非物流建筑返回空（omnidirectional=false）。
+ *
+ * 分拣器（第 16 轮契约 §2）：方向**完全由建筑 rotation 决定**——背面取货、正面放货，
+ * 沿朝向轴向前后各找 range 格。服务端也按旋转写死成单向下发，客户端不再读
+ * `sorter.input_directions/output_directions`（那两个字段在服务端只剩记录作用），
+ * 也就不存在「四向皆可」这种状态。分流器仍是真正的四向设备，不套用这条规则。
  */
-export function logisticsArrows(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter'>): LogisticsArrows {
+export function logisticsArrows(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): LogisticsArrows {
   if (building.splitter) {
     return arrowsFromPairs(cardinals(building.splitter.input_directions), cardinals(building.splitter.output_directions));
   }
   if (building.sorter) {
-    return arrowsFromPairs(cardinals(building.sorter.input_directions), cardinals(building.sorter.output_directions));
+    const to = ROTATION_FACING[rotationTurns(building.rotation)];
+    return { arrows: [{ from: OPPOSITE_DIRECTION[to], to }], omnidirectional: false };
   }
   if (!building.conveyor) return { arrows: [], omnidirectional: false };
   const output = isCardinalDirection(building.conveyor.output) ? building.conveyor.output : null;
@@ -116,14 +134,14 @@ export function isSorterBuilding(building: Pick<Building, 'type' | 'sorter' | 's
  * 与 planet-logistics-flow.beltFlowVector 的「auto 回退 east」不同——那里是货物流向的近似，
  * 这里要的是真实方向，未配置就不画箭头。
  */
-export function resolveLogisticsDirection(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter'>): CardinalDirection | null {
+export function resolveLogisticsDirection(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): CardinalDirection | null {
   const { arrows, omnidirectional } = logisticsArrows(building);
   if (omnidirectional) return null;
   return arrows[0]?.to ?? null;
 }
 
 /** 物流建筑是否四向皆可（分拣器/分流器默认配置）：2D 画枢纽、3D 画枢纽标记。 */
-export function isOmnidirectionalLogistics(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter'>): boolean {
+export function isOmnidirectionalLogistics(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): boolean {
   return logisticsArrows(building).omnidirectional;
 }
 
@@ -175,7 +193,7 @@ export function describeFlowNeighbors(
 }
 
 /** 「北→南」式一句话流向（详情面板/提示用）。 */
-export function describeFlowText(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter'>): string {
+export function describeFlowText(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): string {
   const { arrows, omnidirectional } = logisticsArrows(building);
   if (omnidirectional) return '四向皆可（未配置取料/放料方向）';
   if (arrows.length === 0) return '方向未定（等待服务端解析输出方向）';
@@ -218,7 +236,7 @@ export function describeLogisticsDetail(
 
 /**
  * 建造 ghost 的朝向箭头：传送带按 direction（auto 返回 null，由服务端放置时解析）；
- * 其他建筑按 rotation 推「正面」方向（0° = 南向，与服务端 rotateOffset 的 90° 一档一致）。
+ * 其他建筑按 rotation 推「正面」方向（正面 = 放货端，背面 = 取货端，第 16 轮契约）。
  */
 export function buildGhostDirection(
   buildingType: string,
@@ -226,6 +244,24 @@ export function buildGhostDirection(
   rotation: number | undefined,
 ): CardinalDirection | null {
   if (buildingType.startsWith('conveyor_belt')) return isCardinalDirection(direction) ? direction : null;
-  const turns = ((Math.round((rotation ?? 0) / 90) % 4) + 4) % 4;
-  return CARDINAL_DIRECTIONS[turns];
+  return ROTATION_FACING[rotationTurns(rotation)];
+}
+
+/** rotation（度）→ 0..3 档位。 */
+export function rotationTurns(rotation: number | undefined): number {
+  return ((Math.round((rotation ?? 0) / 90) % 4) + 4) % 4;
+}
+
+/**
+ * 分拣器 ghost 的「取 → 放」两端方向（第 16 轮契约：背面取货、正面放货）。
+ * 与 buildGhostDirection 同源：front = 正面（放货），back = 背面（取货）。
+ * 非分拣器返回 null。
+ */
+export function sorterGhostDirections(
+  buildingType: string,
+  rotation: number | undefined,
+): { from: CardinalDirection; to: CardinalDirection } | null {
+  if (!/sorter/.test(buildingType)) return null;
+  const to = buildGhostDirection(buildingType, undefined, rotation);
+  return to ? { from: OPPOSITE_DIRECTION[to], to } : null;
 }

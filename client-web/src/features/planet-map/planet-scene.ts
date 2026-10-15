@@ -70,7 +70,7 @@ import {
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
 import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
-import { buildGhostDirection, directionVector, isSorterBuilding } from '@/features/planet-map/logistics-direction';
+import { buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections } from '@/features/planet-map/logistics-direction';
 import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
 import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
 import {
@@ -112,6 +112,7 @@ import {
   resolveBuildingArchetype,
   resolveBuildingVisualState,
   resolveConveyorBeltDirection,
+  resolveSorterDirection,
 } from '@/features/planet-map/planet-building-sprites';
 import {
   renderPlanetFogCanvas,
@@ -530,6 +531,10 @@ interface BuildingNode extends SceneNode {
   flow: TilingSprite | null;
   /** 流向箭头签名（方向/纹理变体），不变时不重建 sprite。 */
   flowKey: string;
+  /** 分拣器「取 → 放」有向线（单一方向的取货/放货对才挂载）。 */
+  sorterRoute: Graphics | null;
+  /** 有向线签名（取/放方向），不变时不重建。 */
+  sorterRouteKey: string;
   /** 采集产出脉冲（running 的采集建筑才挂载，ticker 驱动"矿石被采出"上抛粒子）。 */
   harvest: HarvestPulseView | null;
   data: Building;
@@ -618,6 +623,10 @@ const COLOR_DETECTION = 0xffd43b;
 const COLOR_SELECTED = 0xffd166;
 const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
+/** 分拣器 ghost 的取货端箭头（背面）：青色与放货端（正面，绿）区分。 */
+const COLOR_GHOST_TAKE = 0x6ee7f7;
+/** 分拣器「取 → 放」有向线颜色（与流向纹的琥珀区分，一眼看出起止端）。 */
+const SORTER_ROUTE_COLOR = 0x8ef0ff;
 const COLOR_RANGE_COMBAT = 0xff922b;
 
 /**
@@ -1910,6 +1919,8 @@ export class PlanetScene {
       beltFlow: null,
       flow: null,
       flowKey: '',
+      sorterRoute: null,
+      sorterRouteKey: '',
       harvest: null,
       data: building,
       phase: entityAnimPhase(building.id),
@@ -1956,7 +1967,10 @@ export class PlanetScene {
       tilesWide: width,
       tilesHigh: height,
       state: visualState,
-      direction: archetype === 'belt' ? resolveConveyorBeltDirection(building) : undefined,
+      // 分拣器方向取自建筑 rotation（背面取货/正面放货），传送带取 conveyor.output。
+      direction: archetype === 'belt'
+        ? (isSorterBuilding(building) ? resolveSorterDirection(building) : resolveConveyorBeltDirection(building))
+        : undefined,
     });
     const scale = this.tileSize / BUILDING_SPRITE_TILE_PX;
     const layout = buildingSpriteLayout(width, height);
@@ -2049,12 +2063,15 @@ export class PlanetScene {
   /**
    * 传送带/分拣器流向箭头：每格一个 TilingSprite（纹理平铺，沿流向滚动）。
    * 方向来自 logistics-direction（服务端 output / sorter 配置）；四向皆可的分拣器不画单一流向。
+   * 分拣器额外画一条「取 → 放」的有向线（第 16 轮契约：背面取货、正面放货），
+   * 单一箭头纹看不出起止端，这条线让玩家一眼认出取货侧与放货侧。
    */
   private syncLogisticsFlow(node: BuildingNode, pixelWidth: number, pixelHeight: number) {
     const building = node.data;
     const belt = Boolean(building.conveyor);
     const sorter = Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type));
     const direction = belt || sorter ? resolveLogisticsDirection(building) : null;
+    this.syncSorterRoute(node, building, sorter && !belt, pixelWidth, pixelHeight);
     if (!direction || this.tileSize < BELT_FLOW_MIN_TILE_SIZE) {
       this.destroyLogisticsFlow(node);
       return;
@@ -2077,12 +2094,62 @@ export class PlanetScene {
     node.flowKey = key;
   }
 
-  /** 流向箭头卸载。 */
+  /** 流向箭头卸载（同时清掉分拣器有向线）。 */
   private destroyLogisticsFlow(node: BuildingNode) {
+    this.destroySorterRoute(node);
     if (node.flow) {
       node.flow.destroy();
       node.flow = null;
       node.flowKey = '';
+    }
+  }
+
+  /**
+   * 分拣器「取 → 放」有向线：从取货端（背面）指向放货端（正面），带箭头。
+   * 方向一律来自服务端 sorter 配置（缺失即不画），与顶面箭头同一份事实来源。
+   */
+  private syncSorterRoute(node: BuildingNode, building: Building, isSorter: boolean, pixelWidth: number, pixelHeight: number) {
+    const arrows = isSorter ? logisticsArrows(building) : { arrows: [], omnidirectional: false };
+    const route = arrows.omnidirectional || arrows.arrows.length !== 1 ? null : arrows.arrows[0];
+    if (!route?.from || this.tileSize < BELT_FLOW_MIN_TILE_SIZE) {
+      this.destroySorterRoute(node);
+      return;
+    }
+    const key = `sorter-route:${route.from}:${route.to}`;
+    if (node.sorterRoute && node.sorterRouteKey === key) {
+      node.sorterRoute.width = Math.max(pixelWidth, pixelHeight) * 0.86;
+      node.sorterRoute.height = Math.max(pixelWidth, pixelHeight) * 0.86;
+      node.sorterRoute.visible = true;
+      return;
+    }
+    this.destroySorterRoute(node);
+    const size = Math.max(pixelWidth, pixelHeight) * 0.86;
+    const graphics = new Graphics();
+    const from = directionVector(route.from);
+    const to = directionVector(route.to);
+    // 端点落在格边（0.42 半径）→ 箭尖落在 0.46，正好指向放货侧的邻格。
+    const span = size * 0.42;
+    const start = { x: size / 2 + from.x * span, y: size / 2 + from.y * span };
+    const end = { x: size / 2 + to.x * span, y: size / 2 + to.y * span };
+    const wing = size * 0.11;
+    graphics
+      .moveTo(start.x, start.y)
+      .lineTo(end.x, end.y)
+      .moveTo(end.x, end.y)
+      .lineTo(end.x - to.x * wing - to.y * wing, end.y - to.y * wing - to.x * wing)
+      .moveTo(end.x, end.y)
+      .lineTo(end.x - to.x * wing + to.y * wing, end.y - to.y * wing + to.x * wing)
+      .stroke({ width: Math.max(1.5, size * 0.05), color: SORTER_ROUTE_COLOR, alpha: 0.95 });
+    node.container.addChildAt(graphics, 1);
+    node.sorterRoute = graphics;
+    node.sorterRouteKey = key;
+  }
+
+  private destroySorterRoute(node: BuildingNode) {
+    if (node.sorterRoute) {
+      node.sorterRoute.destroy();
+      node.sorterRoute = null;
+      node.sorterRouteKey = '';
     }
   }
 
@@ -2723,24 +2790,29 @@ export class PlanetScene {
       return;
     }
 
-    // 分拣器/分流器 ghost：顶面朝向箭头（旋转后一眼看出取放侧），与 3D ghost 同一套推导。
+    // 分拣器 ghost：取 → 放 两端箭头（第 16 轮契约：背面取货、正面放货，方向跟 rotation 走）。
     if (!overviewMode && mode.kind === 'build' && hoveredTile && isSorterBuilding({ type: mode.buildingType })) {
-      const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
-      if (direction) {
-        const vector = directionVector(direction);
+      const routes = sorterGhostDirections(mode.buildingType, mode.rotation);
+      if (routes) {
         const cx = this.pxTileX(hoveredTile.x) + ts / 2;
         const cy = this.pxTileY(hoveredTile.y) + ts / 2;
-        const half = ts * 0.34;
-        const wing = ts * 0.18;
-        const tipX = cx + vector.x * half;
-        const tipY = cy + vector.y * half;
-        g.moveTo(cx - vector.x * half, cy - vector.y * half)
-          .lineTo(tipX, tipY)
-          .moveTo(tipX, tipY)
-          .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
-          .moveTo(tipX, tipY)
-          .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
-          .stroke({ width: 2.5, color: COLOR_GHOST_OK, alpha: 0.95 });
+        for (const [direction, color, width] of [
+          [routes.from, COLOR_GHOST_TAKE, 2.5],
+          [routes.to, COLOR_GHOST_OK, 2.5],
+        ] as [typeof routes.to, number, number][]) {
+          const vector = directionVector(direction);
+          const half = ts * 0.34;
+          const wing = ts * 0.18;
+          const tipX = cx + vector.x * half;
+          const tipY = cy + vector.y * half;
+          g.moveTo(cx - vector.x * half, cy - vector.y * half)
+            .lineTo(tipX, tipY)
+            .moveTo(tipX, tipY)
+            .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
+            .moveTo(tipX, tipY)
+            .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
+            .stroke({ width, color, alpha: 0.95 });
+        }
       }
       return;
     }

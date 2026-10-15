@@ -10,6 +10,7 @@ import {
   directionVector,
   logisticsArrows,
   resolveLogisticsDirection,
+  sorterGhostDirections,
   stepTile,
 } from './logistics-direction';
 
@@ -60,11 +61,15 @@ describe('物流方向推导', () => {
     expect(logisticsArrows(sorter('s3', 4, 4, ['west'], ['west'])).arrows).toEqual([]);
   });
 
-  it('分拣器：四向默认配置（4 取 × 3 放 = 12 组）判为四向皆可，交给枢纽标记', () => {
-    const four = sorter('s4', 4, 4, ['north', 'east', 'south', 'west'], ['north', 'east', 'south', 'west']);
-    expect(logisticsArrows(four)).toEqual({ arrows: [], omnidirectional: true });
-    expect(resolveLogisticsDirection(four)).toBeNull();
-    expect(describeFlowText(four)).toContain('四向皆可');
+  it('分拣器：服务端四向默认值按 rotation 收成单一「取 → 放」（第 16 轮契约）', () => {
+    const all = ['north', 'east', 'south', 'west'];
+    const east = sorter('s4', 4, 4, all, all);
+    expect(logisticsArrows(east)).toEqual({ arrows: [{ from: 'west', to: 'east' }], omnidirectional: false });
+    expect(resolveLogisticsDirection(east)).toBe('east');
+    expect(describeFlowText(east)).toBe('西→东');
+    // rotation 决定正面（放货端）：90° = 南，背面 = 北
+    const south = { ...sorter('s5', 4, 4, all, all), rotation: '90' } as Building;
+    expect(logisticsArrows(south)).toEqual({ arrows: [{ from: 'north', to: 'south' }], omnidirectional: false });
   });
 
   it('分流器：一进多出各画一支，走 splitter 而非 conveyor', () => {
@@ -134,11 +139,23 @@ describe('建造 ghost 朝向', () => {
     expect(buildGhostDirection('conveyor_belt_mk1', undefined, 0)).toBeNull();
   });
 
-  it('其他建筑用 rotation（0° = 南，90° = 西，与服务端 rotateOffset 同向）', () => {
-    expect(buildGhostDirection('sorter_mk1', 'auto', 0)).toBe('north');
-    expect(buildGhostDirection('sorter_mk1', 'auto', 90)).toBe('east');
-    expect(buildGhostDirection('arc_smelter', 'auto', 180)).toBe('south');
-    expect(buildGhostDirection('arc_smelter', 'auto', 270)).toBe('west');
+  it('其他建筑用 rotation（0° = 东，每档顺时针 90°，与服务端 SorterState 同向）', () => {
+    expect(buildGhostDirection('sorter_mk1', 'auto', 0)).toBe('east');
+    expect(buildGhostDirection('sorter_mk1', 'auto', 90)).toBe('south');
+    expect(buildGhostDirection('arc_smelter', 'auto', 180)).toBe('west');
+    expect(buildGhostDirection('arc_smelter', 'auto', 270)).toBe('north');
+  });
+
+  it('分拣器 ghost 给出「取 → 放」两端（背面取货、正面放货）', () => {
+    expect(sorterGhostDirections('sorter_mk1', 0)).toEqual({ from: 'west', to: 'east' });
+    expect(sorterGhostDirections('sorter_mk1', 90)).toEqual({ from: 'north', to: 'south' });
+    expect(sorterGhostDirections('sorter_mk1', 180)).toEqual({ from: 'east', to: 'west' });
+    expect(sorterGhostDirections('sorter_mk1', 270)).toEqual({ from: 'south', to: 'north' });
+    // rotation 缺失按 0 处理（与 3D 场景 rotateY(-rotation) 同口径）
+    expect(sorterGhostDirections('sorter_mk1', undefined)).toEqual({ from: 'west', to: 'east' });
+    // 非分拣器不画取放端
+    expect(sorterGhostDirections('conveyor_belt_mk1', 0)).toBeNull();
+    expect(sorterGhostDirections('arc_smelter', 90)).toBeNull();
   });
 
   it('方向向量与 tile 坐标系一致（y 向南为正）', () => {
