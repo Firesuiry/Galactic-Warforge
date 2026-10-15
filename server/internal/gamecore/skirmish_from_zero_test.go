@@ -42,7 +42,7 @@ func TestSkirmishFromZeroFullMatch(t *testing.T) {
 
 // 开局链不变量（快，单 seed，tick 6000）：
 // 空背包下，仅靠「手动采矿 + 手搓」必须能建起第一座风机、电塔、矿机，
-// 并让矿机通电运转（矿机通电后 minerals 才有产出，否则整局死锁）。
+// 并让矿机通电运转（矿机通电后才有矿石实物产出，否则整局死锁）。
 // 实测：风机 tick 1413、电塔 1443、第一座矿机 3513（手搓链要走 齿轮/磁线圈/电路板）。
 func TestSkirmishFromZeroOpeningByTick6000(t *testing.T) {
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
@@ -187,9 +187,9 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 	// 采矿机是 3×3 占地 + 1 圈覆盖（5×5 框，最多 25 条脉）：挑「纯矿」的落点，
 	// 别把机器压在混合簇上。细分网格下一台 3×3 矿机覆盖 5×5 框内的**所有**矿脉，
 	// 每脉 8/tick——压在铁铜混合簇上时产量是熔炉消耗（1/60 tick）的几十倍，
-	// 修好「落不下就不扣矿脉、也不回充 minerals」（试玩 1015）之后，机器几 tick
+	// 修好「落不下就不扣矿脉」（试玩 1015）之后，机器几 tick
 	// 就被混合矿堵满，搬运脚本搬不空就整局矿物收入归零（实测 pt1011 的两台矿机
-	// 各压 48 煤 + 37 铜，背包卡在 200/200，tick 9000 之后 minerals 恒为 10）。
+	// 各压 48 煤 + 37 铜，背包卡在 200/200，tick 9000 之后矿石再也运不出来）。
 	// 真人也一样：矿机压在混合簇上要么配齐所有矿种的出口，要么挑纯矿。
 	pureSite := func(nodes []*model.ResourceNodeState, kind string) *model.ResourceNodeState {
 		for _, node := range nodes {
@@ -250,7 +250,7 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 		{btype: model.BuildingTypeWindTurbine},
 		// 铜熔炉必须紧跟铁熔炉：矿机压在铁铜混合簇上，一次覆盖多条脉，
 		// 没有铜的出口时铜几 tick 就填满矿机（48+8），矿机随即阻塞、不再挖矿
-		// 也不再回充 minerals（试玩 1015 的修法）——整局矿物收入归零，连
+		// 也运不出去（试玩 1015 的修法）——整局矿石产出归零，连
 		// 铜熔炉自己都建不起来。铁熔炉先上（电路板/磁线圈/石砖都要铁块），
 		// 铜熔炉紧随其后，两种矿就都有出口。
 		{btype: model.BuildingTypeArcSmelter, recipe: "smelt_copper"},
@@ -260,15 +260,15 @@ func (op *zeroOpening) openingPlan(t *testing.T) []zeroStep {
 		// 兵营 + 补给站：开局就有、容量 1000 的「矿石堆场」，**必须紧跟熔炉**。
 		// 细分网格下一台 3×3 采矿机覆盖 5×5 框内的所有矿脉（每脉 8/tick，实测
 		// 20 条以上），产量是早期熔炉消耗（1/60 tick）的几十倍；而试玩 1015 的
-		// 修法规定「产出落不下就不扣矿脉、也不回充 minerals」，所以矿石必须真的
+		// 修法规定「产出落不下就不扣矿脉」，所以矿石必须真的
 		// 搬得走，矿机才能继续挖、矿物收入才转得起来。
 		//
 		// 这一条同时是个「鸡生蛋」：堆场本身要 60 矿物，而矿物只有矿机在挖时才有。
-		// 排在熔炉之后（此时 minerals 200–300、矿石已开始产出）刚好建得起；排在
+		// 排在熔炉之后（此时矿石已开始产出、够手搓下一批料）刚好建得起；排在
 		// 电路板制造台之后就会因为「矿物不足：需要 60，当前 1」永远建不动——
-		// 矿机阻塞 → minerals 归零 → 堆场建不起来 → 矿机永远阻塞（实测 pt1011
-		// tick 19000 起 minerals 恒为 1、背包里只有 24 件，HQ 的 60 格已堆满）。
-		// 两座 1000 容量的建筑合计 2000 矿石 ≈ 2000 minerals，够整条开局链。
+		// 矿机阻塞 → 矿石产出归零 → 堆场建不起来 → 矿机永远阻塞（实测 pt1011
+		// tick 19000 起背包里只有 24 件，HQ 的 60 格已堆满）。
+		// 两座 1000 容量的建筑合计 2000 矿石，够整条开局链。
 		{btype: model.BuildingType("barracks")},
 		{btype: model.BuildingTypeSupplyStation},
 		{btype: model.BuildingTypeWindTurbine},
@@ -403,9 +403,9 @@ func (op *zeroOpening) observe() {
 // buildNext 追一条建造命令（UI 正常速度：约 3 秒一条）。
 //
 // 电力优先于计划：修好试玩 1015 的采掘口径后，矿物收入 = 「矿石真正落地」的量，
-// 而采掘本身要电（`scaleByPowerRatio`）。电力缺口一旦出现，矿机停摆 → minerals
+// 而采掘本身要电（`scaleByPowerRatio`）。电力缺口一旦出现，矿机停摆 → 矿石
 // 归零 → 计划里下一步（兵营/补给站，60 矿物）再也建不起来，计划里排在后面的
-// 风机也就永远轮不到——整局从 tick 19000 卡死在 minerals=1（实测 pt1011）。
+// 风机也就永远轮不到——整局从 tick 19000 卡死在「背包只剩 1 件料」（实测 pt1011）。
 // 真人玩家看到「电力不足」会先补一台风机；脚本在这里做同一件事：只要还有
 // 30 矿物、有机器无电、且施工队列空闲，就插一台风机。
 func (op *zeroOpening) buildNext() {
@@ -738,11 +738,11 @@ func (op *zeroOpening) candidateNodes(kind string, fallback *model.ResourceNodeS
 // 而不是纯度：
 //
 //   - 采矿机是 3×3 占地 + 1 圈覆盖，5×5 框内的矿脉**全部**会被采（每脉 8/tick）；
-//   - 试玩 1015 的修法把采掘改成「落不下就不扣矿脉、也不回充 minerals」，所以
+//   - 试玩 1015 的修法把采掘改成「落不下就不扣矿脉」，所以
 //     覆盖框里只要有**没有出口**的矿（煤：早期没有任何配方吃煤），它几 tick 就
 //     把机器主库存攒满，机器 `output_blocked`，矿物收入归零——连下一步要 120
 //     矿物的熔炉都建不出来（实测 pt1011 的两台矿机压在煤铜混合簇上，tick 12000
-//     起 minerals 恒为 83、整局停在第二座熔炉）。
+//     起背包料恒为 83、整局停在第二座熔炉）。
 //   - 铁/铜/石都有熔炉出口，混在一起只是搬运累一点，不会把机器堵死。
 //
 // 于是先看「覆盖框里有没有煤」，再按距家远近。纯矿簇常常在 30–45 格外，靠
@@ -1177,7 +1177,7 @@ func (op *zeroOpening) feedIndustry() {
 		case model.BuildingTypeBattlefieldAnalysisBase:
 			// 无配方的存储建筑（基站）同样是矿石的堆场：矿机覆盖多条矿脉，
 			// 产量远超早期熔炉的消耗（每台 1/60 tick），矿石必须有地方放，
-			// 否则矿机一阻塞就既不挖矿也不回充 minerals（试玩 1015 的修法），
+			// 否则矿机一阻塞就既不挖矿也运不出矿（试玩 1015 的修法），
 			// 开局链的矿物收入直接归零。
 			depots = append(depots, b)
 		case model.BuildingTypeArcSmelter, model.BuildingTypeAssemblingMachineMk1:
@@ -1205,7 +1205,7 @@ func (op *zeroOpening) feedIndustry() {
 		// 锭的背包上限压到 16：背包是整局唯一的搬运缓冲，矿石必须搬得进来
 		// （见 oreBackpackTotalCap）。40/40 的锭 + 32 电路板会把 200 格占掉一半，
 		// 矿机取矿的额度归零后矿石再也搬不空、矿机阻塞、矿物收入停摆
-		// （实测 pt1011 tick 18000：铜矿机 output_blocked，minerals 卡在 33）。
+		// （实测 pt1011 tick 18000：铜矿机 output_blocked，料卡在 33）。
 		// 16 个锭够当前建造步骤的手搓用量（最贵的一步 8 个铁块）。
 		model.ItemIronIngot:             16,
 		model.ItemCopperIngot:           16,
@@ -1271,12 +1271,12 @@ func (op *zeroOpening) feedIndustry() {
 	}
 	// 矿机：矿石在开局阶段是手搓链的燃料，只在背包存量不足时补货，
 	// 免得把矿机刚挖的矿又原样取回来堆在背包里。**本地缓冲满的矿机必须清空**：
-	// 产出无处可放时矿机不再扣矿脉、也不再回充 minerals（试玩 1015 的修法），
+	// 产出无处可放时矿机不再扣矿脉（试玩 1015 的修法），
 	// 真人玩家看到「产物阻塞」就会把矿取出来喂熔炉——脚本同理。清空要按「机器里
 	// 实际有的矿种」来做：一台压在铁铜混合簇上的矿机会被先攒满的铜堵住，
 	// 只按背包缺口取（铜已超上限）永远取不出铜，铁矿就再也挖不出来。
 	//
-	// 矿机是**唯一的**矿物收入来源：只要它在挖，minerals 就按实际产出回充，
+	// 矿机是**唯一的**矿石来源：只要它在挖，矿石就按实际产出落进它的输出缓冲，
 	// 不需要脚本搬运；它一堵住收入就停。所以这里把矿机的货直接取出来（取到背包
 	// 上限为止，超出的倒进储物仓），让它一直挖——而不是等背包缺料才补货。
 	type oreStack struct {
@@ -1431,7 +1431,7 @@ func (op *zeroOpening) feedIndustry() {
 	}
 	// 计划走完后机甲的唯一产出是「手动采矿」，而手动采矿的落点是背包——
 	// 背包满了机甲就彻底停摆（实测 seed 001 tick 23000 起背包 200/200，
-	// 机甲 `mine(iron_ore)` 永远 ready 不了，minerals 停在 3321 直到整局结束）。
+	// 机甲 `mine(iron_ore)` 永远 ready 不了，矿石停在 3321 直到整局结束）。
 	// 真人玩家这时会把背包里的堆料倒进堆场/产线。`relieveBackpack` 只处理
 	// 施工用不到的物品，计划走完后没有任何施工，它应该能倒干净；这里的
 	// `relieveBackpackFull` 是兜底：把「产线已经吃不动」的成品（子弹、多余的
@@ -1487,7 +1487,7 @@ const midItemBackpackCap = 40
 // 而这里的前提是**建造计划已经走完**——没有任何施工在等料，背包里的一切都只是
 // 堆料。计划走完后机甲唯一的工作是手动采矿（产出落在背包里），背包一旦顶到
 // 200/200 机甲就彻底停摆（实测 seed 001 tick 23000–75000 背包恒为 200/200、
-// minerals 恒为 3321，机甲 `mine(iron_ore)` 永远 ready 不了）。
+// 矿石恒为 3321，机甲 `mine(iron_ore)` 永远 ready 不了）。
 //
 // 倒料按「先矿后料」的顺序：原矿只占 `oreBackpackCapFor` 那点额度（多出来的
 // 喂熔炉/倒堆场），中间品与成品（子弹、超量电路板/线圈/磁铁）整包倒堆场。
@@ -1543,7 +1543,7 @@ const (
 	//
 	// 这个上限不是「经济模型」，而是「矿机→背包→熔炉」这条手动物流的流量控制：
 	// 修好试玩 1015 的采掘口径后，矿机只有在产物真的落地时才扣矿脉、才回充
-	// minerals，而一台 3×3 矿机压在铁铜混合簇上每 tick 会产 8×N 个矿——远超
+	// 矿石，而一台 3×3 矿机压在铁铜混合簇上每 tick 会产 8×N 个矿——远超
 	// 熔炉的消耗速度（每台 1/60 tick）。矿机本地存储（48+8）几 tick 就满，此后
 	// 只有当脚本把矿取走、喂进熔炉（熔炉消耗后腾出主库存）才能继续挖。所以
 	// 「背包上限」实质上是「脚本允许多少矿滞留在矿机与熔炉之外」：给少了矿机
@@ -1556,12 +1556,12 @@ const (
 	// 额度受它约束：机甲背包是手搓链的唯一工作台，矿石把 200 格顶满后手搓批次
 	// 因「背包已满」不结算（`mecha.job.state = inventory_full`），齿轮/电路板
 	// 全部停产、建造随之停摆——实测 pt1011 的机甲卡在 200/200 矿石上，tick 11000
-	// 之后一座建筑都建不起来、minerals 恒为 35。
+	// 之后一座建筑都建不起来、背包料恒为 35。
 	//
 	// 但也不能太小：修好 1015 的采掘口径后，矿物收入 = 「矿石真正落地」的量，
 	// 而开局唯一的大容量堆场（兵营/补给站，各 1000）本身要花 60 矿物才能建。
-	// 上限太小（80）时矿石无处可去 → 矿机阻塞 → minerals 停在 55 → 兵营永远
-	// 建不起来（实测 pt1011 tick 13000 起 minerals 恒为 55，`next=13` 卡死）。
+	// 上限太小（80）时矿石无处可去 → 矿机阻塞 → 料停在 55 → 兵营永远
+	// 建不起来（实测 pt1011 tick 13000 起背包料恒为 55，`next=13` 卡死）。
 	// 110 让机甲先用手搓链与背包把矿物垫到能建堆场为止。
 	oreBackpackTotalCap = 110
 	// blockedIngotCap 熔炉 `output_blocked` 时允许滞留在背包里的锭数（平时 16）。
@@ -1576,8 +1576,8 @@ const (
 // minableOreItemIDs 采矿机可能压到的原矿种类（手动可采的固体矿）。
 // 脚本的「矿机 → 背包 → 熔炉/储物仓」搬运必须按**矿机实际持有的矿种**来做：
 // pt1011 seed 的两台矿机覆盖的是煤矿（coal），写死铁/铜/石三种矿会让它们
-// 永远搬不空——矿机一阻塞就既不挖矿也不回充 minerals（试玩 1015 的修法），
-// 整局矿物收入归零（实测 tick 9000 后 minerals 恒为 10）。
+// 永远搬不空——矿机一阻塞就既不挖矿也运不出矿（试玩 1015 的修法），
+// 整局矿石产出归零（实测 tick 9000 后背包料恒为 10）。
 var minableOreItemIDs = []string{
 	model.ItemIronOre, model.ItemCopperOre, model.ItemStoneOre, model.ItemCoal,
 }
@@ -1712,8 +1712,8 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 	need := map[string]int{}
 	if step >= len(op.steps) {
 		// 建造计划已经走完：整条开局链都建好了，机甲没有「下一座建筑」要备料。
-		// 此时真人玩家的手是空的，机甲只会继续手动采矿把 minerals 顶到上限
-		// （矿物是建造与研究之外的唯一硬通货，也是矿机阻塞时的兜底收入）。
+		// 此时真人玩家的手是空的，机甲只会继续手动采矿把背包顶到上限
+		// （手采矿是矿机阻塞时唯一的兜底料源）。
 		// 脚本若继续按「研究矩阵/兵营」的手搓清单排动作，机甲会一直手搓矩阵、
 		// 把背包顶到 200/200（实测 seed 001 tick 21000 走完计划后，机甲
 		// `mine(iron_ore)` 因背包已满永远 ready 不了，整局僵在 200/200 一动不动）。
@@ -1771,7 +1771,7 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 	// 下一批动作——实测 seed 001 在 tick 12000 的下一步是铜熔炉（缺 4 电路板 +
 	// 4 铁块 + 2 磁线圈 + 2 石砖），计划里明明有 `craft(circuit_board)`，
 	// 机甲却因为 `mine(copper_ore)` 排在前面而永远 ready 不了，整局停在
-	// minerals=96、背包 154/200（`actions=[]`），第一座制造台再也建不起来。
+	// 背包 154/200、只差 96 件中间件（`actions=[]`），第一座制造台再也建不起来。
 	//
 	// 排序键取「该物品在手搓链上能下钻到的最大层数」：越靠下游（越接近成品）
 	// 越先排。同深度按名字排序，保持确定性。
@@ -1854,7 +1854,7 @@ func (op *zeroOpening) collectBarracksNeeds(need map[string]int) {
 
 // feedOreToSmelters 把背包里的矿石喂给「正缺这种料」的熔炉：矿机阻塞期间矿
 // 必须真的进熔炉变成锭，矿物收入才转得起来（试玩 1015 的修法：产出无处可放时
-// 矿机不挖矿也不回充 minerals，玩家看到「产物阻塞」就会把矿送去熔炉）。
+// 矿机不挖矿，玩家看到「产物阻塞」就会把矿送去熔炉）。
 func (op *zeroOpening) feedOreToSmelters(byRecipe map[string][]*model.Building) {
 	for _, item := range minableOreItemIDs {
 		have := op.player.Inventory[item]
@@ -2088,7 +2088,7 @@ func withdrawFromBuilding(core *GameCore, ws *model.WorldState, b *model.Buildin
 }
 
 // queuedConstructionItems 已排队（pending/active）施工任务还需要的手搓件
-// （minerals/energy 由建造结算扣，不在这里备）。
+// （第 16 轮起建造只扣背包物品，就是这份清单）。
 func (op *zeroOpening) queuedConstructionItems() []model.ItemAmount {
 	ws := op.ws
 	if ws == nil || ws.Construction == nil {
