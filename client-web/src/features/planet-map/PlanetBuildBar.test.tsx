@@ -50,6 +50,17 @@ const catalog: CatalogView = {
       color: '#8fa3c8',
     } as never,
     {
+      id: 'sorter_mk1',
+      name: '分拣器 Mk.I',
+      category: 'transport',
+      footprint: { width: 1, height: 1 },
+      build_cost: { items: [{ item_id: 'iron_ingot', quantity: 1 }] },
+      buildable: true,
+      unlock_tech: ['tech-basic-power'],
+      icon_key: 'sorter_mk1',
+      color: '#8fa3c8',
+    } as never,
+    {
       id: 'assembling_machine_mk1',
       name: '组装机 Mk.I',
       category: 'production',
@@ -321,6 +332,37 @@ describe('PlanetBuildBar', () => {
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'auto' });
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+  });
+
+  it('分拣器建造模式：R 旋转写 rotation、提示行说明取货/放货端（第 16 轮契约 §4）', async () => {
+    const user = userEvent.setup();
+    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+
+    await openCategory(user, '运输');
+    // 物流页里分拣器排在传送带后面。
+    const cards = screen.getAllByRole('button').filter((button) => button.classList.contains('planet-build-card'));
+    const ids = cards.map((card) => card.getAttribute('data-building-id'));
+    expect(ids.indexOf('sorter_mk1')).toBe(ids.indexOf('conveyor_belt_mk1') + 1);
+
+    await user.click(screen.getByRole('button', { name: /分拣器 Mk\.I/ }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'sorter_mk1',
+      direction: 'auto',
+    });
+    // 提示行给出朝向语义（青色 = 取货端，琥珀 = 放货端），而不是传送带的「箭头 = 物流方向」。
+    expect(screen.getByText(/青色箭头 = 取货端/)).toBeInTheDocument();
+
+    // 分拣器不是传送带：R 旋转走 rotation 档位（0 → 90 → 180 → 270 → 0）。
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 90 });
+    expect(screen.getByRole('button', { name: /^方向：/ })).toHaveTextContent('90°');
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 180 });
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 270 });
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 0 });
   });
 
   it('生产建筑建造模式：配方下拉选择后写入 interactionMode.recipeId', async () => {

@@ -464,7 +464,6 @@ export const TRANSLATIONS = {
     "payloadValue.insufficient_materials": "材料不足",
     "payloadValue.materials_available": "材料已备齐",
     "payloadValue.demolish": "拆除",
-    "payloadValue.maintenance_insufficient": "维护资金不足",
     "payloadValue.shot_down": "被击落",
     "payloadValue.lifetime_expired": "寿命到期",
     "payloadValue.emerged": "出现",
