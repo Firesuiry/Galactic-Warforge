@@ -59,7 +59,7 @@ describe('SystemPage', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 1000, energy: 800 },
+              resources: { energy: 800 },
             },
           },
         }));

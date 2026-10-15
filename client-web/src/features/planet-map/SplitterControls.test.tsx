@@ -10,7 +10,7 @@ vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
 vi.mock('@/hooks/use-session', () => ({ useSessionSnapshot: () => ({ playerId: 'p1', playerKey: 'key', serverUrl: 'http://test.local' }) }));
 const building: Building = {
   id: 'splitter-1', type: 'splitter', owner_id: 'p1', position: { x: 2, y: 2, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 4,
-  runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, maintenance_cost: { minerals: 0, energy: 0 }, footprint: { width: 1, height: 1 } }, functions: {}, state: 'running' },
+  runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 1, height: 1 } }, functions: {}, state: 'running' },
   conveyor: { input: 'west', output: 'east', max_stack: 12, buffer: [{ item_id: 'iron_ore', quantity: 3 }, { item_id: 'copper_ore', quantity: 1 }] },
   splitter: { input_directions: ['west'], output_directions: ['north', 'east', 'south'], output_priority: 'east', output_filters: { east: 'iron_ore' }, input_cursor: 0, output_cursor: 1, transferred_items: 24, last_transfer_tick: 16 },
 };

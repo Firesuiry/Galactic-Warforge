@@ -8,11 +8,11 @@ function createCatalog() {
       { id: "small_carrier_rocket", name: "小型运载火箭", category: "intermediate", form: "item", stack_limit: 100, unit_volume: 1, icon_key: "small_carrier_rocket", color: "#fca5a5" },
     ],
     buildings: [
-      { id: "matrix_lab", name: "矩阵研究站", category: "research", subcategory: "research", footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1, items: [] }, buildable: true, icon_key: "matrix_lab", color: "#7dd3fc" },
-      { id: "tesla_tower", name: "特斯拉塔", category: "power", subcategory: "power", footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1, items: [] }, buildable: true, icon_key: "tesla_tower", color: "#93c5fd" },
-      { id: "em_rail_ejector", name: "电磁弹射器", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1, items: [] }, buildable: true, icon_key: "em_rail_ejector", color: "#fcd34d" },
-      { id: "vertical_launching_silo", name: "垂直发射井", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1, items: [] }, buildable: true, icon_key: "vertical_launching_silo", color: "#fca5a5" },
-      { id: "ray_receiver", name: "射线接收站", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1, items: [] }, buildable: true, icon_key: "ray_receiver", color: "#c4b5fd" },
+      { id: "matrix_lab", name: "矩阵研究站", category: "research", subcategory: "research", footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, icon_key: "matrix_lab", color: "#7dd3fc" },
+      { id: "tesla_tower", name: "特斯拉塔", category: "power", subcategory: "power", footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, icon_key: "tesla_tower", color: "#93c5fd" },
+      { id: "em_rail_ejector", name: "电磁弹射器", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, icon_key: "em_rail_ejector", color: "#fcd34d" },
+      { id: "vertical_launching_silo", name: "垂直发射井", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, icon_key: "vertical_launching_silo", color: "#fca5a5" },
+      { id: "ray_receiver", name: "射线接收站", category: "space", subcategory: "space", footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, icon_key: "ray_receiver", color: "#c4b5fd" },
     ],
     recipes: [
       { id: "magnet_recipe", name: "磁铁配方", inputs: [], outputs: [], duration: 1, energy_cost: 1, icon_key: "magnet_recipe", color: "#9ca3af" },
@@ -73,7 +73,6 @@ function createScene() {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           functions: {},
@@ -99,7 +98,6 @@ function createScene() {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           functions: {},
@@ -125,7 +123,6 @@ function createScene() {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           functions: {},
@@ -149,7 +146,6 @@ function createScene() {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           functions: {},
@@ -234,9 +230,7 @@ function createSummary(completedTechIds: string[]) {
       p1: {
         player_id: "p1",
         is_alive: true,
-        resources: {
-          minerals: 100,
-          energy: 80,
+        resources: { energy: 80,
         },
         // 背包：「装入建筑」下拉只列「背包里有 ∩ 目标建筑真会收」的物品
         // （listTransferItemOptions，c484aa4 起）。发射类建筑收一切仓储物品，

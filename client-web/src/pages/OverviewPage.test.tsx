@@ -22,7 +22,7 @@ function summaryPayload() {
       p1: {
         player_id: 'p1',
         is_alive: true,
-        resources: { minerals: 240, energy: 140 },
+        resources: { energy: 140 },
         inventory: {
           iron_ore: 24,
           silicon_ore: 8,
@@ -243,10 +243,12 @@ describe('OverviewPage', () => {
     expect(within(quickNav).getByRole('link', { name: /回放/ })).toHaveAttribute('href', '/replay');
     expect(within(quickNav).getByRole('button', { name: /情报/ })).toBeInTheDocument();
 
-    // 右栏：资源脉搏（矿产/能量/电力/研究）
+    // 右栏：资源脉搏（背包物资/电网结余/电力/研究）——第 16 轮契约删掉资金维度
     const resources = document.querySelector('.command-resources') as HTMLElement;
-    expect(within(resources).getByText('240')).toBeInTheDocument();
+    expect(within(resources).getByText('背包物资')).toBeInTheDocument();
+    expect(within(resources).getByText('35')).toBeInTheDocument();
     expect(within(resources).getByText('铁矿 24 · 石矿 3 · 硅矿 8')).toBeInTheDocument();
+    expect(within(resources).getByText('电网结余')).toBeInTheDocument();
     expect(within(resources).getByText('140')).toBeInTheDocument();
     expect(within(resources).getByText('120/90')).toBeInTheDocument();
     expect(within(resources).getByText('供电稳定')).toBeInTheDocument();

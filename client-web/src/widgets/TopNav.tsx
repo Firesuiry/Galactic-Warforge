@@ -203,14 +203,7 @@ export function TopNav() {
           <Icon iconKey="gear" size={14} />
           <span>tick {summaryQuery.data?.tick ?? '-'}</span>
         </span>
-        <span
-          className="top-nav__chip"
-          title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
-        >
-          <Icon iconKey="iron_ore" color="#c9a06a" size={16} />
-          <span className="top-nav__chip-value">{currentPlayer?.resources?.minerals ?? 0}</span>
-        </span>
-        <span className="top-nav__chip" title="能量">
+        <span className="top-nav__chip" title={`电网结余（只读展示）· 背包库存：${mineralSummary}`}>
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>

@@ -7,7 +7,7 @@ export const ironRecipe: RecipeCatalogEntry = {
 };
 export const smelterCatalog: BuildingCatalogEntry = {
   id: 'arc_smelter', name: '电弧熔炉', category: 'production', subcategory: '', footprint: { width: 2, height: 2 },
-  build_cost: { minerals: 10, energy: 10 }, buildable: true, unlock_tech: ['smelting'], icon_key: 'smelter', color: '#fff',
+  build_cost: { items: [] }, buildable: true, unlock_tech: ['smelting'], icon_key: 'smelter', color: '#fff',
 };
 export const productionCatalog: CatalogView = { recipes: [ironRecipe], buildings: [smelterCatalog] } as CatalogView;
 export function makeSmelter(overrides: Partial<Building> = {}): Building {
@@ -16,7 +16,7 @@ export function makeSmelter(overrides: Partial<Building> = {}): Building {
     hp: 100, max_hp: 100, level: 1, vision_range: 10,
     runtime: {
       state: 'running', functions: { production: { throughput: 1, recipe_slots: 1 } },
-      params: { energy_consume: 1, energy_generate: 0, capacity: 10, maintenance_cost: { minerals: 0, energy: 0 }, footprint: { width: 2, height: 2 } },
+      params: { energy_consume: 1, energy_generate: 0, capacity: 10, footprint: { width: 2, height: 2 } },
     },
     production: { recipe_id: ironRecipe.id }, storage: { inventory: { iron_ore: 1 }, input_buffer: { iron_ore: 1 } },
     ...overrides,

@@ -42,7 +42,7 @@ test('智能体平台支持模型 Provider 配置与成员 Provider 切换', asy
         tick: 42,
         active_planet_id: 'planet-a',
         players: {
-          p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
         },
       }),
     });
@@ -243,7 +243,7 @@ test('案例1：浏览器中李斯创建胡景并委派建矿场', async ({ page
         tick: 42,
         active_planet_id: 'planet-1-1',
         players: {
-          p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+          p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
         },
       }),
     });

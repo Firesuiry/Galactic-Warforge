@@ -5,7 +5,7 @@ import { TrafficMonitorControls } from './TrafficMonitorControls';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 const { client } = vi.hoisted(() => ({ client: { cmdConfigureTrafficMonitor: vi.fn(), fetchEventSnapshot: vi.fn() } }));
 vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
-const monitor: Building = { hp: 100, max_hp: 100, level: 1, vision_range: 4, runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, maintenance_cost: { minerals: 0, energy: 0 }, footprint: { width: 1, height: 1 } }, functions: {}, state: 'running' }, id: 'monitor', type: 'traffic_monitor', owner_id: 'p1', position: { x: 5, y: 5, z: 0 },
+const monitor: Building = { hp: 100, max_hp: 100, level: 1, vision_range: 4, runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 1, height: 1 } }, functions: {}, state: 'running' }, id: 'monitor', type: 'traffic_monitor', owner_id: 'p1', position: { x: 5, y: 5, z: 0 },
   traffic_monitor: { target_belt_id: 'belt', window_ticks: 10, minimum_items_per_tick: .5, alerts_enabled: true,
     state: 'blocked', samples: [], sample_count: 10, window_items: 0, items_per_tick: 0, total_items: 24, last_sample_tick: 30, alert_active: true } };
 const belt = { id: 'belt', type: 'conveyor_belt_mk1', owner_id: 'p1', position: { x: 6, y: 5, z: 0 } } as Building;

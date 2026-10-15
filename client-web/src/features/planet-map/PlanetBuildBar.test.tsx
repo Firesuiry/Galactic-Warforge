@@ -10,13 +10,18 @@ import { resetPlanetViewStore, usePlanetViewStore } from '@/features/planet-map/
 import { useSessionStore } from '@/stores/session';
 
 const catalog: CatalogView = {
+  items: [
+    { id: 'iron_ingot', name: '铁块' },
+    { id: 'gear', name: '齿轮' },
+    { id: 'circuit_board', name: '电路板' },
+  ],
   buildings: [
     {
       id: 'wind_turbine',
       name: '风力发电机',
       category: 'power',
       footprint: { width: 1, height: 1 },
-      build_cost: { minerals: 30, energy: 0 },
+      build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] },
       buildable: true,
       unlock_tech: ['tech-basic-power'],
       icon_key: 'wind_turbine',
@@ -27,7 +32,7 @@ const catalog: CatalogView = {
       name: '矩阵研究站',
       category: 'research',
       footprint: { width: 2, height: 2 },
-      build_cost: { minerals: 60, energy: 0 },
+      build_cost: { items: [{ item_id: 'circuit_board', quantity: 4 }] },
       buildable: true,
       unlock_tech: ['tech-electromagnetism'],
       icon_key: 'matrix_lab',
@@ -38,7 +43,7 @@ const catalog: CatalogView = {
       name: '传送带 Mk.I',
       category: 'transport',
       footprint: { width: 1, height: 1 },
-      build_cost: { minerals: 2, energy: 0 },
+      build_cost: { items: [{ item_id: 'iron_ingot', quantity: 2 }] },
       buildable: true,
       unlock_tech: ['tech-basic-power'],
       icon_key: 'conveyor_belt_mk1',
@@ -49,7 +54,7 @@ const catalog: CatalogView = {
       name: '组装机 Mk.I',
       category: 'production',
       footprint: { width: 2, height: 2 },
-      build_cost: { minerals: 40, energy: 0 },
+      build_cost: { items: [{ item_id: 'iron_ingot', quantity: 4 }] },
       buildable: true,
       unlock_tech: ['tech-basic-power'],
       icon_key: 'assembling_machine_mk1',
@@ -81,6 +86,8 @@ const summary: StateSummary = {
     p1: {
       player_id: 'p1',
       is_alive: true,
+      resources: { energy: 100 },
+      inventory: { iron_ingot: 20, gear: 10, circuit_board: 10 },
       tech: {
         player_id: 'p1',
         completed_techs: ['tech-basic-power'],
@@ -125,9 +132,9 @@ describe('PlanetBuildBar', () => {
   it('选中买不起的卡片时，建造栏立即给出缺料提示（试玩 1014 层 01 P2）', async () => {
     const user = userEvent.setup();
     const itemCatalog = { ...catalog, items: [{ id: 'gear', name: '齿轮' }, { id: 'iron_ingot', name: '铁块' }], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
-      ? { ...entry, build_cost: { minerals: 30, energy: 0, items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
+      ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
-    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 20, energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
     render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
@@ -139,8 +146,8 @@ describe('PlanetBuildBar', () => {
 
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ kind: 'build', buildingType: 'wind_turbine' });
     const shortage = screen.getByTestId('planet-build-shortage');
-    // 文案与鼠标旁放置提示同口径：缺的物品在前、矿石在后
-    expect(shortage).toHaveTextContent('无法建造：缺少 齿轮 1、铁块 6、矿石 10');
+    // 第 16 轮契约：只有物品造价，不再有矿石/资金项
+    expect(shortage).toHaveTextContent('无法建造：缺少 齿轮 1、铁块 6');
     // 缺料时不再显示「移动鼠标预览」的常规提示
     expect(screen.queryByText(/移动鼠标预览/)).not.toBeInTheDocument();
 
@@ -178,14 +185,15 @@ describe('PlanetBuildBar', () => {
     expect(lockedCard).toBeDisabled();
   });
 
-  it('建设资金不足的卡片置灰并提示差额', () => {
+  it('背包缺料的卡片置灰并逐项显示「背包有/需要」（§4）', () => {
     const poorSummary: StateSummary = {
       ...summary,
       players: {
         p1: {
           player_id: 'p1',
           is_alive: true,
-          resources: { minerals: 20, energy: 100 },
+          resources: { energy: 100 },
+          inventory: { iron_ingot: 4, gear: 0 },
           tech: {
             player_id: 'p1',
             completed_techs: ['tech-basic-power'],
@@ -195,41 +203,49 @@ describe('PlanetBuildBar', () => {
     };
     render(<PlanetBuildBar catalog={catalog} summary={poorSummary} planet={makePlanet()} />);
 
-    // wind_turbine 矿 30 > 余额 20 → 红边 + 提示差额；仍可选中（预览标红并写原因）
+    // wind_turbine 要 铁块 6 / 齿轮 1，背包只有 4 / 0 → 整格置灰，逐项写出「背包有/需要」
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card).not.toBeDisabled();
     expect(card.className).toContain('planet-build-card--unaffordable');
-    expect(card).toHaveAttribute('aria-label', expect.stringContaining('矿不足：需要 30 / 现有 20'));
+    const cost = card.querySelector('.planet-build-card__cost');
+    expect(cost?.textContent).toContain('4/6');
+    expect(cost?.textContent).toContain('0/1');
+    expect(cost?.querySelectorAll('.is-short').length).toBe(2);
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('铁块 4/6（不足）'));
+    expect(card).toHaveAttribute('aria-label', expect.stringContaining('齿轮 0/1（不足）'));
   });
 
-  it('卡片与悬停详情显示物品造价（拥有/需要，不足标红）', () => {
+  it('卡片与悬停详情显示物品造价（背包有/需要，不足标红并列缺什么）', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
-      ? { ...entry, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
+      ? { ...entry, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 500, energy: 100 }, inventory: { iron_ingot: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { iron_ingot: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
     render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card.className).toContain('planet-build-card--unaffordable');
-    // §3.2 复核：格子里只有图标 + 快捷键数字，物品造价走 aria-label 与悬停浮层。
+    // §3.2 复核：格子里只有图标 + 快捷键数字 + 造价条，物品造价同时走 aria-label 与悬停浮层。
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('铁块 4/6（不足）'));
+    expect(card.querySelector('.planet-build-card__cost')?.textContent).toContain('4/6');
     fireEvent.mouseEnter(card);
     const detail = screen.getByTestId('planet-build-detail');
-    expect(detail).toHaveTextContent('拥有 / 需要');
+    expect(detail).toHaveTextContent('背包有 / 需要');
     expect(detail.querySelector('.is-short')?.textContent).toContain('4 / 6');
+    // 悬停提示列出缺什么（§4）
+    expect(detail.textContent).toContain('缺：铁块 2');
   });
 
-  it('悬停浮层内联显示中文物品名与拥有/需要数量', () => {
+  it('悬停浮层内联显示中文物品名与背包有/需要数量', () => {
     const itemCatalog = { ...catalog, items: [
       { id: 'custom_plate', name: '定制板材' },
       { id: 'gear', name: '齿轮' },
     ], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
-      ? { ...entry, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
+      ? { ...entry, build_cost: { items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 500, energy: 100 }, inventory: { custom_plate: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { custom_plate: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
     render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    // 卡片 aria-label 与悬停浮层都带中文物品名 + 拥有/需要（格子里不再内联截断文本）
+    // 卡片 aria-label 与悬停浮层都带中文物品名 + 背包有/需要（格内只留图标 + 造价条）
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('定制板材 4/6（不足）'));
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('齿轮 3/1'));
     fireEvent.mouseEnter(card);
@@ -241,7 +257,7 @@ describe('PlanetBuildBar', () => {
     expect(shortItem?.textContent).toContain('4 / 6');
   });
 
-  it('余额充足时卡片可点击进入建造模式', async () => {
+  it('背包充足时卡片可点击进入建造模式', async () => {
     const user = userEvent.setup();
     const richSummary: StateSummary = {
       ...summary,
@@ -249,7 +265,8 @@ describe('PlanetBuildBar', () => {
         p1: {
           player_id: 'p1',
           is_alive: true,
-          resources: { minerals: 240, energy: 100 },
+          resources: { energy: 100 },
+          inventory: { iron_ingot: 60, gear: 10 },
           tech: {
             player_id: 'p1',
             completed_techs: ['tech-basic-power'],
@@ -261,6 +278,7 @@ describe('PlanetBuildBar', () => {
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card).toBeEnabled();
+    expect(card.className).not.toContain('planet-build-card--unaffordable');
     await user.click(card);
     expect(usePlanetViewStore.getState().interactionMode).toEqual({
       kind: 'build',
@@ -354,7 +372,7 @@ describe('PlanetBuildBar', () => {
           name: 'Wind Turbine',
           category: 'power',
           footprint: { width: 1, height: 1 },
-          build_cost: { minerals: 30, energy: 0 },
+          build_cost: { items: [] },
           buildable: true,
           unlock_tech: ['tech-basic-power'],
           icon_key: 'wind_turbine',
@@ -366,7 +384,7 @@ describe('PlanetBuildBar', () => {
           name: 'Future Building X',
           category: 'power',
           footprint: { width: 1, height: 1 },
-          build_cost: { minerals: 10, energy: 0 },
+          build_cost: { items: [] },
           buildable: true,
           unlock_tech: ['tech-basic-power'],
           icon_key: 'wind_turbine',

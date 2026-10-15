@@ -995,14 +995,10 @@ export function PlanetPage() {
               <div className="planet-title-chip__chips">
                 <div
                   className="hero-chip"
-                  title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
+                  title={`电网结余（只读展示）· 背包库存：${mineralSummary}`}
                 >
-                  <Icon iconKey="iron_ore" color="#c9a06a" size={18} />
-                  <span>矿产 {currentPlayer?.resources?.minerals ?? 0}</span>
-                </div>
-                <div className="hero-chip">
                   <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
-                  <span>能量 {currentPlayer?.resources?.energy ?? 0}</span>
+                  <span>电网结余 {currentPlayer?.resources?.energy ?? 0}</span>
                 </div>
                 <div className="hero-chip">
                   <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />

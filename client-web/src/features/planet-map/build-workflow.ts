@@ -162,24 +162,20 @@ export function compareBuildItems(entry: Pick<BuildingCatalogEntry, 'build_cost'
 }
 
 /**
- * 买不起的原因文案（不看格子，只看造价余额）：缺的物品在前、矿石在后，
- * 与服务端拒绝/本地预检同口径——「缺少 齿轮 1、铁块 6、矿石 10」。
+ * 买不起的原因文案（不看格子，只看造价余额）：只按背包物品算，
+ * 与服务端拒绝/本地预检同口径——「缺少 齿轮 1、铁块 6」。
  * 建造栏的缺料提示条与鼠标旁的放置提示都用它，玩家在两处看到同一句话（试玩 1014 层 01 P2）。
+ * 第 16 轮契约去掉资金维度后不再有「矿石不足」这一项。
  */
 export function describeBuildShortage(
   entry: Pick<BuildingCatalogEntry, 'build_cost'> | undefined,
   inventory: ItemInventory | undefined,
-  mineralsBalance: number | undefined,
   itemName: (itemId: string) => string = (id) => id,
 ): string {
-  const parts = compareBuildItems(entry, inventory)
+  return compareBuildItems(entry, inventory)
     .filter((item) => item.short)
-    .map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`);
-  const mineralCost = entry?.build_cost?.minerals ?? 0;
-  if (mineralsBalance !== undefined && mineralsBalance < mineralCost) {
-    parts.push(`矿石 ${mineralCost - mineralsBalance}`);
-  }
-  return parts.join('、');
+    .map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`)
+    .join('、');
 }
 
 /**

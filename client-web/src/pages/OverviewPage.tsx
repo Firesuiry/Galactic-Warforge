@@ -263,6 +263,7 @@ export function OverviewPage() {
   const currentPlayer = summary.players[session.playerId];
   const resources = currentPlayer?.resources;
   const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
+  const inventoryTotal = Object.values(currentPlayer?.inventory ?? {}).reduce((sum, quantity) => sum + quantity, 0);
   const currentResearch = currentPlayer?.tech?.current_research;
   const researchPercent = currentResearch && currentResearch.total_cost > 0
     ? Math.min(100, Math.round((currentResearch.progress / currentResearch.total_cost) * 100))
@@ -435,16 +436,16 @@ export function OverviewPage() {
               <article className="command-resource">
                 <div className="command-resource__head">
                   <Icon iconKey="mining_machine" color="#5fb0ff" size={24} />
-                  <span>矿产</span>
+                  <span>背包物资</span>
                 </div>
-                <strong className="command-resource__value">{formatNumber(resources?.minerals)}</strong>
+                <strong className="command-resource__value">{formatNumber(inventoryTotal)}</strong>
                 <span className="command-resource__meta">产出 +{stats.production_stats.total_output}/t</span>
                 <span className="command-resource__meta command-resource__meta--dim">{mineralSummary}</span>
               </article>
               <article className="command-resource">
                 <div className="command-resource__head">
                   <Icon iconKey="energy" color="#ffb454" size={24} />
-                  <span>能量</span>
+                  <span>电网结余</span>
                 </div>
                 <strong className="command-resource__value">{formatNumber(resources?.energy)}</strong>
                 <div className="command-resource__bar" aria-hidden="true">

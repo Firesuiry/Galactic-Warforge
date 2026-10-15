@@ -66,7 +66,7 @@ function stubFetch(alerts: unknown[]) {
       return Promise.resolve(jsonResponse({
         tick: 120,
         active_planet_id: 'planet-1-1',
-        players: { p1: { player_id: 'p1', resources: { minerals: 0, energy: 0 }, is_alive: true } },
+        players: { p1: { player_id: 'p1', resources: { energy: 0 }, is_alive: true } },
       }));
     }
     if (url.pathname === '/catalog') {

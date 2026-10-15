@@ -8,9 +8,7 @@ function createSummary() {
       p1: {
         player_id: 'p1',
         is_alive: true,
-        resources: {
-          minerals: 880,
-          energy: 460,
+        resources: { energy: 460,
         },
         inventory: {
           iron_ore: 40,

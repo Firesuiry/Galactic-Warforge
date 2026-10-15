@@ -31,7 +31,7 @@ const catalog: CatalogView = {
       name: '特斯拉塔',
       category: 'power',
       footprint: { width: 1, height: 1 },
-      build_cost: { minerals: 20, energy: 0 },
+      build_cost: { items: [] },
       buildable: true,
       icon_key: 'tesla_tower',
       color: '#39e6d0',

@@ -215,7 +215,6 @@ describe("shared api client", () => {
                 energy_consume: 8,
                 energy_generate: 0,
                 capacity: 60,
-                maintenance_cost: { minerals: 0, energy: 1 },
                 footprint: { width: 2, height: 2 },
               },
               state: "paused",

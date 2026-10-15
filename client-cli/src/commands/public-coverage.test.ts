@@ -97,7 +97,7 @@ describe('observation query CLI paths', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 10, energy: 4 },
+              resources: { energy: 4 },
               inventory: { steel: 2, iron_ingot: 1 },
             },
           },

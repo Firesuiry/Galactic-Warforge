@@ -5,10 +5,10 @@ import { buildColonyProgression, nextResearchTarget, type ProgressionInput } fro
 const tech = (id: string, prerequisites: string[] = []): TechCatalogEntry => ({ id, name: id, category: 'main', type: 'main', level: 1, icon_key: id, color: '#fff', prerequisites });
 const catalog: CatalogView = {
   techs: [tech('dyson_sphere_program'), tech('electromagnetism', ['dyson_sphere_program']), tech('basic_logistics_system', ['electromagnetism']), tech('interstellar_logistics', ['basic_logistics_system'])],
-  buildings: ['wind_turbine', 'matrix_lab', 'interstellar_logistics_station'].map(id => ({ id, name: id, category: 'energy', subcategory: '', footprint: { width: 1, height: 1 }, build_cost: { minerals: 1, energy: 1 }, buildable: true, unlock_tech: [id === 'interstellar_logistics_station' ? 'interstellar_logistics' : 'dyson_sphere_program'], icon_key: id, color: '#fff' })),
+  buildings: ['wind_turbine', 'matrix_lab', 'interstellar_logistics_station'].map(id => ({ id, name: id, category: 'energy', subcategory: '', footprint: { width: 1, height: 1 }, build_cost: { items: [] }, buildable: true, unlock_tech: [id === 'interstellar_logistics_station' ? 'interstellar_logistics' : 'dyson_sphere_program'], icon_key: id, color: '#fff' })),
 };
 function building(type: string, owner_id = 'p1'): Building {
-  return { id: type, type, owner_id, hp: 100, max_hp: 100, level: 1, vision_range: 1, position: { x: 0, y: 0, z: 0 }, runtime: { state: 'running', params: { energy_consume: 0, energy_generate: 1, capacity: 1, maintenance_cost: { minerals: 0, energy: 0 }, footprint: { width: 1, height: 1 } } } };
+  return { id: type, type, owner_id, hp: 100, max_hp: 100, level: 1, vision_range: 1, position: { x: 0, y: 0, z: 0 }, runtime: { state: 'running', params: { energy_consume: 0, energy_generate: 1, capacity: 1, footprint: { width: 1, height: 1 } } } };
 }
 const player: PlayerState = { player_id: 'p1', is_alive: true, tech: { player_id: 'p1', completed_techs: ['dyson_sphere_program'] } };
 const planet = { planet_id: 'planet-1', system_id: 'system-1', buildings: {} } as PlanetSceneView;

@@ -61,7 +61,6 @@ function createPlanetPayload() {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           state: "running",
@@ -215,7 +214,7 @@ function createSummaryPayload() {
       p1: {
         player_id: "p1",
         is_alive: true,
-        resources: { minerals: 240, energy: 140 },
+        resources: { energy: 140 },
         inventory: {
           iron_ore: 24,
           silicon_ore: 8,
@@ -310,7 +309,7 @@ function createCatalogPayload() {
         category: "production",
         subcategory: "mining",
         footprint: { width: 1, height: 1 },
-        build_cost: { minerals: 12 },
+        build_cost: { items: [] },
         buildable: true,
         icon_key: "mining_machine",
         color: "#d8a23a",
@@ -382,7 +381,6 @@ function createPlanetPayloadWithLogisticsStation(
             energy_consume: 12,
             energy_generate: 0,
             capacity: 200,
-            maintenance_cost: { minerals: 0, energy: 1 },
             footprint: { width: 2, height: 2 },
           },
           state: "running",
@@ -548,7 +546,7 @@ function createCatalogPayloadWithLogistics() {
         category: "logistics",
         subcategory: "planetary",
         footprint: { width: 2, height: 2 },
-        build_cost: { minerals: 80 },
+        build_cost: { items: [] },
         buildable: true,
         icon_key: "planetary_logistics_station",
         color: "#6a8f5b",
@@ -559,7 +557,7 @@ function createCatalogPayloadWithLogistics() {
         category: "logistics",
         subcategory: "interstellar",
         footprint: { width: 2, height: 2 },
-        build_cost: { minerals: 160 },
+        build_cost: { items: [] },
         buildable: true,
         icon_key: "interstellar_logistics_station",
         color: "#4a6db3",
@@ -969,10 +967,10 @@ describe("PlanetPage", () => {
     expect(screen.getByRole("img", { name: "行星地图" })).toBeInTheDocument();
     // §3.2：行星胶囊默认收成一行，展开后才显示 hero 资源芯片
     await user.click(screen.getByRole("button", { name: "展开行星信息" }));
-    // hero 矿产位显示建设资金 resources.minerals（背包矿石库存收进 title 提示）
-    expect(screen.getAllByText("矿产 240").length).toBeGreaterThan(0);
+    // 第 16 轮契约：hero 资金位已删，只剩「电网结余」（只读）——背包矿石库存收进 title 提示
+    expect(screen.getAllByText("电网结余 140").length).toBeGreaterThan(0);
     expect(
-      screen.getAllByTitle("建设资金（矿石）· 背包库存：铁矿 24 · 石矿 3 · 硅矿 8").length,
+      screen.getAllByTitle("电网结余（只读展示）· 背包库存：铁矿 24 · 石矿 3 · 硅矿 8").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("资源 240 / 140")).not.toBeInTheDocument();
 
@@ -1937,7 +1935,7 @@ describe("PlanetPage", () => {
             // 「生产建筑」下拉只列真能生产该单位类型的建筑。
             buildings: [
               ...createCatalogPayload().buildings,
-              { id: "recomposing_assembler", name: "重组式制造台", category: "production", subcategory: "assembling", footprint: { width: 3, height: 3 }, build_cost: { minerals: 10 }, buildable: true, can_produce_units: true, icon_key: "recomposing_assembler", color: "#f59f00" },
+              { id: "recomposing_assembler", name: "重组式制造台", category: "production", subcategory: "assembling", footprint: { width: 3, height: 3 }, build_cost: { items: [] }, buildable: true, can_produce_units: true, icon_key: "recomposing_assembler", color: "#f59f00" },
             ],
             world_units: [{ id: "combat_drone", name: "战斗无人机", domain: "ground_unit", runtime_class: "squad", producer: "recomposing_assembler", public: true, production_mode: "world_produce" }],
           }));

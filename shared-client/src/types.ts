@@ -39,17 +39,11 @@ export interface IOPort {
   allowed_items?: string[];
 }
 
-export interface MaintenanceCost {
-  minerals: number;
-  energy: number;
-}
-
 export interface BuildingRuntimeParams {
   energy_consume: number;
   energy_generate: number;
   power_priority?: number;
   capacity: number;
-  maintenance_cost: MaintenanceCost;
   footprint: Footprint;
   connection_points?: ConnectionPoint[];
   io_ports?: IOPort[];
@@ -837,7 +831,7 @@ export interface CommandResponse {
 }
 
 export interface Resources {
-  minerals: number;
+  /** 电网结余（只读展示，不再是可以花的货币；建造消耗只走物品背包）。 */
   energy: number;
 }
 
@@ -1321,7 +1315,11 @@ export interface LogisticsStationView {
 
 export type ConstructionState = 'pending' | 'in_progress' | 'paused' | 'completed' | 'cancelled';
 
-export type PlanRotation = '' | 'north' | 'east' | 'south' | 'west';
+/**
+ * 建筑平面旋转（第 16 轮契约：分拣器等建筑的方向完全由它决定）。
+ * 服务端 PlanRotation 是度数字符串（"0"/"90"/"180"/"270"），客户端不再自造东南西北枚举。
+ */
+export type PlanRotation = '0' | '90' | '180' | '270';
 export type ConveyorDirection = '' | 'north' | 'east' | 'south' | 'west' | 'auto';
 
 export interface BlueprintParams {
@@ -1329,9 +1327,7 @@ export interface BlueprintParams {
 }
 
 export interface BuildCost {
-  minerals: number;
-  energy: number;
-  items?: ItemAmount[];
+  items: ItemAmount[];
 }
 
 export interface ItemAmount {
@@ -2474,7 +2470,6 @@ export interface ReplayDigest {
   buildings: number;
   units: number;
   resources: number;
-  total_minerals: number;
   total_energy: number;
   resource_remaining: number;
   entity_counter: number;
