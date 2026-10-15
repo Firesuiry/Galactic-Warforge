@@ -19,6 +19,17 @@ func colliderForTest(ws *model.WorldState, recipe string) *model.Building {
 	return b
 }
 
+// itemAmountIDs 把配方的产出清单转成分拣器过滤用 ID 列表。
+func itemAmountIDs(amounts []model.ItemAmount) []string {
+	out := make([]string, 0, len(amounts))
+	for _, amount := range amounts {
+		if amount.ItemID != "" {
+			out = append(out, amount.ItemID)
+		}
+	}
+	return out
+}
+
 func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 	for _, tc := range []struct {
 		recipe          string
@@ -33,12 +44,33 @@ func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 			ws := model.NewWorldState("planet", 12)
 			b := colliderForTest(ws, tc.recipe)
 			supplyProductionFixture(t, ws, b)
-			// 细分网格：对撞机 5×5（x3..7,y3..7）。输入带贴西侧外圈朝东，
-			// 主输出带贴东侧外圈朝东，副产物带贴南侧外圈朝南。
-			input := newConveyorBuilding("input", model.Position{X: 2, Y: 5}, model.ConveyorEast)
-			output := newConveyorBuilding("output", model.Position{X: 8, Y: 5}, model.ConveyorEast)
-			side := newConveyorBuilding("side", model.Position{X: 5, Y: 8}, model.ConveyorSouth)
-			for _, belt := range []*model.Building{input, output, side} {
+			recipe, ok := model.Recipe(tc.recipe)
+			if !ok {
+				t.Fatalf("recipe %s missing", tc.recipe)
+			}
+			// 细分网格：对撞机 5×5（x3..7,y3..7）。第 16 轮契约 §3 起对撞机不再与
+			// 皮带直连，三条带子都各自配一台分拣器：
+			//   进料 (1,5) 带 → 分拣器 (2,5)（背西面东）→ 占地 (3,5)；
+			//   主产物 分拣器 (8,5)（背西面东）→ 带 (9,5)；
+			//   副产物 分拣器 (5,8)（背北面南）→ 带 (5,9)。
+			// 两台出货分拣器必须带过滤：不区分端口，靠过滤把主产物与副产物分开。
+			input := newConveyorBuilding("input", model.Position{X: 1, Y: 5}, model.ConveyorEast)
+			feeder := newSorterBuilding("feeder", model.Position{X: 2, Y: 5})
+			feeder.Sorter.CycleTicks = 1
+			output := newConveyorBuilding("output", model.Position{X: 9, Y: 5}, model.ConveyorEast)
+			mainSorter := newSorterBuilding("main-sorter", model.Position{X: 8, Y: 5})
+			mainSorter.Sorter.CycleTicks = 1
+			mainSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: itemAmountIDs(recipe.Outputs)}
+			side := newConveyorBuilding("side", model.Position{X: 5, Y: 9}, model.ConveyorSouth)
+			sideSorter := newSorterBuilding("side-sorter", model.Position{X: 5, Y: 8})
+			sideSorter.Rotation = model.PlanRotation180 // 背面北（对撞机）、正面南（带子）
+			sideSorter.Sorter.CycleTicks = 1
+			sideSorter.Sorter.Filter = model.SorterFilter{Mode: model.SorterFilterAllow, Items: itemAmountIDs(recipe.Byproducts)}
+			buildings := []*model.Building{input, feeder, output, mainSorter}
+			if len(recipe.Byproducts) > 0 {
+				buildings = append(buildings, side, sideSorter)
+			}
+			for _, belt := range buildings {
 				attachBuilding(ws, belt)
 			}
 			for item, quantity := range tc.inputs {
@@ -48,8 +80,9 @@ func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 						t.Fatalf("feed %s: accepted=%d err=%v", item, accepted, err)
 					}
 					quantity = remaining
-					for drain := 0; drain < 20 && input.Conveyor.TotalItems() > 0; drain++ {
-						settleBuildingIO(ws)
+					for drain := 0; drain < 60 && input.Conveyor.TotalItems() > 0; drain++ {
+						ws.Tick++
+						settleSorters(ws)
 						settleStorage(ws)
 					}
 				}
@@ -67,7 +100,7 @@ func TestParticleColliderRecipesThroughBelts(t *testing.T) {
 				ws.Tick++
 				settleProduction(ws)
 				settleStorage(ws)
-				settleBuildingIO(ws)
+				settleSorters(ws)
 			}
 			got := model.ItemInventory{}
 			for _, belt := range []*model.Building{output, side} {
@@ -227,8 +260,9 @@ func TestParticleColliderBuildResearchGates(t *testing.T) {
 func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	core := newConstructionTestCore(t, 4, 4)
 	ws := core.World()
-	// 细分网格：粒子对撞机占地 5×5，IO 是占地外圈的一圈 cell。输入带贴在
-	// 占地西侧外圈、方向朝东（指向占地）；输出带贴在东侧外圈、方向朝东（背离）。
+	// 细分网格：粒子对撞机占地 5×5，IO 是占地外圈的一圈 cell。第 16 轮契约 §3
+	// 起对撞机不与皮带直连，三台分拣器接上：进料（背西面东）、主产物（背西面东）、
+	// 副产物（背北面南）。
 	colliderFP := model.Footprint{Width: 5, Height: 5}
 	var center *model.Position
 	for y := 8; y < ws.MapHeight-8 && center == nil; y++ {
@@ -237,9 +271,18 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 			if !ws.FootprintFits(origin, colliderFP, model.BuildingTypeMiniatureParticleCollider, "") {
 				continue
 			}
-			inPos := model.Position{X: x - 1, Y: y + 2}
-			outPos := model.Position{X: x + 5, Y: y + 2}
-			if ws.TileBuilding[model.TileKey(inPos.X, inPos.Y)] != "" || ws.TileBuilding[model.TileKey(outPos.X, outPos.Y)] != "" {
+			free := true
+			for _, p := range []model.Position{
+				{X: x - 2, Y: y + 2}, {X: x - 1, Y: y + 2},
+				{X: x + 5, Y: y + 2}, {X: x + 6, Y: y + 2},
+				{X: x + 2, Y: y + 5}, {X: x + 2, Y: y + 6},
+			} {
+				if ws.TileBuilding[model.TileKey(p.X, p.Y)] != "" {
+					free = false
+					break
+				}
+			}
+			if !free {
 				continue
 			}
 			center = &origin
@@ -249,21 +292,42 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	if center == nil {
 		t.Fatal("no buildable collider site with belt ring cells")
 	}
-	inPos := model.Position{X: center.X - 1, Y: center.Y + 2}
-	outPos := model.Position{X: center.X + 5, Y: center.Y + 2}
+	inPos := model.Position{X: center.X - 2, Y: center.Y + 2}
+	feedPos := model.Position{X: center.X - 1, Y: center.Y + 2}
+	outPos := model.Position{X: center.X + 6, Y: center.Y + 2}
+	drainPos := model.Position{X: center.X + 5, Y: center.Y + 2}
+	sidePos := model.Position{X: center.X + 2, Y: center.Y + 6}
+	sideDrainPos := model.Position{X: center.X + 2, Y: center.Y + 5}
+	recipe, ok := model.Recipe("antimatter")
+	if !ok {
+		t.Fatal("antimatter recipe missing")
+	}
 	for _, entry := range []struct {
-		pos    model.Position
-		kind   model.BuildingType
-		recipe string
+		pos      model.Position
+		kind     model.BuildingType
+		recipe   string
+		rotation int
+		filter   []string
 	}{
-		{inPos, model.BuildingTypeConveyorBeltMk1, ""},
-		{*center, model.BuildingTypeMiniatureParticleCollider, "antimatter"},
-		{outPos, model.BuildingTypeConveyorBeltMk1, ""},
+		{pos: inPos, kind: model.BuildingTypeConveyorBeltMk1, rotation: -1},
+		{pos: feedPos, kind: model.BuildingTypeSorterMk1, rotation: 90},
+		{pos: *center, kind: model.BuildingTypeMiniatureParticleCollider, recipe: "antimatter", rotation: -1},
+		{pos: drainPos, kind: model.BuildingTypeSorterMk1, rotation: 90, filter: itemAmountIDs(recipe.Outputs)},
+		{pos: outPos, kind: model.BuildingTypeConveyorBeltMk1, rotation: -1},
+		{pos: sideDrainPos, kind: model.BuildingTypeSorterMk1, rotation: 180, filter: itemAmountIDs(recipe.Byproducts)},
+		{pos: sidePos, kind: model.BuildingTypeConveyorBeltMk1, rotation: -1},
 	} {
 		pos := entry.pos
-		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(entry.kind), "recipe_id": entry.recipe, "direction": "east"}})
+		payload := map[string]any{"building_type": string(entry.kind), "recipe_id": entry.recipe, "direction": "east"}
+		if entry.rotation >= 0 {
+			payload["rotation"] = entry.rotation
+		}
+		if len(entry.filter) > 0 {
+			payload["filter_items"] = entry.filter
+		}
+		result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: payload})
 		if result.Code != model.CodeOK {
-			t.Fatalf("build %s: %+v", entry.kind, result)
+			t.Fatalf("build %s at %+v: %+v", entry.kind, pos, result)
 		}
 	}
 	for i := 0; i < 15; i++ {
@@ -273,7 +337,8 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	input := ws.Buildings[ws.TileBuilding[model.TileKey(inPos.X, inPos.Y)]]
 	collider := ws.Buildings[ws.TileBuilding[model.TileKey(center.X, center.Y)]]
 	output := ws.Buildings[ws.TileBuilding[model.TileKey(outPos.X, outPos.Y)]]
-	if input == nil || collider == nil || output == nil {
+	side := ws.Buildings[ws.TileBuilding[model.TileKey(sidePos.X, sidePos.Y)]]
+	if input == nil || collider == nil || output == nil || side == nil {
 		t.Fatal("line construction failed")
 	}
 	supplyProductionFixture(t, ws, collider)
@@ -283,13 +348,15 @@ func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
 	got := model.ItemInventory{}
 	for i := 0; i < 135; i++ {
 		ws.Tick++
-		settleBuildingIO(ws)
+		settleSorters(ws)
 		settleProduction(ws)
 		settleStorage(ws)
-		for _, stack := range output.Conveyor.Buffer {
-			got[stack.ItemID] += stack.Quantity
+		for _, belt := range []*model.Building{output, side} {
+			for _, stack := range belt.Conveyor.Buffer {
+				got[stack.ItemID] += stack.Quantity
+			}
+			belt.Conveyor.Take(belt.Conveyor.TotalItems())
 		}
-		output.Conveyor.Take(output.Conveyor.TotalItems())
 	}
 	if got[model.ItemAntimatter] != 2 || got[model.ItemHydrogen] != 2 || len(got) != 2 || input.Conveyor.TotalItems() != 0 || totalStorageItems(collider.Storage) != 0 {
 		t.Fatalf("constructed line not conserved: input=%+v collider=%+v output=%+v", input.Conveyor, collider.Storage, got)

@@ -304,14 +304,18 @@ func TestTrafficMonitorCapturesEveryRealBeltExitPath(t *testing.T) {
 		return ws.ConveyorTraffic.Departed[id]
 	}
 	t.Run("ordinary machine input", func(t *testing.T) {
+		// 第 16 轮契约 §3：仓储不再与皮带直连，进料走「带 → 分拣器 → 机器」，
+		// 皮带流出量由分拣器那一趟记账。
 		ws := model.NewWorldState("io", 8)
 		source := newConveyorBuilding("source", model.Position{X: 1, Y: 1}, model.ConveyorEast)
-		depot := newDepotBuilding("depot", model.Position{X: 2, Y: 1})
+		sorter := newSorterBuilding("arm", model.Position{X: 2, Y: 1})
+		depot := newDepotBuilding("depot", model.Position{X: 3, Y: 1})
 		attachBuilding(ws, source)
+		attachBuilding(ws, sorter)
 		attachBuilding(ws, depot)
 		source.Conveyor.Insert(model.ItemIronOre, 3)
-		settleBuildingIO(ws)
-		if count(ws, source.ID) != 2 || source.Conveyor.TotalItems() != 1 {
+		settleSorters(ws)
+		if count(ws, source.ID) != 1 || source.Conveyor.TotalItems() != 2 {
 			t.Fatal("successful machine intake not measured")
 		}
 	})
@@ -349,15 +353,18 @@ func TestTrafficMonitorCapturesEveryRealBeltExitPath(t *testing.T) {
 		}
 	})
 	t.Run("rejected full machine input", func(t *testing.T) {
+		// 目标机器收不下时，分拣器不得推进周期，也不得记账。
 		ws := model.NewWorldState("full", 8)
 		source := newConveyorBuilding("source", model.Position{X: 1, Y: 1}, model.ConveyorEast)
-		depot := newDepotBuilding("depot", model.Position{X: 2, Y: 1})
+		sorter := newSorterBuilding("arm", model.Position{X: 2, Y: 1})
+		depot := newDepotBuilding("depot", model.Position{X: 3, Y: 1})
 		depot.Storage = model.NewStorageState(model.StorageModule{Capacity: 1, Slots: 1})
 		depot.Storage.Load(model.ItemIronOre, 1)
 		attachBuilding(ws, source)
+		attachBuilding(ws, sorter)
 		attachBuilding(ws, depot)
 		source.Conveyor.Insert(model.ItemIronOre, 3)
-		settleBuildingIO(ws)
+		settleSorters(ws)
 		if count(ws, source.ID) != 0 || source.Conveyor.TotalItems() != 3 {
 			t.Fatal("failed transfer counted as traffic")
 		}
