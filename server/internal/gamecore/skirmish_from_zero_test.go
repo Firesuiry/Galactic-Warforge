@@ -31,7 +31,7 @@ import (
 //	cd server && go test ./internal/gamecore/ -run TestSkirmishFromZeroFullMatch -v -timeout 30m
 func TestSkirmishFromZeroFullMatch(t *testing.T) {
 	if testing.Short() {
-		t.Skip("整局遭遇战模拟（无物资包从零开局，每个 seed 约 2 分钟）")
+		t.Skip("整局遭遇战模拟（实物物资包从零开局，每个 seed 约 2 分钟）")
 	}
 	for _, seed := range []string{"skirmish-seed-001", "pt1011-0e2bz1"} {
 		t.Run(seed, func(t *testing.T) {
