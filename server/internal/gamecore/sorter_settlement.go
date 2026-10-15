@@ -239,9 +239,36 @@ func returnSourceItems(source *model.Building, sourcePort string, cargo []model.
 		source.Conveyor.PrependStacks(rest)
 		return
 	}
-	for _, stack := range rest {
-		if _, _, err := model.StoragePortInput(source, sourcePort, stack.ItemID, stack.Quantity); err != nil {
-			log.Printf("[WARN] sorter rollback failed: source=%s port=%s item=%s qty=%d: %v", source.ID, sourcePort, stack.ItemID, stack.Quantity, err)
+	returnStorageItems(source.Storage, rest)
+}
+
+// returnStorageItems 把货退回建筑存储：先回输出缓冲、再回主库存，与 Provide
+// 的取货顺序对称（取货也是先输出缓冲后主库存），所以原样回退能还原取货前的状态。
+// 来源端口是「输出口」，不能走 StoragePortInput（它只认输入口），否则退货直接
+// 失败、货就丢了。
+func returnStorageItems(storage *model.StorageState, stacks []model.ItemStack) {
+	if storage == nil {
+		return
+	}
+	for _, stack := range stacks {
+		remaining := stack.Quantity
+		if remaining <= 0 {
+			continue
+		}
+		if space := storage.OutputBufferSpace(); space > 0 {
+			give := min(space, remaining)
+			storage.EnsureOutputBuffer()[stack.ItemID] += give
+			remaining -= give
+		}
+		if remaining > 0 {
+			if room := storage.Capacity - storage.UsedInventory(); room > 0 {
+				give := min(room, remaining)
+				storage.EnsureInventory()[stack.ItemID] += give
+				remaining -= give
+			}
+		}
+		if remaining > 0 {
+			log.Printf("[WARN] sorter rollback dropped %d x %s: storage full", remaining, stack.ItemID)
 		}
 	}
 }
