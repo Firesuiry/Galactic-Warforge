@@ -12,7 +12,7 @@ func TestT113SnapshotRoundTripPreservesWarIndustryState(t *testing.T) {
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,
-		Resources: model.Resources{Minerals: 100, Energy: 50},
+		Resources: model.Resources{Energy: 50},
 		WarIndustry: &model.WarIndustryState{
 			NextOrderSeq: 3,
 			ProductionOrders: map[string]*model.WarProductionOrder{

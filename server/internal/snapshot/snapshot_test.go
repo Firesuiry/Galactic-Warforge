@@ -21,7 +21,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		PlayerID:  "player-1",
 		TeamID:    "team-1",
 		Role:      "commander",
-		Resources: model.Resources{Minerals: 120, Energy: 55},
+		Resources: model.Resources{Energy: 55},
 		IsAlive:   true,
 	}
 	player.SetPermissions([]string{"build", "move"})

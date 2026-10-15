@@ -39,8 +39,12 @@ func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 		if player == nil {
 			t.Fatalf("expected player %s", playerID)
 		}
-		if player.Resources.Minerals != 480 || player.Resources.Energy != 200 {
-			t.Fatalf("unexpected bootstrap resources for %s: %+v", playerID, player.Resources)
+		// 第 16 轮：开局物资是实物（config-dev 的 bootstrap.items 直接进背包）。
+		if player.Inventory[model.ItemIronIngot] != 96 || player.Inventory[model.ItemGear] != 32 {
+			t.Fatalf("unexpected bootstrap inventory for %s: %+v", playerID, player.Inventory)
+		}
+		if player.Resources.Energy != 0 {
+			t.Fatalf("unexpected bootstrap energy for %s: %+v", playerID, player.Resources)
 		}
 		if player.Inventory[model.ItemElectromagneticMatrix] != 0 {
 			t.Fatalf("expected %s to start without bootstrapped matrices (industry chain required), got %+v", playerID, player.Inventory)

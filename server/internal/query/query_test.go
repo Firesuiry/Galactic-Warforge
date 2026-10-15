@@ -569,7 +569,7 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 		TeamID:    "team-1",
 		Role:      "commander",
 		IsAlive:   true,
-		Resources: model.Resources{Minerals: 240, Energy: 80},
+		Resources: model.Resources{Energy: 80},
 		Inventory: model.ItemInventory{"iron_ore": 12},
 		Tech: &model.PlayerTechState{
 			PlayerID: "p1",
@@ -641,7 +641,7 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 	if briefing.Winner != "p1" || briefing.VictoryReason != "game_win" || briefing.VictoryRule != "hybrid" {
 		t.Fatalf("unexpected victory metadata: %+v", briefing)
 	}
-	if briefing.Self.PlayerID != "p1" || briefing.Self.Resources.Minerals != 240 {
+	if briefing.Self.PlayerID != "p1" || briefing.Self.Resources.Energy != 80 {
 		t.Fatalf("unexpected self payload: %+v", briefing.Self)
 	}
 	if briefing.Self.Tech == nil || briefing.Self.Tech.CompletedCount != 2 {

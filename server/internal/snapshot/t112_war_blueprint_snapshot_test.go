@@ -12,7 +12,7 @@ func TestT112SnapshotRoundTripPreservesPlayerWarBlueprints(t *testing.T) {
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,
-		Resources: model.Resources{Minerals: 100, Energy: 50},
+		Resources: model.Resources{Energy: 50},
 		WarBlueprints: map[string]*model.WarBlueprint{
 			"falcon_mk1": {
 				ID:                "falcon_mk1",
