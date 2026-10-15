@@ -2522,4 +2522,4 @@ export interface RollbackResponse {
 
 export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; /** 终点是否在玩家已探索范围内（目标可以在未探索区，服务端照常按真实地形寻路）。 */ explored: boolean; path: Position[]; waypoints: Position[] }
 
-export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }
+export interface SorterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }

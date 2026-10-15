@@ -1131,22 +1131,16 @@ export async function cmdConfigureTrafficMonitor(args: string[], { api }: Comman
 
 export async function cmdConfigureSorter(args: string[], { api }: CommandContext): Promise<string> {
  const parsed=parseArgs(args);
- const usage='Usage: configure_sorter <building_id> --inputs west --outputs east [--mode allow|deny] [--items iron_ore,copper_ore] [--planet <id>]';
+ const usage='Usage: configure_sorter <building_id> [--mode allow|deny] [--items iron_ore,copper_ore] [--planet <id>]';
  if(args.includes('--help') || parsed.positionals.length!==1) return fmtError(usage);
  try {
-  const allowed=new Set(['inputs','outputs','mode','items','planet']);
+  // 分拣器方向由建造朝向决定（背面取货、正面放货），这里只配过滤。
+  const allowed=new Set(['mode','items','planet']);
   for(const [key,value] of Object.entries(parsed.options)) if(!allowed.has(key)||typeof value!=='string') throw new Error('无效选项 '+key);
-  const dirs=(key:string):CardinalDirection[]=>{
-   const values=parseCSVList(getStringOption(parsed,key),key);
-   if(!values.length||values.some(v=>!['north','east','south','west'].includes(v))||new Set(values).size!==values.length) throw new Error('方向无效');
-   return values as CardinalDirection[];
-  };
-  const inputs=dirs('inputs'), outputs=dirs('outputs');
-  if(inputs.some(v=>outputs.includes(v))) throw new Error('输入和输出方向不能重叠');
   const mode=getStringOption(parsed,'mode')??'allow';
   if(mode!=='allow'&&mode!=='deny')throw new Error('mode 必须为 allow 或 deny');
   const items=getStringOption(parsed,'items');
-  return fmtCommandResponse(await api.cmdConfigureSorter(parsed.positionals[0],{input_directions:inputs,output_directions:outputs,filter_mode:mode,filter_items:items?parseCSVList(items,'items'):[]},getStringOption(parsed,'planet')));
+  return fmtCommandResponse(await api.cmdConfigureSorter(parsed.positionals[0],{filter_mode:mode,filter_items:items?parseCSVList(items,'items'):[]},getStringOption(parsed,'planet')));
  }catch(error){return fmtError(toErrorMessage(error));}
 }
 
