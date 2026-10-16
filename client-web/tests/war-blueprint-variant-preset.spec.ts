@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 
 async function installSession(page: Page) {
   await page.addInitScript((serverUrl) => {

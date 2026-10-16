@@ -275,7 +275,7 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
       state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
     }));
   });
-  await page.goto(`/planet/${planetId}`);
+  await page.goto(`/planet/${planetId}?e2e=1`);
   const canvas = page.locator('.planet-three__surface canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: '3D 星球', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -411,7 +411,7 @@ test('镜头聚焦未探索区：地表是测绘网格而不是一片空白，�
       state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
     }));
   });
-  await page.goto(`/planet/${planetId}?quality=low`);
+  await page.goto(`/planet/${planetId}?quality=low&e2e=1`);
   const canvas = page.locator('.planet-three__surface canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: ThreeDebug }).__planetThree?.project));

@@ -12,7 +12,7 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
  * - 没有匹配建筑时：断言服务端回执给出明确的中文配对错误（配对契约本身也要守住）。
  */
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const PLANET_ID = 'planet-1-1';
 

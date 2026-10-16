@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = 'http://127.0.0.1:19481';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
+const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 
 type Auth = {
   playerId: string;

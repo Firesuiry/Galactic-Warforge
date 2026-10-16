@@ -217,8 +217,11 @@ for (const viewport of [
     await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.planet-drawer--open')).toHaveCount(0);
     const reclosed = await canvasGeometry(page);
-    expect(reclosed.x).toBe(closed.x);
-    expect(reclosed.width).toBe(closed.width);
+    // 断言的是「没有 300px 级别的横向位移」，不是亚像素：生产构建（vite preview）下
+    // 刷新后滚动条/小数布局会让 0.5px 取整后的 x、width 差半格（实测 1 → 1.5、
+    // 398 → 397.5，main 上也复现），所以给 1px 容差。
+    expect(Math.abs(reclosed.x - closed.x), `画布 x 从 ${closed.x} 变成 ${reclosed.x}`).toBeLessThanOrEqual(1);
+    expect(Math.abs(reclosed.width - closed.width), `画布宽从 ${closed.width} 变成 ${reclosed.width}`).toBeLessThanOrEqual(1);
     expect(reclosed.shellScrollLeft).toBe(0);
     expect(reclosed.windowScrollX).toBe(0);
   });
