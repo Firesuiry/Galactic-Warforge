@@ -254,6 +254,45 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(document.querySelector(".planet-panel-stack .json-preview")).toBeNull();
   });
 
+  it("采集建筑详情写明唯一开采的矿种（第 16 轮契约 §5.1）", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-mine"] = {
+      id: "b-mine",
+      type: "mining_machine",
+      owner_id: "p1",
+      position: { x: 5, y: 1, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      mining_item: "copper_ore",
+      runtime: {
+        params: {
+          energy_consume: 1,
+          energy_generate: 0,
+          capacity: 0,
+          footprint: { width: 1, height: 1 },
+        },
+        functions: {
+          storage: { capacity: 20 },
+          collect: { resource_kind: "copper_ore", yield_per_tick: 8 },
+        },
+        state: "running",
+      },
+      storage: { inventory: { silicon_ore: 4 } },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-mine",
+      position: { x: 5, y: 1, z: 0 },
+    });
+
+    render(<PlanetEntityPanel catalog={{ items: [{ id: "copper_ore", name: "铜矿" }] } as CatalogView} planet={planet as never} />);
+
+    expect(screen.getByText("开采矿种")).toBeInTheDocument();
+    expect(screen.getByText("铜矿")).toBeInTheDocument();
+  });
+
   it("无存储数据时显示空库存与未配置配方", () => {
     const planet = createPlanet();
     usePlanetViewStore.getState().setSelected({

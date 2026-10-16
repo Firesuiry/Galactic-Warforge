@@ -195,6 +195,43 @@ describe('PlanetSelectionBar', () => {
     expect(bar).toHaveTextContent('库存 硅矿 12 · 容量 12/20');
   });
 
+  it('选中采集建筑：写明它唯一开采的矿种（第 16 轮契约 §5.1）', () => {
+    const planet = makePlanet();
+    planet.buildings = {
+      'b-mine': {
+        id: 'b-mine',
+        type: 'mining_machine',
+        owner_id: 'p1',
+        position: { x: 3, y: 3, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 3,
+        mining_item: 'iron_ore',
+        runtime: { state: 'running', functions: { collect: { resource_kind: 'iron_ore', yield_per_tick: 8 } } },
+      } as never,
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: 'building',
+      id: 'b-mine',
+      position: { x: 3, y: 3, z: 0 },
+    });
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+
+    expect(screen.getByTestId('planet-selection-bar')).toHaveTextContent('开采 铁矿');
+  });
+
+  it('非采集建筑不显示「开采」字样', () => {
+    usePlanetViewStore.getState().setSelected({
+      kind: 'building',
+      id: 'b-1',
+      position: { x: 2, y: 2, z: 0 },
+    });
+    render(<PlanetSelectionBar catalog={catalog} planet={makePlanet()} />);
+
+    expect(screen.getByTestId('planet-selection-bar')).not.toHaveTextContent('开采');
+  });
+
   it('己方建筑提供"详情"入口并回调 onShowDetail', async () => {
     const user = userEvent.setup();
     const onShowDetail = vi.fn();

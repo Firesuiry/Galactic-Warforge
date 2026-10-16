@@ -361,6 +361,14 @@ function BuildingStorageSection({
             <dd>{collect.yield_per_tick}/tick</dd>
           </div>
         ) : null}
+        {/* 采集建筑只采一种矿（第 16 轮契约 §5.1）：详情里直接写明是哪一种，
+            覆盖框里混进来的别的矿脉一格都不采。 */}
+        {collect && building.mining_item ? (
+          <div>
+            <dt>开采矿种</dt>
+            <dd>{getItemDisplayName(catalog, building.mining_item)}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>生产配方</dt>
           <dd>

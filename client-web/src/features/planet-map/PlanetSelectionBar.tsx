@@ -261,6 +261,12 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
           <span className="planet-selection-bar__meta">
             ({building.position.x}, {building.position.y}) · {translateBuildingState(building.runtime?.state)}
           </span>
+          {/* 采集建筑只采一种矿（第 16 轮契约 §5.1）：选中条直接写明是哪一种。 */}
+          {building.mining_item ? (
+            <span className="planet-selection-bar__meta">
+              开采 {getItemDisplayName(catalog, building.mining_item)}
+            </span>
+          ) : null}
           {storageSummary ? (
             <span className="planet-selection-bar__meta">{storageSummary}</span>
           ) : null}
