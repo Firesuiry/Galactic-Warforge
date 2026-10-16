@@ -276,20 +276,28 @@ func spotCoversGroundUnit(ws *model.WorldState, origin model.Position, fp model.
 	return false
 }
 
-// BeltLink 描述「上游建筑 → 一条传送带 → 下游建筑」的落位。
+// BeltLink 描述「上游建筑 → 一条传送带 → 分拣器 → 下游建筑」的落位。
+//
+// 第 16 轮契约 §3 起，生产建筑与传送带之间必须夹一台分拣器（只有 direct_belt_io
+// 的采集类 / 物流站 / 带上设备保留直连）。所以一条最短产线是四格：
+// 上游占地外圈「带子」→「分拣器」（背面朝带、正面朝下游）→ 下游占地内。
+// 分拣器的朝向用 SorterRotation 表达（0°=正面北、90°=东、180°=南、270°=西）。
 type BeltLink struct {
 	Belt   model.Position
 	Dir    model.ConveyorDirection
-	Target model.Position // 下游建筑的占地锚点
+	Sorter model.Position
+	// SorterRotation 是分拣器的建造朝向：正面 = 放货端（下游），背面 = 取货端（带子）。
+	SorterRotation model.PlanRotation
+	Target         model.Position // 下游建筑的占地锚点
 }
 
-// PlanBeltLink 在 src 建筑占地外圈找一个方向，放一条传送带 + 一栋 targetType 建筑，
-// 让 src 的产出自动流进下游建筑的输入端口。返回 false 表示四个方向都不行。
+// PlanBeltLink 在 src 建筑占地外圈找一个方向，放「传送带 + 分拣器 + 下游建筑」，
+// 让 src 的产出经分拣器自动流进下游建筑的输入端口。返回 false 表示四个方向都不行。
 //
-// 端口规则（见 docs/guide/细分网格与DSP界面.md §1.2）：建筑 IO 是「占地外圈一圈
-// 相邻 cell」。传送带落在外圈、方向背离 src（即指向占地内）= src 的输出落点；
-// 同一条带子又指向下游建筑占地内 = 下游的输入来源。所以一栋上游、一条带子、
-// 一栋下游刚好构成一条最短产线。
+// 端口规则（见 docs/guide/细分网格与DSP界面.md §1.2 与实物经济与分拣器.md §2）：
+// 建筑 IO 是「占地外圈一圈相邻 cell」。分拣器是 1×1，取货端沿朝向的反方向扫
+// Range 格、放货端沿朝向扫 Range 格，所以「带子 → 分拣器 → 下游占地」这条
+// 直线在 Range ≥ 2 时两个端点都能连上（mk1 的 Range=1 只够接一侧）。
 func PlanBeltLink(ws *model.WorldState, src *model.Building, targetType model.BuildingType) (BeltLink, bool) {
 	if ws == nil || src == nil {
 		return BeltLink{}, false
@@ -308,33 +316,42 @@ func PlanBeltLink(ws *model.WorldState, src *model.Building, targetType model.Bu
 		minX, minY = min(minX, t.X), min(minY, t.Y)
 		maxX, maxY = max(maxX, t.X), max(maxY, t.Y)
 	}
-	// 四个方向各取一条候选带子（沿占地中轴），再沿该方向把下游建筑摆在带子后面。
+	// 四个方向各取一条候选带子（沿占地中轴），带子后面是分拣器，再往外是下游建筑。
 	type candidate struct {
 		belt   model.Position
 		dir    model.ConveyorDirection
+		sorter model.Position
+		rot    model.PlanRotation
 		target model.Position
 	}
 	var candidates []candidate
 	midX, midY := (minX+maxX)/2, (minY+maxY)/2
-	// 东/西：带子在中轴上，下游建筑沿中轴再往外。
+	// 东/西：带子在中轴上，分拣器与下游建筑沿中轴再往外。
 	candidates = append(candidates,
 		candidate{belt: model.Position{X: maxX + 1, Y: midY}, dir: model.ConveyorEast,
-			target: model.Position{X: maxX + 2, Y: midY - fp.Height/2}},
+			sorter: model.Position{X: maxX + 2, Y: midY}, rot: model.PlanRotation90,
+			target: model.Position{X: maxX + 3, Y: midY - fp.Height/2}},
 		candidate{belt: model.Position{X: minX - 1, Y: midY}, dir: model.ConveyorWest,
-			target: model.Position{X: minX - 1 - fp.Width, Y: midY - fp.Height/2}},
+			sorter: model.Position{X: minX - 2, Y: midY}, rot: model.PlanRotation270,
+			target: model.Position{X: minX - 2 - fp.Width, Y: midY - fp.Height/2}},
 		candidate{belt: model.Position{X: midX, Y: maxY + 1}, dir: model.ConveyorSouth,
-			target: model.Position{X: midX - fp.Width/2, Y: maxY + 2}},
+			sorter: model.Position{X: midX, Y: maxY + 2}, rot: model.PlanRotation180,
+			target: model.Position{X: midX - fp.Width/2, Y: maxY + 3}},
 		candidate{belt: model.Position{X: midX, Y: minY - 1}, dir: model.ConveyorNorth,
-			target: model.Position{X: midX - fp.Width/2, Y: minY - 1 - fp.Height}},
+			sorter: model.Position{X: midX, Y: minY - 2}, rot: model.PlanRotation0,
+			target: model.Position{X: midX - fp.Width/2, Y: minY - 2 - fp.Height}},
 	)
 	for _, c := range candidates {
-		if !ws.InBounds(c.belt.X, c.belt.Y) {
+		if !ws.InBounds(c.belt.X, c.belt.Y) || !ws.InBounds(c.sorter.X, c.sorter.Y) {
 			continue
 		}
-		if !ws.Grid[c.belt.Y][c.belt.X].Terrain.Buildable() {
+		if !ws.Grid[c.belt.Y][c.belt.X].Terrain.Buildable() || !ws.Grid[c.sorter.Y][c.sorter.X].Terrain.Buildable() {
 			continue
 		}
 		if ws.Grid[c.belt.Y][c.belt.X].BuildingID != "" || ws.Grid[c.belt.Y][c.belt.X].ResourceNodeID != "" {
+			continue
+		}
+		if ws.Grid[c.sorter.Y][c.sorter.X].BuildingID != "" || ws.Grid[c.sorter.Y][c.sorter.X].ResourceNodeID != "" {
 			continue
 		}
 		if !ws.FootprintFits(c.target, fp, targetType, "") {
@@ -343,13 +360,29 @@ func PlanBeltLink(ws *model.WorldState, src *model.Building, targetType model.Bu
 		if footprintReserved(ws, c.target, fp) {
 			continue
 		}
+		// 分拣器必须贴着下游占地：它的放货端扫 Range 格，正前方一格是占地内。
+		next, _ := ws.SurfaceStep(c.sorter, c.dir)
+		targetTiles, err := ws.FootprintTiles(c.target, fp)
+		if err != nil {
+			continue
+		}
+		inside := false
+		for _, tile := range targetTiles {
+			if tile.X == next.X && tile.Y == next.Y {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			continue
+		}
 		if buildingEnclosure(ws, targetType, model.PlanRotation0, c.target) != nil {
 			continue
 		}
 		if spotCoversGroundUnit(ws, c.target, fp) {
 			continue
 		}
-		return BeltLink{Belt: c.belt, Dir: c.dir, Target: c.target}, true
+		return BeltLink{Belt: c.belt, Dir: c.dir, Sorter: c.sorter, SorterRotation: c.rot, Target: c.target}, true
 	}
 	return BeltLink{}, false
 }
@@ -370,6 +403,29 @@ func BuildCommand(x, y int, btype model.BuildingType, recipeID string, dir model
 			Position: &model.Position{X: x, Y: y},
 		},
 		Payload: payload,
+	}
+}
+
+// BuildRotatedCommand 与 BuildCommand 相同，但带建造朝向（分拣器的取/放端由它决定：
+// 背面取货、正面放货）。rotation 是角度（0/90/180/270），与 POST /commands 的
+// build 载荷一致。
+func BuildRotatedCommand(x, y int, btype model.BuildingType, rotation model.PlanRotation) model.Command {
+	cmd := BuildCommand(x, y, btype, "", model.ConveyorAuto)
+	cmd.Payload["rotation"] = planRotationDegrees(rotation)
+	return cmd
+}
+
+// planRotationDegrees 把 PlanRotation 转成 build 载荷里的角度。
+func planRotationDegrees(rotation model.PlanRotation) int {
+	switch rotation {
+	case model.PlanRotation90:
+		return 90
+	case model.PlanRotation180:
+		return 180
+	case model.PlanRotation270:
+		return 270
+	default:
+		return 0
 	}
 }
 

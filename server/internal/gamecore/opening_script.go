@@ -48,10 +48,12 @@ type scriptStep struct {
 	recipe string
 	// ore 非空时这是采矿机，落点由 PlanMinerSpot 在真实局面上选。
 	ore string
-	// linkTo 非空时这栋建筑要贴着 linkTo 那栋建，中间夹一条传送带。
-	// 带子先放（belt=true 的那一步），下游后放。
+	// linkTo 非空时这栋建筑要贴着 linkTo 那栋建，中间夹一条传送带 + 一台分拣器
+	// （第 16 轮契约 §3：生产建筑不再与传送带直连）。
+	// 带子先放（belt=true）、分拣器第二（sorter=true）、下游建筑最后。
 	linkTo string
 	belt   bool
+	sorter bool
 }
 
 // ScriptedOpeningPlan 是开局链的建造顺序（对应存档点 cp-power → cp-base）。
@@ -59,16 +61,21 @@ type scriptStep struct {
 // 顺序的取法见 docs/guide/存档点回归测试.md 与 skirmish_from_zero_test.go 的开局
 // 注释：先风机通电、再矿机出矿；熔炉紧跟矿机（矿机一开工就有矿要吃，而且必须有
 // 出口，否则几 tick 就被自己的产出堵死）。
+//
+// 第 16 轮契约 §3 起，矿机 → 熔炉这条产线中间必须夹一台分拣器：
+// 矿机（direct_belt_io）出矿到带子，带子把矿送到分拣器取货端，分拣器投进熔炉。
 func ScriptedOpeningPlan() []scriptStep {
 	return []scriptStep{
 		{role: "wind1", btype: model.BuildingTypeWindTurbine},
 		{role: "tesla1", btype: model.BuildingTypeTeslaTower},
 		{role: "ironMiner", btype: model.BuildingTypeMiningMachine, ore: model.ItemIronOre},
 		{role: "ironBelt", linkTo: "ironMiner", belt: true},
+		{role: "ironSorter", linkTo: "ironMiner", sorter: true},
 		{role: "ironSmelter", btype: model.BuildingTypeArcSmelter, recipe: "smelt_iron", linkTo: "ironMiner"},
 		{role: "tesla2", btype: model.BuildingTypeTeslaTower},
 		{role: "copperMiner", btype: model.BuildingTypeMiningMachine, ore: model.ItemCopperOre},
 		{role: "copperBelt", linkTo: "copperMiner", belt: true},
+		{role: "copperSorter", linkTo: "copperMiner", sorter: true},
 		{role: "copperSmelter", btype: model.BuildingTypeArcSmelter, recipe: "smelt_copper", linkTo: "copperMiner"},
 		{role: "wind2", btype: model.BuildingTypeWindTurbine},
 		{role: "assembler", btype: model.BuildingTypeAssemblingMachineMk1, recipe: "gear"},
@@ -143,6 +150,9 @@ func (s *ScriptedOpening) settleAwaiting(ws *model.WorldState) {
 	if step.belt {
 		want = model.BuildingTypeConveyorBeltMk1
 	}
+	if step.sorter {
+		want = model.BuildingTypeSorterMk1
+	}
 	if id := s.claimNewBuilding(ws, want); id != "" {
 		s.built[step.role] = id
 		s.awaiting = false
@@ -193,7 +203,7 @@ func (s *ScriptedOpening) refuel(ws *model.WorldState, unit *model.Unit, player 
 	}, true
 }
 
-// buildStep 推进当前这一步：先放传送带，再放带子后面的建筑。
+// buildStep 推进当前这一步：先放传送带，再放分拣器，最后放下游建筑。
 func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerState, step scriptStep) (model.Command, bool) {
 	if step.belt {
 		if s.built[step.role] != "" {
@@ -201,9 +211,9 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 			s.next++
 			return model.Command{}, false
 		}
-		if _, ok := s.links[step.role]; ok {
+		if _, ok := s.links[step.linkTo]; ok {
 			// 建造命令已经下达过，正在等落成（settleAwaiting 认领）——
-			// 不能在这里直接 next++，否则下游建筑拿不到带子落位。
+			// 不能在这里直接 next++，否则后面的分拣器/下游建筑拿不到落位。
 			return model.Command{}, false
 		}
 		src := ws.Buildings[s.built[step.linkTo]]
@@ -219,13 +229,30 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		if !scriptMaterialsReady(player, model.BuildingTypeConveyorBeltMk1) {
 			return model.Command{}, false
 		}
-		s.links[step.role] = link
+		s.links[step.linkTo] = link
 		s.awaiting = true
 		return BuildCommand(link.Belt.X, link.Belt.Y, model.BuildingTypeConveyorBeltMk1, "", link.Dir), true
 	}
+	if step.sorter {
+		// 分拣器夹在带子与下游建筑之间（第 16 轮契约 §3）：背面朝带子取货、
+		// 正面朝下游占地放货。
+		if s.built[step.role] != "" {
+			s.next++
+			return model.Command{}, false
+		}
+		link, ok := s.links[step.linkTo]
+		if !ok || s.built[s.beltRoleFor(step.linkTo)] == "" {
+			return model.Command{}, false
+		}
+		if !scriptMaterialsReady(player, model.BuildingTypeSorterMk1) {
+			return model.Command{}, false
+		}
+		s.awaiting = true
+		return BuildRotatedCommand(link.Sorter.X, link.Sorter.Y, model.BuildingTypeSorterMk1, link.SorterRotation), true
+	}
 	if step.linkTo != "" {
-		link, ok := s.links[s.beltRoleFor(step.role)]
-		if !ok || s.built[s.beltRoleFor(step.role)] == "" {
+		link, ok := s.links[step.linkTo]
+		if !ok || s.built[s.sorterRoleFor(step.linkTo)] == "" {
 			return model.Command{}, false
 		}
 		// 第 16 轮起建造门槛只剩「背包物品够不够」（scriptMaterialsReady）：
@@ -274,27 +301,33 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 	s.awaiting = true
 	return BuildCommand(pos.X, pos.Y, step.btype, step.recipe, model.ConveyorAuto), true}
 
-// linkedTargetType 返回「这条带子通向哪栋建筑」（带子那一步的 linkTo 角色之后的
-// 那一步的类型），PlanBeltLink 需要它来算下游落位。
+// linkedTargetType 返回「这条产线通向哪栋建筑」（带子那一步的 linkTo 角色之后的
+// 下游建筑那一步的类型），PlanBeltLink 需要它来算下游落位。
 func (s *ScriptedOpening) linkedTargetType(beltStep scriptStep) model.BuildingType {
 	for i := s.next + 1; i < len(s.plan); i++ {
-		if s.plan[i].linkTo == beltStep.linkTo && !s.plan[i].belt {
-			return s.plan[i].btype
+		step := s.plan[i]
+		if step.linkTo == beltStep.linkTo && !step.belt && !step.sorter {
+			return step.btype
 		}
 	}
 	return ""
 }
 
-// beltRoleFor 返回某个 linkTo 目标对应的带子步骤角色名。
-func (s *ScriptedOpening) beltRoleFor(role string) string {
+// beltRoleFor 返回某条产线上带子那一步的角色名。
+func (s *ScriptedOpening) beltRoleFor(linkTo string) string {
 	for _, step := range s.plan {
-		if step.belt && s.built[step.role] != "" {
-			// 带子步骤的 linkTo 与目标步骤的 linkTo 相同即为一对。
-			for _, target := range s.plan {
-				if target.role == role && target.linkTo == step.linkTo {
-					return step.role
-				}
-			}
+		if step.belt && step.linkTo == linkTo {
+			return step.role
+		}
+	}
+	return ""
+}
+
+// sorterRoleFor 返回某条产线上分拣器那一步的角色名。
+func (s *ScriptedOpening) sorterRoleFor(linkTo string) string {
+	for _, step := range s.plan {
+		if step.sorter && step.linkTo == linkTo {
+			return step.role
 		}
 	}
 	return ""
@@ -499,10 +532,13 @@ func scriptRecipeOutputQty(recipe model.RecipeDefinition, item string) int {
 }
 
 // driveTarget 返回「现在要凑料的那栋建筑」的类型：带子那一步要凑带子的料，
-// 建筑那一步要凑建筑的料。
+// 分拣器那一步要凑分拣器的料，其余建筑那一步要凑建筑自己的料。
 func (s *ScriptedOpening) driveTarget(step scriptStep) model.BuildingType {
 	if step.belt {
 		return model.BuildingTypeConveyorBeltMk1
+	}
+	if step.sorter {
+		return model.BuildingTypeSorterMk1
 	}
 	return step.btype
 }
