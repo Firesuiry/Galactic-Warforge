@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"fmt"
 	"testing"
 
 	"siliconworld/internal/checkpoint"
@@ -239,4 +240,88 @@ func TestNoAlertSincePredicate(t *testing.T) {
 	if result := eval(checkpoint.ContractCheck{Kind: "no_alert_since", AlertType: string(model.AlertTypeBeltBlocked), Type: string(model.BuildingTypeMatrixLab), Tick: 0}); !result.Passed {
 		t.Fatalf("限定建筑类型后不该命中传送带的告警，got %+v", result)
 	}
+}
+
+// 按落点定位建筑的谓词：building_item_at_gte / building_item_at_lt /
+// building_no_alert_since。建筑 ID 是运行时分配的，契约要能按「建造落点」断言
+// （分拣器送到的仓储非空、紧贴传送带但没分拣器的仓储必须空着、带尾没被堵住）。
+func TestBuildingPositionPredicates(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	player := ws.Players["p1"]
+
+	depot := newBuilding("depot-1", model.BuildingTypeDepotMk1, "p1", model.Position{X: 30, Y: 30})
+	if _, _, err := depot.Storage.Load(model.ItemIronIngot, 5); err != nil {
+		t.Fatalf("装货: %v", err)
+	}
+	placeBuilding(ws, depot)
+	// 同落点但属于别人的建筑：不能算作该玩家的建筑。
+	other := newBuilding("depot-2", model.BuildingTypeDepotMk1, "p2", model.Position{X: 40, Y: 40})
+	placeBuilding(ws, other)
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+	at := func(kind, item string, n int, x, y int) checkpoint.ContractCheck {
+		return checkpoint.ContractCheck{Kind: kind, Player: "p1", ItemID: item, N: n,
+			Position: &model.Position{X: x, Y: y}}
+	}
+
+	if r := eval(at("building_item_at_gte", string(model.ItemIronIngot), 5, 30, 30)); !r.Passed || r.Actual != "5" {
+		t.Fatalf("落点仓储里的铁块应 >= 5，got %+v", r)
+	}
+	if r := eval(at("building_item_at_gte", string(model.ItemIronIngot), 6, 30, 30)); r.Passed {
+		t.Fatalf("铁块只有 5 个，>= 6 必须失败，got %+v", r)
+	}
+	// 直接 IO 已移除：紧贴传送带、没配分拣器的仓储必须一直是空的。
+	if r := eval(at("building_item_at_lt", string(model.ItemIronIngot), 1, 30, 30)); r.Passed {
+		t.Fatalf("铁块 5 个时 < 1 必须失败，got %+v", r)
+	}
+	if r := eval(at("building_item_at_lt", string(model.ItemCopperOre), 1, 30, 30)); !r.Passed {
+		t.Fatalf("空物品的 < 1 必须通过，got %+v", r)
+	}
+	// 别人家的建筑：按落点找不到该玩家的建筑。
+	if r := eval(at("building_item_at_gte", string(model.ItemIronIngot), 0, 40, 40)); r.Passed || r.Actual != "(none)" {
+		t.Fatalf("p2 的建筑不算 p1 的，got %+v", r)
+	}
+	// 空落点 / 缺 position。
+	if r := eval(at("building_item_at_gte", string(model.ItemIronIngot), 0, 50, 50)); r.Passed || r.Actual != "(none)" {
+		t.Fatalf("空落点必须失败，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "building_item_at_gte", Player: "p1"}); r.Passed ||
+		r.Detail != "该谓词需要 position（建筑锚点格）" {
+		t.Fatalf("缺 position 必须报明确原因，got %+v", r)
+	}
+
+	// building_no_alert_since：只看该建筑、该类型、且 tick >= 起点 的告警。
+	record := func(buildingID string, atTick int64, alertType model.ProductionAlertType) {
+		core.AlertHistory().Record([]*model.ProductionAlert{{
+			AlertID: fmt.Sprintf("a-%s-%d", buildingID, atTick), Tick: atTick, PlayerID: "p1",
+			BuildingID: buildingID, BuildingType: model.BuildingTypeConveyorBeltMk1,
+			AlertType: alertType, Severity: model.AlertSeverityWarning,
+		}})
+	}
+	noAlert := func(x, y int, alertType string, sinceTick int64) checkpoint.ContractResult {
+		return eval(checkpoint.ContractCheck{Kind: "building_no_alert_since", Player: "p1",
+			AlertType: alertType, Tick: sinceTick, Position: &model.Position{X: x, Y: y}})
+	}
+	if r := noAlert(30, 30, "belt_blocked", 0); !r.Passed || r.Actual != "0" {
+		t.Fatalf("没有告警时应通过，got %+v", r)
+	}
+	record("depot-1", 100, model.AlertTypeBeltBlocked)
+	record("depot-1", 200, model.AlertTypeThroughputDrop)
+	record("depot-2", 300, model.AlertTypeBeltBlocked) // 别人的建筑，不该算
+	if r := noAlert(30, 30, "belt_blocked", 0); r.Passed || r.Actual != "1" {
+		t.Fatalf("tick 100 的 belt_blocked 应让该落点失败，got %+v", r)
+	}
+	if r := noAlert(30, 30, "belt_blocked", 150); !r.Passed {
+		t.Fatalf("tick 150 之后没有 belt_blocked，应通过，got %+v", r)
+	}
+	if r := noAlert(30, 30, "", 0); r.Passed || r.Actual != "2" {
+		t.Fatalf("alert_type 为空时数全部类型（2 条），got %+v", r)
+	}
+	if r := noAlert(30, 30, "power_shortage", 0); !r.Passed {
+		t.Fatalf("别的告警类型不影响，got %+v", r)
+	}
+	_ = player
 }

@@ -200,6 +200,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		Level:             b.Level,
 		VisionRange:       b.VisionRange,
 		Rotation:          b.Rotation,
+		MiningItem:        b.MiningItem,
 		Runtime:           cloneRuntime(b.Runtime),
 		Storage:           cloneStorage(b.Storage),
 		Distributor:       b.Distributor.Clone(),
@@ -250,6 +251,7 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		Level:             snap.Level,
 		VisionRange:       snap.VisionRange,
 		Rotation:          snap.Rotation,
+		MiningItem:        snap.MiningItem,
 		Runtime:           cloneRuntime(snap.Runtime),
 		FoundationTerrain: append([]string(nil), snap.FoundationTerrain...),
 	}
