@@ -27,8 +27,8 @@ type AdvanceStopOn struct {
 	// CriticalAlert 只认「快进开始后新出现的」高价值产线告警：电力不足
 	// （power_shortage，含欠压停机）与原料短缺导致停工（input_shortage）。
 	// 常态告警（output_blocked 产物阻塞、throughput_drop 产能下降、backlog 堆积、
-	// unit_spawn_blocked 出厂口被占满）刻意排除——它们在正常产线里反复出现，
-	// 会把「一路狂奔」切碎（试玩 1014 层 06 遗留 2）。
+	// unit_spawn_blocked 出厂口被占满、belt_blocked 传送带被堵）刻意排除——
+	// 它们在正常产线里反复出现，会把「一路狂奔」切碎（试玩 1014 层 06 遗留 2）。
 	// 快进开始前就已在持续中的同类告警（同一建筑同一类型）也不再触发。
 	CriticalAlert bool
 }
