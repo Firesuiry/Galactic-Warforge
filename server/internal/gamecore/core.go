@@ -416,8 +416,10 @@ func (gc *GameCore) runTick() (int64, []*model.GameEvent) {
 			snap := snapshot.CaptureRuntime(gc.worlds, gc.activePlanetID, gc.discovery, gc.spaceRuntime)
 			gc.snapshotStore.SaveSnapshot(snap)
 			if oldest := gc.snapshotStore.OldestSnapshotTick(); oldest > 0 {
-				gc.cmdLog.TrimBefore(oldest)
-				gc.snapshotStore.TrimAuditBeforeTick(oldest)
+				if cutoff := gc.auditTrimTick(currentTick, oldest); cutoff > 0 {
+					gc.cmdLog.TrimBefore(cutoff)
+					gc.snapshotStore.TrimAuditBeforeTick(cutoff)
+				}
 			}
 		}
 	}
@@ -430,6 +432,28 @@ func (gc *GameCore) runTick() (int64, []*model.GameEvent) {
 	}
 	gc.bus.Publish(published)
 	return currentTick, allEvents
+}
+
+// auditTrimTick 返回审计/命令日志该裁到哪个 tick：返回 0 表示不裁剪
+// （整局全留）。currentTick 由调用方传入（runTick 里读世界 tick 要再抢锁）。
+//
+// 默认（server.audit_retention_ticks = 0）**不裁**：审计日志是 checkpointbuild
+// -export 导出「可执行构建记录」的唯一来源，裁掉开局建造段就再也导不出来
+//（试玩 1016 报告 B3）。配置里给了非 0 值时，保留窗口与快照保留窗口取较大者，
+// 所以旧配置（只写 snapshot_retention_ticks）的行为不变。
+func (gc *GameCore) auditTrimTick(currentTick, oldestSnapshotTick int64) int64 {
+	if gc == nil || gc.cfg == nil || oldestSnapshotTick <= 0 {
+		return 0
+	}
+	window := gc.cfg.Server.AuditRetentionTicks
+	if window <= 0 {
+		return 0
+	}
+	byWindow := currentTick - window + 1
+	if byWindow < oldestSnapshotTick {
+		return oldestSnapshotTick
+	}
+	return byWindow
 }
 
 // executeRequest processes all commands in a queued request
