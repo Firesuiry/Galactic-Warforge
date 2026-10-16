@@ -20,6 +20,10 @@ const (
 	AlertTypeOutputBlocked    ProductionAlertType = "output_blocked"
 	AlertTypePowerShortage    ProductionAlertType = "power_shortage"
 	AlertTypeUnitSpawnBlocked ProductionAlertType = "unit_spawn_blocked"
+	// AlertTypeBeltBlocked：带上有货却长期一件都动不出去（带尾对着空地、
+	// 下游分拣器/建筑不收这个物品）。指向**带格本身**，避免玩家把上游矿机的
+	// 「产物阻塞」当成根因（试玩 1016 报告 B1/U7）。
+	AlertTypeBeltBlocked ProductionAlertType = "belt_blocked"
 )
 
 // ProductionAlert is a monitoring alert raised for a single building.
@@ -172,6 +176,8 @@ func AlertMessage(alertType ProductionAlertType, buildingID string) string {
 		return fmt.Sprintf("建筑 %s：电力不足", buildingID)
 	case AlertTypeUnitSpawnBlocked:
 		return fmt.Sprintf("建筑 %s：出厂口被占满", buildingID)
+	case AlertTypeBeltBlocked:
+		return fmt.Sprintf("建筑 %s：传送带被堵，物品运不出去", buildingID)
 	default:
 		return fmt.Sprintf("建筑 %s：产线告警", buildingID)
 	}

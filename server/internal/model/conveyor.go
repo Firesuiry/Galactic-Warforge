@@ -100,6 +100,10 @@ type ConveyorState struct {
 	Buffer     []ItemStack       `json:"buffer,omitempty"`
 	MaxStack   int               `json:"max_stack"`
 	Throughput int               `json:"throughput"`
+	// BlockedTicks 是「带上有货、但连续多少 tick 一件都没动出去」的计数
+	// （见 gamecore.settleBeltBlockAlerts）。用于给玩家报「带被堵」，
+	// 而不是让他盯着上游矿机的「产物阻塞」猜。清空或动过就归零。
+	BlockedTicks int `json:"blocked_ticks,omitempty"`
 }
 
 // Clone returns a deep copy of the conveyor state.

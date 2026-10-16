@@ -95,6 +95,19 @@ func newSettlementPipeline() settlementPipeline {
 			gc.prof.mark("enemy_forces")
 			events = append(events, settleTrafficMonitors(ws)...)
 
+			// 带堵告警要在生产监视器之前统计：本 tick 的「动过没有」由
+			// ConveyorTraffic 记账，此刻已经写满（settleConveyors 之后的所有
+			// 搬运都会记进去）。
+			beltEvents := settleBeltBlockAlerts(ws)
+			events = append(events, beltEvents...)
+			if gc.alertHistory != nil {
+				for _, evt := range beltEvents {
+					if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
+						gc.alertHistory.Record([]*model.ProductionAlert{alert})
+					}
+				}
+			}
+
 			if gc.monitor != nil {
 				monEvents, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
 				events = append(events, monEvents...)

@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"fmt"
 	"sort"
 
 	"siliconworld/internal/model"
@@ -55,6 +56,84 @@ func conveyorInsertCapacity(ws *model.WorldState, target *model.Building) int {
 		return 0
 	}
 	return target.Conveyor.AvailableCapacity()
+}
+
+// beltBlockedWarnTicks 是「带上有货却一件都动不出去」多久后报警的阈值。
+// 按 tick 计，10 tps 下 30 秒；试玩里传送带堵死是几 tick 内就发生的事，
+// 这个阈值只用来滤掉换配方/开机瞬间的正常停顿。
+const beltBlockedWarnTicks = 300
+
+// settleBeltBlockAlerts 统计每条带子「有货但连续不动」的 tick 数，超过阈值
+// 就发一条 belt_blocked 告警（指向带格本身）。
+//
+// 为什么要有：带尾对着空地、或下游分拣器/建筑不收这个物品时，货会永久堆在
+// 带上，上游矿机随后被自己的输出缓冲堵住——玩家在活动流里只看到「采矿机
+// 产物阻塞」，会去查矿机而不是查带子（试玩 1016 报告 B1/U7）。
+func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
+	if ws == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(ws.Buildings))
+	for id, building := range ws.Buildings {
+		if model.IsTrafficMonitorBelt(building) {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sort.Strings(ids)
+	var events []*model.GameEvent
+	for _, id := range ids {
+		building := ws.Buildings[id]
+		conveyor := building.Conveyor
+		if conveyor == nil {
+			continue
+		}
+		moved := 0
+		if ws.ConveyorTraffic != nil && ws.ConveyorTraffic.Tick == ws.Tick {
+			moved = ws.ConveyorTraffic.Departed[id]
+		}
+		if conveyor.TotalItems() == 0 || moved > 0 {
+			conveyor.BlockedTicks = 0
+			if building.ProductionMonitor != nil {
+				building.ProductionMonitor.Alert(model.AlertTypeBeltBlocked, false, ws.Tick, 0)
+			}
+			continue
+		}
+		conveyor.BlockedTicks++
+		if conveyor.BlockedTicks < beltBlockedWarnTicks {
+			continue
+		}
+		if building.ProductionMonitor == nil {
+			building.ProductionMonitor = model.NewProductionMonitorState()
+		}
+		if !building.ProductionMonitor.Alert(model.AlertTypeBeltBlocked, true, ws.Tick, beltBlockedWarnTicks) {
+			continue
+		}
+		alert := &model.ProductionAlert{
+			AlertID:      fmt.Sprintf("alert-%d-%s-%s", ws.Tick, building.ID, model.AlertTypeBeltBlocked),
+			Tick:         ws.Tick,
+			PlayerID:     building.OwnerID,
+			BuildingID:   building.ID,
+			BuildingType: building.Type,
+			AlertType:    model.AlertTypeBeltBlocked,
+			Severity:     model.AlertSeverityWarning,
+			Message:      model.AlertMessage(model.AlertTypeBeltBlocked, building.ID),
+			Metrics:      building.ProductionMonitor.LastStats,
+			Details: map[string]any{
+				"position":      building.Position,
+				"queued_items":  conveyor.TotalItems(),
+				"blocked_ticks": conveyor.BlockedTicks,
+			},
+		}
+		events = append(events, &model.GameEvent{
+			EventType:       model.EvtProductionAlert,
+			VisibilityScope: building.OwnerID,
+			Payload:         map[string]any{"alert": alert},
+		})
+	}
+	return events
 }
 
 // compressPilerBuffer regroups the buffer into piles of at most pileHeight

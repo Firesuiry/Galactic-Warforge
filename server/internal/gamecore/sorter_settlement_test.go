@@ -35,7 +35,10 @@ func TestSorterTakesFromAnyPassingBeltCell(t *testing.T) {
 	}
 }
 
-func TestSorterFilterRespectsFrontStack(t *testing.T) {
+// 第 16 轮契约 §2（DSP 口径）+ 试玩 1016 报告 B1：分拣器从带子上取货时**扫描
+// 整段带子**，跳过被过滤掉的队首物品，取它认的那一栈。旧实现只看队首，队首是
+// 铜矿时整条带子（连同后面的铁矿）都取不动。
+func TestSorterFilterSkipsFrontStackAndTakesBehind(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 3)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
@@ -61,11 +64,17 @@ func TestSorterFilterRespectsFrontStack(t *testing.T) {
 
 	settleSorters(ws)
 
-	if got := output.Conveyor.TotalItems(); got != 0 {
-		t.Fatalf("filtered front stack must not move, got %d", got)
+	if got := output.Conveyor.TotalItems(); got != 1 {
+		t.Fatalf("后面的铁矿应被取走，got %d", got)
 	}
-	if got := input.Conveyor.TotalItems(); got != 3 {
-		t.Fatalf("expected input unchanged, got %d", got)
+	if got := output.Conveyor.Buffer[0].ItemID; got != model.ItemIronOre {
+		t.Fatalf("取走的应是铁矿，got %s", got)
+	}
+	if got := input.Conveyor.TotalItems(); got != 2 {
+		t.Fatalf("被过滤掉的铜矿应留在带上，got %d", got)
+	}
+	if got := input.Conveyor.Buffer[0].ItemID; got != model.ItemCopperOre {
+		t.Fatalf("带子顺序应保持（铜矿仍在队首），got %+v", input.Conveyor.Buffer)
 	}
 }
 

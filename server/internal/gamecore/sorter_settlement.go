@@ -115,40 +115,71 @@ func settleSorters(ws *model.WorldState) {
 	}
 }
 
-// sorterGrabOnce performs a single trip: up to maxStacks stacks from the front
-// of the source buffer. Ordinary sorters take one item per stack; pile
-// sorters lift each stack whole. Returns items moved and the first item ID.
+// sorterGrabOnce performs a single trip: up to maxStacks stacks from the source.
+// Ordinary sorters take one item per stack; pile sorters lift each stack whole.
+// Returns items moved and the first item ID.
+//
+// 取货端是传送带时按 DSP 口径**扫描整段带子**（不只是队首）：跳过本分拣器
+// 过滤掉的、以及放货端收不下的物品，取第一个既过筛又能落地的栈（见
+// conveyorGrabIndex）。旧实现只看队首：队首是下游不要的矿种时直接放弃，
+// 后面的货永远取不到；配上「带尾对着分拣器、下游不收」的布局就是整线死锁
+// （试玩 1016 报告 B1）。
 func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, sourcePort, targetPort string, sorter *model.SorterState, maxStacks int, pileGrab bool) (int, string) {
 	moved, firstItem := 0, ""
 	for stacks := 0; stacks < maxStacks; stacks++ {
 		itemID, available := "", 0
 		if source.Conveyor != nil {
-			front, ok := peekConveyorFront(source.Conveyor)
-			if !ok {
+			index := conveyorGrabIndex(ws, source, target, targetPort, sorter)
+			if index < 0 {
 				break
 			}
-			itemID, available = front.ItemID, front.Quantity
-		} else {
-			items := make([]string, 0)
-			for id := range source.Storage.Inventory {
-				items = append(items, id)
+			stack := source.Conveyor.Buffer[index]
+			itemID, available = stack.ItemID, stack.Quantity
+			take := 1
+			if pileGrab {
+				take = available
 			}
-			for id := range source.Storage.OutputBuffer {
-				items = append(items, id)
-			}
-			sort.Strings(items)
-			for _, id := range items {
-				if source.ExportableItemQuantity(id) > 0 && sorter.Filter.Allows(id) {
-					for _, port := range source.Runtime.Params.IOPorts {
-						if port.ID == sourcePort && allowsItem(port.AllowedItems, id) {
-							itemID, available = id, source.ExportableItemQuantity(id)
-							break
-						}
-					}
-				}
-				if itemID != "" {
+			if target.Conveyor != nil {
+				take = min(take, conveyorInsertCapacity(ws, target))
+			} else {
+				accepted, _, err := model.StoragePortPreviewInput(target, targetPort, itemID, take)
+				if err != nil {
 					break
 				}
+				take = accepted
+			}
+			if take <= 0 {
+				break
+			}
+			cargo := source.Conveyor.TakeAt(index, take)
+			if len(cargo) == 0 {
+				break
+			}
+			moved += sorterDeliverCargo(ws, source, target, sourcePort, targetPort, itemID, cargo)
+			if firstItem == "" {
+				firstItem = itemID
+			}
+			continue
+		}
+		items := make([]string, 0)
+		for id := range source.Storage.Inventory {
+			items = append(items, id)
+		}
+		for id := range source.Storage.OutputBuffer {
+			items = append(items, id)
+		}
+		sort.Strings(items)
+		for _, id := range items {
+			if source.ExportableItemQuantity(id) > 0 && sorter.Filter.Allows(id) {
+				for _, port := range source.Runtime.Params.IOPorts {
+					if port.ID == sourcePort && allowsItem(port.AllowedItems, id) {
+						itemID, available = id, source.ExportableItemQuantity(id)
+						break
+					}
+				}
+			}
+			if itemID != "" {
+				break
 			}
 		}
 		if itemID == "" || available <= 0 || !sorter.Filter.Allows(itemID) {
@@ -170,48 +201,77 @@ func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, source
 		if take <= 0 {
 			break
 		}
-		var cargo []model.ItemStack
-		if source.Conveyor != nil {
-			cargo = source.Conveyor.Take(take)
-		} else {
-			got, _, err := model.StoragePortOutput(source, sourcePort, itemID, take)
-			if err != nil || got <= 0 {
-				break
-			}
-			take = got
-			cargo = []model.ItemStack{{ItemID: itemID, Quantity: take}}
-		}
-		if len(cargo) == 0 {
+		got, _, err := model.StoragePortOutput(source, sourcePort, itemID, take)
+		if err != nil || got <= 0 {
 			break
 		}
-		taken := 0
-		for _, stack := range cargo {
-			taken += stack.Quantity
-		}
-		if target.Conveyor != nil {
-			target.Conveyor.AppendStacks(cargo)
-		} else {
-			// 预览与提交在本 tick 内串行，中间没有别的生产者；万一仍对不上
-			// （端口被别的路径改过），跳过本次搬运并把货退回来源，不再 panic。
-			inserted, _, _ := model.StoragePortInput(target, targetPort, itemID, taken)
-			if inserted != taken {
-				log.Printf("[WARN] sorter storage preview/commit mismatch: target=%s port=%s item=%s want=%d got=%d", target.ID, targetPort, itemID, taken, inserted)
-				returnSourceItems(source, sourcePort, cargo, taken-inserted)
-				taken = inserted
-				if taken <= 0 {
-					break
-				}
-			}
-		}
-		if source.Conveyor != nil {
-			recordConveyorDeparture(ws, source, taken)
-		}
-		moved += taken
+		cargo := []model.ItemStack{{ItemID: itemID, Quantity: got}}
+		moved += sorterDeliverCargo(ws, source, target, sourcePort, targetPort, itemID, cargo)
 		if firstItem == "" {
 			firstItem = itemID
 		}
 	}
 	return moved, firstItem
+}
+
+// conveyorGrabIndex 在带格缓冲里挑本趟要取的栈：按顺序取第一个「过滤允许 +
+// 放货端收得下」的栈，实现 DSP「分拣器从经过的物品里挑自己认的」口径。
+// 返回 -1 表示本趟没有可取之物（带空、全部被过滤、或放货端都收不下）。
+func conveyorGrabIndex(ws *model.WorldState, source, target *model.Building, targetPort string, sorter *model.SorterState) int {
+	if source == nil || source.Conveyor == nil || sorter == nil {
+		return -1
+	}
+	capacity := -1
+	if target.Conveyor != nil {
+		capacity = conveyorInsertCapacity(ws, target)
+		if capacity <= 0 {
+			return -1
+		}
+	}
+	for i, stack := range source.Conveyor.Buffer {
+		if stack.Quantity <= 0 || stack.ItemID == "" {
+			continue
+		}
+		if !sorter.Filter.Allows(stack.ItemID) {
+			continue
+		}
+		if capacity >= 0 {
+			return i
+		}
+		if accepted, _, err := model.StoragePortPreviewInput(target, targetPort, stack.ItemID, 1); err != nil || accepted <= 0 {
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
+// sorterDeliverCargo 把一趟取到的货投进放货端，返回实际投出的件数（放不下时
+// 余货退回来源）。分拣器取货与投货都走这里，保证「预览 → 提交 → 退差」只有一处。
+func sorterDeliverCargo(ws *model.WorldState, source, target *model.Building, sourcePort, targetPort, itemID string, cargo []model.ItemStack) int {
+	taken := 0
+	for _, stack := range cargo {
+		taken += stack.Quantity
+	}
+	if taken <= 0 {
+		return 0
+	}
+	if target.Conveyor != nil {
+		target.Conveyor.AppendStacks(cargo)
+	} else {
+		// 预览与提交在本 tick 内串行，中间没有别的生产者；万一仍对不上
+		// （端口被别的路径改过），跳过本次搬运并把货退回来源，不再 panic。
+		inserted, _, _ := model.StoragePortInput(target, targetPort, itemID, taken)
+		if inserted != taken {
+			log.Printf("[WARN] sorter storage preview/commit mismatch: target=%s port=%s item=%s want=%d got=%d", target.ID, targetPort, itemID, taken, inserted)
+			returnSourceItems(source, sourcePort, cargo, taken-inserted)
+			taken = inserted
+		}
+	}
+	if taken > 0 && source.Conveyor != nil {
+		recordConveyorDeparture(ws, source, taken)
+	}
+	return taken
 }
 
 // returnSourceItems puts the surplus back where it came from after a partial
@@ -376,15 +436,4 @@ func sorterCanInsertToConveyor(conveyorBuilding *model.Building, dir model.Conve
 	}
 	allowed := conveyorAllowedInputs(conveyorBuilding)
 	return allowsInput(allowed, dir.Opposite())
-}
-
-func peekConveyorFront(conveyor *model.ConveyorState) (model.ItemStack, bool) {
-	if conveyor == nil || len(conveyor.Buffer) == 0 {
-		return model.ItemStack{}, false
-	}
-	stack := conveyor.Buffer[0]
-	if stack.Quantity <= 0 {
-		return model.ItemStack{}, false
-	}
-	return stack, true
 }
