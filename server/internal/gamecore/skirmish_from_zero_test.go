@@ -104,6 +104,17 @@ type zeroOpening struct {
 	lastRallyTick int64
 
 	buildFails map[string]int
+	// pendingShort 表示「当前这一步的料还没凑齐，建造被脚本主动跳过」
+	// （见 buildNext）。此时机甲必须真的去备料，不能空转。
+	pendingShort bool
+	// pendingShortTicks 是「料没凑齐、建造被跳过」累计的 tick 数（节奏指标）。
+	pendingShortTicks int64
+	// progressStep / lastProgressTick / maxStall / maxStallStart：建造计划的
+	// 进度停滞计量（最长停滞了多少 tick、从哪一 tick 开始）。
+	progressStep     int
+	lastProgressTick int64
+	maxStall         int64
+	maxStallStart    int64
 
 	// soldierFails / soldierFailReasons：兵营排产被拒的次数与原因（诊断用，
 	// 见 produceSoldier）。兵营缺料是常态，不能混进 buildFails。
@@ -321,6 +332,7 @@ func (op *zeroOpening) run() {
 		// 排产与送料的相位差让「兵营有料」的窗口永远错过（真人玩家看到兵营有料
 		// 立刻点造兵，不会干等 30 tick）。这里在排产之前补一拍物流。
 		if ws.Tick > 0 && ws.Tick%30 == 0 {
+			op.pendingShort = false
 			op.buildNext()
 			op.repairRecipes()
 			op.powerLink()
@@ -341,6 +353,19 @@ func (op *zeroOpening) run() {
 		op.rallySoldiers()
 		op.driveMecha()
 		op.core.processTick()
+		// 停滞计量：建造计划的进度（op.next）多久没动过。脚本「缺料就不发建造命令」
+		// 之后，回执不再是信号（料没凑齐本来就不该有回执），所以用「进度停滞」
+		// 兜住「料凑不齐且机甲也没在备料」的死锁。
+		if op.next != op.progressStep {
+			op.progressStep = op.next
+			op.lastProgressTick = ws.Tick
+		} else if stall := ws.Tick - op.lastProgressTick; stall > op.maxStall {
+			op.maxStall = stall
+			op.maxStallStart = op.lastProgressTick
+		}
+		if op.pendingShort {
+			op.pendingShortTicks++
+		}
 		if op.onTick != nil {
 			op.onTick()
 		}
@@ -417,6 +442,17 @@ func (op *zeroOpening) buildNext() {
 		return
 	}
 	s := op.steps[op.next]
+	// 第 16 轮起建造门槛是背包物品（矿池已删除）。脚本每 30 tick 才试一次建造，
+	// 而「机甲手搓 + 熔炉/矿机出料」是持续的——料没凑齐就下发，只会换来一条
+	// 注定被拒的回执（实测整局 800+ 条，回执日志被「缺少 N 个「电路板」」刷满；
+	// 真人玩家看到料不够不会去点建造，而是接着手搓/等机器出货）。所以下发前先按
+	// 背包自查一次：缺料就直接回去备料（`nextMechaAction` 会沿手搓链下钻），
+	// 不产生回执。矿机（s.node != nil）仍照原样下发：它的料由 `feedIndustry`
+	// 从自己的机器里取（`planForSteps` 会备），且它落点要现算。
+	if s.node == nil && !op.player.HasItems(buildingCost(s.btype)) {
+		op.pendingShort = true
+		return
+	}
 	var pos *model.Position
 	if s.node != nil {
 		// 矿点随时重选：botBuildSpotNear 不跳过资源格，新手随手放的建筑可能
@@ -2279,6 +2315,15 @@ func runFromZeroMatch(t *testing.T, seed string) {
 		sort.Strings(keys)
 		t.Logf("seed=%s 建造失败回执：%s", seed, strings.Join(keys, " | "))
 	}
+	// 节奏：建造进度停滞与「料没凑齐、脚本主动跳过建造」的累计 tick。
+	// 第 16 轮起脚本在下发前自查背包（缺料就不发命令、直接去备料），所以回执不再是
+	// 死锁信号；进度停滞才是——料凑不齐且机甲也没在备料时，计划会一直停在这一步。
+	t.Logf("seed=%s 建造进度：已推进 %d/%d 步，最长停滞 %d tick（从 tick %d 起），缺料跳过累计 %d tick",
+		seed, op.next, len(op.steps), op.maxStall, op.maxStallStart, op.pendingShortTicks)
+	if op.next < len(op.steps) && op.maxStall > 40000 {
+		t.Fatalf("建造计划停滞：已推进 %d/%d 步，从 tick %d 起 %d tick 没有推进（料凑不齐且机甲没在备料）",
+			op.next, len(op.steps), op.maxStallStart, op.maxStall)
+	}
 	if op.soldierFails > 0 {
 		keys := make([]string, 0, len(op.soldierFailReasons))
 		for k := range op.soldierFailReasons {
@@ -2374,6 +2419,15 @@ func runFromZeroMatch(t *testing.T, seed string) {
 	if !player.IsAlive {
 		t.Fatalf("p1 在 tick %d 被淘汰（首攻 %d，首波峰值 %d）", ws.Tick, op.firstAttackTick, op.firstWavePeak)
 	}
+}
+
+// buildingCost 是这栋建筑的建造物品成本（第 16 轮起建造只扣背包物品）。
+func buildingCost(btype model.BuildingType) []model.ItemAmount {
+	def, ok := model.BuildingDefinitionByID(btype)
+	if !ok {
+		return nil
+	}
+	return def.BuildCost.Items
 }
 
 // itemIDByName 按中文名反查物品 ID（建造失败回执里只有中文名）。
