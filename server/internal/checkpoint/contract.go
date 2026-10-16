@@ -11,10 +11,13 @@ package checkpoint
 //	player_alive        {}              玩家存活
 //	tech_researched     {tech_id}       已完成该科技（等级 > 0）
 //	research_in_progress {tech_id?}     该玩家当前有进行中的研究；给了 tech_id 时还要求正在研究的就是它
+//	research_progress_gte {tech_id?, n} 进行中的研究进度 >= n（证明研究在推进，不是卡在 waiting_matrix）
 //	building_count_gte  {type, n}       存活建筑数 >= n
 //	building_running_gte {type, n}      存活且 state=running 的建筑数 >= n
+//	building_item_gte   {type, item_id, n} 玩家该类存活建筑的库存里该物品总数 >= n
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
 //	item_gte            {item_id, n}    玩家可用物资 >= n
+//	no_alert_since      {alert_type, tick, type?}  从 tick 起没有该类型的生产告警
 //	dark_fog_hostile    {bool}          黑雾对该玩家是否敌对
 //	enemy_attack_seen   {bool}          该玩家是否已被敌方玩家造成过伤害/损失
 //
@@ -27,12 +30,13 @@ type ContractCheck struct {
 	Kind   string `json:"kind"`
 	Player string `json:"player,omitempty"`
 
-	Tick    int64  `json:"tick,omitempty"`
-	TechID  string `json:"tech_id,omitempty"`
-	Type    string `json:"type,omitempty"`
-	N       int    `json:"n,omitempty"`
-	ItemID  string `json:"item_id,omitempty"`
-	Boolean bool   `json:"bool,omitempty"`
+	Tick      int64  `json:"tick,omitempty"`
+	TechID    string `json:"tech_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+	N         int    `json:"n,omitempty"`
+	ItemID    string `json:"item_id,omitempty"`
+	AlertType string `json:"alert_type,omitempty"`
+	Boolean   bool   `json:"bool,omitempty"`
 }
 
 // Contract 是一份状态契约。

@@ -19,10 +19,13 @@ import (
 //	player_alive        {}
 //	tech_researched     {tech_id}
 //	research_in_progress {tech_id?}
+//	research_progress_gte {tech_id?, n}   进行中的研究进度 >= n
 //	building_count_gte  {type, n}
 //	building_running_gte {type, n}      只统计 Runtime.State == running 的存活建筑
+//	building_item_gte   {type, item_id, n}  玩家该类建筑库存里的该物品总数 >= n
 //	unit_count_gte      {type, n}
 //	item_gte            {item_id, n}
+//	no_alert_since      {alert_type, tick, type?}  自 tick 起没有该类生产告警（type 非空时只看该建筑类型）
 //	dark_fog_hostile    {bool}
 //	enemy_attack_seen   {bool}
 //
@@ -70,6 +73,13 @@ func (gc *GameCore) evaluateContractCheck(check checkpoint.ContractCheck) checkp
 			return pass("running", "")
 		}
 		return fail("finished", "对局已宣判结束")
+	case "no_alert_since":
+		// 未指定 player 时是「全局」口径：只要求没有该类告警，不做「或」展开。
+		count := gc.alertCountSince(check.AlertType, check.Type, check.Tick, "")
+		if count == 0 {
+			return pass("0", "")
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("自 tick %d 起有 %d 条 %s 告警", check.Tick, count, check.AlertType))
 	}
 
 	players := gc.contractPlayers(check.Player)
@@ -125,6 +135,20 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(current.TechID)
 		}
 		return fail(current.TechID, fmt.Sprintf("要求正在研究 %s", check.TechID))
+	case "research_progress_gte":
+		// 研究进度：只有真的在消耗矩阵推进时才 > 0。卡在 waiting_matrix 时进度不动，
+		// 这条谓词就是「研究确实在跑」的可执行断言（cp-research-start 用）。
+		current := player.Tech.CurrentResearch
+		if current == nil {
+			return fail("0", "当前没有进行中的研究")
+		}
+		if check.TechID != "" && current.TechID != check.TechID {
+			return fail(fmt.Sprintf("%d", current.Progress), fmt.Sprintf("要求正在研究 %s", check.TechID))
+		}
+		if current.Progress >= int64(check.N) {
+			return pass(fmt.Sprintf("%d", current.Progress))
+		}
+		return fail(fmt.Sprintf("%d", current.Progress), fmt.Sprintf("要求研究进度 >= %d（当前 %s）", check.N, current.BlockedReason))
 	case "building_count_gte":
 		count := 0
 		for _, world := range gc.sortedWorlds() {
@@ -159,6 +183,27 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", count))
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求运行中的 %s >= %d（只统计 state=running）", check.Type, check.N))
+	case "building_item_gte":
+		// 建筑库存口径：玩家「该类建筑」的主库存 + 输入/输出缓冲里的该物品总数。
+		// 用来断言「产线真的把货送到了那台机器」（item_gte 只看背包，看不到机器里）。
+		count := 0
+		for _, world := range gc.sortedWorlds() {
+			world.RLock()
+			for _, building := range world.Buildings {
+				if building == nil || building.OwnerID != player.PlayerID || building.HP <= 0 {
+					continue
+				}
+				if string(building.Type) != check.Type || building.Storage == nil {
+					continue
+				}
+				count += building.Storage.ItemQuantity(check.ItemID)
+			}
+			world.RUnlock()
+		}
+		if count >= check.N {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求 %s 里的 %s >= %d", check.Type, check.ItemID, check.N))
 	case "unit_count_gte":
 		count := 0
 		for _, world := range gc.sortedWorlds() {
@@ -194,6 +239,31 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 		return fail(fmt.Sprintf("%t", seen), fmt.Sprintf("要求已遭敌方玩家攻击 = %t", check.Boolean))
 	}
 	return checkpoint.ContractResult{Check: check, Passed: false, Actual: "(unknown)", Detail: fmt.Sprintf("未知谓词 %q", check.Kind)}
+}
+
+// alertCountSince 数自 tick 起（含）的记录在案的生产告警：alertType 为空时数全部类型，
+// buildingType 非空时只看该建筑类型，playerID 非空时只看该玩家的建筑。
+func (gc *GameCore) alertCountSince(alertType, buildingType string, tick int64, playerID string) int {
+	if gc == nil || gc.alertHistory == nil {
+		return 0
+	}
+	count := 0
+	for _, alert := range gc.alertHistory.All() {
+		if alert == nil || alert.Tick < tick {
+			continue
+		}
+		if alertType != "" && string(alert.AlertType) != alertType {
+			continue
+		}
+		if buildingType != "" && string(alert.BuildingType) != buildingType {
+			continue
+		}
+		if playerID != "" && alert.PlayerID != playerID {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // opponentKills 汇总除 exclude 之外所有玩家的击杀数（敌方战果）。
