@@ -177,13 +177,18 @@ func coveredResourceNode(ws *WorldState, btype BuildingType, rotation PlanRotati
 
 // MiningItemAt 返回采集建筑落在 (btype, rotation, pos) 时会采的那种矿
 // （目录物品 ID）：覆盖框里数量最多的矿种，同数量取物品 ID 较小者。
-// 采矿机只采一种矿（DSP 口径，试玩 1016 报告 B2）；覆盖框里没有矿时返回 ""。
+// 采矿机只采一种矿（DSP 口径，试玩 1016 报告 B2）；非采集建筑（没有
+// requires_resource_node）与覆盖框里没有矿时返回 ""。
 //
 // 它同时是「建造前的预览口径」与「建成后写进建筑的 mining_item」：同一套
 // 覆盖格（CollectorCoverageCells）+ 同一套平票规则，所以 hover 提示与实际
 // 产出必然一致。命令校验（ValidateCollectorSite）仍只看「有没有允许的矿」。
 func MiningItemAt(ws *WorldState, btype BuildingType, rotation PlanRotation, pos Position) string {
 	if ws == nil {
+		return ""
+	}
+	def, ok := BuildingDefinitionByID(btype)
+	if !ok || !def.RequiresResourceNode {
 		return ""
 	}
 	collect := BuildingProfileFor(btype, 1).Runtime.Functions.Collect

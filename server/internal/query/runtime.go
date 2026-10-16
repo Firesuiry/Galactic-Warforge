@@ -120,8 +120,8 @@ type ConstructionTaskView struct {
 	ConveyorDirection model.ConveyorDirection `json:"conveyor_direction,omitempty"`
 	RecipeID          string                  `json:"recipe_id,omitempty"`
 	// MiningItem：采集类施工任务唯一开采的矿种（目录物品 ID，排产时定下）。
-	MiningItem string          `json:"mining_item,omitempty"`
-	Cost       model.BuildCost `json:"cost,omitempty"`
+	MiningItem        string                  `json:"mining_item,omitempty"`
+	Cost              model.BuildCost         `json:"cost,omitempty"`
 	State             model.ConstructionState `json:"state"`
 	WaitReason        string                  `json:"wait_reason,omitempty"`
 	EnqueueTick       int64                   `json:"enqueue_tick"`

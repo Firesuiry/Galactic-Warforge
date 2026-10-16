@@ -8,12 +8,12 @@ type PlanetInspectRequest struct {
 }
 
 type PlanetInspectView struct {
-	PlanetID   string                    `json:"planet_id"`
-	Discovered bool                      `json:"discovered"`
-	TargetType string                    `json:"target_type,omitempty"`
-	TargetID   string                    `json:"target_id,omitempty"`
-	Title      string                    `json:"title,omitempty"`
-	Building   *model.Building           `json:"building,omitempty"`
+	PlanetID   string          `json:"planet_id"`
+	Discovered bool            `json:"discovered"`
+	TargetType string          `json:"target_type,omitempty"`
+	TargetID   string          `json:"target_id,omitempty"`
+	Title      string          `json:"title,omitempty"`
+	Building   *model.Building `json:"building,omitempty"`
 	// MiningItem：目标采集建筑唯一开采的矿种（目录物品 ID）。非采集建筑为空。
 	MiningItem string                    `json:"mining_item,omitempty"`
 	Power      *BuildingPowerInspectView `json:"power,omitempty"`

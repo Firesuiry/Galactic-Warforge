@@ -439,7 +439,7 @@ func (gc *GameCore) runTick() (int64, []*model.GameEvent) {
 //
 // 默认（server.audit_retention_ticks = 0）**不裁**：审计日志是 checkpointbuild
 // -export 导出「可执行构建记录」的唯一来源，裁掉开局建造段就再也导不出来
-//（试玩 1016 报告 B3）。配置里给了非 0 值时，保留窗口与快照保留窗口取较大者，
+// （试玩 1016 报告 B3）。配置里给了非 0 值时，保留窗口与快照保留窗口取较大者，
 // 所以旧配置（只写 snapshot_retention_ticks）的行为不变。
 func (gc *GameCore) auditTrimTick(currentTick, oldestSnapshotTick int64) int64 {
 	if gc == nil || gc.cfg == nil || oldestSnapshotTick <= 0 {
