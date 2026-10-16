@@ -58,6 +58,7 @@ import {
   getTechDisplayName,
 } from "@/features/planet-map/model";
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
+import { useShellAlerts } from "@/features/production-alerts-query";
 import { accumulateOwnEntities, createOwnEntityCache, ownEntitySnapshot } from "@/features/planet-map/own-entity-cache";
 import { indexUnitsById } from "@/features/planet-map/rts-commands";
 import { useApiClient } from "@/hooks/use-api-client";
@@ -525,6 +526,16 @@ export function PlanetPage() {
     enabled: Boolean(planetId),
   });
 
+  /**
+   * 地图标记用的「当前仍成立的告警」：与顶栏/警报条同一份快照
+   * （`useShellAlerts`，limit 50，已滤研究站噪音）。
+   *
+   * 不用上面那份 limit=20 的补拉：它按告警**首现顺序**取最早 20 条，
+   * 老对局里早被常态告警占满，新出现的 `belt_blocked` 根本不在里面，
+   * 地图上于是没有红杠（试玩 1016 复现）。20 条那份继续负责活动流的首次回填。
+   */
+  const { alerts: liveAlerts } = useShellAlerts();
+
   const overviewQuery = useQuery({
     queryKey: [
       "planet-overview",
@@ -893,7 +904,7 @@ export function PlanetPage() {
         <Suspense fallback={<div className="panel">正在加载 3D 行星...</div>}>
         {isThree ? <PlanetMapThree
           key={planet.planet_id}
-          alerts={recentAlerts}
+          alerts={liveAlerts}
           catalog={catalog}
           inventory={summary?.players?.[session.playerId]?.inventory}
           darkFogHostile={darkFogHostile}
@@ -914,7 +925,7 @@ export function PlanetPage() {
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
           layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
         /> : <PlanetMapPixi
-          alerts={recentAlerts}
+          alerts={liveAlerts}
           catalog={catalog}
           inventory={summary?.players?.[session.playerId]?.inventory}
           darkFogHostile={darkFogHostile}
