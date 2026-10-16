@@ -23,6 +23,9 @@ import (
 //	building_count_gte  {type, n}
 //	building_running_gte {type, n}      只统计 Runtime.State == running 的存活建筑
 //	building_item_gte   {type, item_id, n}  玩家该类建筑库存里的该物品总数 >= n
+//	building_item_at_gte {position, item_id, n}  该落点上的玩家建筑里该物品 >= n
+//	building_item_at_lt  {position, item_id, n}  该落点上的玩家建筑里该物品 < n
+//	building_no_alert_since {position, alert_type?, tick}  该落点建筑自 tick 起无该类告警
 //	unit_count_gte      {type, n}
 //	item_gte            {item_id, n}
 //	no_alert_since      {alert_type, tick, type?}  自 tick 起没有该类生产告警（type 非空时只看该建筑类型）
@@ -219,6 +222,49 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", count))
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求 %s >= %d", check.Type, check.N))
+	case "building_item_at_gte", "building_item_at_lt":
+		// 按落点定位一台建筑（而不是建筑 ID）：契约要能断言「这一格上的机器里
+		// 有多少货」——分拣器送到的仓储非空、紧贴传送带但没有分拣器的仓储必须
+		// 空着（第 16 轮直接 IO 已移除）。建筑 ID 是运行时分配的，换一次重建就变。
+		building, result := gc.contractBuildingAt(player, check.Position)
+		if building == nil {
+			return result
+		}
+		count := building.Storage.ItemQuantity(check.ItemID)
+		wantLess := check.Kind == "building_item_at_lt"
+		ok := count >= check.N
+		if wantLess {
+			ok = count < check.N
+		}
+		actual := fmt.Sprintf("%d", count)
+		if ok {
+			return pass(actual)
+		}
+		op := ">="
+		if wantLess {
+			op = "<"
+		}
+		return fail(actual, fmt.Sprintf("要求 (%d,%d) 上 %s 里的 %s %s %d",
+			check.Position.X, check.Position.Y, building.Type, check.ItemID, op, check.N))
+	case "building_no_alert_since":
+		// 某台建筑自 tick 起没有该类生产告警：断言「这条产线没被堵住」时，
+		// 既不能只看世界状态里有没有存量告警（告警是历史记录），也不能只看
+		// 全服告警（别的产线堵了不该让这一层挂）。所以按落点定位建筑再按
+		// building_id + alert_type 过滤历史告警。
+		building, result := gc.contractBuildingAt(player, check.Position)
+		if building == nil {
+			return result
+		}
+		count := gc.buildingAlertCountSince(building.ID, check.AlertType, check.Tick)
+		if count == 0 {
+			return pass("0")
+		}
+		kind := check.AlertType
+		if kind == "" {
+			kind = "生产"
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("(%d,%d) 上的 %s 自 tick %d 起有 %d 条 %s 告警",
+			check.Position.X, check.Position.Y, building.Type, check.Tick, count, kind))
 	case "item_gte":
 		count := player.Inventory[check.ItemID]
 		if count >= check.N {
@@ -239,6 +285,51 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 		return fail(fmt.Sprintf("%t", seen), fmt.Sprintf("要求已遭敌方玩家攻击 = %t", check.Boolean))
 	}
 	return checkpoint.ContractResult{Check: check, Passed: false, Actual: "(unknown)", Detail: fmt.Sprintf("未知谓词 %q", check.Kind)}
+}
+
+// contractBuildingAt 按锚点格找出该玩家的建筑（不要求它正好在锚点上，
+// 只要它占着这一格——多格建筑的契约写中心格最直观）。
+//
+// 找不到时返回的 ContractResult 已经带好了失败原因（没写 position / 该格没有
+// 玩家的建筑），调用方直接把它当结果返回。
+func (gc *GameCore) contractBuildingAt(player *model.PlayerState, pos *model.Position) (*model.Building, checkpoint.ContractResult) {
+	check := checkpoint.ContractCheck{}
+	fail := func(detail string) (*model.Building, checkpoint.ContractResult) {
+		return nil, checkpoint.ContractResult{Check: check, Passed: false, Actual: "(none)", Detail: detail}
+	}
+	if pos == nil {
+		return fail("该谓词需要 position（建筑锚点格）")
+	}
+	for _, world := range gc.sortedWorlds() {
+		world.RLock()
+		id := world.TileBuilding[model.TileKey(pos.X, pos.Y)]
+		building := world.Buildings[id]
+		if building != nil && building.OwnerID == player.PlayerID && building.HP > 0 {
+			world.RUnlock()
+			return building, checkpoint.ContractResult{}
+		}
+		world.RUnlock()
+	}
+	return fail(fmt.Sprintf("(%d,%d) 上没有该玩家的建筑", pos.X, pos.Y))
+}
+
+// buildingAlertCountSince 数自 tick 起（含）记录在案的、属于某台建筑的生产告警。
+// alertType 为空时数全部类型。
+func (gc *GameCore) buildingAlertCountSince(buildingID, alertType string, tick int64) int {
+	if gc == nil || gc.alertHistory == nil {
+		return 0
+	}
+	count := 0
+	for _, alert := range gc.alertHistory.All() {
+		if alert == nil || alert.Tick < tick || alert.BuildingID != buildingID {
+			continue
+		}
+		if alertType != "" && string(alert.AlertType) != alertType {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // alertCountSince 数自 tick 起（含）的记录在案的生产告警：alertType 为空时数全部类型，

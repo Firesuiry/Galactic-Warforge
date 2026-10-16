@@ -1,5 +1,7 @@
 package checkpoint
 
+import "siliconworld/internal/model"
+
 // 状态契约（checkpoint contract）：创建存档点时对当前世界做一次结构化断言。
 // regression 存档点要求逐条通过才允许创建；bug 存档点只记录结果。
 //
@@ -15,6 +17,9 @@ package checkpoint
 //	building_count_gte  {type, n}       存活建筑数 >= n
 //	building_running_gte {type, n}      存活且 state=running 的建筑数 >= n
 //	building_item_gte   {type, item_id, n} 玩家该类存活建筑的库存里该物品总数 >= n
+//	building_item_at_gte {position, item_id, n} 该落点（锚点格）上玩家建筑的该物品 >= n
+//	building_item_at_lt  {position, item_id, n} 该落点（锚点格）上玩家建筑的该物品 < n
+//	building_no_alert_since {position, alert_type?, tick} 该落点建筑自 tick 起没有该类生产告警
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
 //	item_gte            {item_id, n}    玩家可用物资 >= n
 //	no_alert_since      {alert_type, tick, type?}  从 tick 起没有该类型的生产告警
@@ -36,7 +41,12 @@ type ContractCheck struct {
 	N         int    `json:"n,omitempty"`
 	ItemID    string `json:"item_id,omitempty"`
 	AlertType string `json:"alert_type,omitempty"`
-	Boolean   bool   `json:"bool,omitempty"`
+	// Position 是「按落点定位一台建筑」的锚点格（见 building_item_at_gte /
+	// building_item_at_lt / building_no_alert_since）。用落点而不是建筑 ID：
+	// 建筑 ID 是运行时分配的（b-121 这种），换一次重建就变了，写进构建记录
+	// 会让契约在别的存档点里指到另一台机器。
+	Position *model.Position `json:"position,omitempty"`
+	Boolean  bool            `json:"bool,omitempty"`
 }
 
 // Contract 是一份状态契约。
