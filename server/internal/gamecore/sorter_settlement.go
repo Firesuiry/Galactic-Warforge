@@ -125,19 +125,22 @@ func settleSorters(ws *model.WorldState) {
 // 后面的货永远取不到；配上「带尾对着分拣器、下游不收」的布局就是整线死锁
 // （试玩 1016 报告 B1）。
 func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, sourcePort, targetPort string, sorter *model.SorterState, maxStacks int, pileGrab bool) (int, string) {
+	if source == nil || target == nil || sorter == nil {
+		return 0, ""
+	}
 	moved, firstItem := 0, ""
 	for stacks := 0; stacks < maxStacks; stacks++ {
-		itemID, available := "", 0
+		itemID := ""
+		take := 1
+		var cargo []model.ItemStack
 		if source.Conveyor != nil {
 			index := conveyorGrabIndex(ws, source, target, targetPort, sorter)
 			if index < 0 {
 				break
 			}
-			stack := source.Conveyor.Buffer[index]
-			itemID, available = stack.ItemID, stack.Quantity
-			take := 1
+			itemID = source.Conveyor.Buffer[index].ItemID
 			if pileGrab {
-				take = available
+				take = source.Conveyor.Buffer[index].Quantity
 			}
 			if target.Conveyor != nil {
 				take = min(take, conveyorInsertCapacity(ws, target))
@@ -151,67 +154,69 @@ func sorterGrabOnce(ws *model.WorldState, source, target *model.Building, source
 			if take <= 0 {
 				break
 			}
-			cargo := source.Conveyor.TakeAt(index, take)
-			if len(cargo) == 0 {
-				break
-			}
-			moved += sorterDeliverCargo(ws, source, target, sourcePort, targetPort, itemID, cargo)
-			if firstItem == "" {
-				firstItem = itemID
-			}
-			continue
-		}
-		items := make([]string, 0)
-		for id := range source.Storage.Inventory {
-			items = append(items, id)
-		}
-		for id := range source.Storage.OutputBuffer {
-			items = append(items, id)
-		}
-		sort.Strings(items)
-		for _, id := range items {
-			if source.ExportableItemQuantity(id) > 0 && sorter.Filter.Allows(id) {
-				for _, port := range source.Runtime.Params.IOPorts {
-					if port.ID == sourcePort && allowsItem(port.AllowedItems, id) {
-						itemID, available = id, source.ExportableItemQuantity(id)
-						break
-					}
-				}
-			}
-			if itemID != "" {
-				break
-			}
-		}
-		if itemID == "" || available <= 0 || !sorter.Filter.Allows(itemID) {
-			break
-		}
-		take := 1
-		if pileGrab {
-			take = available
-		}
-		if target.Conveyor != nil {
-			take = min(take, conveyorInsertCapacity(ws, target))
+			cargo = source.Conveyor.TakeAt(index, take)
 		} else {
-			accepted, _, err := model.StoragePortPreviewInput(target, targetPort, itemID, take)
-			if err != nil {
+			itemID = sorterPickStorageItem(source, sourcePort, sorter)
+			if itemID == "" {
 				break
 			}
-			take = accepted
+			if pileGrab {
+				take = source.ExportableItemQuantity(itemID)
+			}
+			if target.Conveyor != nil {
+				take = min(take, conveyorInsertCapacity(ws, target))
+			} else {
+				accepted, _, err := model.StoragePortPreviewInput(target, targetPort, itemID, take)
+				if err != nil {
+					break
+				}
+				take = accepted
+			}
+			if take <= 0 {
+				break
+			}
+			got, _, err := model.StoragePortOutput(source, sourcePort, itemID, take)
+			if err != nil || got <= 0 {
+				break
+			}
+			cargo = []model.ItemStack{{ItemID: itemID, Quantity: got}}
 		}
-		if take <= 0 {
+		if len(cargo) == 0 {
 			break
 		}
-		got, _, err := model.StoragePortOutput(source, sourcePort, itemID, take)
-		if err != nil || got <= 0 {
-			break
-		}
-		cargo := []model.ItemStack{{ItemID: itemID, Quantity: got}}
 		moved += sorterDeliverCargo(ws, source, target, sourcePort, targetPort, itemID, cargo)
 		if firstItem == "" {
 			firstItem = itemID
 		}
 	}
 	return moved, firstItem
+}
+
+// sorterPickStorageItem 从建筑存储里挑本趟要取的物品：取第一个「过滤允许 +
+// 来源端口放行」的（物品 ID 字典序，与旧实现同口径）。
+func sorterPickStorageItem(source *model.Building, sourcePort string, sorter *model.SorterState) string {
+	if source == nil || source.Storage == nil || sorter == nil {
+		return ""
+	}
+	items := make([]string, 0, len(source.Storage.Inventory)+len(source.Storage.OutputBuffer))
+	for id := range source.Storage.Inventory {
+		items = append(items, id)
+	}
+	for id := range source.Storage.OutputBuffer {
+		items = append(items, id)
+	}
+	sort.Strings(items)
+	for _, id := range items {
+		if source.ExportableItemQuantity(id) <= 0 || !sorter.Filter.Allows(id) {
+			continue
+		}
+		for _, port := range source.Runtime.Params.IOPorts {
+			if port.ID == sourcePort && allowsItem(port.AllowedItems, id) {
+				return id
+			}
+		}
+	}
+	return ""
 }
 
 // conveyorGrabIndex 在带格缓冲里挑本趟要取的栈：按顺序取第一个「过滤允许 +
