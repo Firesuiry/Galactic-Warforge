@@ -13,6 +13,7 @@ import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene } from './planet-three-scene';
+import { describePickNotice, offscreenPickNotice, PICK_MISS_NOTICE, type PickNotice } from './pick-feedback';
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
@@ -22,6 +23,8 @@ import { subscribeBattleEvents } from '@/engine/battle-events';
 import { useSessionSnapshot } from '@/hooks/use-session';
 
 const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+/** 点选落空提示的停留时长（ms）：一次点击的回执，不是常驻状态。 */
+const PICK_NOTICE_TTL_MS = 2400;
 
 function readQuality(): PlanetRenderQuality {
   const query = new URLSearchParams(window.location.search).get('quality');
@@ -67,6 +70,9 @@ export function PlanetMapThree(props: Props) {
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
+  // 点选落空提示（试玩 1016 B4）：目标格不在视野内（已聚焦过去）/ 点击处不在星球表面，
+  // 都不能静默丢弃——旧实现在这两种情况下什么都没发生，玩家与驱动脚本都以为点成功了。
+  const [pickNotice, setPickNotice] = useState<PickNotice | null>(null);
   // 镜头中心落在未探索区：地表只有测绘网格，给一条「回到基地」的出路（试玩 1010 D / 1011 A）。
   const [centerUncharted, setCenterUncharted] = useState(false);
   // §3.2：镜头设置（俯仰/画质）与图层收进竖排图标栏的弹出层。
@@ -161,15 +167,24 @@ export function PlanetMapThree(props: Props) {
     if (ids.length > 0) sfx.uiClick();
   }
 
+  // 点选落空提示是「一次性回执」，2.4s 后自动消失（与迷雾提示的常驻语义不同）。
+  useEffect(() => {
+    if (!pickNotice) return undefined;
+    const timer = window.setTimeout(() => setPickNotice(null), PICK_NOTICE_TTL_MS);
+    return () => window.clearTimeout(timer);
+  }, [pickNotice]);
+
   useEffect(() => {
     if (!host.current) return;
     let renderer: PlanetThreeScene;
     try {
-      renderer = new PlanetThreeScene(host.current, tile => {
+      renderer = new PlanetThreeScene(host.current, (tile, meta) => {
         const current = latest.current;
         const store = usePlanetViewStore.getState();
         const fog = current.fog;
         const kind = store.interactionMode.kind;
+        // 视口外目标格：场景已把镜头聚焦过去，这里补一条可见提示（试玩 1016 B4）。
+        setPickNotice(meta.offscreen ? offscreenPickNotice(tile) : null);
         // 迷雾格只用于「看」和「建」，但即使不可见也要先尝试选中格上的实体（资源/建筑/单位），
         // 再决定是否聚焦——早期实现直接 requestFocus，把镜头推进未探索区，
         // 那里没有地形浮雕也没有实体，画面变成一片空白，玩家还会以为游戏崩了。
@@ -209,7 +224,7 @@ export function PlanetMapThree(props: Props) {
           store.setSelectedUnits(selection.kind === 'unit' ? [selection.id] : []);
           store.setSelectedSquads([]);
         }
-      }, tile => usePlanetViewStore.getState().setHoveredTile(tile));
+      }, tile => usePlanetViewStore.getState().setHoveredTile(tile), () => setPickNotice(PICK_MISS_NOTICE));
     } catch {
       setError('无法启动 3D 画面，请启用浏览器硬件加速，或切换到平面战术视图。');
       return;
@@ -479,6 +494,11 @@ export function PlanetMapThree(props: Props) {
     ) : null}
     {!marqueeRect && <PlanetHoverTip containerRef={root} info={hoverInfo} />}
     {error && <div role="alert" className="planet-three__error">{error}</div>}
+    {pickNotice && !error ? (
+      <div className="planet-three__pick-notice" role="status" data-testid="planet-three-pick-notice">
+        {describePickNotice(pickNotice)}
+      </div>
+    ) : null}
     {fogNotice && !error ? (
       <div className="planet-three__fog-notice" role="status">
         该区域尚未探索（{fogNotice.x}, {fogNotice.y}）：不能查看详情或建造，可派单位移动/进攻过去开视野

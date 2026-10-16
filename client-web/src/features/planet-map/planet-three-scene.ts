@@ -163,7 +163,17 @@ export class PlanetThreeScene {
   private readonly motionScratch = { from: new THREE.Vector3(), to: new THREE.Vector3(), up: new THREE.Vector3(), rotation: new THREE.Quaternion(), identity: new THREE.Quaternion() };
 
 
-  constructor(private readonly host: HTMLElement, private readonly onPick: (tile: TilePoint) => void, private readonly onHover: (tile: TilePoint | null) => void) {
+  constructor(
+    private readonly host: HTMLElement,
+    /**
+     * 点选回调。`offscreen` = 这次点击是「按格派发」（`clickTile`）且该格当时不在视野内，
+     * 场景已把镜头聚焦过去；调用侧据此给玩家一条可见提示（试玩 1016 B4：不能静默丢弃）。
+     */
+    private readonly onPick: (tile: TilePoint, meta: { offscreen: boolean }) => void,
+    private readonly onHover: (tile: TilePoint | null) => void,
+    /** 点击处不在星球表面（射线没打中球面）：调用侧给提示，避免「点了没反应」。 */
+    private readonly onMiss?: () => void,
+  ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
     const quality = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
     this.renderer.setPixelRatio(quality.pixelRatio);
@@ -215,7 +225,10 @@ export class PlanetThreeScene {
     this.scene.add(sky); this.world.add(atmosphere);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
-      if (tap) { const tile = this.pick(event); if (tile) this.onPick(tile); }
+      if (!tap) return;
+      const tile = this.pick(event);
+      if (tile) this.onPick(tile, { offscreen: false });
+      else this.onMiss?.();
     });
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointermove', this.pointerMove);
@@ -1176,6 +1189,24 @@ export class PlanetThreeScene {
   /** 屏幕坐标 → tile 拾取（右键情境指令/双击选同类等 React 侧交互用）。 */
   pickAt(clientX: number, clientY: number) {
     return this.pickAtCoords(clientX, clientY);
+  }
+
+  /**
+   * 按格派发一次点击（试玩驱动 `clickTile`、迷你地图「点缩略图给该格下令」等）。
+   *
+   * 目标格投影不在视野内时（`project().visible === false`）先聚焦镜头再派发，
+   * 并以 `offscreen: true` 通知调用侧给提示——旧实现直接 return，命令既没下发也没有
+   * 任何反馈，驱动脚本白丢过两次建造（试玩 1016 B4）。
+   * 返回 `{ dispatched, offscreen }`，调用侧据此判断命令是否真的走了同一条点击路径。
+   */
+  clickTile(tile: TilePoint, options: { focus?: boolean } = {}): { dispatched: boolean; offscreen: boolean } {
+    if (!this.data) return { dispatched: false, offscreen: false };
+    const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
+    const projected = this.project(rounded);
+    const offscreen = !projected?.visible;
+    if (offscreen && options.focus !== false) this.focus(rounded);
+    this.onPick(rounded, { offscreen });
+    return { dispatched: true, offscreen };
   }
   private pickAtCoords(clientX: number, clientY: number) {
     if (!this.data) return null;

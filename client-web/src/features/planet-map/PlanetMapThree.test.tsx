@@ -5,18 +5,21 @@ import { PlanetMapThree } from './PlanetMapThree';
 import { resetPlanetViewStore, usePlanetViewStore } from './store';
 
 // 捕获场景构造时注册的点击回调，让测试能直接喂 tile（jsdom 里没有 WebGL 拾取）。
-let onClick: ((tile: { x: number; y: number }) => void) | undefined;
+let onClick: ((tile: { x: number; y: number }, meta: { offscreen: boolean }) => void) | undefined;
 let onHover: ((tile: { x: number; y: number }) => void) | undefined;
+let onMiss: (() => void) | undefined;
 
 vi.mock('./planet-three-scene', () => ({
   PlanetThreeScene: class {
     constructor(
       _host: HTMLElement,
-      click: (tile: { x: number; y: number }) => void,
+      click: (tile: { x: number; y: number }, meta: { offscreen: boolean }) => void,
       hover: (tile: { x: number; y: number }) => void,
+      miss: () => void,
     ) {
       onClick = click;
       onHover = hover;
+      onMiss = miss;
     }
     setData() {}
     setQuality() {}
@@ -28,6 +31,7 @@ vi.mock('./planet-three-scene', () => ({
     pickAt() { return null; }
     getCenterTile() { return null; }
     project() { return null; }
+    clickTile() { return { dispatched: false, offscreen: false }; }
     capture() { return null; }
     handleBattleEvent() {}
     destroy() {}
@@ -39,7 +43,13 @@ afterEach(() => {
   resetPlanetViewStore();
   onClick = undefined;
   onHover = undefined;
+  onMiss = undefined;
 });
+
+/** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
+function click(tile: { x: number; y: number }, meta: { offscreen: boolean } = { offscreen: false }) {
+  onClick?.(tile, meta);
+}
 
 describe('3D 地图降级与交互退出', () => {
   it('WebGL 不可用时显示降级说明，焦点在地图外时 Escape 仍退出建造', () => {
@@ -70,7 +80,7 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
 
   it('点矿石：选中资源并显示信息，不把镜头推进未探索区', () => {
     renderMap();
-    act(() => onClick?.({ x: 5, y: 4 }));
+    act(() => click({ x: 5, y: 4 }));
     expect(usePlanetViewStore.getState().selected).toMatchObject({ kind: 'resource', id: 'copper-1' });
     expect(usePlanetViewStore.getState().focusRequest).toBeNull();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -78,7 +88,7 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
 
   it('点未探索空格：不移动镜头，改为提示未探索', () => {
     renderMap();
-    act(() => onClick?.({ x: 12, y: 12 }));
+    act(() => click({ x: 12, y: 12 }));
     expect(usePlanetViewStore.getState().selected).toBeNull();
     expect(usePlanetViewStore.getState().focusRequest).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('该区域尚未探索');
@@ -87,7 +97,7 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
   it('不可见格子上有实体时优先选中实体（不聚焦镜头）', () => {
     renderMap();
     // baseline 里 (6,4) 是 explored 但不可见，上面有敌方单位 enemy-1
-    act(() => onClick?.({ x: 6, y: 4 }));
+    act(() => click({ x: 6, y: 4 }));
     expect(usePlanetViewStore.getState().focusRequest).toBeNull();
     expect(usePlanetViewStore.getState().selected).toMatchObject({ kind: 'unit', id: 'enemy-1' });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -95,7 +105,7 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
 
   it('已探索但当前不可见的空格：(1,5) 只提示未探索', () => {
     renderMap();
-    act(() => onClick?.({ x: 1, y: 5 }));
+    act(() => click({ x: 1, y: 5 }));
     expect(usePlanetViewStore.getState().focusRequest).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('该区域尚未探索');
   });
@@ -114,7 +124,7 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
     expect(usePlanetViewStore.getState().selectedUnits).toEqual([]);
 
     // 点未探索空地：提示未探索，同时旧选区被清空（否则「点空地 + 框选」没法做部分重选）。
-    act(() => onClick?.({ x: 12, y: 12 }));
+    act(() => click({ x: 12, y: 12 }));
     const store = usePlanetViewStore.getState();
     expect(store.selected).toBeNull();
     expect(store.selectedUnits).toEqual([]);
@@ -125,9 +135,34 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
     const onInteractTile = vi.fn();
     renderMap(onInteractTile);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' }));
-    act(() => onClick?.({ x: 12, y: 12 }));
+    act(() => click({ x: 12, y: 12 }));
     expect(onInteractTile).toHaveBeenCalledWith({ x: 12, y: 12 });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(usePlanetViewStore.getState().focusRequest).toBeNull();
+  });
+
+  it('回归（试玩 1016 B4）：目标格不在视野内时照常下令，并提示「已移动镜头」', () => {
+    const onInteractTile = vi.fn();
+    renderMap(onInteractTile);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' }));
+    // 场景已聚焦过去并把 offscreen 标出来（真实场景里由 clickTile 派发）。
+    act(() => click({ x: 60, y: 146 }, { offscreen: true }));
+    // 命令照常下发：不能因为「投影不在视野内」就静默丢弃。
+    expect(onInteractTile).toHaveBeenCalledWith({ x: 60, y: 146 });
+    expect(screen.getByTestId('planet-three-pick-notice')).toHaveTextContent('目标格 (60, 146) 不在视野内，已移动镜头');
+  });
+
+  it('回归（试玩 1016 B4）：点击处不在星球表面时给提示，而不是静默', () => {
+    renderMap();
+    act(() => onMiss?.());
+    expect(screen.getByTestId('planet-three-pick-notice')).toHaveTextContent('不在星球表面');
+  });
+
+  it('视野内的正常点击不弹落空提示（提示只属于落空的那一次）', () => {
+    renderMap();
+    act(() => click({ x: 5, y: 4 }, { offscreen: true }));
+    expect(screen.getByTestId('planet-three-pick-notice')).toBeInTheDocument();
+    act(() => click({ x: 6, y: 4 }));
+    expect(screen.queryByTestId('planet-three-pick-notice')).not.toBeInTheDocument();
   });
 });

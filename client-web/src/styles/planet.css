@@ -1912,6 +1912,9 @@
 /* 迷雾格点击提示：不移动镜头，只在顶部给一行说明（避免把镜头推进未探索区导致画面空白） */
 /* 迷雾提示放在画面中上部的空旷带（不贴顶：顶部被行星信息卡与视图切换占着，试玩 1011 截图 21 被挡一半）。 */
 .planet-three__fog-notice { position:absolute; top:24%; left:50%; transform:translateX(-50%); z-index:6; max-width:min(520px, 80%); padding:6px 12px; border:1px solid #7cbcc355; border-radius:999px; background:#06131ee6; color:#a6c4d1; font-size:12px; text-align:center; pointer-events:none; }
+/* 点选落空提示（试玩 1016 B4）：视口外目标格已移动镜头 / 点击处不在星球表面。
+   与迷雾提示同一视觉语言，但用琥珀描边强调「这次点击没按你以为的方式生效」。 */
+.planet-three__pick-notice { position:absolute; top:18%; left:50%; transform:translateX(-50%); z-index:7; max-width:min(520px, 80%); padding:6px 12px; border:1px solid #ffd76a66; border-radius:999px; background:#1a1408e6; color:#ffe6b0; font-size:12px; text-align:center; pointer-events:none; }
 /* 镜头中心在未探索区：低调的测绘提示 + 回家出口，与迷雾提示同一视觉语言。 */
 .planet-three__uncharted { position:absolute; top:31%; left:50%; transform:translateX(-50%); z-index:6; display:flex; align-items:center; gap:10px; padding:6px 6px 6px 14px; border:1px solid #7cbcc344; border-radius:999px; background:#06131ed9; box-shadow:0 6px 24px #0006; color:#a6c4d1; font-size:12px; white-space:nowrap; }
 .planet-three__uncharted-title { color:#d8eef0; font-weight:600; letter-spacing:.06em; }
