@@ -51,6 +51,15 @@ type BuildingSnapshot struct {
 	MaxHP             int                          `json:"max_hp"`
 	Level             int                          `json:"level"`
 	VisionRange       int                          `json:"vision_range"`
+	// Rotation 是建筑朝向（0/90/180/270）。分拣器的取货端/放货端由它派生
+	// （model.SorterFacingAxis：背面取货、正面放货），采集机的覆盖框也按它算
+	// （model.CollectorCoverageCells）。快照里漏掉它会让读档后的分拣器全部变成
+	// 朝北、采集机覆盖框回到 0° 朝向——产线静默停摆（存档点重建实测）。
+	Rotation model.PlanRotation `json:"rotation,omitempty"`
+	// MiningItem 是采集建筑建成时定下的唯一开采矿种（见 model.MiningItemAt）：
+	// 覆盖框里数量最多的那种矿，平票取物品 ID 较小者。漏掉它会让读档后的矿机
+	// 按「覆盖框里第一个矿脉」重算，混矿簇上采到别的矿种。
+	MiningItem        string                       `json:"mining_item,omitempty"`
 	Runtime           model.BuildingRuntime        `json:"runtime"`
 	Storage           *model.StorageState          `json:"storage,omitempty"`
 	Distributor       *model.DistributorState      `json:"distributor,omitempty"`
