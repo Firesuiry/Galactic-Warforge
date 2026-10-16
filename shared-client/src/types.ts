@@ -297,6 +297,12 @@ export interface Building {
   };
   job?: BuildingJob;
   foundation_terrain?: string[];
+  /**
+   * 采集建筑（requires_resource_node）建成时定下的**唯一**开采矿种（目录物品 ID，
+   * 见 model.MiningItemAt）：覆盖框里数量最多的那种矿，平票取物品 ID 较小者。
+   * 覆盖框里混了别的矿种时那些矿脉一格都不采（第 16 轮契约，docs/dev/服务端API.md §5.1）。
+   */
+  mining_item?: string;
 }
 
 export interface MechaJob {
@@ -1181,6 +1187,8 @@ export interface PlanetInspectView {
   entity_id?: string;
   title?: string;
   building?: Building;
+  /** 采集建筑唯一开采的矿种（目录物品 ID，见 §5.1 的 mining_item）；非采集建筑为空。 */
+  mining_item?: string;
   unit?: Unit;
   resource?: PlanetResource;
 }
@@ -1370,6 +1378,8 @@ export interface ConstructionTaskView {
   priority?: number;
   error?: string;
   materials_deducted?: boolean;
+  /** 采集任务排产时定下的唯一开采矿种（目录物品 ID，见 Building.mining_item）。 */
+  mining_item?: string;
 }
 
 export interface EnemyForceView {
