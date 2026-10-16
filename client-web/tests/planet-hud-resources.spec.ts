@@ -40,9 +40,10 @@ test('顶栏只展示电网结余（无资金位），建造卡片名全部本�
   await page.goto(`${WEB_ENTRY}/planet/planet-1-1`);
 
   // web-08（第 16 轮契约）：资金位已删，顶栏那一格是「电网结余」只读展示，背包库存收进 title。
+  // 断言的是 title 属性本身（chip 的可见文本是电网结余数字，toContainText 只看文本节点）。
   const powerChip = page.locator('.top-nav__chip[title*="电网结余"]');
   await expect(powerChip).toBeVisible({ timeout: 30_000 });
-  await expect(powerChip).toContainText(/背包库存/);
+  await expect(powerChip).toHaveAttribute('title', /电网结余（只读展示）· 背包库存：/);
 
   // web-12：建造卡片名无 snake_case 裸 ID（§3.2 复核后格子里不再写名称，
   // 可读名在 aria-label 的第一段：`${name} · 铁块 2/6 · …`）
@@ -57,9 +58,13 @@ test('顶栏只展示电网结余（无资金位），建造卡片名全部本�
   // 格子里只剩图标，中文名在 aria-label 里（不再用 hasText 找卡片）
   await expect(page.locator('.planet-build-card[data-building-id="wind_turbine"]')).toHaveAttribute('aria-label', /^风力涡轮机/);
 
-  // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）：只有物品造价，没有资金项
+  // 卡片成本文案在 aria-label（title 已移除，改用悬浮详情）：只有物品造价，没有资金项。
+  // aria-label 形状：`<名称> · <物品造价> · 物品（背包有/需要）：<逐项 有/需要>`。
   const windCard = page.locator('.planet-build-card[data-building-id="wind_turbine"]');
-  await expect(windCard).toHaveAttribute('aria-label', /风力涡轮机 · 物品（背包有\/需要）：/);
+  const windLabel = (await windCard.getAttribute('aria-label')) ?? '';
+  expect(windLabel).toMatch(/^风力涡轮机 · /);
+  expect(windLabel).toContain('物品（背包有/需要）：');
+  expect(windLabel).not.toMatch(/矿不足|建设资金|矿 \d/);
   await expect(windCard).toBeEnabled();
 });
 
