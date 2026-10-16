@@ -1,6 +1,6 @@
 {
   "parent": "cp-lab",
-  "note": "cp-matrix-line（第 16 轮改写）：从 cp-lab（tick 1824）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并让货真的送进研究站。布局：制造台 Mk.I b-98@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器 b-100@(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器 b-111@(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-92@(62,146) 的占地）。两台分拣器都配 allow 过滤 electromagnetic_matrix。电力：新增电力感应塔 b-112@(66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从铜熔炉 b-67 取铜块 14、铁熔炉 b-55 取铁块 4、铁矿机 b-49 取铁矿 8，手搓 电路板×9、磁铁×8、磁线圈×4 批（产出 8；其中 1 个用于电力感应塔），分四轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥8（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警。",
+  "note": "cp-matrix-line（第 16 轮改写）：从 cp-lab（tick 1824）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并让货真的送进研究站。布局：制造台 Mk.I b-98@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器 b-100@(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器 b-111@(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-92@(62,146) 的占地）。两台分拣器都配 allow 过滤 electromagnetic_matrix。电力：新增电力感应塔 b-112@(66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从铜熔炉 b-67 取铜块 14、铁熔炉 b-55 取铁块 4、铁矿机 b-49 取铁矿 8，手搓 电路板×9、磁铁×8、磁线圈×4 批（产出 8；其中 1 个用于电力感应塔），分四轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥8（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警——每轮投料后顺手取走两台电弧熔炉的成品，因为熔炉输出缓冲满了就停产，上游矿线的带子随后会被堵死并报 belt_blocked（`no_alert_since` 的 tick 取 cp-lab 的落点 tick 1824，本层及之后都不许再出现）。",
   "steps": [
     {
       "advance_to_tick": 1900
@@ -352,6 +352,38 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
+          "entity_id": "b-55"
+        },
+        "payload": {
+          "building_id": "b-55",
+          "direction": "to_player",
+          "item_id": "iron_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-67"
+        },
+        "payload": {
+          "building_id": "b-67",
+          "direction": "to_player",
+          "item_id": "copper_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
           "entity_id": "b-98"
         },
         "payload": {
@@ -387,6 +419,38 @@
         "n": 4
       },
       "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-55"
+        },
+        "payload": {
+          "building_id": "b-55",
+          "direction": "to_player",
+          "item_id": "iron_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-67"
+        },
+        "payload": {
+          "building_id": "b-67",
+          "direction": "to_player",
+          "item_id": "copper_ingot",
+          "quantity": 4
+        }
+      }
     },
     {
       "cmd": {
@@ -436,6 +500,38 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
+          "entity_id": "b-55"
+        },
+        "payload": {
+          "building_id": "b-55",
+          "direction": "to_player",
+          "item_id": "iron_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-67"
+        },
+        "payload": {
+          "building_id": "b-67",
+          "direction": "to_player",
+          "item_id": "copper_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
           "entity_id": "b-98"
         },
         "payload": {
@@ -471,6 +567,38 @@
         "n": 8
       },
       "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-55"
+        },
+        "payload": {
+          "building_id": "b-55",
+          "direction": "to_player",
+          "item_id": "iron_ingot",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-67"
+        },
+        "payload": {
+          "building_id": "b-67",
+          "direction": "to_player",
+          "item_id": "copper_ingot",
+          "quantity": 4
+        }
+      }
     }
   ],
   "contract": {
