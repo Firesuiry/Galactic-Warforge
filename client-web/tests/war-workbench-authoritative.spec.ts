@@ -78,6 +78,9 @@ async function installSession(page: Page) {
 }
 
 test('战争工作台可直接连接 authoritative 战争场景并操作核心流程', async ({ page }) => {
+  // 前置 API 链路（蓝图→量产→舰队→任务群→战区）要等若干 tick，并行跑时把这一步
+  // 拖到默认 30s 之外会整例超时；后面还有 120s 的 waitForCondition。
+  test.setTimeout(180_000);
   const p1 = { playerId: 'p1', playerKey: 'key_player_1' };
   const p1HubId = await findBuildingId('p1', 'battlefield_analysis_base');
   const p1FactoryId = await findBuildingId('p1', 'recomposing_assembler');
