@@ -2222,6 +2222,10 @@
 .build-placement-hint { position:fixed; z-index:40; padding:3px 8px; border-radius:4px; border:1px solid #ff6b6b88; background:#2a0b10e6; color:#ffb3b3; font-size:.75rem; white-space:nowrap; pointer-events:none; box-shadow:0 2px 10px #0008; }
 /* 未探索区：本地无法判定是否可建（服务端说了算），用中性色而不是红色拒绝。 */
 .build-placement-hint--unknown { border-color:#7cbcc355; background:#06131ee6; color:#a6c4d1; }
+/* 采集建筑合法落点：绿色提示「将开采：铁矿」（不再是只说「有矿」）。 */
+.build-placement-hint--mining { border-color:#7ee08a55; background:#0a1c12e6; color:#b6f0c2; }
+/* 覆盖框里混了别的矿种：那些矿脉一格都不采，换警示色并列出矿种与格数。 */
+.build-placement-hint--mining-mixed { border-color:#ffc46b66; background:#231a06e6; color:#ffd79a; }
 
 /* 底部选择条/建造栏永远在抽屉之上；抽屉打开时让出抽屉宽度 + 小地图走廊。 */
 .planet-map-shell__overlay { z-index:8; }

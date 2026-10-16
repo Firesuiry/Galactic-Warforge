@@ -1080,6 +1080,8 @@ export interface PlanetResource {
   decay_per_tick?: number;
   is_rare?: boolean;
   cluster_id?: string;
+  /** 枯竭（服务端 ResourceNodeState.Depleted 原样下发）：枯竭矿脉不参与开采判定。 */
+  depleted?: boolean;
 }
 
 export interface SurfaceMetadata { topology: 'cube_sphere'; face_size: number }

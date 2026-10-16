@@ -7,6 +7,7 @@ import type { CatalogView, ItemInventory, PlanetRuntimeView } from '@shared/type
 
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
 import { buildGhostDirection, DIRECTION_NAMES, isSorterBuilding } from '@/features/planet-map/logistics-direction';
+import { describeMiningCoverage } from '@/features/planet-map/mining-coverage';
 import { getBuildingDisplayName, getItemDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 
@@ -42,7 +43,23 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
     (itemId) => getItemDisplayName(catalog, itemId),
     (buildingType) => getBuildingDisplayName(catalog, buildingType),
   );
-  if (!assessment || assessment.buildable) return null;
+  if (!assessment || assessment.buildable) {
+    // 采集建筑（矿机/水泵/抽油机）合法落点：不再只说「有矿」，直接说清这一台会采哪种矿
+    // （与服务端 model.MiningItemAt 同一套覆盖框 + 平票规则，见 §5.1）。覆盖框里混了别的
+    // 矿种时给警示色 + 列出不会开采的矿——那些矿脉一格都不采（第 16 轮契约）。
+    const mining = describeMiningCoverage(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, mode.rotation);
+    if (!mining) return null;
+    return (
+      <div
+        className={`build-placement-hint build-placement-hint--mining${mining.mixed ? ' build-placement-hint--mining-mixed' : ''}`}
+        data-testid="build-mining-hint"
+        role="status"
+        style={{ left: pointer.x + 16, top: pointer.y + 14 }}
+      >
+        {mining.text}
+      </div>
+    );
+  }
   // 未探索区不本地拦截（是否可建只有服务端知道）：用中性提示，不显示红色「无法建造」。
   if (!shouldBlockBuildLocally(assessment)) {
     return (
