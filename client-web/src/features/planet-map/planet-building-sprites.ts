@@ -17,7 +17,9 @@
 
 import { Texture } from 'pixi.js';
 
-import type { Building } from '@shared/types';
+import type { Building, PlanRotation } from '@shared/types';
+
+import { ROTATION_FACING, rotationTurns } from '@/features/planet-map/logistics-direction';
 
 // ---------- 原型（archetype）与类型映射 ----------
 
@@ -41,6 +43,18 @@ export function resolveConveyorBeltDirection(
     return output;
   }
   return 'east';
+}
+
+/**
+ * 分拣器方向解析（第 16 轮契约）：方向完全由建筑 rotation 决定——背面取货、正面放货。
+ * 服务端 `SorterState` 已不再下发方向字段，这里与 `logistics-direction.ROTATION_FACING`
+ * 用同一张锚点表（0°=北、90°=东、180°=南、270°=西），保证 2D 方向纹、机械臂与
+ * 服务端扫端点的方向一致。
+ */
+export function resolveSorterDirection(
+  building: { rotation?: PlanRotation },
+): BeltDirection {
+  return ROTATION_FACING[rotationTurns(building.rotation)];
 }
 
 /**

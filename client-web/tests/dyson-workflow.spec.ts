@@ -13,7 +13,7 @@ function createCatalog() {
         category: "research",
         subcategory: "research",
         footprint: { width: 1, height: 1 },
-        build_cost: { minerals: 1, energy: 1, items: [] },
+        build_cost: { items: [] },
         buildable: true,
         icon_key: "matrix_lab",
         color: "#7dd3fc",
@@ -128,9 +128,7 @@ function createSummary() {
       p1: {
         player_id: "p1",
         is_alive: true,
-        resources: {
-          minerals: 500,
-          energy: 500,
+        resources: { energy: 500,
         },
         tech: {
           player_id: "p1",

@@ -88,7 +88,6 @@ function createPlanet() {
             energy_consume: 2,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 1, height: 1 },
           },
           functions: {},
@@ -518,9 +517,9 @@ it('mounts a distributor only on an available owned depot origin and blocks dupl
 });
 
 describe('build item cost', () => {
-  const catalog = { buildings: [{ id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 1, height: 1 }, build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }] } as never;
+  const catalog = { buildings: [{ id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 1, height: 1 }, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }] } as never;
   it('compares owned vs required per item', () => {
-    expect(compareBuildItems({ build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 6 }] } }, { iron_ingot: 4 }))
+    expect(compareBuildItems({ build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }] } }, { iron_ingot: 4 }))
       .toEqual([{ item_id: 'iron_ingot', quantity: 6, owned: 4, short: true }]);
   });
   it('marks preview illegal with a missing-item reason when inventory is short', () => {
@@ -664,7 +663,7 @@ describe('未探索区（地形 unknown）不被本地拦截', () => {
     const shortCatalog = {
       buildings: [{
         id: 'wind_turbine', name: '风机', buildable: true, footprint: { width: 1, height: 1 },
-        build_cost: { minerals: 0, energy: 0, items: [{ item_id: 'iron_ingot', quantity: 4 }] },
+        build_cost: { items: [{ item_id: 'iron_ingot', quantity: 4 }] },
       }],
     };
     const assessment = assessBuildTiles(

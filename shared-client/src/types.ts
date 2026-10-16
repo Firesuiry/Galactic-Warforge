@@ -39,17 +39,11 @@ export interface IOPort {
   allowed_items?: string[];
 }
 
-export interface MaintenanceCost {
-  minerals: number;
-  energy: number;
-}
-
 export interface BuildingRuntimeParams {
   energy_consume: number;
   energy_generate: number;
   power_priority?: number;
   capacity: number;
-  maintenance_cost: MaintenanceCost;
   footprint: Footprint;
   connection_points?: ConnectionPoint[];
   io_ports?: IOPort[];
@@ -211,11 +205,20 @@ export interface SorterTransfer {
   quantity: number;
 }
 
+/**
+ * 分拣器运行时状态（第 16 轮契约 §2，对齐服务端 `model.SorterState`）。
+ *
+ * 方向不在状态里：取货端固定为建造朝向 rotation 的背面、放货端为正面，
+ * 客户端用 `logistics-direction.ROTATION_FACING` 从 rotation 推导，与服务端
+ * `model.SorterFacing` 同一张锚点表。
+ */
 export interface BuildingSorterState {
-  input_directions?: ConveyorDirection[];
-  output_directions?: ConveyorDirection[];
-  speed: number;
+  /** 往返周期系数：往返周期 = cycle_ticks × 两端点距离格数（mk1/mk2/mk3 = 6/3/2）。 */
+  cycle_ticks: number;
+  /** 沿朝向轴前后各扫几格找端点（mk1/mk2/mk3 = 1/2/3）。 */
   range: number;
+  /** 下一次允许往返的最早 tick（0 = 随时可搬）。 */
+  next_trip_tick?: number;
   filter?: {
     mode?: 'allow' | 'deny';
     items?: string[];
@@ -837,7 +840,7 @@ export interface CommandResponse {
 }
 
 export interface Resources {
-  minerals: number;
+  /** 电网结余（只读展示，不再是可以花的货币；建造消耗只走物品背包）。 */
   energy: number;
 }
 
@@ -1321,7 +1324,11 @@ export interface LogisticsStationView {
 
 export type ConstructionState = 'pending' | 'in_progress' | 'paused' | 'completed' | 'cancelled';
 
-export type PlanRotation = '' | 'north' | 'east' | 'south' | 'west';
+/**
+ * 建筑平面旋转（第 16 轮契约：分拣器等建筑的方向完全由它决定）。
+ * 服务端 PlanRotation 是度数字符串（"0"/"90"/"180"/"270"），客户端不再自造东南西北枚举。
+ */
+export type PlanRotation = '0' | '90' | '180' | '270';
 export type ConveyorDirection = '' | 'north' | 'east' | 'south' | 'west' | 'auto';
 
 export interface BlueprintParams {
@@ -1329,9 +1336,7 @@ export interface BlueprintParams {
 }
 
 export interface BuildCost {
-  minerals: number;
-  energy: number;
-  items?: ItemAmount[];
+  items: ItemAmount[];
 }
 
 export interface ItemAmount {
@@ -2474,7 +2479,6 @@ export interface ReplayDigest {
   buildings: number;
   units: number;
   resources: number;
-  total_minerals: number;
   total_energy: number;
   resource_remaining: number;
   entity_counter: number;
@@ -2522,11 +2526,8 @@ export interface RollbackResponse {
 
 export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; reachable: boolean; distance: number; /** 终点是否在玩家已探索范围内（目标可以在未探索区，服务端照常按真实地形寻路）。 */ explored: boolean; path: Position[]; waypoints: Position[] }
 
-// SorterConfig 是 client-web 的 SorterControls 仍在用的完整形状（含方向）。
-// 第 16 轮契约 §2 起服务端 configure_sorter 只接受过滤字段——方向由建造朝向决定
-// （背面取货、正面放货），传 input_directions / output_directions 一律拒绝；CLI 用
-// SorterFilterConfig（见下）而不是这个类型。方向字段随契约 §4 的客户端改造一起删。
-export interface SorterConfig { input_directions: CardinalDirection[]; output_directions: CardinalDirection[]; filter_mode?: "allow" | "deny"; filter_items?: string[]; }
-
-// SorterFilterConfig 是服务端 configure_sorter 真正接受的载荷（第 16 轮契约 §2）。
+/**
+ * configure_sorter 的载荷（第 16 轮契约 §2）：只配过滤，不含方向——
+ * 分拣器朝向由建造时的 rotation 决定（背面取货、正面放货），服务端忽略方向字段。
+ */
 export interface SorterFilterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }

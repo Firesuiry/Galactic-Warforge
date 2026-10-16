@@ -34,6 +34,7 @@ import {
   nextBeltDirection,
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
+import { isSorterBuilding } from '@/features/planet-map/logistics-direction';
 import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
@@ -55,20 +56,15 @@ const MAX_CATEGORY_KEYS = 9;
 /** 未分类建筑归入的兜底页签 id。 */
 const UNCATEGORIZED = '__uncategorized';
 
-function formatCost(entry: BuildCatalogEntryView) {
-  const cost = entry.build_cost;
-  if (!cost) {
+/** 卡片 aria-label 里的一行造价：只列物品（第 16 轮契约去掉资金维度）。 */
+function formatCost(entry: BuildCatalogEntryView, itemName: (itemId: string) => string) {
+  const items = entry.build_cost?.items ?? [];
+  if (items.length === 0) {
     return '';
   }
-  const parts: string[] = [];
-  if (cost.minerals) {
-    parts.push(`矿 ${cost.minerals}`);
-  }
-  if (cost.energy) {
-    parts.push(`能 ${cost.energy}`);
-  }
-  return parts.join(' ');
+  return items.map((item) => `${itemName(item.item_id)} ${item.quantity}`).join('、');
 }
+
 /** 锁定卡的解锁条件提示：任一未完成科技即可解锁（与服务端 any 语义一致）。 */
 function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCatalogEntryView, completedTechIds: ReadonlySet<string>) {
   const missing = missingUnlockTechIds(entry.unlock_tech, completedTechIds);
@@ -178,7 +174,6 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildMode, setInteractionMode]);
 
-  const mineralsBalance = summary?.players?.[session.playerId]?.resources?.minerals;
   const inventory = summary?.players?.[session.playerId]?.inventory;
   const activeShortage = useMemo(() => {
     if (!activeBuildingType) {
@@ -187,10 +182,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     return describeBuildShortage(
       catalog?.buildings?.find((entry) => entry.id === activeBuildingType),
       inventory,
-      mineralsBalance,
       (itemId) => getItemDisplayName(catalog, itemId),
     );
-  }, [activeBuildingType, catalog, inventory, mineralsBalance]);
+  }, [activeBuildingType, catalog, inventory]);
 
   const visibleEntries = useMemo(() => [
     ...workflow.catalog.recommended,
@@ -269,23 +263,19 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   const detail = detailEntry ? (() => {
     const locked = detailEntry.visibility === 'locked' || detailEntry.visibility === 'debugOnly';
     const unlockCondition = locked ? formatUnlockCondition(catalog, detailEntry, completedTechIds) : '';
-    const mineralCost = detailEntry.build_cost?.minerals ?? 0;
+    // 悬停提示明确列出缺什么（§4 契约：「悬停提示缺什么」），与服务端拒绝文案同口径。
+    const detailShortage = describeBuildShortage(detailEntry, inventory, (itemId) => getItemDisplayName(catalog, itemId));
     return (
       <div className="planet-build-bar__detail" role="tooltip" data-testid="planet-build-detail">
         <strong>{translateBuildingType(detailEntry.id, detailEntry.name)}</strong>
         {locked ? <span className="is-short">未解锁{unlockCondition ? `：需要科技 ${unlockCondition}` : ''}</span> : null}
-        <span className="planet-build-bar__detail-head">拥有 / 需要</span>
-        {mineralCost > 0 ? (
-          <span className={mineralsBalance !== undefined && mineralsBalance < mineralCost ? 'is-short' : ''}>
-            矿石 {mineralsBalance ?? '?'} / {mineralCost}
-          </span>
-        ) : null}
+        <span className="planet-build-bar__detail-head">背包有 / 需要</span>
         {compareBuildItems(detailEntry, inventory).map((item) => (
           <span key={item.item_id} className={item.short ? 'is-short' : ''}>
             <Icon iconKey={item.item_id} size={12} /> {getItemDisplayName(catalog, item.item_id)} {item.owned} / {item.quantity}
           </span>
         ))}
-        {(detailEntry.build_cost?.energy ?? 0) > 0 ? <span>能量 {detailEntry.build_cost?.energy}</span> : null}
+        {detailShortage ? <span className="is-short">缺：{detailShortage}</span> : null}
       </div>
     );
   })() : null;
@@ -320,15 +310,12 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             const locked = entry.visibility === 'locked' || entry.visibility === 'debugOnly';
             const active = entry.id === activeBuildingType;
             const name = translateBuildingType(entry.id, entry.name);
-            const cost = formatCost(entry);
-            const mineralCost = entry.build_cost?.minerals ?? 0;
+            const cost = formatCost(entry, (itemId) => getItemDisplayName(catalog, itemId));
             const items = compareBuildItems(entry, inventory);
-            const itemsShort = items.some((item) => item.short);
-            const mineralsShort = mineralsBalance !== undefined && mineralsBalance < mineralCost;
-            const unaffordable = !locked && (mineralsShort || itemsShort);
+            const unaffordable = !locked && items.some((item) => item.short);
             const unlockCondition = locked ? formatUnlockCondition(catalog, entry, completedTechIds) : '';
             const itemText = items.map((item) => `${getItemDisplayName(catalog, item.item_id)} ${item.owned}/${item.quantity}${item.short ? '（不足）' : ''}`).join('、');
-            const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（拥有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}${mineralsShort && !locked ? ` · 矿不足：需要 ${mineralCost} / 现有 ${mineralsBalance}` : ''}`;
+            const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（背包有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}`;
             return (
               <button
                 key={entry.id}
@@ -359,7 +346,17 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                   {/* 数字键角标贴在图标左上角（DSP 口径）。 */}
                   {index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
                 </span>
-                {/* 格内不再写名称：52px 下只能显示被截断的两三个字，名称在 aria-label / 悬停浮层标题里。 */}
+                {/* 造价条：每项物品「背包有/需要」，任一不够整格置灰（§4）。 */}
+                {items.length > 0 ? (
+                  <span aria-hidden="true" className="planet-build-card__cost">
+                    {items.map((item) => (
+                      <span key={item.item_id} className={`planet-build-card__cost-item${item.short ? ' is-short' : ''}`}>
+                        <Icon iconKey={item.item_id} size={9} />
+                        {item.owned}/{item.quantity}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -407,7 +404,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               </span>
             ) : (
               <span className="planet-build-bar__hint">
-                放置 {translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出
+                {isSorterBuilding({ type: activeBuildingType ?? '' })
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上青色箭头 = 取货端，琥珀 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                  : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
             <button

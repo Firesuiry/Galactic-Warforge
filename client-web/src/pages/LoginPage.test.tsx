@@ -50,7 +50,7 @@ function mockFetchForStarmap() {
           p1: {
             player_id: 'p1',
             is_alive: true,
-            resources: { minerals: 120, energy: 88 },
+            resources: { energy: 88 },
           },
         },
       }));

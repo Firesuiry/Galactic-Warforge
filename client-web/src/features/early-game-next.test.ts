@@ -8,7 +8,7 @@ function player(partial: Partial<PlayerState> = {}): PlayerState {
   return {
     player_id: "p1",
     is_alive: true,
-    resources: { minerals: 240, energy: 100 },
+    resources: { energy: 100 },
     inventory: { electromagnetic_matrix: 50 },
     tech: {
       player_id: "p1",

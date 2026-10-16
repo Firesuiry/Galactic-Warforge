@@ -8,7 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
  * 与之互补的单测：src/i18n/event-payload.test.ts（payload → 中文描述的纯函数）。
  */
 
-const WEB_ENTRY = 'http://127.0.0.1:4173';
+const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 const PLANET_ID = 'planet-1-1';
 
 /** 允许出现的 snake_case（当前为空：界面上不应有任何裸字段名/内部 id）。 */

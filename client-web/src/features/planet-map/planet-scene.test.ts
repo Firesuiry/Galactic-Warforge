@@ -87,7 +87,6 @@ describe('范围圈纯函数', () => {
         energy_consume: 3,
         energy_generate: 0,
         capacity: 0,
-        maintenance_cost: { minerals: 0, energy: 0 },
         footprint: { width: 1, height: 1 },
       },
       functions,

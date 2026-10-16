@@ -170,13 +170,12 @@ export function fmtSummary(s: StateSummary): string {
   }
   lines.push('');
 
-  const headers = ['Player', 'Team', 'Role', 'Alive', 'Minerals', 'Energy', 'Executor'];
+  const headers = ['Player', 'Team', 'Role', 'Alive', 'Energy', 'Executor'];
   const rows = Object.values(s.players).map(p => [
     p.player_id,
     p.team_id ?? '-',
     p.role ?? '-',
     p.is_alive ? chalk.green('yes') : chalk.red('no'),
-    p.resources ? String(p.resources.minerals) : chalk.dim('-'),
     p.resources ? String(p.resources.energy) : chalk.dim('-'),
     p.executor?.unit_id ?? '-',
   ]);
@@ -249,7 +248,7 @@ export function fmtAgentBriefing(b: AgentBriefing): string {
     `  ${b.self.player_id} team=${b.self.team_id ?? '-'} role=${b.self.role ?? '-'} alive=${b.self.is_alive}`,
   );
   lines.push(
-    `  minerals=${b.self.resources?.minerals ?? 0} energy=${b.self.resources?.energy ?? 0}`,
+    `  energy=${b.self.resources?.energy ?? 0}（电网结余）`,
   );
   if (b.self.tech) {
     lines.push(

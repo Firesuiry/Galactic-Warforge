@@ -1,11 +1,12 @@
 import type { ItemInventory } from '@shared/types';
 
-interface MineralDefinition {
+/** 顶栏/总览里单独列出的原矿类物品。 */
+interface OreDefinition {
   id: string;
   label: string;
 }
 
-const mineralDefinitions: MineralDefinition[] = [
+const oreDefinitions: OreDefinition[] = [
   { id: 'iron_ore', label: '铁矿' },
   { id: 'copper_ore', label: '铜矿' },
   { id: 'stone_ore', label: '石矿' },
@@ -18,8 +19,8 @@ const mineralDefinitions: MineralDefinition[] = [
   { id: 'monopole_magnet', label: '单极磁石' },
 ];
 
-export function formatMineralInventory(inventory?: ItemInventory) {
-  const entries = mineralDefinitions
+export function formatInventorySummary(inventory?: ItemInventory) {
+  const entries = oreDefinitions
     .map((definition) => ({
       ...definition,
       quantity: inventory?.[definition.id] ?? 0,

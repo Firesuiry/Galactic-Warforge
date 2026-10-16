@@ -55,7 +55,6 @@ function createPlanetFixture(): PlanetView {
             energy_consume: 1,
             energy_generate: 0,
             capacity: 0,
-            maintenance_cost: { minerals: 0, energy: 0 },
             footprint: { width: 2, height: 1 },
           },
           state: 'running',

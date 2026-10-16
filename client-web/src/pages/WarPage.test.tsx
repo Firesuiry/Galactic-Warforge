@@ -48,7 +48,7 @@ describe('WarPage', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 880, energy: 460 },
+              resources: { energy: 460 },
               inventory: {
                 iron_ore: 40,
                 silicon_ore: 18,
@@ -460,7 +460,7 @@ describe('WarPage', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 880, energy: 460 },
+              resources: { energy: 460 },
               inventory: {
                 iron_ore: 40,
                 silicon_ore: 18,
@@ -773,7 +773,7 @@ describe('WarPage', () => {
           active_planet_id: 'planet-1-1',
           map_width: 128,
           map_height: 128,
-          players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 880, energy: 460 }, inventory: {} } },
+          players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 460 }, inventory: {} } },
         });
       }
       if (url.endsWith('/catalog')) {
@@ -1006,7 +1006,7 @@ describe('WarPage', () => {
           active_planet_id: 'planet-1-1',
           map_width: 128,
           map_height: 128,
-          players: { p1: { player_id: 'p1', is_alive: true, resources: { minerals: 880, energy: 460 }, inventory: {} } },
+          players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 460 }, inventory: {} } },
         });
       }
       if (url.endsWith('/catalog')) {
@@ -1148,7 +1148,7 @@ describe('WarPage', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 880, energy: 460 },
+              resources: { energy: 460 },
               inventory: { iron_ore: 40, silicon_ore: 18, stone_ore: 10 },
             },
           },

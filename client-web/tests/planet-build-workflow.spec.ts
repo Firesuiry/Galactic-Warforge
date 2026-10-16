@@ -217,6 +217,10 @@ function pickBuildTile(scene: ScenePayload): { x: number; y: number } {
 }
 
 test('建造栏点选建筑卡片后在地图点击放置，命令回执出现在工作台', async ({ page }) => {
+  // 并行规格共用同一个战争服：别的 spec（产线规划/量产单位等）可能在 pickBuildTile
+  // 之后抢建了同一块空地，落点冲突要重试；每轮重试含 10s 的文案等待，
+  // 默认 30s 会整例超时，这里给足。
+  test.setTimeout(120_000);
   const scene = await fetchAuthorized<ScenePayload>(
     `/world/planets/${PLANET_ID}/scene?x=0&y=0&width=48&height=48`,
   );

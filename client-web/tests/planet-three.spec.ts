@@ -275,7 +275,7 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
       state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
     }));
   });
-  await page.goto(`/planet/${planetId}`);
+  await page.goto(`/planet/${planetId}?e2e=1`);
   const canvas = page.locator('.planet-three__surface canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: '3D 星球', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -381,7 +381,9 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
 
   await page.getByRole('button', { name: '工作台', exact: true }).click();
   await page.getByRole('button', { name: '平面战术', exact: true }).click();
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible();
+  // 切到 2D 要等 Pixi 视图挂载；并行跑时别的规格的软件渲染会把这一步拖到 5s 以上
+  // （实测 ~5.5s），默认 5s 的断言超时会假红，这里给足余量。
+  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 30_000 });
   await expect(canvas).toHaveCount(0);
   await page.getByRole('button', { name: '3D 星球', exact: true }).click();
   await expect(canvas).toBeVisible({ timeout: 30_000 });
@@ -409,7 +411,7 @@ test('镜头聚焦未探索区：地表是测绘网格而不是一片空白，�
       state: { serverUrl: location.origin, playerId: 'p1', playerKey: 'key_player_1' }, version: 0,
     }));
   });
-  await page.goto(`/planet/${planetId}?quality=low`);
+  await page.goto(`/planet/${planetId}?quality=low&e2e=1`);
   const canvas = page.locator('.planet-three__surface canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: ThreeDebug }).__planetThree?.project));

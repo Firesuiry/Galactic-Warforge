@@ -17,7 +17,7 @@ function fixture() {
   model.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
   model.scale.multiplyScalar(size);
   const building = { id: 'sorter', type: 'sorter_mk1', position, owner_id: 'p1', runtime: { state: 'running' },
-    sorter: { speed: 1, range: 1, last_transfer: { tick: 50, sequence: 1, source_id: 'source', target_id: 'target',
+    sorter: { cycle_ticks: 6, range: 1, last_transfer: { tick: 50, sequence: 1, source_id: 'source', target_id: 'target',
       source_position: { x: 8, y: 4, z: 0 }, target_position: { x: 10, y: 4, z: 0 }, item_id: 'iron_ore', quantity: 1 } },
   } as Building;
   const arm = model.getObjectByName('sorter-arm')!;

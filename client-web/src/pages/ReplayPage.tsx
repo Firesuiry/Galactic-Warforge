@@ -23,7 +23,6 @@ const DIGEST_FIELDS: Array<{ key: keyof ReplayDigest; label: string }> = [
   { key: 'buildings', label: '建筑数' },
   { key: 'units', label: '单位数' },
   { key: 'resources', label: '资源点' },
-  { key: 'total_minerals', label: '总矿物' },
   { key: 'total_energy', label: '总能量' },
   { key: 'resource_remaining', label: '剩余储量' },
   { key: 'entity_counter', label: '实体计数' },

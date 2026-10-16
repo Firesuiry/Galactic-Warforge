@@ -37,7 +37,7 @@ const catalog: CatalogView = {
       category: 'production',
       subcategory: 'core',
       footprint: { width: 3, height: 3 },
-      build_cost: { minerals: 0, energy: 0 },
+      build_cost: { items: [] },
       buildable: true,
       can_produce_units: true,
       icon_key: 'command_center',

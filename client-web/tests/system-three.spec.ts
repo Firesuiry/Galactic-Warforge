@@ -15,7 +15,7 @@ test('真实恒星系 3D 星体点击、镜头、行星往返与战术调兵入�
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await login(page);
-  await page.goto('/system/sys-1');
+  await page.goto('/system/sys-1?e2e=1');
   const canvas = page.locator('.system-orbit__canvas canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('.system-orbit__body')).not.toHaveCount(0);
@@ -66,7 +66,7 @@ test('390px 恒星系显示与星体卡、战术入口可操作', async ({ page 
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await login(page); await page.goto('/system/sys-1');
+  await login(page); await page.goto('/system/sys-1?e2e=1');
   await expect(page.locator('.system-orbit__canvas canvas')).toBeVisible({ timeout: 30_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: '/tmp/siliconworld-system-mobile.png', fullPage: true });
@@ -97,7 +97,7 @@ test('FIXTURE 戴森响应新增与清空会同步节点、框架、球壳', asy
     }] : [] };
     await route.fulfill({ response, json: runtime });
   });
-  await login(page); await page.goto('/system/sys-1');
+  await login(page); await page.goto('/system/sys-1?e2e=1');
   await expect(page.locator('.system-orbit__canvas canvas')).toBeVisible({ timeout: 30_000 });
   const objects = () => page.evaluate(() => {
     const renderer = (window as unknown as { __systemThree?: { megastructure: { children: { name: string; count?: number }[] } } }).__systemThree;

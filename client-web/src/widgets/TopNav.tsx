@@ -9,7 +9,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { isPowerAlertType } from '@/features/notifications/event-toasts';
-import { formatMineralInventory, pickKeyItems, sortedInventory } from '@/features/mineral-summary';
+import { formatInventorySummary, pickKeyItems, sortedInventory } from '@/features/inventory-summary';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
@@ -118,7 +118,7 @@ export function TopNav() {
   }
 
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
-  const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
+  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
   const energyStats = statsQuery.data?.energy_stats;
   const powerGeneration = energyStats?.generation;
   const powerConsumption = energyStats?.consumption;
@@ -203,14 +203,7 @@ export function TopNav() {
           <Icon iconKey="gear" size={14} />
           <span>tick {summaryQuery.data?.tick ?? '-'}</span>
         </span>
-        <span
-          className="top-nav__chip"
-          title={`建设资金（矿石）· 背包库存：${mineralSummary}`}
-        >
-          <Icon iconKey="iron_ore" color="#c9a06a" size={16} />
-          <span className="top-nav__chip-value">{currentPlayer?.resources?.minerals ?? 0}</span>
-        </span>
-        <span className="top-nav__chip" title="能量">
+        <span className="top-nav__chip" title={`电网结余（只读展示）· 背包库存：${inventorySummary}`}>
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>

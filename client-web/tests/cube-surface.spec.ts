@@ -204,7 +204,7 @@ test('cube face seam: real GUI construction, movement, neighbor streaming and fi
   const executor=Object.values(initial.units ?? {}).find(u=>u.type==='executor'&&u.owner_id==='p2')!;
   expect(executor).toBeDefined();
   await page.addInitScript(()=>localStorage.setItem('siliconworld-client-web-session',JSON.stringify({state:{serverUrl:location.origin,playerId:'p2',playerKey:'key_player_2'},version:0})));
-  await page.goto(`/planet/${planet}`);
+  await page.goto(`/planet/${planet}?e2e=1`);
   await page.waitForFunction(()=>Boolean((window as any).__planetThree?.data?.planet?.surface_patches?.length));
   const beforeScale=await page.evaluate(id=>(window as any).__planetThree.moving.get(`unit:${id}`).group.scale.toArray(),executor.id);
   const selectionBar = page.getByTestId('planet-selection-bar');

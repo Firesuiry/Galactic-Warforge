@@ -73,7 +73,7 @@ describe('TopNav save', () => {
           players: {
             p1: {
               player_id: 'p1',
-              resources: { minerals: 1, energy: 1 },
+              resources: { energy: 1 },
               inventory: { iron_ore: 7, copper_ore: 2 },
               is_alive: true,
             },
@@ -104,9 +104,9 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
-    // 顶栏矿产位显示建设资金 resources.minerals，背包矿石库存降级为 title 提示
-    const mineralChip = await screen.findByTitle('建设资金（矿石）· 背包库存：铁矿 7 · 铜矿 2');
-    expect(mineralChip).toHaveTextContent('1');
+    // 第 16 轮契约：资金维度已删，能量位改标「电网结余」（只读展示），背包库存走 title 提示。
+    const energyChip = await screen.findByTitle('电网结余（只读展示）· 背包库存：铁矿 7 · 铜矿 2');
+    expect(energyChip).toHaveTextContent('1');
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
     // 保存成功提示收进设置弹层
@@ -130,7 +130,7 @@ describe('TopNav save', () => {
           players: {
             p1: {
               player_id: 'p1',
-              resources: { minerals: 1, energy: 1 },
+              resources: { energy: 1 },
               inventory: { silicon_ore: 5 },
               is_alive: true,
             },
@@ -154,15 +154,15 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
-    const mineralChip = await screen.findByTitle('建设资金（矿石）· 背包库存：硅矿 5');
-    expect(mineralChip).toHaveTextContent('1');
+    const energyChip = await screen.findByTitle('电网结余（只读展示）· 背包库存：硅矿 5');
+    expect(energyChip).toHaveTextContent('1');
     await user.click(await screen.findByRole('button', { name: '保存' }));
 
     await user.click(await screen.findByRole('button', { name: '设置' }));
     expect(await screen.findByText('disk full')).toBeInTheDocument();
   });
 
-  it('背包无矿石时矿产位仍显示 minerals 余额', async () => {
+  it('背包无矿石时能量位仍显示电网结余', async () => {
     const alertsStub = stubAlerts();
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
       const url = new URL(String(input));
@@ -177,7 +177,7 @@ describe('TopNav save', () => {
           players: {
             p1: {
               player_id: 'p1',
-              resources: { minerals: 240, energy: 140 },
+              resources: { energy: 140 },
               inventory: {},
               is_alive: true,
             },
@@ -195,8 +195,8 @@ describe('TopNav save', () => {
     }));
 
     renderTopNav();
-    const chip = await screen.findByTitle('建设资金（矿石）· 背包库存：暂无矿石库存');
-    await waitFor(() => expect(chip).toHaveTextContent('240'));
+    const chip = await screen.findByTitle('电网结余（只读展示）· 背包库存：暂无矿石库存');
+    await waitFor(() => expect(chip).toHaveTextContent('140'));
   });
 
   it('研究站（空 matrix_lab）的吞吐类告警不计入顶栏缺电角标', async () => {
@@ -239,7 +239,7 @@ describe('TopNav save', () => {
         return Promise.resolve(jsonResponse({
           tick: 12,
           active_planet_id: 'planet-1-1',
-          players: { p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true } },
+          players: { p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true } },
         }));
       }
       if (url.pathname === '/state/stats') {
@@ -273,7 +273,7 @@ describe('TopNav save', () => {
         return Promise.resolve(jsonResponse({
           tick: 12,
           active_planet_id: 'planet-1-1',
-          players: { p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true } },
+          players: { p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true } },
         }));
       }
       if (url.pathname === '/state/stats') {
@@ -324,7 +324,7 @@ describe('TopNav save', () => {
         return Promise.resolve(jsonResponse({
           tick: 12,
           active_planet_id: 'planet-1-1',
-          players: { p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true } },
+          players: { p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true } },
         }));
       }
       if (url.pathname === '/state/stats') {
@@ -379,7 +379,7 @@ describe('TopNav save', () => {
         return Promise.resolve(jsonResponse({
           tick: 12,
           active_planet_id: 'planet-1-1',
-          players: { p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true } },
+          players: { p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true } },
         }));
       }
       if (url.pathname === '/state/stats') {

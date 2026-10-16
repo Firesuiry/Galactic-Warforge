@@ -6,10 +6,9 @@ export interface NewGameBootstrapItem {
   quantity: number;
 }
 
+/** 开局物资包：只发物品背包（第 16 轮契约去掉 minerals/energy 资金维度）。 */
 export interface NewGameBootstrap {
-  minerals?: number;
-  energy?: number;
-  inventory?: NewGameBootstrapItem[];
+  items?: NewGameBootstrapItem[];
   completed_techs?: string[];
 }
 

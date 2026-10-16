@@ -12,6 +12,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { ghostArrowGeometry, ghostArrowTransform } from './three/ghost-arrow';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -20,7 +21,7 @@ import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { LogisticsDirectionMarks, directionArrowTexture, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
-import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSorterBuilding, type CardinalDirection } from './logistics-direction';
+import { logisticsArrows, stepTile, buildGhostDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
@@ -70,6 +71,10 @@ function refId(value: object | undefined | null) {
   return id;
 }
 const FRONT = new THREE.Vector3(0, 0, 1);
+/** 分拣器 ghost 的取货端（背面）箭头颜色：与放货端（琥珀）区分。 */
+const GHOST_TAKE_COLOR = '#6ee7f7';
+/** 建造 ghost 的默认箭头色（放货端 / 传送带流向）。 */
+const GHOST_ARROW_COLOR = '#ffd76a';
 /** Presentation only: all entities and terrain are sourced from player-visible server views. */
 export class PlanetThreeScene {
   private readonly scene = new THREE.Scene();
@@ -930,12 +935,23 @@ export class PlanetThreeScene {
     const mode = this.interaction?.interactionMode;
     const hovered = this.interaction?.hoveredTile;
     if (!this.data || !this.interaction || !mode || mode.kind !== 'build' || !hovered) return;
+    // 分拣器：取（背面）→ 放（正面）两端箭头，方向由 rotation 决定（第 16 轮契约）。
+    const sorterRoutes = sorterGhostDirections(mode.buildingType, mode.rotation);
     const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
-    if (!direction) return;
+    if (!direction && !sorterRoutes) return;
     // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器 ghost 抬高一点压在顶面）。
     const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0 ? this.beltDragPath : [hovered];
     const elevated = isSorterBuilding({ type: mode.buildingType });
-    for (const tile of tiles) this.ghostArrow(tile, direction, elevated);
+    if (sorterRoutes) {
+      // 取货端（背面）与放货端（正面）各缩到 0.62 并沿各自方向推离格心 0.26 格，
+      // 两支箭头分开摆在前后半格——都压格心会糊成一个「叉」。
+      for (const tile of tiles) {
+        this.ghostArrow(tile, sorterRoutes.from, elevated, GHOST_TAKE_COLOR, .62, .26);
+        this.ghostArrow(tile, sorterRoutes.to, elevated, GHOST_ARROW_COLOR, .62, .26);
+      }
+      return;
+    }
+    for (const tile of tiles) this.ghostArrow(tile, direction!, elevated);
   }
 
   /**
@@ -1068,20 +1084,32 @@ export class PlanetThreeScene {
     return material;
   }
 
-  /** 一个朝 direction 的琥珀箭头（贴格中心，指示物流输出侧）。 */
-  private ghostArrow(tile: TilePoint, direction: CardinalDirection, elevated = false) {    const size = this.tileScale();
-    const faceSize = this.data!.planet.surface.face_size;
-    const { east, south } = tileFrame(tile, faceSize);
-    const normal = this.normal(tile.x, tile.y);
-    const vector = directionVector(direction);
-    const forward = east.clone().multiplyScalar(vector.x).addScaledVector(south, vector.y).normalize();
+  /**
+   * 一个朝 direction 的箭头（贴格中心，指示物流输出侧）；分拣器取货端用另一色区分。
+   * `scale` 缩小整支箭头、`along` 沿 direction 把箭头推离格心——分拣器用这两个参数把
+   * 「背面取货 / 正面放货」两支箭头分开摆在格子的前后半格，叠在格心只会糊成一个叉。
+   * 平铺姿态与四向可见性见 `three/ghost-arrow`（PlaneGeometry 不转就会立起来侧对相机）。
+   */
+  private ghostArrow(
+    tile: TilePoint,
+    direction: CardinalDirection,
+    elevated = false,
+    color = '#ffd76a',
+    scale = 1,
+    along = 0,
+  ) {
+    const size = this.tileScale();
     const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(size * .82, size * .82),
-      new THREE.MeshBasicMaterial({ map: directionArrowTexture(), color: '#ffd76a', transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+      ghostArrowGeometry(size, scale),
+      new THREE.MeshBasicMaterial({ map: directionArrowTexture(), color, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
     );
-    mesh.position.copy(normal).multiplyScalar(RADIUS + size * (elevated ? .18 : .1));
-    // 平面局部 +X = 流向、+Z = 格法线；纹理里的 chevron 指向 +U（局部 +X）。
-    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, normal, new THREE.Vector3().crossVectors(forward, normal).normalize()));
+    const { position, quaternion } = ghostArrowTransform(tile, direction, this.data!.planet.surface.face_size, RADIUS, {
+      size,
+      lift: elevated ? .18 : .1,
+      along,
+    });
+    mesh.position.copy(position);
+    mesh.quaternion.copy(quaternion);
     mesh.renderOrder = 20;
     this.ghostMarks.add(mesh);
   }

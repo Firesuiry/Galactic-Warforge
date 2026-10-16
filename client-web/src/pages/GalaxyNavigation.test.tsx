@@ -55,7 +55,7 @@ function createCatalogPayload() {
         category: 'production',
         subcategory: 'mining',
         footprint: { width: 1, height: 1 },
-        build_cost: { minerals: 12 },
+        build_cost: { items: [] },
         buildable: true,
         icon_key: 'mining_machine',
         color: '#d8a23a',
@@ -175,7 +175,7 @@ describe('Galaxy navigation', () => {
             p1: {
               player_id: 'p1',
               is_alive: true,
-              resources: { minerals: 120, energy: 88 },
+              resources: { energy: 88 },
             },
           },
         }));

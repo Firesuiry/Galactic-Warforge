@@ -41,6 +41,10 @@ test('行星地图主视图截图基线', async ({ page }) => {
   // freeze 模式冻结氛围动效（水面流光/岩浆呼吸）与脉冲，保证截图确定性
   await page.goto('/planet/planet-1-1?view=2d&freeze=1');
   await expect(page.getByRole('heading', { name: 'Gaia' })).toBeVisible();
+  // 调试入口默认隐藏（085f063：debugMode 关闭时工具条不渲染调试图标与面板）：
+  // 基线里调试图标在、面板是收起的，所以先按 Ctrl+Shift+D 打开调试模式（此时面板同时展开），
+  // 再点图标把面板收起来。
+  await page.keyboard.press('Control+Shift+D');
   const expandDebugButton = page.getByRole('button', { name: '展开调试' });
   if (!(await expandDebugButton.isVisible())) {
     await page.getByRole('button', { name: '收起调试' }).click();

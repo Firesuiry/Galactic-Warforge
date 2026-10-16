@@ -93,7 +93,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -178,7 +178,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -279,7 +279,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -373,7 +373,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -442,7 +442,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -585,7 +585,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -676,7 +676,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -812,7 +812,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -921,7 +921,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1063,7 +1063,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1188,7 +1188,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1336,7 +1336,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1373,7 +1373,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1514,7 +1514,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-a',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }
@@ -1632,7 +1632,7 @@ describe('AgentsPage', () => {
           tick: 42,
           active_planet_id: 'planet-1-1',
           players: {
-            p1: { player_id: 'p1', resources: { minerals: 1, energy: 1 }, is_alive: true },
+            p1: { player_id: 'p1', resources: { energy: 1 }, is_alive: true },
           },
         }));
       }

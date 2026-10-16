@@ -28,8 +28,11 @@ export function SystemOrbitView({ systemId }: { systemId: string }) {
       });
     } catch { setError('无法启动 3D 星系画面，请切换平面战术视图。'); return; }
     scene.current = renderer; setReady(true);
-    if (import.meta.env.DEV) (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree = renderer;
-    return () => { renderer.destroy(); scene.current=null; if(import.meta.env.DEV) delete (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree; };
+    // Projection helper for browser tests (dev, or production build opened with ?e2e)——与
+    // PlanetMapThree 的 __planetThree 同口径：生产构建下测试靠 ?e2e=1 拿到调试句柄。
+    const exposeTestHook = import.meta.env.DEV || new URLSearchParams(window.location.search).has('e2e');
+    if (exposeTestHook) (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree = renderer;
+    return () => { renderer.destroy(); scene.current=null; if (exposeTestHook) delete (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree; };
   }, [Boolean(query.data?.discovered)]);
   useEffect(() => {
     if (ready && query.data) scene.current?.setData({system:query.data,runtime:runtime.data});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickKeyItems, sortedInventory } from '@/features/mineral-summary';
+import { pickKeyItems, sortedInventory } from '@/features/inventory-summary';
 
 describe('顶栏关键库存', () => {
   it('按优先级取持有量 > 0 的前 4 项', () => {

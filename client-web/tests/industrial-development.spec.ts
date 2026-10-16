@@ -72,7 +72,7 @@ test('真实产线配方规划可建造带配方的工厂，发展路线可进�
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await login(page);
-  await page.goto(`/planet/${planetId}?quality=low`);
+  await page.goto(`/planet/${planetId}?quality=low&e2e=1`);
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: DebugScene }).__planetThree?.getQuality));
   // §3.2：行星胶囊默认收成一行，「生产规划」在展开态里；画质下拉在左下视角设置弹层里。
@@ -157,7 +157,7 @@ test('390px 生产与发展入口可操作，配方检索和画质设置不溢�
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await login(page);
-  await page.goto(`/planet/${planetId}?quality=low`);
+  await page.goto(`/planet/${planetId}?quality=low&e2e=1`);
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
   await openProductionPlanner(page);
   const planner = page.getByRole('region', { name: '生产规划' });
