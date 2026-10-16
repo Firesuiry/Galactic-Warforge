@@ -278,6 +278,23 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(isPowerAlertToast(mapped!.toast)).toBe(false);
   });
 
+  it('production_alert：belt_blocked 带位置/件数/时长（中文，不裸显枚举 id）', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a-belt',
+        building_id: 'b-9',
+        building_type: 'conveyor_belt_mk1',
+        alert_type: 'belt_blocked',
+        message: '建筑 b-9：传送带被堵，物品运不出去了',
+        details: { position: { x: 12, y: 7, z: 0 }, queued_items: 5, blocked_ticks: 300 },
+      },
+    }));
+    expect(mapped?.toast.title).toBe('传送带 Mk.I：传送带堵塞');
+    expect(mapped?.toast.body).toBe('传送带 Mk.I：(12, 7)：5 件货 30 秒没动');
+    expect(mapped?.toast.kind).toBe('warning');
+    expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
+  });
+
   it('rocket_launched → info（不配音）', () => {
     const mapped = toastFromGameEvent(gameEvent('rocket_launched', { count: 2 }));
     expect(mapped?.toast.kind).toBe('info');

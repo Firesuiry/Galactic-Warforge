@@ -2096,6 +2096,21 @@
   .planet-power-alert-marker { animation: none; }
 }
 
+/* 传送带堵塞标记层（试玩 1016 B1/U7）：belt_blocked 告警指向带格，画红色短杠。
+   与 U7 死端短杠同色同位置口径（短杠垂直于流向），指针穿透。 */
+.planet-belt-blocked-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 7; }
+.planet-belt-blocked-marker {
+  position: absolute;
+  height: 3px;
+  border-radius: 2px;
+  background: #ff5757;
+  box-shadow: 0 0 4px rgba(255, 87, 87, 0.85);
+  animation: planet-power-alert-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .planet-belt-blocked-marker { animation: none; }
+}
+
 .planet-theater-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
 .planet-theater-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .planet-theater-zone--alerted { animation: planet-theater-alert 1s ease-in-out infinite; }

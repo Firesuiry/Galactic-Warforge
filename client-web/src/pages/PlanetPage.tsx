@@ -893,6 +893,7 @@ export function PlanetPage() {
         <Suspense fallback={<div className="panel">正在加载 3D 行星...</div>}>
         {isThree ? <PlanetMapThree
           key={planet.planet_id}
+          alerts={recentAlerts}
           catalog={catalog}
           inventory={summary?.players?.[session.playerId]?.inventory}
           darkFogHostile={darkFogHostile}
@@ -913,6 +914,7 @@ export function PlanetPage() {
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
           layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
         /> : <PlanetMapPixi
+          alerts={recentAlerts}
           catalog={catalog}
           inventory={summary?.players?.[session.playerId]?.inventory}
           darkFogHostile={darkFogHostile}

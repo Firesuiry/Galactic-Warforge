@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Application } from 'pixi.js';
 import { useShallow } from 'zustand/react/shallow';
 
-import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
+import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 
 import { PixiStage } from '@/engine/PixiStage';
 import { sfx } from '@/engine/audio';
@@ -32,6 +32,7 @@ import {
 } from '@/features/planet-map/squad-commands';
 import { PlanetLegionLayer } from '@/features/planet-map/PlanetLegionLayer';
 import { legionAliveMemberIds } from '@/features/planet-map/legion-model';
+import { PlanetBeltBlockedLayer } from '@/features/planet-map/PlanetBeltBlockedLayer';
 import { PlanetPowerAlertLayer } from '@/features/planet-map/PlanetPowerAlertLayer';
 import { PlanetSquadLayer } from '@/features/planet-map/PlanetSquadLayer';
 import { PlanetTheaterLayer } from '@/features/planet-map/PlanetTheaterLayer';
@@ -85,6 +86,8 @@ interface PlanetMapPixiProps {
   squads?: CombatSquad[];
   /** C4：战区列表（zones 圆圈覆盖层 + 告警态）。 */
   theaters?: WarTheaterView[];
+  /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，用于地图红色短杠（试玩 1016 U7）。 */
+  alerts?: AlertEntry[];
   onCanvasReady?: (capture: PlanetMapCapture | null) => void;
   /** build/move/attack/unit_order 模式下的地图点击（inspect 模式不会触发）。 */
   onInteractTile?: (tile: TilePoint) => void;
@@ -182,7 +185,7 @@ function areCameraPatchesEqual(left: CameraPatch, right: CameraPatch) {
  * 交互命中仍走 pointToTile 的 tile 换算；语义实体层（PlanetEntityLayer）以 ghost 形式保留
  * （opacity:0 + pointer-events:none，DevTools/agent 可定位，视觉由 Pixi 承担）。
  */
-export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, planet, runtime, squads, theaters, onCanvasReady, onInteractTile, onContextTile, onDefineZone, darkFogHostile = false }: PlanetMapPixiProps) {
+export function PlanetMapPixi({ alerts, catalog, inventory, fog, networks, overview, planet, runtime, squads, theaters, onCanvasReady, onInteractTile, onContextTile, onDefineZone, darkFogHostile = false }: PlanetMapPixiProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const entityLayerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<PlanetScene | null>(null);
@@ -1023,6 +1026,17 @@ export function PlanetMapPixi({ catalog, inventory, fog, networks, overview, pla
             offsetY={camera.offsetY}
             planet={planet}
             playerId={session.playerId}
+            tileSize={tileSize}
+          />
+        )}
+        {/* 传送带堵塞标记（试玩 1016 B1/U7）：belt_blocked 告警指向带格，
+            在该格画红色短杠，和「带尾对着空地」的死端提示同一视觉语言。 */}
+        {overviewMode ? null : (
+          <PlanetBeltBlockedLayer
+            alerts={alerts}
+            buildings={visibleEntities.buildings}
+            offsetX={camera.offsetX}
+            offsetY={camera.offsetY}
             tileSize={tileSize}
           />
         )}

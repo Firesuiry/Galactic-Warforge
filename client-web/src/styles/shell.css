@@ -877,3 +877,10 @@
   font-variant-numeric: tabular-nums;
   font-size: 0.7rem;
 }
+
+/* 传送带堵塞条目的细节（位置：件数 时长）：比建筑名更弱一档，不抢标签的注意力。 */
+.alert-bar__row-detail {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
