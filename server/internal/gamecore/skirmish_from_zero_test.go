@@ -35,6 +35,9 @@ func TestSkirmishFromZeroFullMatch(t *testing.T) {
 	}
 	for _, seed := range []string{"skirmish-seed-001", "pt1011-0e2bz1"} {
 		t.Run(seed, func(t *testing.T) {
+			// 每个 seed 建自己的 GameCore/WorldState（见 newSkirmishCoreForSeed），
+			// 脚本状态都在 zeroOpening 里，不碰包级可变状态，可以并行跑。
+			t.Parallel()
 			runFromZeroMatch(t, seed)
 		})
 	}
