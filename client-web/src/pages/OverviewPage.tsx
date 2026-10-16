@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
 import { resolveEarlyGameNextAction } from '@/features/early-game-next';
-import { formatMineralInventory } from '@/features/mineral-summary';
+import { formatInventorySummary } from '@/features/inventory-summary';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { MiniGalaxyMap } from '@/features/starmap/MiniGalaxyMap';
 import { planetColorOf } from '@/features/starmap/model';
@@ -262,7 +262,7 @@ export function OverviewPage() {
 
   const currentPlayer = summary.players[session.playerId];
   const resources = currentPlayer?.resources;
-  const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
+  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
   const inventoryTotal = Object.values(currentPlayer?.inventory ?? {}).reduce((sum, quantity) => sum + quantity, 0);
   const currentResearch = currentPlayer?.tech?.current_research;
   const researchPercent = currentResearch && currentResearch.total_cost > 0
@@ -440,7 +440,7 @@ export function OverviewPage() {
                 </div>
                 <strong className="command-resource__value">{formatNumber(inventoryTotal)}</strong>
                 <span className="command-resource__meta">产出 +{stats.production_stats.total_output}/t</span>
-                <span className="command-resource__meta command-resource__meta--dim">{mineralSummary}</span>
+                <span className="command-resource__meta command-resource__meta--dim">{inventorySummary}</span>
               </article>
               <article className="command-resource">
                 <div className="command-resource__head">

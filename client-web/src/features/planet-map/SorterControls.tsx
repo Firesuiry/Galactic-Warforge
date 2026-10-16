@@ -6,7 +6,7 @@
  * （`configure_sorter` 服务端也不再接受方向）。
  */
 import { useEffect, useState } from 'react';
-import type { Building, CatalogView, SorterConfig } from '@shared/types';
+import type { Building, CatalogView, SorterFilterConfig } from '@shared/types';
 import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
@@ -14,7 +14,7 @@ import { DIRECTION_NAMES, logisticsArrows } from './logistics-direction';
 import { getItemDisplayName } from './model';
 
 /** 只取过滤字段；方向由 rotation 决定，不进载荷。 */
-function readConfig(b: Building): SorterConfig {
+function readConfig(b: Building): SorterFilterConfig {
   return {
     filter_mode: b.sorter?.filter?.mode ?? 'allow',
     filter_items: [...(b.sorter?.filter?.items ?? [])],

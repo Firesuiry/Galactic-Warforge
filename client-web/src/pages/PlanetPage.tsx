@@ -49,7 +49,7 @@ import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
-import { formatMineralInventory } from "@/features/mineral-summary";
+import { formatInventorySummary } from "@/features/inventory-summary";
 import {
   extractAlertFromEvent,
   parseEnabledLayers,
@@ -745,7 +745,7 @@ export function PlanetPage() {
   const stats = statsQuery.data;
   const currentPlayer = summary?.players?.[session.playerId];
   const liveTick = Math.max(summary?.tick ?? 0, planet.tick);
-  const mineralSummary = formatMineralInventory(currentPlayer?.inventory);
+  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
   const currentResearchName = getTechDisplayName(
     catalog,
     currentPlayer?.tech?.current_research?.tech_id ?? "",
@@ -995,7 +995,7 @@ export function PlanetPage() {
               <div className="planet-title-chip__chips">
                 <div
                   className="hero-chip"
-                  title={`电网结余（只读展示）· 背包库存：${mineralSummary}`}
+                  title={`电网结余（只读展示）· 背包库存：${inventorySummary}`}
                 >
                   <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
                   <span>电网结余 {currentPlayer?.resources?.energy ?? 0}</span>
