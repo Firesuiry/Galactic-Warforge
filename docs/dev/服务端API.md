@@ -268,6 +268,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - **占地（细分网格）**：`position` 是占地原点（左上 cell）。建筑按 `buildings.yaml` 的 `footprint {width, height}` 真实占 1×1 / 2×2 / 3×3 / 5×5 个 cell，旋转 90/270 交换宽高；占地内每一格都必须在界内、可建造（`foundation` 例外，它自己铺地形）且空闲，否则 `INVALID_TARGET`（「占地地块 (x,y) 不可建造」）或 `POSITION_OCCUPIED`。`TileBuilding` 与 `Grid[].BuildingID` 为占地每一格登记，拆除时整块释放；垂直叠层仍按原点 `position.z` 递增。
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
   - **采集建筑只采一种矿**（DSP 口径，试玩 1016 报告 B2）：下单时按覆盖框里**数量最多的矿种**定死这一台采什么（平票取物品 ID 较小者，结果确定），写进施工任务的 `mining_item`，落成时写进建筑的 `mining_item`（`build` 回执也会写明「施工任务已排队（位置 x,y），将开采「铁矿石」」）。覆盖框里混了别的矿种时那些矿脉一格都不采——不会出现「铜矿先攒满输出缓冲、把整条产线堵死」。校验仍只要求覆盖框里有允许的矿（`INVALID_TARGET`：「<建筑> 占地及外圈没有可开采的资源节点」/「<建筑> 无法开采资源 <kind>」）。
+  - 服务端没有独立的「建造预览」接口：客户端 hover 用的「有矿」判定是在本地按 `catalog.buildings[].requires_resource_node` + `coverage_radius` 与 `GET .../scene` 的 `resources[]` 算的。要在 hover 里显示「将开采哪一种矿」，本地按同一条规则数覆盖框（占地 + `max(1, coverage_radius)` 圈）里各矿种的格数、取最多者（平票取物品 ID 字典序较小者）即可与服务端一致；已建成建筑的 `mining_item` 直接读建筑字段。
   - 围堵校验（三层，全部 `INVALID_TARGET`）：
     1. **四邻全堵死**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。单位自身站在建造格上的情况由既有的占位校验处理。
     2. **口袋（增量）**：若建造点 48 cell 内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
