@@ -221,6 +221,35 @@ func coveredResourceNodeIDs(ws *model.WorldState, building *model.Building) []st
 	return ids
 }
 
+// minedResourceNodeIDs 是采集建筑**实际开采**的矿脉：覆盖框里所有同种矿脉。
+// 一台采集建筑只采一种矿（building.MiningItem，DSP 口径，试玩 1016 报告 B2）：
+// 覆盖框里混了别的矿种时，那些矿脉一格都不采，产出永远是单一矿种——不会出现
+// 「铜矿先攒满输出缓冲、把整条产线堵死」的局面（报告 B1 的诱因）。
+func minedResourceNodeIDs(ws *model.WorldState, building *model.Building) []string {
+	covered := coveredResourceNodeIDs(ws, building)
+	if len(covered) == 0 {
+		return nil
+	}
+	itemID := building.MiningItem
+	if itemID == "" {
+		// 老存档点/测试夹具里没有 mining_item 的建筑：按建造时的同一套规则补算
+		// （就地推导，不写回），保证行为与新建建筑一致。
+		itemID = model.MiningItemAt(ws, building.Type, building.Rotation, building.Position)
+	}
+	if itemID == "" {
+		return nil
+	}
+	out := make([]string, 0, len(covered))
+	for _, nodeID := range covered {
+		node := ws.Resources[nodeID]
+		if node == nil || node.Kind != itemID {
+			continue
+		}
+		out = append(out, nodeID)
+	}
+	return out
+}
+
 // miningExtraction 是「一台采集建筑本 tick 从某个矿脉要抽多少」的纯计划项：
 // 只描述意图，不改动世界（见 planMiningExtraction / commitMiningExtraction）。
 type miningExtraction struct {
@@ -240,7 +269,7 @@ func planMiningExtraction(ws *model.WorldState, player *model.PlayerState, build
 	level := veinsUtilizationLevel(player)
 	perVeinYield := miningYieldPerVein(yieldPerTick, level)
 	var plan []miningExtraction
-	for _, nodeID := range coveredResourceNodeIDs(ws, building) {
+	for _, nodeID := range minedResourceNodeIDs(ws, building) {
 		node := ws.Resources[nodeID]
 		if node == nil {
 			continue
@@ -416,10 +445,16 @@ func syncCollectorResourceKind(ws *model.WorldState, building *model.Building) {
 	if ws == nil || building == nil || building.Runtime.Functions.Collect == nil {
 		return
 	}
+	if building.MiningItem == "" {
+		building.MiningItem = model.MiningItemAt(ws, building.Type, building.Rotation, building.Position)
+	}
 	building.Runtime.Functions.Collect.ResourceKind = collectorResourceKind(ws, building)
 }
 
 func collectorOutputItemID(ws *model.WorldState, building *model.Building) string {
+	if building != nil && building.MiningItem != "" {
+		return resourceKindToItemID(building.MiningItem)
+	}
 	node := resourceNodeForBuilding(ws, building)
 	if node == nil {
 		return ""
@@ -445,11 +480,9 @@ func collectorResourceKind(ws *model.WorldState, building *model.Building) strin
 	return node.Kind
 }
 
-// resourceNodeForBuilding resolves the resource kind a collector reports. The
-// building covers its whole footprint plus rings, so the anchor cell is only
-// one candidate: the first covered node (row-major, matching
-// model.coveredResourceNode) wins, which keeps the reported kind deterministic
-// and identical to the pre-build validation.
+// resourceNodeForBuilding resolves the resource kind a collector reports：优先取
+// 建筑定下的唯一开采矿种（building.MiningItem）对应的矿脉——它才是真正会产出
+// 的那种矿；没有 mining_item（老档/夹具）时才退回「覆盖框里第一个矿脉」。
 func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *model.ResourceNodeState {
 	if ws == nil || building == nil {
 		return nil
@@ -458,8 +491,16 @@ func resourceNodeForBuilding(ws *model.WorldState, building *model.Building) *mo
 		return nil
 	}
 	for _, cell := range model.CollectorCoverageCells(ws, building.Type, building.Rotation, building.Position) {
-		if nodeID := ws.Grid[cell.Y][cell.X].ResourceNodeID; nodeID != "" {
-			return ws.Resources[nodeID]
+		nodeID := ws.Grid[cell.Y][cell.X].ResourceNodeID
+		if nodeID == "" {
+			continue
+		}
+		node := ws.Resources[nodeID]
+		if node == nil {
+			continue
+		}
+		if building.MiningItem == "" || node.Kind == building.MiningItem {
+			return node
 		}
 	}
 	return nil

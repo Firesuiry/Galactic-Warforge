@@ -375,6 +375,8 @@ type planetInspectResponse struct {
 	EntityID   string                   `json:"entity_id,omitempty"`
 	Title      string                   `json:"title,omitempty"`
 	Building   *model.Building          `json:"building,omitempty"`
+	// MiningItem：采集建筑唯一开采的矿种（目录物品 ID，见 model.MiningItemAt）。
+	MiningItem string                   `json:"mining_item,omitempty"`
 	Unit       *model.Unit              `json:"unit,omitempty"`
 	Resource   *model.ResourceNodeState `json:"resource,omitempty"`
 }
@@ -418,6 +420,7 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 		EntityID:   entityID,
 		Title:      view.Title,
 		Building:   view.Building,
+		MiningItem: view.MiningItem,
 		Unit:       view.Unit,
 		Resource:   view.Resource,
 	})

@@ -175,6 +175,53 @@ func coveredResourceNode(ws *WorldState, btype BuildingType, rotation PlanRotati
 	return nil
 }
 
+// MiningItemAt 返回采集建筑落在 (btype, rotation, pos) 时会采的那种矿
+// （目录物品 ID）：覆盖框里数量最多的矿种，同数量取物品 ID 较小者。
+// 采矿机只采一种矿（DSP 口径，试玩 1016 报告 B2）；覆盖框里没有矿时返回 ""。
+//
+// 它同时是「建造前的预览口径」与「建成后写进建筑的 mining_item」：同一套
+// 覆盖格（CollectorCoverageCells）+ 同一套平票规则，所以 hover 提示与实际
+// 产出必然一致。命令校验（ValidateCollectorSite）仍只看「有没有允许的矿」。
+func MiningItemAt(ws *WorldState, btype BuildingType, rotation PlanRotation, pos Position) string {
+	if ws == nil {
+		return ""
+	}
+	collect := BuildingProfileFor(btype, 1).Runtime.Functions.Collect
+	allowed := map[string]struct{}{}
+	if collect != nil {
+		for _, kind := range collect.AllowedResources {
+			allowed[kind] = struct{}{}
+		}
+	}
+	counts := map[string]int{}
+	for _, cell := range CollectorCoverageCells(ws, btype, rotation, pos) {
+		if !ws.InBounds(cell.X, cell.Y) {
+			continue
+		}
+		nodeID := ws.Grid[cell.Y][cell.X].ResourceNodeID
+		if nodeID == "" {
+			continue
+		}
+		node := ws.Resources[nodeID]
+		if node == nil || node.Depleted {
+			continue
+		}
+		if len(allowed) > 0 {
+			if _, ok := allowed[node.Kind]; !ok {
+				continue
+			}
+		}
+		counts[node.Kind]++
+	}
+	best, bestCount := "", 0
+	for kind, count := range counts {
+		if count > bestCount || (count == bestCount && (best == "" || kind < best)) {
+			best, bestCount = kind, count
+		}
+	}
+	return best
+}
+
 // CollectorCoverageCells lists the cells a collector of btype covers at pos:
 // every footprint cell plus `max(1, coverage_radius)` surrounding rings, in a
 // stable (row-major) order so selection is deterministic.

@@ -119,7 +119,9 @@ type ConstructionTaskView struct {
 	BlueprintParams   model.BlueprintParams   `json:"blueprint_params,omitempty"`
 	ConveyorDirection model.ConveyorDirection `json:"conveyor_direction,omitempty"`
 	RecipeID          string                  `json:"recipe_id,omitempty"`
-	Cost              model.BuildCost         `json:"cost,omitempty"`
+	// MiningItem：采集类施工任务唯一开采的矿种（目录物品 ID，排产时定下）。
+	MiningItem string          `json:"mining_item,omitempty"`
+	Cost       model.BuildCost `json:"cost,omitempty"`
 	State             model.ConstructionState `json:"state"`
 	WaitReason        string                  `json:"wait_reason,omitempty"`
 	EnqueueTick       int64                   `json:"enqueue_tick"`
@@ -520,6 +522,7 @@ func collectConstructionTasks(ws *model.WorldState, playerID string) []Construct
 			BlueprintParams:   task.BlueprintParams,
 			ConveyorDirection: task.ConveyorDirection,
 			RecipeID:          task.RecipeID,
+			MiningItem:        task.MiningItem,
 			Cost: model.BuildCost{
 				Items: costItems,
 			},

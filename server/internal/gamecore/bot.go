@@ -1385,6 +1385,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		}
 		return candidates[i].id < candidates[j].id
 	})
+	var fallback *model.Position
 	for _, cand := range candidates {
 		node := cand.node
 		homeDist := cand.dist
@@ -1434,10 +1435,25 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
 			continue
 		}
-		pos := origin
+		// 矿机只采一种矿（DSP 口径，试玩 1016 报告 B2）：落点覆盖框里矿种最多的
+		// 那种才是实际产出。落点覆盖框里最多的不是候选矿种时（混合矿簇），先记下
+		// 这个兜底落点、继续找真正能采到目标矿的位置；全都找不到才用它，保证
+		// bot 不会因为「找不到纯矿落点」而永远建不出矿机。
+		if model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) == node.Kind {
+			return issue(model.Command{
+				Type:    model.CmdBuild,
+				Target:  model.CommandTarget{Layer: "planet", Position: &origin},
+				Payload: map[string]any{"building_type": string(model.BuildingTypeMiningMachine)},
+			})
+		}
+		if fallback == nil {
+			fallback = &origin
+		}
+	}
+	if fallback != nil {
 		return issue(model.Command{
 			Type:    model.CmdBuild,
-			Target:  model.CommandTarget{Layer: "planet", Position: &pos},
+			Target:  model.CommandTarget{Layer: "planet", Position: fallback},
 			Payload: map[string]any{"building_type": string(model.BuildingTypeMiningMachine)},
 		})
 	}

@@ -260,6 +260,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		Position:          *pos,
 		ConveyorDirection: conveyorDir,
 		RecipeID:          recipeID,
+		MiningItem:        model.MiningItemAt(ws, btype, rotation, *pos),
 		Cost:              def.BuildCost,
 		State:             model.ConstructionPending,
 		EnqueueTick:       ws.Tick,
@@ -289,6 +290,11 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	// 并发上限（执行体 concurrent_tasks / 区域 construction_region_concurrent_limit）
 	// 只影响开工顺序，不影响命令成功；具体排队原因由任务视图的 wait_reason 下发。
 	res.Message = fmt.Sprintf("施工任务已排队（位置 %d,%d）", pos.X, pos.Y)
+	if task.MiningItem != "" {
+		// 矿机会采哪一种矿在下单时就定死了（覆盖框里最多的矿种，平票取物品 ID
+		// 较小者）：写进回执，玩家不用等落成才知道（试玩 1016 报告 B2）。
+		res.Message += fmt.Sprintf("，将开采「%s」", itemDisplayName(task.MiningItem))
+	}
 	return res, nil
 }
 

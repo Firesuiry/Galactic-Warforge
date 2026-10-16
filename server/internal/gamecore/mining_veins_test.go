@@ -133,8 +133,10 @@ func TestVeinsUtilizationNotResearchedKeepsBaseline(t *testing.T) {
 	}
 }
 
-// F2: advanced_mining_machine 覆盖范围内多脉同采（跨簇、跨矿种）。
-func TestAdvancedMiningMachineMinesMultipleVeins(t *testing.T) {
+// F2 + 第 16 轮契约（试玩 1016 报告 B2）：一台采集建筑只采**一种**矿。
+// advanced_mining_machine 覆盖范围内混了铁矿与铜矿时，只采数量最多的那一种
+// （这里覆盖框里铁矿 2 格、铜矿 1 格 → 铁矿），别的矿脉一格都不动。
+func TestAdvancedMiningMachineMinesSingleOreKind(t *testing.T) {
 	ws := newMiningTestWorld(2)
 	addFiniteVein(ws, "n1", "iron_ore", "cluster-a", 2, 1, 20, 100)
 	addFiniteVein(ws, "n2", "copper_ore", "cluster-b", 0, 0, 20, 100)
@@ -145,13 +147,77 @@ func TestAdvancedMiningMachineMinesMultipleVeins(t *testing.T) {
 
 	settleResources(ws)
 
-	for _, id := range []string{"n1", "n2", "n3"} {
+	if miner.MiningItem != "iron_ore" {
+		t.Fatalf("覆盖框里铁矿 2 格 > 铜矿 1 格，应采铁矿，got %q", miner.MiningItem)
+	}
+	// 铁矿两格一起采，铜矿完全不动。
+	for _, id := range []string{"n1", "n3"} {
 		if got := ws.Resources[id].Remaining; got != 84 {
-			t.Fatalf("expected vein %s remaining 84, got %d", id, got)
+			t.Fatalf("expected iron vein %s remaining 84, got %d", id, got)
 		}
 	}
-	if got := totalStorageItems(miner.Storage); got != 48 {
-		t.Fatalf("expected 48 total ore stored, got %d", got)
+	if got := ws.Resources["n2"].Remaining; got != 100 {
+		t.Fatalf("铜矿不该被混采，remaining=%d", got)
+	}
+	if got := totalStorageItems(miner.Storage); got != 32 {
+		t.Fatalf("expected 32 ore stored (2 iron veins x yield 16), got %d", got)
+	}
+	// 采集建筑上报的矿种也必须是这一种（客户端配色/提示都读它）。
+	if got := collectorOutputItemID(ws, miner); got != "iron_ore" {
+		t.Fatalf("collectorOutputItemID = %q, want iron_ore", got)
+	}
+}
+
+// 覆盖框里两种矿数量相同时按物品 ID 较小者定（确定性）。
+func TestMiningItemTieBreaksByItemID(t *testing.T) {
+	ws := newMiningTestWorld(6)
+	addFiniteVein(ws, "n1", "iron_ore", "cluster-a", 1, 1, 20, 100)
+	addFiniteVein(ws, "n2", "copper_ore", "cluster-b", 3, 3, 20, 100)
+
+	// 采矿机 3×3 锚点 (1,1)、覆盖 5×5（x0..4, y0..4）：两种矿各 1 格 → 平票。
+	got := model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, model.Position{X: 1, Y: 1})
+	if got != "copper_ore" {
+		t.Fatalf("平票应取物品 ID 较小者（copper_ore < iron_ore），got %q", got)
+	}
+	// 位置不变 → 结果不变（同一套覆盖格与平票规则）。
+	if again := model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, model.Position{X: 1, Y: 1}); again != got {
+		t.Fatalf("同一落点两次评估应一致，got %q then %q", got, again)
+	}
+}
+
+// 覆盖框里没有矿时 MiningItemAt 返回空（命令校验会先拒掉这种落点）。
+func TestMiningItemEmptyWithoutVeins(t *testing.T) {
+	ws := newMiningTestWorld(4)
+	if got := model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, model.Position{X: 1, Y: 1}); got != "" {
+		t.Fatalf("无矿落点应返回空矿种，got %q", got)
+	}
+}
+
+// 覆盖框里同种矿有多格时全部计入（DSP 的「矿机范围内同种矿一起采」）。
+func TestAdvancedMiningMachineMinesEveryVeinOfItsOre(t *testing.T) {
+	ws := newMiningTestWorld(6)
+	addFiniteVein(ws, "n1", "iron_ore", "cluster-a", 1, 1, 20, 100)
+	addFiniteVein(ws, "n2", "iron_ore", "cluster-a", 2, 1, 20, 100)
+	addFiniteVein(ws, "n3", "copper_ore", "cluster-b", 5, 5, 20, 100)
+
+	miner := newMiningTestBuilding("b1", model.BuildingTypeMiningMachine, model.Position{X: 1, Y: 1}, 8)
+	ws.Buildings["b1"] = miner
+
+	settleResources(ws)
+
+	if miner.MiningItem != "iron_ore" {
+		t.Fatalf("覆盖框里铁矿 2 格 > 铜矿 1 格，应采铁矿，got %q", miner.MiningItem)
+	}
+	for _, id := range []string{"n1", "n2"} {
+		if got := ws.Resources[id].Remaining; got != 92 {
+			t.Fatalf("同种矿 %s 应一起采，remaining=%d", id, got)
+		}
+	}
+	if got := ws.Resources["n3"].Remaining; got != 100 {
+		t.Fatalf("铜矿在覆盖框外且矿种不同，不该被动，remaining=%d", got)
+	}
+	if got := totalStorageItems(miner.Storage); got != 16 {
+		t.Fatalf("expected 2 veins x 8 = 16 ore, got %d", got)
 	}
 }
 
