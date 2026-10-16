@@ -1,6 +1,7 @@
 import type { ApiClient } from '../api.js';
 import type { CommandContext } from './game-commands.js';
 import chalk from 'chalk';
+import { formatAlertText } from '../alerts.js';
 import { ALL_EVENT_TYPES, DEFAULT_EVENT_TYPES } from '../config.js';
 import { fmtError } from './format.js';
 import { getStringOption, hasFlag, parseArgs, parseIntegerArg, type ParsedArgs } from './args.js';
@@ -167,7 +168,9 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
         : alert.severity === 'warning'
           ? chalk.yellow(alert.severity)
           : chalk.dim(alert.severity);
-      lines.push(`[t${alert.tick}] ${severity} ${chalk.yellow(alert.alert_type)} ${alert.message}`);
+      // 中文口径走 shared alerts：绝不裸显 belt_blocked 这类枚举 id，
+      // 传送带堵塞还要带上位置/件数/停顿时长（与 Web 警报条同一份文案）。
+      lines.push(`[t${alert.tick}] ${severity} ${chalk.yellow(formatAlertText(alert))}`);
       lines.push(`    building=${alert.building_id} type=${alert.building_type}`);
     }
     if (result.next_alert_id) {

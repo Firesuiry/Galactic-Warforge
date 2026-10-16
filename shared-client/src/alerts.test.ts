@@ -5,6 +5,7 @@ import {
   PRODUCTION_ALERT_TYPES,
   alertDetailsPosition,
   alertTypeLabel,
+  beltBlockedDetail,
   beltBlockedText,
   formatAlertText,
   ticksToSeconds,
@@ -51,6 +52,14 @@ describe('产线告警中文文案（shared-client）', () => {
     expect(beltBlockedText(alert())).toBe('传送带堵塞');
     expect(beltBlockedText(alert({ details: { position: { x: 3, y: 4 } } }))).toBe('传送带堵塞 (3, 4)');
     expect(beltBlockedText(alert({ details: { queued_items: 2, blocked_ticks: 300 } }))).toBe('传送带堵塞：2 件货 30 秒没动');
+  });
+
+  it('beltBlockedDetail：toast 用的细节段（无 details 时为空串）', () => {
+    expect(beltBlockedDetail(alert({
+      details: { position: { x: 12, y: 7 }, queued_items: 5, blocked_ticks: 300 },
+    }))).toBe('(12, 7)：5 件货 30 秒没动');
+    expect(beltBlockedDetail(alert({ details: { queued_items: 5, blocked_ticks: 300 } }))).toBe('5 件货 30 秒没动');
+    expect(beltBlockedDetail(alert())).toBe('');
   });
 
   it('formatAlertText：belt_blocked 走位置文案，其余类型只给标签', () => {

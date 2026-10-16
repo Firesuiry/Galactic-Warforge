@@ -101,10 +101,39 @@ export function ticksToSeconds(ticks: number, tickRate: number = DEFAULT_TICKS_P
 }
 
 /**
- * 传送带堵塞的单行文案：`传送带堵塞 (12, 7)：5 件货 30 秒没动`。
+ * 传送带堵塞的细节段：`(12, 7)：5 件货 30 秒没动`（没有 details 时返回空串）。
  *
  * `details` 带 `position` / `queued_items` / `blocked_ticks`（服务端
  * `settleBeltBlockAlerts`）；缺哪项就少写哪段，不写占位符也不编数字。
+ * toast 用它拼「建筑名 + 细节」，警报条与 CLI 用整句（见 `beltBlockedText`）。
+ */
+export function beltBlockedDetail(
+  alert: Pick<AlertEntry, 'alert_type' | 'details'>,
+  tickRate: number = DEFAULT_TICKS_PER_SECOND,
+): string {
+  const details = alert.details ?? {};
+  const position = alertDetailsPosition(details);
+  const queued = asFiniteNumber(details.queued_items);
+  const blockedTicks = asFiniteNumber(details.blocked_ticks);
+
+  const movementParts: string[] = [];
+  if (queued !== undefined && queued > 0) {
+    movementParts.push(`${Math.round(queued)} 件货`);
+  }
+  if (blockedTicks !== undefined && blockedTicks > 0) {
+    movementParts.push(`${ticksToSeconds(blockedTicks, tickRate)} 秒没动`);
+  }
+
+  const where = position ? `(${position.x}, ${position.y})` : '';
+  const movement = movementParts.join(' ');
+  if (where && movement) {
+    return `${where}：${movement}`;
+  }
+  return where || movement;
+}
+
+/**
+ * 传送带堵塞的整句文案：`传送带堵塞 (12, 7)：5 件货 30 秒没动`。
  */
 export function beltBlockedText(
   alert: Pick<AlertEntry, 'alert_type' | 'details'>,

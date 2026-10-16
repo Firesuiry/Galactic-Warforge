@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { formatAlertText } from '../alerts.js';
 import type {
   Building,
   CommandCatalogView,
@@ -276,7 +277,9 @@ export function fmtAgentBriefing(b: AgentBriefing): string {
   lines.push(chalk.bold(`Task forces (${b.task_forces?.length ?? 0}) / Theaters (${b.theaters?.length ?? 0}) / Enemies (${b.enemy_forces?.length ?? 0})`));
   lines.push(chalk.bold(`Recent alerts (${b.recent_alerts?.length ?? 0})`));
   for (const a of b.recent_alerts ?? []) {
-    lines.push(`  [t${a.tick}] ${a.severity ?? '-'} ${a.alert_type ?? '-'} ${a.message ?? ''}`);
+    // 中文口径走 shared alerts：枚举 id（如 belt_blocked）不上界面，
+    // 传送带堵塞带上位置/件数/停顿时长。
+    lines.push(`  [t${a.tick}] ${a.severity ?? '-'} ${formatAlertText(a)}`);
   }
   lines.push('');
   lines.push(chalk.bold(`Available commands (${b.available_commands?.length ?? 0})`));

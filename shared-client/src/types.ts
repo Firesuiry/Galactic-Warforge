@@ -191,6 +191,11 @@ export interface BuildingConveyorState {
   buffer?: ItemStack[];
   max_stack?: number;
   throughput?: number;
+  /**
+   * 带上有货却连续多少 tick 一件都没动出去（服务端 `settleBeltBlockAlerts` 的计数，
+   * 清空或动过就归零）。达阈值（300 tick）时服务端另发 `belt_blocked` 告警。
+   */
+  blocked_ticks?: number;
 }
 
 /** 服务端最近一次实际搬运；空转时保留旧记录，按 tick / sequence 判断工作动画。 */
