@@ -2319,3 +2319,24 @@ body:has([data-planet-minimap]) {
     --planet-hud-right-reserve:0px;
   }
 }
+
+/* ---------- 分拣器过滤物品选择器（试玩 1016 U2） ----------
+   旧实现是原生 <select multiple>：100+ 项铺开、无搜索，Ctrl 点选很费劲。
+   现在是「搜索框 + 已选 chip 行 + 可滚动候选列表」，每行给物品色块 + 中文名 + id。 */
+.sorter-filter { display:flex; flex-direction:column; gap:8px; margin:8px 0; }
+.sorter-filter__search { display:flex; flex-direction:column; gap:4px; font-size:12px; }
+.sorter-filter__search input { padding:5px 8px; border:1px solid #ffffff22; border-radius:6px; background:#0b1218; color:#dffcf6; font-size:12px; }
+.sorter-filter__chosen { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.sorter-filter__chosen-title { color:#8fb0bd; font-size:11px; }
+.sorter-filter__chip { display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid #ffffff2e; border-radius:999px; background:#131f28; color:#dffcf6; font-size:11px; cursor:pointer; }
+.sorter-filter__chip:hover { border-color:#ff8a8a88; }
+.sorter-filter__list { max-height:190px; margin:0; padding:0; overflow-y:auto; list-style:none; border:1px solid #ffffff1f; border-radius:6px; background:#080f16; }
+.sorter-filter__list li { margin:0; }
+.sorter-filter__option { display:flex; width:100%; align-items:center; gap:8px; padding:4px 8px; border:0; background:transparent; color:#cfe6ea; font-size:12px; text-align:left; cursor:pointer; }
+.sorter-filter__option:hover { background:#ffffff12; }
+.sorter-filter__option.is-selected { background:#123a2e; color:#c9ffe9; }
+.sorter-filter__swatch { flex:none; width:10px; height:10px; border-radius:3px; box-shadow:0 0 0 1px #0009 inset; }
+.sorter-filter__name { flex:1; }
+.sorter-filter__id { color:#6f8d99; font-size:10px; }
+.sorter-filter__check { color:#6ee7b7; font-weight:700; }
+.sorter-filter__empty { padding:8px; color:#8fb0bd; font-size:11px; }
