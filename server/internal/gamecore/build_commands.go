@@ -577,6 +577,7 @@ func buildingEnclosure(ws *model.WorldState, btype model.BuildingType, rotation 
 		}
 		blocked := 0
 		exitsBefore := 0
+		closedByThisBuild := false
 		var lastExit model.Position
 		neighbors := ws.SurfaceNeighbors(unit.Position)
 		for _, n := range neighbors {
@@ -585,13 +586,24 @@ func buildingEnclosure(ws *model.WorldState, btype model.BuildingType, rotation 
 				// 建造前可通行、建造后被堵死的格子：就是"最后一个出口"。
 				if !unitTileBlockedBeforeBuild(ws, n) {
 					lastExit = n
+					closedByThisBuild = true
 				}
 				continue
 			}
 			exitsBefore++
 		}
 		if len(neighbors) > 0 && blocked == len(neighbors) && exitsBefore == 0 {
-			return &buildingEnclosureInfo{unitName: unitDisplayName(unit), unitPos: unit.Position, lastExit: lastExit}
+			// 必须真的是**本次建造**堵上了它的出口（closedByThisBuild）：四邻在建造前
+			// 就已经全堵的单位是被更早的建筑/地形困住的（例如建造命令下达后、施工完成前
+			// 单位自己走进了即将合拢的口袋），与本次落点无关。
+			//
+			// 这里若不加这一条，全图任何一处建造都会被这台早已被困的单位拒掉——玩家与
+			// bot 从此一座建筑都建不出来。实测：bot 长跑里一台步兵被自家建筑困住后，
+			// 整局所有建造命令 INVALID_TARGET，产业彻底冻结（TestPhase1BotIndustrialCycle
+			// 从 74s 涨到超过 600s 超时）。
+			if closedByThisBuild {
+				return &buildingEnclosureInfo{unitName: unitDisplayName(unit), unitPos: unit.Position, lastExit: lastExit}
+			}
 		}
 	}
 	// 第二遍：口袋判定——建造点附近的己方地面单位是否会因此走不到自家基地。
