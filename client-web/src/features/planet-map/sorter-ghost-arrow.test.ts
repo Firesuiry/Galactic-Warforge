@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { directionVector } from '@/features/planet-map/logistics-direction';
-import { resolveSorterGhostArrows } from '@/features/planet-map/planet-scene';
+import { resolveSorterGhostArrows, sorterGhostArrowStyle } from '@/features/planet-map/planet-scene';
 
 /**
  * §4 建造幽灵：分拣器两支箭头（取 → 放）必须**背向分开**摆在格子的前后半格。
@@ -50,5 +50,16 @@ describe('2D 分拣器幽灵箭头', () => {
     expect(resolveSorterGhostArrows('sorter_mk1', 90, center, ts)!.map((arrow) => arrow.direction)).toEqual(['west', 'east']);
     expect(resolveSorterGhostArrows('sorter_mk1', 180, center, ts)!.map((arrow) => arrow.direction)).toEqual(['north', 'south']);
     expect(resolveSorterGhostArrows('sorter_mk1', 270, center, ts)!.map((arrow) => arrow.direction)).toEqual(['east', 'west']);
+  });
+
+  it('试玩 1016 U1：取货端空心细描边 + 「取」，放货端实心粗线 + 「放」（不只靠颜色）', () => {
+    const take = sorterGhostArrowStyle('take');
+    const drop = sorterGhostArrowStyle('drop');
+    expect(take.filled).toBe(false);
+    expect(drop.filled).toBe(true);
+    expect(take.label).toBe('取');
+    expect(drop.label).toBe('放');
+    // 粗细必须拉开：空心端细、实心端粗，低缩放档也读得出形状差异。
+    expect(drop.shaftWidth).toBeGreaterThan(take.shaftWidth * 2);
   });
 });

@@ -13,13 +13,14 @@ import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { ghostArrowGeometry, ghostArrowTransform } from './three/ghost-arrow';
+import { ghostArrowTexture, ghostRoleLabelMaterial, disposeGhostArrowTextures, type GhostArrowRole } from './three/ghost-arrow-texture';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
-import { LogisticsDirectionMarks, directionArrowTexture, disposeLogisticsTextures } from './three/logistics-marks';
+import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
 import { logisticsArrows, stepTile, buildGhostDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
@@ -958,9 +959,10 @@ export class PlanetThreeScene {
     if (sorterRoutes) {
       // 取货端（背面）与放货端（正面）各缩到 0.62 并沿各自方向推离格心 0.26 格，
       // 两支箭头分开摆在前后半格——都压格心会糊成一个「叉」。
+      // 取货端走空心纹理、放货端实心，并各挂「取」「放」小字标签（试玩 1016 U1）。
       for (const tile of tiles) {
-        this.ghostArrow(tile, sorterRoutes.from, elevated, GHOST_TAKE_COLOR, .62, .26);
-        this.ghostArrow(tile, sorterRoutes.to, elevated, GHOST_ARROW_COLOR, .62, .26);
+        this.ghostArrow(tile, sorterRoutes.from, elevated, GHOST_TAKE_COLOR, .62, .26, 'take', true);
+        this.ghostArrow(tile, sorterRoutes.to, elevated, GHOST_ARROW_COLOR, .62, .26, 'drop', true);
       }
       return;
     }
@@ -1103,6 +1105,13 @@ export class PlanetThreeScene {
    * 「背面取货 / 正面放货」两支箭头分开摆在格子的前后半格，叠在格心只会糊成一个叉。
    * 平铺姿态与四向可见性见 `three/ghost-arrow`（PlaneGeometry 不转就会立起来侧对相机）。
    */
+  /**
+   * 建造预览箭头（传送带流向 / 分拣器取放端）。
+   *
+   * `role` 决定纹理：取货端空心描边、放货端实心（试玩 1016 U1——旧实现两端同一张实心
+   * 箭头，只靠青/琥珀两色区分，3D 近景里分不出来）。分拣器两端再各挂一枚「取」「放」
+   * 小字标签，颜色再分不出来也能读字。
+   */
   private ghostArrow(
     tile: TilePoint,
     direction: CardinalDirection,
@@ -1110,11 +1119,13 @@ export class PlanetThreeScene {
     color = '#ffd76a',
     scale = 1,
     along = 0,
+    role: GhostArrowRole = 'drop',
+    labeled = false,
   ) {
     const size = this.tileScale();
     const mesh = new THREE.Mesh(
       ghostArrowGeometry(size, scale),
-      new THREE.MeshBasicMaterial({ map: directionArrowTexture(), color, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ map: ghostArrowTexture(role), color, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
     );
     const { position, quaternion } = ghostArrowTransform(tile, direction, this.data!.planet.surface.face_size, RADIUS, {
       size,
@@ -1125,6 +1136,24 @@ export class PlanetThreeScene {
     mesh.quaternion.copy(quaternion);
     mesh.renderOrder = 20;
     this.ghostMarks.add(mesh);
+    if (!labeled) return;
+    // 标签浮在箭头正上方一点点（沿格法线抬 0.3 格），始终正对相机。
+    const sprite = new THREE.Sprite(this.ghostRoleLabelMaterial(role, color));
+    sprite.position.copy(position).multiplyScalar((position.length() + size * .3) / Math.max(position.length(), 1e-6));
+    sprite.scale.set(size * .3, size * .3, 1);
+    sprite.renderOrder = 21;
+    this.ghostMarks.add(sprite);
+  }
+
+  /** 取/放标签的共享材质（按角色 + 颜色缓存；清理 ghost 标记时不释放）。 */
+  private ghostRoleLabelMaterial(role: GhostArrowRole, color: string) {
+    const key = `ghost-role:${role}:${color}`;
+    const cached = this.spriteMaterials.get(key);
+    if (cached) return cached;
+    const material = ghostRoleLabelMaterial(role, color);
+    material.userData.shared = true;
+    this.spriteMaterials.set(key, material);
+    return material;
   }
 
   focus(tile: TilePoint, close = true) {
@@ -1328,6 +1357,7 @@ export class PlanetThreeScene {
     this.clearMarks(this.ghostMarks);
     this.ghostMarks.removeFromParent();
     disposeLogisticsTextures();
+    disposeGhostArrowTextures();
     this.combat.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
     this.spriteMaterials.clear();

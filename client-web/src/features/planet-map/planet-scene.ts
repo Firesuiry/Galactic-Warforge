@@ -402,6 +402,17 @@ export interface GhostArrowStroke {
 }
 
 /**
+ * 分拣器幽灵箭头的画法（试玩 1016 U1）：两端必须**形状**可分，不能只靠颜色。
+ * 取货端空心细描边 + 「取」，放货端实心粗线 + 「放」。
+ * 与 3D 的 `three/ghost-arrow-texture`（空心/实心纹理）同一口径。
+ */
+export function sorterGhostArrowStyle(role: 'take' | 'drop'): { shaftWidth: number; wingWidth: number; filled: boolean; label: string } {
+  return role === 'take'
+    ? { shaftWidth: 1.5, wingWidth: 1.5, filled: false, label: '取' }
+    : { shaftWidth: 4, wingWidth: 2.5, filled: true, label: '放' };
+}
+
+/**
  * 分拣器幽灵的「取（背面）→ 放（正面）」两支半支箭头（像素坐标）。
  *
  * 每支只画从格心朝该侧的半支（tail 在格心附近、tip 伸出约 0.36 格）：两支背向分开，
@@ -2828,6 +2839,8 @@ export class PlanetScene {
       // 分支（原先的判断在 assessment 存在时被上面的 return 短路，箭头根本画不出来）。
       // 每支只画「从格心朝该侧」的半支，两支背向分开、不在格心叠成叉（端点算法见
       // resolveSorterGhostArrows，有单测）。
+      // 取货端画**空心**箭头 + 「取」字、放货端实心 + 「放」字（试玩 1016 U1：旧实现两端
+      // 同色同形，2D/3D 里都分不出哪端取货）。
       if (isSorterBuilding({ type: mode.buildingType })) {
         const arrows = resolveSorterGhostArrows(
           mode.buildingType,
@@ -2838,13 +2851,21 @@ export class PlanetScene {
         for (const arrow of arrows ?? []) {
           const { x: tx, y: ty } = directionVector(arrow.direction);
           const wing = ts * 0.16;
+          const color = arrow.role === 'take' ? COLOR_GHOST_TAKE : COLOR_GHOST_OK;
+          const style = sorterGhostArrowStyle(arrow.role);
+          // 空心 = 细描边不填充；实心 = 粗杆 + 粗箭头（与 3D 的空心/实心纹理同口径）。
           g.moveTo(arrow.tail.x, arrow.tail.y)
             .lineTo(arrow.tip.x, arrow.tip.y)
             .moveTo(arrow.tip.x, arrow.tip.y)
             .lineTo(arrow.tip.x - tx * wing - ty * wing, arrow.tip.y - ty * wing - tx * wing)
             .moveTo(arrow.tip.x, arrow.tip.y)
             .lineTo(arrow.tip.x - tx * wing + ty * wing, arrow.tip.y - ty * wing + tx * wing)
-            .stroke({ width: 2.5, color: arrow.role === 'take' ? COLOR_GHOST_TAKE : COLOR_GHOST_OK, alpha: 0.95 });
+            .stroke({ width: style.shaftWidth, color, alpha: 0.95 });
+          if (style.filled) {
+            // 实心端：杆身再压一道粗线，与空心端的细描边形成明显粗细对比。
+            g.moveTo(arrow.tail.x, arrow.tail.y).lineTo(arrow.tip.x, arrow.tip.y).stroke({ width: style.wingWidth + 1.5, color, alpha: 0.95 });
+          }
+          this.sorterGhostLabel(arrow, color, ts);
         }
       }
       return;
@@ -3020,6 +3041,25 @@ export class PlanetScene {
     });
     text.anchor.set(0.5);
     text.position.set(cx, cy);
+    this.haulLabelLayer.addChild(text);
+  }
+
+  /** 分拣器 ghost 的「取」/「放」单字标签：贴在各自箭头尖端外侧（字比颜色好认）。 */
+  private sorterGhostLabel(arrow: GhostArrowStroke, color: number, ts: number) {
+    if (ts < 10) return;
+    const { x: tx, y: ty } = directionVector(arrow.direction);
+    const text = new Text({
+      text: sorterGhostArrowStyle(arrow.role).label,
+      style: {
+        fontSize: Math.max(9, Math.min(14, ts * 0.5)),
+        fill: color,
+        fontFamily: 'system-ui, sans-serif',
+        fontWeight: '700',
+        stroke: { color: 0x0b1218, width: 3 },
+      },
+    });
+    text.anchor.set(0.5);
+    text.position.set(arrow.tip.x + tx * ts * 0.2, arrow.tip.y + ty * ts * 0.2);
     this.haulLabelLayer.addChild(text);
   }
 
