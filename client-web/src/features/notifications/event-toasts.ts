@@ -11,6 +11,7 @@
  * - 文案中文、简洁游戏化；名称尽量走 i18n 字典（建筑/科技）。
  */
 
+import { beltBlockedDetail } from '@shared/alerts';
 import type { GameEventDetail } from '@shared/types';
 
 import { GAME_FINISHED_MESSAGE, isGameFinishedResult, toPlayerFacingMessage } from '@/common/player-facing-error';
@@ -336,13 +337,21 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       const positionLabel = position
         ? formatPositionLabel(position)
         : '';
+      // 传送带堵塞指向带格本身：把「(x, y)：N 件货 M 秒没动」写进 toast 正文，
+      // 玩家一眼就知道堵在哪、堵了多少（服务端 message 只写「传送带被堵」）。
+      const beltBlocked = alertType === 'belt_blocked';
+      const beltDetail = beltBlocked
+        ? beltBlockedDetail({ alert_type: alertType, details: asRecord(alert?.details) ?? {} })
+        : '';
       return {
         toast: {
           // 断电类：danger + 常驻（sticky）且不套用产线节流——
           // 否则第二次断电提醒会被节流吞掉（试玩报告 F）。
           kind: power ? 'danger' : 'warning',
-          title: power ? '建筑断电' : '产线告警',
-          body: [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
+          title: power ? '建筑断电' : beltBlocked ? `${buildingLabel}：传送带堵塞` : '产线告警',
+          body: beltBlocked
+            ? [buildingLabel, beltDetail || issue, positionLabel].filter(Boolean).join('：') || undefined
+            : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，
           // 不合并会刷屏）；键含建筑 id，不同建筑的同类告警分开显示。

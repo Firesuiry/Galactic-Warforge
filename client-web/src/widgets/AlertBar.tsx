@@ -2,11 +2,13 @@
  * 警报条（§3.3）：顶栏下方居中的窄条。
  *
  * 收起态：只显示最新一条（图标 · 类型 · 建筑 · tick）+ 总数徽标 + 展开箭头。
- * 展开态：下拉列表，最多 8 条（可滚动），按「建筑 + 类型」合并计数，点击聚焦对应建筑。
+ * 展开态：下拉列表，最多 8 条（可滚动），按「建筑 + 类型」合并计数，点击聚焦对应目标。
  * 无警报时整条不渲染（返回 null），不给地图让出任何高度。
  *
  * 数据源：useShellAlerts（与顶栏共用 query key/limit，研究站噪音已过滤）。
  * 聚焦：行星页内直接选中并移镜头（复用 store 动作）；其他页面带 select 深链跳到活跃行星。
+ * 传送带堵塞（`belt_blocked`）指向**带格**：条目上直接写「(12, 7)：5 件货 30 秒没动」，
+ * 点击把镜头移到那一格并选中它——地图上另有红杠标记（PlanetBeltBlockedLayer）。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -14,9 +16,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, TriangleAlert } from 'lucide-react';
 
+import { alertDetailsPosition, DEFAULT_TICKS_PER_SECOND, formatAlertText } from '@shared/alerts';
 import type { AlertEntry, CatalogView } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
+import { useCurrentGameQuery } from '@/features/lobby/use-current-game';
 import { getBuildingDisplayName } from '@/features/planet-map/model';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useShellAlerts } from '@/features/production-alerts-query';
@@ -36,6 +40,7 @@ interface AlertRow {
   count: number;
   tick: number;
   message: string;
+  details: Record<string, unknown>;
 }
 
 /**
@@ -57,6 +62,7 @@ export function mergeAlertRows(alerts: readonly AlertEntry[]): AlertRow[] {
         count: 1,
         tick: alert.tick,
         message: alert.message,
+        details: alert.details ?? {},
       });
       continue;
     }
@@ -65,6 +71,7 @@ export function mergeAlertRows(alerts: readonly AlertEntry[]): AlertRow[] {
       existing.tick = alert.tick;
       existing.message = alert.message;
       existing.severity = alert.severity;
+      existing.details = alert.details ?? {};
     }
   }
   return [...byKey.values()].sort((a, b) => b.tick - a.tick);
@@ -96,12 +103,34 @@ function buildingTag(row: AlertRow): string {
   return row.buildingId;
 }
 
+/**
+ * 告警条目的说明文案：传送带堵塞给出中文的位置/件数/时长
+ * （服务端 message 只写「建筑 b-9：传送带被堵，物品运不出去」，定位不到格子），
+ * 其余类型沿用服务端 message。
+ */
+function alertRowDetail(row: AlertRow, tickRate: number): string {
+  return formatAlertText(
+    { alert_type: row.alertType, details: row.details, message: row.message },
+    tickRate,
+  );
+}
+
+/** 条目 title：中文标签 + 细节（belt_blocked 用位置/件数/时长，其余用服务端 message）。 */
+function alertRowTitle(row: AlertRow, tickRate: number): string {
+  if (row.alertType === 'belt_blocked') {
+    return alertRowDetail(row, tickRate);
+  }
+  return `${translateAlertType(row.alertType, row.message)}：${row.message}`;
+}
+
 export function AlertBar() {
   const client = useApiClient();
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSessionSnapshot();
   const { alerts } = useShellAlerts();
+  // 「30 秒没动」这类时长按服务端实际 tick 速率换算（服务端可调速）。
+  const tickRate = useCurrentGameQuery().data?.max_tick_rate ?? DEFAULT_TICKS_PER_SECOND;
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -146,16 +175,24 @@ export function AlertBar() {
   const latest = rows[0];
 
   /**
-   * 聚焦到告警建筑：行星页内直接选中它（选中态会带出选中条与详情页签，
-   * 与顶栏缺电 chip 的深链口径一致——服务端告警不带坐标，这里不编造位置）；
-   * 其他页面带 select 深链跳到活跃行星。
+   * 聚焦到告警目标：
+   * - `belt_blocked` 指向**带格本身**（details.position），行星页内直接移镜头到该格
+   *   并选中它（与其他带位置的告警同一口径；带格选中会带出该格的详情）；
+   * - 其余告警指向建筑：行星页内选中它（服务端告警通常不带坐标，这里不编造位置）；
+   * - 不在行星页时带深链跳到活跃行星（带位置的告警额外带 x/y 直接聚焦）。
    */
-  function focusBuilding(row: AlertRow) {
+  function focusAlert(row: AlertRow) {
     sfx.uiClick();
     setOpen(false);
+    const tile = alertDetailsPosition(row.details);
     const onPlanet = location.pathname.startsWith('/planet/');
     if (onPlanet) {
       const planet = usePlanetViewStore.getState();
+      if (row.alertType === 'belt_blocked' && tile) {
+        planet.setSelected({ kind: 'tile', position: { ...tile, z: 0 } });
+        planet.requestFocus(tile);
+        return;
+      }
       planet.setSelected({
         kind: 'building',
         id: row.buildingId,
@@ -167,7 +204,9 @@ export function AlertBar() {
     if (!activePlanetId) {
       return;
     }
-    navigate(`/planet/${activePlanetId}?select=building:${row.buildingId}`);
+    // 带位置的告警（当前只有 belt_blocked）带 x/y 直接聚焦；其余只带 select。
+    const positionQuery = tile ? `&x=${tile.x}&y=${tile.y}` : '';
+    navigate(`/planet/${activePlanetId}?select=building:${row.buildingId}${positionQuery}`);
   }
 
   return (
@@ -180,7 +219,7 @@ export function AlertBar() {
           sfx.uiClick();
           setOpen((value) => !value);
         }}
-        title={`${translateAlertType(latest.alertType, translateSeverity(latest.severity))}：${latest.message}`}
+        title={alertRowTitle(latest, tickRate)}
         type="button"
       >
         <TriangleAlert aria-hidden="true" size={14} strokeWidth={2} />
@@ -202,8 +241,8 @@ export function AlertBar() {
             <li key={row.key}>
               <button
                 className={`alert-bar__row alert-bar__row--${severityClass(row.severity)}`}
-                onClick={() => focusBuilding(row)}
-                title={row.message}
+                onClick={() => focusAlert(row)}
+                title={alertRowTitle(row, tickRate)}
                 type="button"
               >
                 <TriangleAlert aria-hidden="true" size={13} strokeWidth={2} />
@@ -216,6 +255,11 @@ export function AlertBar() {
                   {buildingLabel(catalogQuery.data, row)}
                   <span className="alert-bar__row-tag">{buildingTag(row)}</span>
                 </span>
+                {/* 传送带堵塞指向带格本身：把位置/件数/时长写在条目上，
+                    玩家不用点开地图就知道堵在哪、堵了多少。 */}
+                {row.alertType === 'belt_blocked' ? (
+                  <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate)}</span>
+                ) : null}
                 {row.count > 1 ? <span className="alert-bar__row-count">×{row.count}</span> : null}
                 <span className="alert-bar__row-tick">t{row.tick}</span>
               </button>
