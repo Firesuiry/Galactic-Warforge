@@ -43,6 +43,8 @@ type ConstructionTask struct {
 	// WaitReason 说明 pending 任务为什么还没开工（insufficient_materials /
 	// executor_concurrent_limit / region_concurrent_limit），随 runtime 视图下发；
 	// 开工后清空。它只解释排队，不代表命令失败。
+	// 另有 footprint_occupied：施工已完成、但占地里还站着让不开的地面单位，
+	// 落成被推迟到它走开为止（见 gamecore.WaitReasonFootprintOccupied）。
 	WaitReason string `json:"wait_reason,omitempty"`
 	// MaterialsDeducted indicates whether materials have been deducted for this task.
 	// When false, materials are "locked" but not yet deducted (deducted at completion).

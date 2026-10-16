@@ -1626,6 +1626,8 @@ export function describeConstructionWait(
       return '执行体正在施工其他任务，排队等待';
     case 'region_concurrent_limit':
       return '该区域同时在施工的工程已达上限，排队等待';
+    case 'footprint_occupied':
+      return '占地里有单位让不开（四周没有可站立的空位），等它走开再落成';
     case '':
     case undefined:
       return null;

@@ -19,7 +19,7 @@ func TestA1BotAmmoChain(t *testing.T) {
 	player.Resources.Energy = 20000
 
 	place := func(id string, btype model.BuildingType) *model.Building {
-		pos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine)
+		pos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine, "")
 		if pos == nil {
 			t.Fatalf("no tile for %s", btype)
 		}
@@ -30,7 +30,7 @@ func TestA1BotAmmoChain(t *testing.T) {
 	}
 	// 每座关键建筑自带一台风机，供电不依赖 bot 自己拉线。
 	powerNextTo := func(b *model.Building) {
-		pos := botBuildSpotNear(ws, b.Position, 2, model.BuildingTypeWindTurbine)
+		pos := botBuildSpotNear(ws, b.Position, 2, model.BuildingTypeWindTurbine, "")
 		if pos == nil {
 			t.Fatalf("no power tile near %s", b.ID)
 		}

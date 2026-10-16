@@ -251,7 +251,7 @@ func (gc *GameCore) botSmelters(ws *model.WorldState, owner string, ctx *botSurv
 		if botSmelterCovers(ctx, recipe) || botPendingSmelter(ws, owner, recipe) {
 			continue
 		}
-		pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), model.BuildingTypeArcSmelter)
+		pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), model.BuildingTypeArcSmelter, owner)
 		if pos == nil {
 			return model.Command{}, false
 		}
@@ -598,7 +598,7 @@ func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx 
 	}
 	pos := fixed
 	if pos == nil {
-		pos = botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), typ)
+		pos = botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), typ, owner)
 	}
 	if pos == nil {
 		return model.Command{}, false

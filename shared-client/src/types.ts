@@ -1368,8 +1368,8 @@ export interface ConstructionTaskView {
   state: ConstructionState;
   /** 建筑中文名（服务端 building_name）。 */
   building_name?: string;
-  /** pending 未开工的原因：insufficient_materials / executor_concurrent_limit / region_concurrent_limit。 */
-  wait_reason?: 'insufficient_materials' | 'executor_concurrent_limit' | 'region_concurrent_limit' | string;
+  /** 未开工 / 落成推迟的原因：insufficient_materials / executor_concurrent_limit / region_concurrent_limit / footprint_occupied。 */
+  wait_reason?: 'insufficient_materials' | 'executor_concurrent_limit' | 'region_concurrent_limit' | 'footprint_occupied' | string;
   enqueue_tick: number;
   start_tick?: number;
   update_tick?: number;
