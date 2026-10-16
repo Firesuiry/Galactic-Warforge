@@ -381,7 +381,9 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
 
   await page.getByRole('button', { name: '工作台', exact: true }).click();
   await page.getByRole('button', { name: '平面战术', exact: true }).click();
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible();
+  // 切到 2D 要等 Pixi 视图挂载；并行跑时别的规格的软件渲染会把这一步拖到 5s 以上
+  // （实测 ~5.5s），默认 5s 的断言超时会假红，这里给足余量。
+  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 30_000 });
   await expect(canvas).toHaveCount(0);
   await page.getByRole('button', { name: '3D 星球', exact: true }).click();
   await expect(canvas).toBeVisible({ timeout: 30_000 });
