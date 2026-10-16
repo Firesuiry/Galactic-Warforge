@@ -8,12 +8,14 @@ type PlanetInspectRequest struct {
 }
 
 type PlanetInspectView struct {
-	PlanetID   string                    `json:"planet_id"`
-	Discovered bool                      `json:"discovered"`
-	TargetType string                    `json:"target_type,omitempty"`
-	TargetID   string                    `json:"target_id,omitempty"`
-	Title      string                    `json:"title,omitempty"`
-	Building   *model.Building           `json:"building,omitempty"`
+	PlanetID   string          `json:"planet_id"`
+	Discovered bool            `json:"discovered"`
+	TargetType string          `json:"target_type,omitempty"`
+	TargetID   string          `json:"target_id,omitempty"`
+	Title      string          `json:"title,omitempty"`
+	Building   *model.Building `json:"building,omitempty"`
+	// MiningItem：目标采集建筑唯一开采的矿种（目录物品 ID）。非采集建筑为空。
+	MiningItem string                    `json:"mining_item,omitempty"`
 	Power      *BuildingPowerInspectView `json:"power,omitempty"`
 	Unit       *model.Unit               `json:"unit,omitempty"`
 	Resource   *model.ResourceNodeState  `json:"resource,omitempty"`
@@ -60,6 +62,11 @@ func (ql *Layer) PlanetInspect(ws *model.WorldState, playerID, planetID string, 
 		}
 		view.Title = string(building.Type)
 		view.Building = building.Clone()
+		// 采集建筑定下的唯一开采矿种（DSP 口径）：随 inspect 下发，省得客户端
+		// 自己去数覆盖框里的矿脉（试玩 1016 报告 B2）。
+		if building.Runtime.Functions.Collect != nil {
+			view.MiningItem = building.MiningItem
+		}
 		if snapshot := model.CurrentPowerSettlementSnapshot(ws); snapshot != nil {
 			if receiver, ok := snapshot.Receivers[building.ID]; ok {
 				view.Power = &BuildingPowerInspectView{

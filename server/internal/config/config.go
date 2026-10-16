@@ -147,6 +147,14 @@ type ServerConfig struct {
 	SnapshotMaxBytes        int64                   `yaml:"snapshot_max_bytes"`       // soft max snapshot JSON size
 	AutoSaveIntervalSeconds int                     `yaml:"auto_save_interval_seconds"`
 	ProductionMonitor       ProductionMonitorConfig `yaml:"production_monitor"`
+	// AuditRetentionTicks 是审计/命令日志的独立保留窗口（tick），与快照保留
+	// **解耦**：0 与缺省都表示「整局全留、不裁剪」。
+	//
+	// 为什么要有：每次存快照都会把审计日志裁到 SnapshotRetentionTicks
+	//（遭遇战 6000），于是 `checkpointbuild -export` 从存档点导出构建记录时
+	// 只剩最后 6000 tick 的命令，开局建造段整个丢失（试玩 1016 报告 B3）。
+	// 审计条目本身很小（一条命令一行），整局几万 tick 也就几 MB。
+	AuditRetentionTicks int64 `yaml:"audit_retention_ticks,omitempty"`
 }
 
 // ProductionMonitorConfig configures production monitoring sampling and alert thresholds.
@@ -246,6 +254,9 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Server.AutoSaveIntervalSeconds < 0 {
 		return fmt.Errorf("server.auto_save_interval_seconds must be >= 0")
+	}
+	if cfg.Server.AuditRetentionTicks < 0 {
+		return fmt.Errorf("server.audit_retention_ticks must be >= 0 (0 = 整局全留)")
 	}
 	if cfg.Server.SnapshotIntervalTicks == 0 {
 		cfg.Server.SnapshotIntervalTicks = defaultSnapshotIntervalTicks

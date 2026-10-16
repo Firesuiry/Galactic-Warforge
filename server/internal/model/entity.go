@@ -56,6 +56,10 @@ type Building struct {
 	Production        *ProductionState        `json:"production,omitempty"`
 	Job               *BuildingJob            `json:"job,omitempty"`
 	ProductionMonitor *ProductionMonitorState `json:"production_monitor,omitempty"`
+	// MiningItem 是采集建筑（RequiresResourceNode）建成时定下的**唯一**开采矿种
+	// （目录物品 ID，见 model.MiningItemAt）：覆盖框里数量最多的那种矿，平票取
+	// 物品 ID 较小者。DSP 口径——矿机不混采（试玩 1016 报告 B2）。建好后不再变化。
+	MiningItem string `json:"mining_item,omitempty"`
 	// FoundationTerrain stores the terrain replaced by a foundation, in footprint order.
 	// It allows demolition and snapshot restore to return the tile to its prior state.
 	FoundationTerrain []string `json:"foundation_terrain,omitempty"`

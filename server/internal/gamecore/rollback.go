@@ -132,8 +132,10 @@ func (gc *GameCore) Rollback(req model.RollbackRequest) (*model.RollbackResponse
 	gc.snapshotStore.TrimAuditAfterTick(toTick)
 	trimmedLogBefore := 0
 	if oldest := gc.snapshotStore.OldestSnapshotTick(); oldest > 0 {
-		trimmedLogBefore = gc.cmdLog.TrimBefore(oldest)
-		gc.snapshotStore.TrimAuditBeforeTick(oldest)
+		if cutoff := gc.auditTrimTick(toTick, oldest); cutoff > 0 {
+			trimmedLogBefore = gc.cmdLog.TrimBefore(cutoff)
+			gc.snapshotStore.TrimAuditBeforeTick(cutoff)
+		}
 	}
 	if gc.queue != nil {
 		gc.queue.ClearPending()

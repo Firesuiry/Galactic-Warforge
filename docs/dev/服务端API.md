@@ -267,8 +267,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
   - **占地（细分网格）**：`position` 是占地原点（左上 cell）。建筑按 `buildings.yaml` 的 `footprint {width, height}` 真实占 1×1 / 2×2 / 3×3 / 5×5 个 cell，旋转 90/270 交换宽高；占地内每一格都必须在界内、可建造（`foundation` 例外，它自己铺地形）且空闲，否则 `INVALID_TARGET`（「占地地块 (x,y) 不可建造」）或 `POSITION_OCCUPIED`。`TileBuilding` 与 `Grid[].BuildingID` 为占地每一格登记，拆除时整块释放；垂直叠层仍按原点 `position.z` 递增。
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
+  - **采集建筑只采一种矿**（DSP 口径，试玩 1016 报告 B2）：下单时按覆盖框里**数量最多的矿种**定死这一台采什么（平票取物品 ID 较小者，结果确定），写进施工任务的 `mining_item`，落成时写进建筑的 `mining_item`（`build` 回执也会写明「施工任务已排队（位置 x,y），将开采「铁矿石」」）。覆盖框里混了别的矿种时那些矿脉一格都不采——不会出现「铜矿先攒满输出缓冲、把整条产线堵死」。校验仍只要求覆盖框里有允许的矿（`INVALID_TARGET`：「<建筑> 占地及外圈没有可开采的资源节点」/「<建筑> 无法开采资源 <kind>」）。
+  - 服务端没有独立的「建造预览」接口：客户端 hover 用的「有矿」判定是在本地按 `catalog.buildings[].requires_resource_node` + `coverage_radius` 与 `GET .../scene` 的 `resources[]` 算的。要在 hover 里显示「将开采哪一种矿」，本地按同一条规则数覆盖框（占地 + `max(1, coverage_radius)` 圈）里各矿种的格数、取最多者（平票取物品 ID 字典序较小者）即可与服务端一致；已建成建筑的 `mining_item` 直接读建筑字段。
   - 围堵校验（三层，全部 `INVALID_TARGET`）：
-    1. **四邻全堵死**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。单位自身站在建造格上的情况由既有的占位校验处理。
+    1. **四邻全堵死（增量）**：若该建筑的占地会让**任何地面单位**（含己方机甲、敌方单位）的四邻全部被堵死，回执「会把<单位名>（x,y）四周完全堵死，最后一个出口（x,y）」。这一层只看**本次落点新堵上的出口**（建造前可通行、建造后被堵死）：四邻在建造前就已经全堵的单位是被更早的建筑/地形困住的（例如建造命令下达后、施工完成前单位自己走进了即将合拢的口袋），与本次落点无关，不再连累别处的建造——否则一台预先被困的单位会让全图任何一处建造都回 `INVALID_TARGET`，玩家与 bot 从此一座建筑都建不出来。单位自身站在建造格上的情况由既有的占位校验处理。
     2. **口袋（增量）**：若建造点 48 cell 内的己方地面单位本可以走到自家主基地、建造后走不到，回执「会把<单位名>（x,y）与基地之间的通路切断（最后通道 x,y），单位会困死在封闭区域里」——防止一圈建筑把自家单位（尤其是执行体）关在封闭区域里（试玩报告 D）。
     3. **基地绝对不变量**：对**所有玩家**，任何建造放下后该玩家的基地（`battlefield_analysis_base`）仍须能沿地面（地形 + 建筑 + 施工预留都算障碍）走到争夺中心（遭遇战地图出生点球面中点的资源簇；没有争夺中心时用对手基地）。不满足即拒绝，回执「会把基地与外界的通路封死（最后通道 x,y）」。与第 2 层不同，这一层不看"增量"，因此能拦住一圈圈逐步收紧的口袋（试玩报告 1010 阻断 A：bot 用 14 座建筑把自家基地封成 126 格口袋，22 个兵与执行体全部困死、整局 0 波进攻）。bot 的选址函数（`botBuildSpotNear` / 矿机点位 / 拉线电塔）复用同一套校验，会自动换格。
   - 占位回执会区分「该格已有你的施工任务：<建筑名>（排队中/建造中）」「该格已有你的建筑：<建筑名>」「该格已有其他玩家的建筑：<建筑名>」「该格已有其他玩家的施工任务：<建筑名>（…）」（试玩报告 1010 一般级 G）。
@@ -346,6 +348,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。
 - 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（`sorter_mk1/2/3` 的 `range` = 1/2/3，`pile_sorter` = 3）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
+- **取货端是传送带时扫描整段带子**（试玩 1016 报告 B1）：按顺序取第一个「过滤允许 + 放货端收得下」的栈，跳过被过滤掉或目标不收的物品，其余货的顺序不变。旧实现只看队首那一栈——队首是下游不要的矿种时后面的货永远取不到，配上「带尾对着分拣器、下游不收」的布局就是整线死锁（带满 → 上游矿机输出缓冲满 → 矿机停采）。带子长期堵死时另发 `belt_blocked` 告警（见 §6.7）。
 - 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
 - `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
 - 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
@@ -469,13 +472,14 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 **`GET /world/planets/{planet_id}/scene`**：局部场景。
 - 参数：`x` / `y` / `width` / `height`（图集窗口，默认 160、最大 257，越界自动裁剪）；可选 `near_x` / `near_y` / `radius`（0..128，非零时中心须为有效地格，否则 400）返回跨面补片。
 - 字段：`bounds`、`terrain`、`height`（可选 0..1，未探索为 0 或不下发）、`visible` / `explored`、`buildings`、`units`、`resources`、`surface_patches[]{bounds, terrain, height, visible, explored}`（未探索地形为 `unknown`，资源只在已探索格返回；实体合并到主响应并去重），以及整星计数。
-- `buildings` 为 `model.Building` 直出，按类型带子结构：`conveyor`、`splitter`、`sorter`、`production`（含 `progress_fraction`、`pending_outputs`）、`fractionation`、`spray_coater`、`traffic_monitor`、`distributor`、`unit_queue`、`rally_point`、`runtime.functions.collect{resource_kind, coverage_radius}` 等。
+- `buildings` 为 `model.Building` 直出，按类型带子结构：`conveyor`（含 `blocked_ticks`，带上有货却连续没动出去的 tick 数）、`splitter`、`sorter`、`production`（含 `progress_fraction`、`pending_outputs`）、`fractionation`、`spray_coater`、`traffic_monitor`、`distributor`、`unit_queue`、`rally_point`、`mining_item`（采集建筑唯一开采的矿种）、`runtime.functions.collect{resource_kind, coverage_radius}` 等。
 - `resources[]` 枯竭时带 `depleted: true`，仍保留输出。
 
 **`GET /world/planets/{planet_id}/path?unit_id=&target_x=&target_y=&stop_range=`**：为己方单位规划地表最短路径。**目标格允许落在未探索区**：服务端是权威，寻路按真实地形/建筑阻挡做（只回路线，不回未探索区的地形细节），响应新增 `explored` 表示终点是否在玩家已探索范围内。`stop_range` 0..128（默认 0）；最多 512 步；非法参数或非己方单位 400。响应 `planet_id` / `surface` / `reachable` / `distance` / `explored` / `path`（含起点）/ `waypoints`（不含起点，按单位 `move_range` 切分，供分段展示）。目标被地形阻挡或不可达时 `reachable=false, distance=-1`；实际移动仍按权威障碍校验。
 - 参数名是 `unit_id`（单位 ID，取自 `/state/summary` 的 `executor.unit_id` 或单位列表），**不是** `entity_id`：传 `entity_id` 会被当成空单位、回 400 `own unit required`（试玩报告 K）。
 
 **`GET /world/planets/{planet_id}/inspect?entity_kind=&entity_id=|sector_id=`**：`entity_kind = building|unit|resource|sector`。返回 `planet_id` / `discovered` / `entity_kind` / `entity_id` / `title` 及对应 `building` / `unit` / `resource`。建筑与单位按可见性校验，不可见 404；资源在 runtime 未加载时回退静态地图。
+- 目标 `entity_kind=building` 是采集建筑（采矿机 / 水泵 / 抽油机等）时，另返回 `mining_item`：这台建筑**唯一**开采的矿种（目录物品 ID，见 §5.1 的 `mining_item`）。非采集建筑为空。
 - `runtime.state = no_power` 时 `state_reason` 为 `under_power`（已接网但分不到电）或 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；燃料型发电机为 `no_fuel`。
 - `runtime.state = running` 时 `state_reason` 也可为 `output_blocked`：生产建筑的整批产出在**输出缓冲与产出预留段**两处都放不下（成品不再走输入缓冲，见 §5.1 的两条通道），本 tick 的批次保留待重试（建筑本身仍在 `running`，只是产物出不去）。此时 `production_alerts` 同时报 `output_blocked`；腾出空间（取出成品 / 接上传送带）后下一 tick 自动恢复，`state_reason` 清空（试玩 1014 层 04 P1）。**采集建筑**的 `output_blocked` 判据是「输出缓冲满且主库存也满」（它的主库存就是出货缓冲）。
 - 射线接收站逐 tick 电力结算不在 inspect 中暴露，用 summary / stats / networks 验证。
@@ -488,7 +492,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `logistics_stations[]`：`building_id` / `building_type` / `position` / `state`（含唯一站库 `inventory`、`slot_capacity` / `item_capacity` / `energy` / `energy_capacity` / `charge_per_tick` / `belt_ports`）/ `drone_ids` / `ship_ids`。
 - `logistics_drones[]` / `logistics_ships[]`：`station_id`（归属站）/ `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `cargo` / `trip_kind` / `pickup_item_id` / `pickup_quantity` / `home_pos` / `returning` / `state_reason` / `energy_cost`；船另有 `current_planet_id`、`warp_*`、`warped`、`warp_item_spent`。
 - `logistics_distributors[]`（`bot_ids` / `host_available` / `inventory`）与 `logistics_bots[]`（`position` / `home_pos` / `target_pos` / `target_kind` / `trip_kind` / `cargo` / `status` / `returning` / `energy_remaining`）。
-- `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释 pending 任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）；开工后清空。排队不是失败——`build` 命令本身返回成功。
+- `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `mining_item`（采集任务排产时定下的唯一开采矿种）/ `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释 pending 任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）；开工后清空。排队不是失败——`build` 命令本身返回成功。
 - `contacts[]`（同 system contacts）、`enemy_forces[]`（至少 `confirmed_type` 的接触：`id` / `type` / `position` / `strength` / `level` / `threat_level`；`id` 是 `fleet_attack` 与自动交战使用的目标 ID；hive 遗址见 `nest_ruins[]`）、`detections[]`（由 contacts 聚合的摘要）。行星传感器源 = 己方建筑（视野 / 雷达 / 信号塔）**加己方单位（含机甲）的车载传感器**（光学 + 红外 + 被动电磁，半径 = 单位 `vision_range`）——把机甲开到黑雾巢穴视野内即可让巢穴升到 `confirmed_type` 并出现在 `enemy_forces` 里（试玩报告 1010 阻断 C：此前只收集建筑传感器，`enemy_forces` 恒为空、黑雾不可见不可打）。
 
 **`GET /world/planets/{planet_id}/networks`**：电网与管网，整体来自同一 tick 的 `PowerSettlementSnapshot`。
@@ -539,7 +543,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 参数：`after_alert_id`（推荐）、`since_tick`、`limit`（默认 `alert_history_limit`）。
 - 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
 - 同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。
-- `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。
+- `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked` / `belt_blocked`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。`belt_blocked` 指向**传送带格本身**：带上有货却连续 300 tick（`beltBlockedWarnTicks`）一件都没动出去（带尾对着空地、下游分拣器/建筑不收这个物品），message 写「传送带被堵，物品运不出去」，`details` 带 `position` / `queued_items` / `blocked_ticks`；货被取走或开始流动后解除——避免玩家把上游矿机的「产物阻塞」误当成根因（试玩 1016 报告 B1/U7）。
 
 **`POST /save`**（仅 admin）：请求 `{reason?}`；响应 `ok` / `tick` / `saved_at` / `path` / `trigger`。只覆盖当前 `save.json`，写盘失败 500。
 
@@ -558,7 +562,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `ticks` 与 `to_tick` **必须且只能给一个**（`to_tick` 必须大于当前 tick，`ticks` 必须为正）；两者都给或都不给 → `400`；未知字段 → `400`。
 - `stop_on` 三项**默认全开**，只有显式传 `false` 才关闭：`game_over`（对局宣判结束）、`under_attack`（我方建筑/单位受到伤害或被摧毁；拆除与太阳帆寿终不算）、`critical_alert`（**快进开始后新出现的**高价值产线告警：缺电 `power_shortage`（含欠压停机）、缺料停工 `input_shortage`）。
-  - 常态产线告警刻意排除，它们不该打断「一路狂奔」：`output_blocked`（产物阻塞）、`throughput_drop`（产能下降）、`backlog`（堆积升高）、`unit_spawn_blocked`（出厂口被占满）。
+  - 常态产线告警刻意排除，它们不该打断「一路狂奔」：`output_blocked`（产物阻塞）、`throughput_drop`（产能下降）、`backlog`（堆积升高）、`unit_spawn_blocked`（出厂口被占满）、`belt_blocked`（传送带被堵）。
   - 快进开始前就已经成立的高价值告警（同一建筑同一类型）不算「新出现」，不会触发；只有快进期间新冒出来的才停下（`go test ./internal/gamecore/ -run TestAdvanceCriticalAlert` 覆盖）。
 - 「我方」口径 = 发起者所属玩家；发起者不在本局玩家表里（纯 admin 账号）时退回本局所有非 bot 玩家。
 - 多人门禁：本局非 bot 玩家多于发起者一人时，只有 `role=admin` 能快进，否则 `403` 并在 `error` 里说明原因（快进会一次性推进全局时间线，其他人类玩家没有叫停机会）。

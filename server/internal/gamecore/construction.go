@@ -729,6 +729,9 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		b.Distributor = model.NewDistributorState(host.ID)
 	}
 	model.ApplyBuildingRotation(b, task.Rotation)
+	// 矿种在排产时就定下了（task.MiningItem）；老存档点的任务没有这个字段时按
+	// 同一套规则现算一次，保证落成的建筑一定有 mining_item。
+	b.MiningItem = task.MiningItem
 	syncCollectorResourceKind(ws, b)
 	if b.Production != nil {
 		recipeID := task.RecipeID

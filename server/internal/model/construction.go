@@ -48,6 +48,10 @@ type ConstructionTask struct {
 	// When false, materials are "locked" but not yet deducted (deducted at completion).
 	// When true, materials have been deducted (used for proper refund handling).
 	MaterialsDeducted bool `json:"materials_deducted,omitempty"`
+	// MiningItem 是采集建筑排产时定下的唯一开采矿种（见 model.MiningItemAt）：
+	// 下单时算一次、落成时写进建筑，玩家在建造回执/任务视图里就能看到
+	// 「这台矿机会采什么」（试玩 1016 报告 B2）。非采集建筑为空。
+	MiningItem string `json:"mining_item,omitempty"`
 }
 
 // ConstructionQueue stores pending and active construction tasks.

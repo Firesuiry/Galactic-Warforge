@@ -114,6 +114,17 @@ if ! grep -q '^  tick_rate_override:' "$SERVER_CONFIG"; then
   printf '\n  tick_rate_override: %s\n' "$TICK_RATE" >>"$SERVER_CONFIG"
 fi
 
+# 试玩一律整局保留审计/命令日志：checkpointbuild -export 靠它导出「可执行构建
+# 记录」，默认的「跟快照保留窗口一起裁」（遭遇战 6000 tick）会把开局建造段裁掉
+# （试玩 1016 报告 B3）。审计条目很小（一条命令一行），整局几万 tick 也就几 MB。
+# 插在 `server:` 之后（同缩进即同一 mapping），不依赖 server 段是不是文件末段。
+log "审计日志保留窗口：整局全留（audit_retention_ticks: 0）"
+if grep -q '^  audit_retention_ticks:' "$SERVER_CONFIG"; then
+  sed -i 's|^  audit_retention_ticks:.*|  audit_retention_ticks: 0|' "$SERVER_CONFIG"
+else
+  sed -i '0,/^server:/{s|^server:|server:\n  audit_retention_ticks: 0|}' "$SERVER_CONFIG"
+fi
+
 log "启动服务端 (:$SERVER_PORT)"
 setsid --fork nohup bash -c "echo \$\$ > '$RUN_DIR/server.pid'; cd '$WORKTREE/server'; exec '$RUN_DIR/server-bin' -config '$SERVER_CONFIG' -map-config '$WORKTREE/$MAP_CONFIG'" \
   >"$RUN_DIR/server.log" 2>&1 </dev/null
