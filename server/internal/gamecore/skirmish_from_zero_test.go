@@ -852,7 +852,7 @@ func (op *zeroOpening) minerOriginFor(node *model.ResourceNodeState) (model.Posi
 	if !ok || !op.ws.FootprintFits(origin, fp, model.BuildingTypeMiningMachine, "") {
 		return model.Position{}, false
 	}
-	if op.spotCoversExecutor(origin, fp) {
+	if spotCoversGroundUnit(op.ws, origin, fp, "p1") {
 		return model.Position{}, false
 	}
 	if model.ValidateCollectorSite(op.ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
@@ -862,31 +862,6 @@ func (op *zeroOpening) minerOriginFor(node *model.ResourceNodeState) (model.Posi
 		return model.Position{}, false
 	}
 	return origin, true
-}
-
-// spotCoversExecutor 该占地是否罩住了自家地面单位（含机甲）。
-//
-// 建造不会把单位推出去：占地一落成，站在里面的单位就永久卡在建筑格上
-// （`buildObstacles` 把 `TileBuilding` 非空的格视为不可通行，寻路再也走不出去）。
-// 脚本选点时必须主动避开自家单位——真人玩家看到机甲站在那儿也不会把风机压上去。
-// 实测 seed 001：第二座风机 (53,142) 的 2×2 占地罩住机甲 (54,143)，此后机甲
-// 一格都动不了，手搓链断在第一座风机之后（整局只建成风机）。
-func (op *zeroOpening) spotCoversExecutor(origin model.Position, fp model.Footprint) bool {
-	tiles, err := op.ws.FootprintTiles(origin, fp)
-	if err != nil {
-		return true // 求不出占地就别选它
-	}
-	for id, u := range op.ws.Units {
-		if u == nil || u.HP <= 0 || u.OwnerID != "p1" || unitIsAir(op.ws, id) {
-			continue
-		}
-		for _, t := range tiles {
-			if t.X == u.Position.X && t.Y == u.Position.Y {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // buildSpot 基地附近的可建空位：与 botBuildSpotNear 同规则，但额外跳过资源格
@@ -944,7 +919,8 @@ func (op *zeroOpening) buildSpot(btype model.BuildingType) *model.Position {
 			// (54,143)，之后机甲再也动不了：开局链停在「已建 3 座建筑」，
 			// 手搓链全断，整局 tick 75000 只建到风机（旧基线用 (53,142)
 			// 建的是 1×1 电塔，细分网格后 2×2 风机才第一次撞上这个问题）。
-			if op.spotCoversExecutor(candidate, fp) {
+			// 判定复用引擎侧 spotCoversGroundUnit（bot 选址同一口径）。
+			if spotCoversGroundUnit(ws, candidate, fp, "p1") {
 				continue
 			}
 			c := candidate

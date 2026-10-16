@@ -486,7 +486,7 @@ func (gc *GameCore) botTurret(ws *model.WorldState, playerID string, tuning botT
 	if !ok {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), btype)
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), btype, playerID)
 	if pos == nil {
 		return false
 	}
@@ -1244,7 +1244,7 @@ func (gc *GameCore) botPoweredSpot(ws *model.WorldState, owner string, ctx *botS
 	if len(anchors) == 0 {
 		// 电网里还没有发电建筑（第一座风机）：仍按常规选址贴基地建，
 		// 它的供电接口在电感应塔无线范围内就能把电送进电网。
-		return botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), btype)
+		return botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, owner, ctx), btype, owner)
 	}
 	sort.Slice(anchors, func(i, j int) bool {
 		di, dj := ws.SurfaceDistance(*ctx.home, anchors[i].Position), ws.SurfaceDistance(*ctx.home, anchors[j].Position)
@@ -1300,6 +1300,10 @@ func (gc *GameCore) botPoweredSpot(ws *model.WorldState, owner string, ctx *botS
 			continue
 		}
 		if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
+			continue
+		}
+		// 占地同样不能罩住自家地面单位（与 botBuildSpotNear 同一口径）。
+		if spotCoversGroundUnit(ws, candidate, footprint, owner) {
 			continue
 		}
 		c := candidate
@@ -1435,6 +1439,10 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) != nil {
 			continue
 		}
+		// 占地里不能站着自家地面单位（落成时会被推到占地外，但选点就该避开）。
+		if spotCoversGroundUnit(ws, origin, fp, playerID) {
+			continue
+		}
 		// 矿机只采一种矿（DSP 口径，试玩 1016 报告 B2）：落点覆盖框里矿种最多的
 		// 那种才是实际产出。落点覆盖框里最多的不是候选矿种时（混合矿簇），先记下
 		// 这个兜底落点、继续找真正能采到目标矿的位置；全都找不到才用它，保证
@@ -1487,7 +1495,7 @@ func (gc *GameCore) botAssembler(ws *model.WorldState, playerID string, tuning b
 	if !botCanAffordBuild(player, def) {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeAssemblingMachineMk1)
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeAssemblingMachineMk1, playerID)
 	if pos == nil {
 		return false
 	}
@@ -1528,7 +1536,7 @@ func (gc *GameCore) botBuildLab(ws *model.WorldState, playerID string, ctx *botS
 	if !botCanAffordBuild(player, def) {
 		return false
 	}
-	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeMatrixLab)
+	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeMatrixLab, playerID)
 	if pos == nil {
 		return false
 	}
@@ -1739,9 +1747,14 @@ func botConstructRadius(ws *model.WorldState, playerID string, ctx *botSurvey) i
 }
 
 // botBuildSpotNear 基地附近的可建格（由内向外扫描），跳过在建格。
-// 建造会围死地面单位（含己方机甲）的格子同样跳过：bot 不再反复发注定被拒的
-// 建造命令（试玩报告 I），复用与 execBuild 相同的 buildingEnclosure 校验。
-func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, btype model.BuildingType) *model.Position {
+// 两条"别把自家单位关起来"的校验都复用引擎侧实现：
+//   - buildingEnclosure：会围死地面单位（含己方机甲）的格子跳过，bot 不再反复发
+//     注定被拒的建造命令（试玩报告 I）；
+//   - spotCoversGroundUnit：占地**罩住**自家地面单位的格子同样跳过——命令下达后
+//     单位会走进即将合拢的占地，落成时虽然会被推到占地外（见
+//     displaceFootprintUnits），但推挤会打乱 bot 自己的站位，选点时就该避开
+//     （bot 长跑 tick 14440：补给站 3×3 落成时步兵正站在占地里）。
+func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, btype model.BuildingType, owner string) *model.Position {
 	if maxRadius < 1 {
 		return nil
 	}
@@ -1774,13 +1787,22 @@ func botBuildSpotNear(ws *model.WorldState, home model.Position, maxRadius int, 
 			// 细分网格：锚点格空 ≠ 放得下。2×2/3×3/5×5 的占地必须整块可落位，
 			// 否则发出的建造命令会被"占地与已有建筑重叠"拒绝（脚本化开局实测
 			// 风机反复撞在 5×5 的 HQ 上，整局卡死在第一座风机）。
-			if def, ok := model.BuildingDefinitionByID(btype); ok {
-				if !ws.FootprintFits(candidate, model.RotatedFootprint(def.Footprint, model.PlanRotation0), btype, "") {
-					continue
-				}
+			def, ok := model.BuildingDefinitionByID(btype)
+			if !ok {
+				continue
+			}
+			fp := model.RotatedFootprint(def.Footprint, model.PlanRotation0)
+			if !ws.FootprintFits(candidate, fp, btype, "") {
+				continue
 			}
 			// 复用围死校验：跳过会把地面单位四周堵死的格子。
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
+				continue
+			}
+			// 占地里不能站着自家地面单位：建造**不会**把单位推出去，占地落成后
+			// 那台单位就永远卡在建筑格上。实测 bot 长跑 tick 14440：补给站
+			// b-86（3×3）落成时步兵 u-74 正站在占地里，此后四邻全堵、永久砌在墙里。
+			if spotCoversGroundUnit(ws, candidate, fp, owner) {
 				continue
 			}
 			c := candidate

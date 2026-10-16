@@ -30,7 +30,7 @@ func TestBotBuildSpotAvoidsEnclosingTile(t *testing.T) {
 	}
 	lastExit := neighbors[3]
 	// 从远处扫描：选址必须跳过这个"最后一个出口"。
-	pos := botBuildSpotNear(ws, target, 12, model.BuildingTypeWindTurbine)
+	pos := botBuildSpotNear(ws, target, 12, model.BuildingTypeWindTurbine, "")
 	if pos == nil {
 		t.Fatal("bot must find another build spot instead of the enclosing tile")
 	}
@@ -47,7 +47,7 @@ func TestBotBuildSpotStillFindsOpenTile(t *testing.T) {
 	core := newEnclosureTestCore(t)
 	ws := core.World()
 	home := model.Position{X: 20, Y: 20}
-	pos := botBuildSpotNear(ws, home, 8, model.BuildingTypeWindTurbine)
+	pos := botBuildSpotNear(ws, home, 8, model.BuildingTypeWindTurbine, "")
 	if pos == nil {
 		t.Fatal("open field must yield a build spot")
 	}

@@ -152,7 +152,7 @@ func PlanBuildSpot(ws *model.WorldState, home model.Position, maxRadius int, bty
 			if buildingEnclosure(ws, btype, model.PlanRotation0, candidate) != nil {
 				continue
 			}
-			if spotCoversGroundUnit(ws, candidate, fp) {
+			if spotCoversGroundUnit(ws, candidate, fp, "") {
 				continue
 			}
 			c := candidate
@@ -190,7 +190,7 @@ func PlanMinerSpot(ws *model.WorldState, node *model.ResourceNodeState, pureKind
 		if buildingEnclosure(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, candidate) != nil {
 			continue
 		}
-		if spotCoversGroundUnit(ws, candidate, fp) {
+		if spotCoversGroundUnit(ws, candidate, fp, "") {
 			continue
 		}
 		if pureKind != "" && !minerCoverIsPure(ws, candidate, pureKind) {
@@ -253,9 +253,11 @@ func footprintReserved(ws *model.WorldState, origin model.Position, fp model.Foo
 	return false
 }
 
-// spotCoversGroundUnit 该占地是否罩住了自家地面单位（含机甲）。建造不会把单位
-// 推出去，占地落成后单位会永久卡在建筑格上，所以选点必须主动避开。
-func spotCoversGroundUnit(ws *model.WorldState, origin model.Position, fp model.Footprint) bool {
+// spotCoversGroundUnit 该占地是否罩住了地面单位（含机甲）。建造不会把单位推出去，
+// 占地落成后单位会永久卡在建筑格上，所以选点必须主动避开。
+// owner 非空时只算该玩家的单位（bot 选点只避开自家的），空串算所有玩家
+// （脚本化开局用，避开任何一个单位都不亏）。
+func spotCoversGroundUnit(ws *model.WorldState, origin model.Position, fp model.Footprint, owner string) bool {
 	if ws == nil {
 		return false
 	}
@@ -265,6 +267,9 @@ func spotCoversGroundUnit(ws *model.WorldState, origin model.Position, fp model.
 	}
 	for id, u := range ws.Units {
 		if u == nil || u.HP <= 0 || unitIsAir(ws, id) {
+			continue
+		}
+		if owner != "" && u.OwnerID != owner {
 			continue
 		}
 		for _, t := range tiles {
@@ -379,7 +384,7 @@ func PlanBeltLink(ws *model.WorldState, src *model.Building, targetType model.Bu
 		if buildingEnclosure(ws, targetType, model.PlanRotation0, c.target) != nil {
 			continue
 		}
-		if spotCoversGroundUnit(ws, c.target, fp) {
+		if spotCoversGroundUnit(ws, c.target, fp, "") {
 			continue
 		}
 		return BeltLink{Belt: c.belt, Dir: c.dir, Sorter: c.sorter, SorterRotation: c.rot, Target: c.target}, true
