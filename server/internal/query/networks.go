@@ -433,9 +433,6 @@ func powerRelevantBuilding(building *model.Building) bool {
 	if building.Runtime.Params.EnergyConsume > 0 || building.Runtime.Params.EnergyGenerate > 0 {
 		return true
 	}
-	if building.Runtime.Params.MaintenanceCost.Energy > 0 {
-		return true
-	}
 	if building.Runtime.Functions.Energy != nil {
 		return true
 	}

@@ -20,7 +20,6 @@ func TestGeothermalBuildRequiresLavaProximity(t *testing.T) {
 	grantTechs(ws, "p1", "geothermal")
 	grantAllItems(ws, "p1", 100)
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 
 	// 细分网格：地热站 3×3，按它自己的占地找落位点。

@@ -25,13 +25,13 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 		// 研究倍率镜像：查询层据此把目录成本缩放成实际成本（与结算一致）。
 		tech.ResearchPace = model.PaceOrOne(cfg.Battlefield.PaceResearch)
 		ps := &model.PlayerState{
-			PlayerID:  p.PlayerID,
-			TeamID:    p.TeamID,
-			Role:      p.Role,
-			Resources: model.Resources{Minerals: 200, Energy: 100},
-			IsAlive:   true,
-			Tech:      tech,
-			Stats:     model.NewPlayerStats(p.PlayerID),
+			PlayerID: p.PlayerID,
+			TeamID:   p.TeamID,
+			Role:     p.Role,
+
+			IsAlive: true,
+			Tech:    tech,
+			Stats:   model.NewPlayerStats(p.PlayerID),
 		}
 		if p.Bot != "" {
 			ps.Bot = &model.BotRuntimeState{}

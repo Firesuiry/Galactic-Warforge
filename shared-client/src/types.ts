@@ -2530,4 +2530,4 @@ export interface PlanetPathView { planet_id: string; surface: SurfaceMetadata; r
  * configure_sorter 的载荷（第 16 轮契约 §2）：只配过滤，不含方向——
  * 分拣器朝向由建造时的 rotation 决定（背面取货、正面放货），服务端忽略方向字段。
  */
-export interface SorterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }
+export interface SorterFilterConfig { filter_mode?: "allow" | "deny"; filter_items?: string[]; }

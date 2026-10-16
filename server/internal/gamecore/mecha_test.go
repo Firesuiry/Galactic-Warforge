@@ -26,12 +26,9 @@ func mechaTestWorld() (*model.WorldState, *model.Unit) {
 func mechaTestWorldFar() (*model.WorldState, *model.Unit) {
 	ws := model.NewWorldState("p1", 32)
 	ws.Players["p1"] = &model.PlayerState{
-		PlayerID: "p1",
-		IsAlive:  true,
-		Resources: model.Resources{
-			Minerals: 0,
-			Energy:   20,
-		},
+		PlayerID:  "p1",
+		IsAlive:   true,
+		Resources: model.Resources{Energy: 20},
 	}
 	ws.Tick = 20
 	unit := model.UnitStats(model.UnitTypeExecutor)

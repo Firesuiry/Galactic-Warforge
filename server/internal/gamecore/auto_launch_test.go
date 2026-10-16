@@ -25,7 +25,9 @@ func makeLaunchBuildingReady(b *model.Building) {
 	b.Runtime.State = model.BuildingWorkRunning
 }
 
-// G2: em_rail_ejector 装料后按 LaunchInterval 自动连续发射太阳帆并扣能。
+// G2: em_rail_ejector 装料后按 LaunchInterval 自动连续发射太阳帆。
+// 第 16 轮起 energy 不再是可花的货币：发射不再扣玩家的 energy 储备
+// （能量消耗走建筑电网 demand，见 rocket_launch.go 的注释）。
 func TestAutoLaunchSolarSailFiresOnCadence(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
@@ -49,9 +51,6 @@ func TestAutoLaunchSolarSailFiresOnCadence(t *testing.T) {
 	if got := ejector.Storage.OutputQuantity(model.ItemSolarSail); got != 2 {
 		t.Fatalf("expected 2 sails left, got %d", got)
 	}
-	if got := ws.Players["p1"].Resources.Energy; got != 1000-lm.EnergyPerLaunch {
-		t.Fatalf("expected energy %d after launch, got %d", 1000-lm.EnergyPerLaunch, got)
-	}
 
 	// 非节拍 tick 不发射。
 	core.processTick()
@@ -67,9 +66,6 @@ func TestAutoLaunchSolarSailFiresOnCadence(t *testing.T) {
 	orbit = GetSolarSailOrbit(core.spaceRuntime, "p1", "sys-1")
 	if orbit == nil || len(orbit.Sails) != 2 {
 		t.Fatalf("expected 2 sails after second cadence, got %+v", orbit)
-	}
-	if got := ws.Players["p1"].Resources.Energy; got != 1000-2*lm.EnergyPerLaunch {
-		t.Fatalf("expected energy %d after two launches, got %d", 1000-2*lm.EnergyPerLaunch, got)
 	}
 }
 
@@ -99,35 +95,10 @@ func TestAutoLaunchSkipsWhenUnpowered(t *testing.T) {
 	if got := ejector.Storage.OutputQuantity(model.ItemSolarSail); got != 1 {
 		t.Fatalf("expected sail retained while unpowered, got %d", got)
 	}
-	if got := ws.Players["p1"].Resources.Energy; got != 1000 {
-		t.Fatalf("expected energy unchanged while unpowered, got %d", got)
-	}
 }
 
-// G2 边界：能量储备不足一次发射时不发射。
-func TestAutoLaunchSkipsWithoutEnoughEnergy(t *testing.T) {
-	core := newE2ETestCore(t)
-	ws := core.World()
-
-	ejector := newEMRailEjectorBuilding("ejector-poor", model.Position{X: 6, Y: 6}, "p1")
-	makeLaunchBuildingReady(ejector)
-	ejector.Storage.EnsureInventory()[model.ItemSolarSail] = 1
-	attachBuilding(ws, ejector)
-
-	lm := ejector.Runtime.Functions.Launch
-	ws.Players["p1"].Resources.Energy = lm.EnergyPerLaunch - 1
-
-	fireTick := nextAutoLaunchTick(ejector.ID, lm.LaunchInterval, ws.Tick)
-	ws.Tick = fireTick - 1
-	core.processTick()
-
-	if orbit := GetSolarSailOrbit(core.spaceRuntime, "p1", "sys-1"); orbit != nil && len(orbit.Sails) != 0 {
-		t.Fatalf("expected no sail launch without energy, got %+v", orbit)
-	}
-	if got := ejector.Storage.OutputQuantity(model.ItemSolarSail); got != 1 {
-		t.Fatalf("expected sail retained without energy, got %d", got)
-	}
-}
+// 第 16 轮删除了「能量储备不足就不发射」这条门槛：energy 只是电网结余的
+// 只读展示，发射与否由建筑通电状态（TestAutoLaunchSkipsWhenUnpowered）决定。
 
 // G2 边界：未装料时不发射。
 func TestAutoLaunchSkipsWithoutLoadedSails(t *testing.T) {
@@ -147,9 +118,6 @@ func TestAutoLaunchSkipsWithoutLoadedSails(t *testing.T) {
 
 	if orbit := GetSolarSailOrbit(core.spaceRuntime, "p1", "sys-1"); orbit != nil && len(orbit.Sails) != 0 {
 		t.Fatalf("expected no sail launch without loaded sails, got %+v", orbit)
-	}
-	if got := ws.Players["p1"].Resources.Energy; got != 1000 {
-		t.Fatalf("expected energy unchanged without loaded sails, got %d", got)
 	}
 }
 
@@ -193,9 +161,6 @@ func TestAutoLaunchRocketIntoDysonLayer(t *testing.T) {
 	}
 	if got := silo.Storage.OutputQuantity(model.ItemSmallCarrierRocket); got != 1 {
 		t.Fatalf("expected 1 rocket left, got %d", got)
-	}
-	if got := ws.Players["p1"].Resources.Energy; got != 1000-lm.EnergyPerLaunch {
-		t.Fatalf("expected energy %d after rocket launch, got %d", 1000-lm.EnergyPerLaunch, got)
 	}
 }
 

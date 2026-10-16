@@ -264,8 +264,6 @@ type MaterialSource struct {
 type MaterialReservation struct {
 	TaskID     string         `json:"task_id"`
 	PlayerID   string         `json:"player_id"`
-	Minerals   int            `json:"minerals"`
-	Energy     int            `json:"energy"`
 	Items      []ItemAmount   `json:"items,omitempty"`
 	Source     MaterialSource `json:"source"`
 	ReservedAt int64          `json:"reserved_at"`

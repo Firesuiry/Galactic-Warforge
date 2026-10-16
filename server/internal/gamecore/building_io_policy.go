@@ -2,38 +2,11 @@ package gamecore
 
 import "siliconworld/internal/model"
 
-type buildingInputCandidate struct {
-	order    int
-	buffer   int
-	dir      model.ConveyorDirection
-	conveyor *model.Building
-	itemID   string
-	quantity int
-}
-
 func buildingRecipe(building *model.Building) (model.RecipeDefinition, bool) {
 	if building == nil || building.Production == nil || building.Production.RecipeID == "" {
 		return model.RecipeDefinition{}, false
 	}
 	return model.Recipe(building.Production.RecipeID)
-}
-
-func buildingRecipeInputNeeds(building *model.Building) map[string]int {
-	recipe, ok := buildingRecipe(building)
-	if !ok {
-		return nil
-	}
-	needs := make(map[string]int, len(recipe.Inputs))
-	for _, input := range recipe.Inputs {
-		if input.ItemID == "" || input.Quantity <= 0 {
-			continue
-		}
-		needs[input.ItemID] += input.Quantity
-	}
-	if len(needs) == 0 {
-		return nil
-	}
-	return needs
 }
 
 func buildingRecipeOutputItems(building *model.Building) []string {
@@ -233,42 +206,6 @@ func ioPortAllowsItem(port model.IOPort, itemID string) bool {
 		}
 	}
 	return false
-}
-
-func compareInputCandidates(building *model.Building, a, b buildingInputCandidate) bool {
-	needs := buildingRecipeInputNeeds(building)
-	if len(needs) == 0 {
-		return a.order < b.order
-	}
-
-	requiredA, okA := needs[a.itemID]
-	requiredB, okB := needs[b.itemID]
-	if okA != okB {
-		return okA
-	}
-	if !okA {
-		return a.order < b.order
-	}
-
-	currentA := currentProductionInputQuantity(building, a.itemID)
-	currentB := currentProductionInputQuantity(building, b.itemID)
-
-	left := currentA * requiredB
-	right := currentB * requiredA
-	if left != right {
-		return left < right
-	}
-	if currentA != currentB {
-		return currentA < currentB
-	}
-	return a.order < b.order
-}
-
-func currentProductionInputQuantity(building *model.Building, itemID string) int {
-	if building == nil || building.Storage == nil || itemID == "" {
-		return 0
-	}
-	return currentStorageItem(building.Storage.InputBuffer, itemID) + currentStorageItem(building.Storage.Inventory, itemID)
 }
 
 func refillBuildingOutputBuffer(building *model.Building) {

@@ -12,7 +12,6 @@ func TestFoundationBuildsOnWaterAndDemolitionRestoresTerrain(t *testing.T) {
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
-	ws.Players["p1"].Resources.Minerals = 100
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Status != model.StatusExecuted {
@@ -48,7 +47,6 @@ func TestFoundationDoesNotOccupyFilledTile(t *testing.T) {
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
-	ws.Players["p1"].Resources.Minerals = 100
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Status != model.StatusExecuted {
@@ -73,7 +71,8 @@ func TestFoundationInsufficientMaterialsDoesNotReserveWater(t *testing.T) {
 	ws := core.world
 	pos := model.Position{X: 5, Y: 5}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileLava
-	ws.Players["p1"].Resources.Minerals = 0
+	// 第 16 轮起建造门槛是背包物品：清空背包制造「材料不足」。
+	ws.Players["p1"].Inventory = model.ItemInventory{}
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Code != model.CodeInsufficientResource {
@@ -89,7 +88,6 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[4][4].Terrain = terrain.TileWater
-	ws.Players["p1"].Resources.Minerals = 100
 	command := model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "foundation"}}
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", command)
 	if res.Status != model.StatusExecuted {
@@ -168,11 +166,11 @@ func TestFoundationCancelledTasksCannotBypassLayerConstraints(t *testing.T) {
 				foundation.Job = &model.BuildingJob{Type: model.BuildingJobDemolish}
 			}
 			ws.Buildings[foundation.ID] = foundation
-			task := &model.ConstructionTask{ID: "cancelled", PlayerID: "p1", BuildingType: kind, Position: pos, State: model.ConstructionCancelled, Cost: model.BuildCost{Minerals: 10}}
+			task := &model.ConstructionTask{ID: "cancelled", PlayerID: "p1", BuildingType: kind, Position: pos, State: model.ConstructionCancelled, Cost: model.BuildCost{Items: []model.ItemAmount{{ItemID: model.ItemSteel, Quantity: 10}}}}
 			ws.Construction.Tasks[task.ID] = task
-			before := ws.Players["p1"].Resources.Minerals
+			before := ws.Players["p1"].Inventory.Clone()
 			res, _ := execCommand(core, model.CmdRestoreConstruction, ws, "p1", model.Command{Type: model.CmdRestoreConstruction, Payload: map[string]any{"task_id": task.ID}})
-			if res.Code != model.CodePositionOccupied || task.State != model.ConstructionCancelled || ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" || ws.Players["p1"].Resources.Minerals != before {
+			if res.Code != model.CodePositionOccupied || task.State != model.ConstructionCancelled || ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" || len(ws.Players["p1"].Inventory) != len(before) {
 				t.Fatalf("restore bypassed foundation constraints: %+v", res)
 			}
 		})

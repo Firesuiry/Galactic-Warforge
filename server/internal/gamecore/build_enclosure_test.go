@@ -15,7 +15,6 @@ func newEnclosureTestCore(t *testing.T) *GameCore {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 5000
 	player.Resources.Energy = 5000
 	grantAllItems(ws, "p1", 200)
 	// 清掉自动生成的地形障碍，保证测试里的建造位置可控。

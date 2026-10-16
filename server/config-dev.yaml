@@ -10,9 +10,19 @@ players:
     team_id: "team-1"
     role: "commander"
     permissions: ["*"]
+    # 开局物资包（第 16 轮：实物，直接进背包，绕过背包上限）。
     bootstrap:
-      minerals: 480
-      energy: 200
+      items:
+        - item_id: gear
+          quantity: 32
+        - item_id: circuit_board
+          quantity: 15
+        - item_id: iron_ingot
+          quantity: 96
+        - item_id: magnetic_coil
+          quantity: 22
+        - item_id: stone_brick
+          quantity: 3
     executor:
       build_efficiency: 1.0
       operate_range: 18
@@ -23,9 +33,19 @@ players:
     team_id: "team-2"
     role: "commander"
     permissions: ["*"]
+    # 开局物资包（第 16 轮：实物，直接进背包，绕过背包上限）。
     bootstrap:
-      minerals: 480
-      energy: 200
+      items:
+        - item_id: gear
+          quantity: 32
+        - item_id: circuit_board
+          quantity: 15
+        - item_id: iron_ingot
+          quantity: 96
+        - item_id: magnetic_coil
+          quantity: 22
+        - item_id: stone_brick
+          quantity: 3
     executor:
       build_efficiency: 1.0
       operate_range: 18

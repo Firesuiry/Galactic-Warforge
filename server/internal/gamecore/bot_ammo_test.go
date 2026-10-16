@@ -16,7 +16,6 @@ func TestA1BotAmmoChain(t *testing.T) {
 	botQuietExecutor(ws, "p2")
 	tuning := botTuningFor("normal")
 	botFillIndustry(t, ws, "p2", home, tuning)
-	player.Resources.Minerals = 20000
 	player.Resources.Energy = 20000
 
 	place := func(id string, btype model.BuildingType) *model.Building {

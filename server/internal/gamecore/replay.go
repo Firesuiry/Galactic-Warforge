@@ -229,7 +229,6 @@ func digestRuntime(ws *model.WorldState, space *model.SpaceRuntimeState) model.R
 		if p.IsAlive {
 			d.AlivePlayers++
 		}
-		d.TotalMinerals += p.Resources.Minerals
 		d.TotalEnergy += p.Resources.Energy
 	}
 	for _, r := range ws.Resources {
@@ -260,14 +259,13 @@ func digestRuntime(ws *model.WorldState, space *model.SpaceRuntimeState) model.R
 }
 
 func hashDigest(d model.ReplayDigest) string {
-	raw := fmt.Sprintf("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+	raw := fmt.Sprintf("%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
 		d.Tick,
 		d.Players,
 		d.AlivePlayers,
 		d.Buildings,
 		d.Units,
 		d.Resources,
-		d.TotalMinerals,
 		d.TotalEnergy,
 		d.ResourceRemaining,
 		d.EntityCounter,

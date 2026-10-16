@@ -1,4 +1,4 @@
-import type { PlanetPathView, SorterConfig } from './types.js';
+import type { PlanetPathView, SorterFilterConfig } from './types.js';
 import type { GameSummary, NewGameRequest } from './game.js';
 import {
   DEFAULT_EVENT_TYPES,
@@ -702,7 +702,7 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdConfigureSorter(entityId: string, config: SorterConfig, planetId?: string) {
+  function cmdConfigureSorter(entityId: string, config: SorterFilterConfig, planetId?: string) {
     return sendSingleCommand({type: 'configure_sorter', target: {layer:'planet', entity_id:entityId, ...(planetId ? {planet_id:planetId} : {})}, payload:{...config}});
   }
 

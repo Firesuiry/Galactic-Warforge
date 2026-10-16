@@ -145,14 +145,12 @@ func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstra
 	if !hasBootstrap(bootstrap) {
 		return
 	}
-	ps.Resources.Minerals = bootstrap.Minerals
-	ps.Resources.Energy = bootstrap.Energy
 	// 开局物资包绕过 inventory_capacity：预设（如 config-war 的 2090 件）本来就是
 	// 为战争预设准备的，按机甲背包上限裁剪会让 bot/玩家一开局就缺料、整局卡死
 	// （实测 bot 的基建决策链直接停摆）。这是配置作者明确给出的开局库存，
 	// 不是游戏内产出，不适用「任何入包路径都不超上限」的运行时约束。
-	items := make([]model.ItemAmount, 0, len(bootstrap.Inventory))
-	for _, item := range bootstrap.Inventory {
+	items := make([]model.ItemAmount, 0, len(bootstrap.Items))
+	for _, item := range bootstrap.Items {
 		if item.ItemID == "" || item.Quantity <= 0 {
 			continue
 		}
@@ -168,9 +166,7 @@ func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstra
 }
 
 func hasBootstrap(bootstrap config.PlayerBootstrapConfig) bool {
-	return bootstrap.Minerals != 0 ||
-		bootstrap.Energy != 0 ||
-		len(bootstrap.Inventory) > 0 ||
+	return len(bootstrap.Items) > 0 ||
 		len(bootstrap.CompletedTechs) > 0
 }
 

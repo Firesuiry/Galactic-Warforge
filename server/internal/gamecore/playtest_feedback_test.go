@@ -294,7 +294,6 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 	exec.OperateRange = 64
 	exec.ConcurrentTasks = 1
 	grantAllItems(ws, "p1", 200)
-	player.Resources.Minerals = 5000
 	player.Resources.Energy = 5000
 	execUnit := ws.Units[exec.UnitID]
 

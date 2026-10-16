@@ -243,7 +243,7 @@ func stackCascadeFixture(t *testing.T) (*model.WorldState, *model.PlayerState, *
 	player := &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,
-		Resources: model.Resources{Minerals: 0, Energy: 0},
+		Resources: model.Resources{Energy: 0},
 		Inventory: model.ItemInventory{},
 	}
 	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("u-1", 1, 10, 2, 0))
@@ -287,13 +287,12 @@ func TestDemolishBaseCascadesStackedLayers(t *testing.T) {
 		t.Fatalf("ground tile still registered to %s", ws.TileBuilding[key])
 	}
 
-	// Each layer refunds at the same 50% rule as the base.
+	// Each layer refunds the same 50% item rule as the base（第 16 轮起返还只有物品）。
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
-	if want := 3 * perLayer.Minerals; player.Resources.Minerals != want {
-		t.Fatalf("cascade refund minerals=%d, want %d", player.Resources.Minerals, want)
-	}
-	if want := 3 * perLayer.Energy; player.Resources.Energy != want {
-		t.Fatalf("cascade refund energy=%d, want %d", player.Resources.Energy, want)
+	for _, item := range perLayer.Items {
+		if got, want := player.Inventory[item.ItemID], 3*item.Quantity; got != want {
+			t.Fatalf("cascade refund %s=%d, want %d", item.ItemID, got, want)
+		}
 	}
 
 	destroyed := map[string]bool{}
@@ -328,8 +327,8 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 	if res.Code != model.CodeOK || base.Job == nil || base.Job.Type != model.BuildingJobDemolish {
 		t.Fatalf("demolish job not started: %+v job=%+v", res, base.Job)
 	}
-	if player.Resources.Minerals != 0 {
-		t.Fatal("refund must wait for job completion")
+	if player.InventoryCount() != 0 {
+		t.Fatalf("refund must wait for job completion, got %+v", player.Inventory)
 	}
 
 	settleBuildingJobs(ws)
@@ -339,8 +338,10 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 		}
 	}
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
-	if want := 3 * perLayer.Minerals; player.Resources.Minerals != want {
-		t.Fatalf("job-path cascade refund=%d, want %d", player.Resources.Minerals, want)
+	for _, item := range perLayer.Items {
+		if got, want := player.Inventory[item.ItemID], 3*item.Quantity; got != want {
+			t.Fatalf("job-path cascade refund %s=%d, want %d", item.ItemID, got, want)
+		}
 	}
 }
 
@@ -368,7 +369,9 @@ func TestDemolishMiddleLayerCascadesUpwardOnly(t *testing.T) {
 		}
 	}
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
-	if want := 2 * perLayer.Minerals; player.Resources.Minerals != want {
-		t.Fatalf("middle-layer cascade refund=%d, want %d", player.Resources.Minerals, want)
+	for _, item := range perLayer.Items {
+		if got, want := player.Inventory[item.ItemID], 2*item.Quantity; got != want {
+			t.Fatalf("middle-layer cascade refund %s=%d, want %d", item.ItemID, got, want)
+		}
 	}
 }

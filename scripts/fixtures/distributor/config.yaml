@@ -16,9 +16,7 @@ players:
       operate_range: 6
     bootstrap:
       completed_techs: [electromagnetism, basic_logistics_system, automatic_metallurgy, basic_assembling_processes, distribution_logistics]
-      minerals: 20000
-      energy: 20000
-      inventory:
+      items:
         - {item_id: iron_ingot, quantity: 1000}
         - {item_id: copper_ingot, quantity: 1000}
         - {item_id: circuit_board, quantity: 100}

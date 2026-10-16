@@ -20,7 +20,6 @@ func unitStackTestCore(t *testing.T) *GameCore {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 5000
 	player.Resources.Energy = 5000
 	grantAllItems(ws, "p1", 200)
 	grantTechs(ws, "p1", "dyson_sphere_program")

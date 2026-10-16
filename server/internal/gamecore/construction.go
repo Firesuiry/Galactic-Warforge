@@ -28,22 +28,14 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 	}
 
 	// Validate availability (check but don't deduct)
-	if player.Resources.Minerals < task.Cost.Minerals {
-		return nil, fmt.Errorf("矿物不足：需要 %d，当前 %d", task.Cost.Minerals, player.Resources.Minerals)
-	}
-	if player.Resources.Energy < task.Cost.Energy {
-		return nil, fmt.Errorf("能量不足：需要 %d，当前 %d", task.Cost.Energy, player.Resources.Energy)
-	}
-	if missing, ok := missingItem(player.Inventory, task.Cost.Items); ok {
-		return nil, fmt.Errorf("物品不足：需要 %d 个 %s", missing.Quantity, missing.ItemID)
+	if msg, short := missingItemMessage(player.Inventory, task.Cost.Items); short {
+		return nil, fmt.Errorf("%s", msg)
 	}
 
 	// Create reservation record (locking without deduction)
 	reservation := &model.MaterialReservation{
 		TaskID:   task.ID,
 		PlayerID: task.PlayerID,
-		Minerals: task.Cost.Minerals,
-		Energy:   task.Cost.Energy,
 		Items:    task.Cost.Items,
 		Source: model.MaterialSource{
 			Type:       model.MaterialSourceLocal,
@@ -80,25 +72,9 @@ func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) e
 		return fmt.Errorf("未找到玩家 %s", task.PlayerID)
 	}
 
-	// Deduct minerals
-	player.Resources.Minerals -= task.Cost.Minerals
-	if player.Resources.Minerals < 0 {
-		// This shouldn't happen if reservation was correct, but handle it
-		player.Resources.Minerals = 0
-	}
-
-	// Deduct energy
-	player.Resources.Energy -= task.Cost.Energy
-	if player.Resources.Energy < 0 {
-		player.Resources.Energy = 0
-	}
-
-	// Deduct items
+	// Deduct items（第 16 轮起建造只扣背包物品）
 	if !player.DeductItems(task.Cost.Items) {
 		// This shouldn't happen if reservation was correct, but handle it
-		// Rollback mineral and energy deduction
-		player.Resources.Minerals += task.Cost.Minerals
-		player.Resources.Energy += task.Cost.Energy
 		return fmt.Errorf("扣除施工任务 %s 的物品失败", task.ID)
 	}
 
@@ -361,14 +337,6 @@ func checkMaterialsAvailable(ws *model.WorldState, task *model.ConstructionTask)
 		return false
 	}
 
-	// Check minerals
-	if player.Resources.Minerals < task.Cost.Minerals {
-		return false
-	}
-	// Check energy
-	if player.Resources.Energy < task.Cost.Energy {
-		return false
-	}
 	// Check items
 	if _, ok := missingItem(player.Inventory, task.Cost.Items); ok {
 		return false
@@ -620,15 +588,11 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 	}
 	// Full refund for pending tasks
 	if task.State == model.ConstructionPending {
-		player.Resources.Minerals += task.Cost.Minerals
-		player.Resources.Energy += task.Cost.Energy
 		refundConstructionItems(ws, player, task.Cost.Items)
 		return
 	}
 	// Partial refund for in_progress tasks: remaining / total
 	if task.TotalTicks <= 0 {
-		player.Resources.Minerals += task.Cost.Minerals
-		player.Resources.Energy += task.Cost.Energy
 		refundConstructionItems(ws, player, task.Cost.Items)
 		return
 	}
@@ -639,8 +603,6 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 	if ratio > 1 {
 		ratio = 1
 	}
-	player.Resources.Minerals += int(float64(task.Cost.Minerals) * ratio)
-	player.Resources.Energy += int(float64(task.Cost.Energy) * ratio)
 	// Items: refund proportionally (round up to avoid losing items on small remainders)
 	refundItems := make([]model.ItemAmount, 0, len(task.Cost.Items))
 	for _, item := range task.Cost.Items {
@@ -672,8 +634,6 @@ func rollbackConstructionDeduction(ws *model.WorldState, task *model.Constructio
 	if player == nil {
 		return
 	}
-	player.Resources.Minerals += task.Cost.Minerals
-	player.Resources.Energy += task.Cost.Energy
 	refundConstructionItems(ws, player, task.Cost.Items)
 	task.MaterialsDeducted = false
 }

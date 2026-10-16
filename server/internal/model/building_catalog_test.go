@@ -23,9 +23,6 @@ func TestBuildingCatalogValid(t *testing.T) {
 		if def.Footprint.Width <= 0 || def.Footprint.Height <= 0 {
 			t.Fatalf("building %s has invalid footprint", def.ID)
 		}
-		if def.BuildCost.Minerals < 0 || def.BuildCost.Energy < 0 {
-			t.Fatalf("building %s has negative build cost", def.ID)
-		}
 	}
 }
 
@@ -34,8 +31,9 @@ func TestBuildableDefinitionsHaveCost(t *testing.T) {
 		if !def.Buildable {
 			continue
 		}
-		if def.BuildCost.Minerals == 0 && def.BuildCost.Energy == 0 && len(def.BuildCost.Items) == 0 {
-			t.Fatalf("buildable building %s should define a build cost", def.ID)
+		// 第 16 轮起建造只扣背包物品，可建造建筑必须有物品成本。
+		if len(def.BuildCost.Items) == 0 {
+			t.Fatalf("buildable building %s should define an item build cost", def.ID)
 		}
 	}
 }

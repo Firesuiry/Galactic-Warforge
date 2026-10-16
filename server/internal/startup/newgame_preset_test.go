@@ -41,9 +41,7 @@ players:
       operate_range: 7
       concurrent_tasks: 3
     bootstrap:
-      minerals: 1200
-      energy: 400
-      inventory:
+      items:
         - { item_id: iron_ingot, quantity: 100 }
         - { item_id: gear, quantity: 40 }
   - player_id: "p2"
@@ -52,8 +50,8 @@ players:
     role: "commander"
     bot: "hard"
     bootstrap:
-      minerals: 1200
-      energy: 400
+      items:
+        - { item_id: circuit_board, quantity: 12 }
 server:
   port: 18082
   data_dir: "data-preset-test"
@@ -107,7 +105,7 @@ server:
 		t.Fatalf("players = %d, want 2", len(cfg.Players))
 	}
 	p1, p2 := cfg.Players[0], cfg.Players[1]
-	if p1.Bootstrap.Minerals != 1200 || p1.Bootstrap.Energy != 400 || len(p1.Bootstrap.Inventory) != 2 {
+	if len(p1.Bootstrap.Items) != 2 {
 		t.Fatalf("p1 bootstrap not inherited: %+v", p1.Bootstrap)
 	}
 	if p1.Role != "admin" || p1.TeamID != "team-1" {
@@ -116,7 +114,7 @@ server:
 	if p1.Executor.OperateRange != 7 || p1.Executor.ConcurrentTasks != 3 {
 		t.Fatalf("p1 executor not inherited: %+v", p1.Executor)
 	}
-	if p2.Bot != "hard" || p2.Bootstrap.Minerals != 1200 {
+	if p2.Bot != "hard" || len(p2.Bootstrap.Items) != 1 {
 		t.Fatalf("p2 bot/bootstrap not inherited: %+v", p2)
 	}
 
@@ -125,14 +123,11 @@ server:
 	if player == nil {
 		t.Fatal("p1 missing from new world")
 	}
-	if player.Resources.Minerals != 1200 {
-		t.Fatalf("p1 minerals = %d, want 1200", player.Resources.Minerals)
-	}
 	if player.Inventory[model.ItemIronIngot] != 100 || player.Inventory[model.ItemGear] != 40 {
 		t.Fatalf("p1 inventory not bootstrapped: %+v", player.Inventory)
 	}
 	botPlayer := sess.Core.World().Players["p2"]
-	if botPlayer == nil || botPlayer.Resources.Minerals != 1200 {
+	if botPlayer == nil || botPlayer.Inventory[model.ItemCircuitBoard] != 12 {
 		t.Fatalf("p2 bootstrap missing: %+v", botPlayer)
 	}
 }
@@ -155,8 +150,8 @@ players:
     role: "admin"
     bot: "hard"
     bootstrap:
-      minerals: 1200
-      energy: 400
+      items:
+        - { item_id: iron_ingot, quantity: 100 }
 server:
   data_dir: "data-preset-override"
 `
@@ -183,8 +178,7 @@ server:
 				Role:     "observer",
 				Bot:      "easy",
 				Bootstrap: &config.PlayerBootstrapConfig{
-					Minerals: 7,
-					Energy:   1,
+					Items: []config.BootstrapItemConfig{{ItemID: model.ItemStoneBrick, Quantity: 7}},
 				},
 			},
 		},
@@ -202,12 +196,12 @@ server:
 	if cfg.Players[0].Role != "observer" || cfg.Players[0].Bot != "easy" {
 		t.Fatalf("explicit player overrides not applied: %+v", cfg.Players[0])
 	}
-	if cfg.Players[0].Bootstrap.Minerals != 7 || cfg.Players[0].Bootstrap.Energy != 1 {
+	if len(cfg.Players[0].Bootstrap.Items) != 1 || cfg.Players[0].Bootstrap.Items[0].Quantity != 7 {
 		t.Fatalf("explicit bootstrap override not applied: %+v", cfg.Players[0].Bootstrap)
 	}
-	// 覆盖后的 bootstrap 生效：新局只发 7 矿。
+	// 覆盖后的 bootstrap 生效：新局只发 7 个石材（不再继承预设的 100 铁块）。
 	player := sess.Core.World().Players["p1"]
-	if player.Resources.Minerals != 7 {
-		t.Fatalf("p1 minerals = %d, want 7 (explicit bootstrap)", player.Resources.Minerals)
+	if player.Inventory[model.ItemStoneBrick] != 7 || player.Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("p1 bootstrap override not applied: %+v (want 7 stone_brick, 0 iron_ingot)", player.Inventory)
 	}
 }

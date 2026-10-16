@@ -32,7 +32,6 @@ func TestPlanetaryProductionRecipesSettleFromBuildCommand(t *testing.T) {
 			if player == nil {
 				t.Fatal("expected player p1")
 			}
-			player.Resources.Minerals = 10000
 			player.Resources.Energy = 10000
 			grantTechs(ws, "p1", tc.techs...)
 			grantAllItems(ws, "p1", 100)

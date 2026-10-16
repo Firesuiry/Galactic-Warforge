@@ -31,6 +31,12 @@ func settleBuildingIO(ws *model.WorldState) {
 		if building == nil || building.Storage == nil || building.Type == model.BuildingTypeSprayCoater {
 			continue
 		}
+		// 只有 direct_belt_io 的建筑能直接和相邻传送带换货（第 16 轮契约 §3）：
+		// 采集类、物流站、分流器 / 叠层器 / 流速监测器这类带上设备。其余建筑
+		// （生产、研究、仓储、发电燃料口、HQ、兵营、炮塔……）一律经分拣器进出货。
+		if !model.BuildingHasDirectBeltIO(building.Type) {
+			continue
+		}
 		ports := sortedIOPorts(building.Runtime.Params.IOPorts)
 		if len(ports) == 0 {
 			continue
@@ -38,12 +44,6 @@ func settleBuildingIO(ws *model.WorldState) {
 		ring := buildingIORing(ws, building)
 		if len(ring) == 0 {
 			continue
-		}
-		for _, port := range ports {
-			if port.Direction != model.PortInput && port.Direction != model.PortBoth {
-				continue
-			}
-			settleBuildingPortInput(ws, conveyors, building, port, ring)
 		}
 		for _, port := range ports {
 			if port.Direction != model.PortOutput && port.Direction != model.PortBoth {
@@ -93,43 +93,6 @@ func buildingIORing(ws *model.WorldState, building *model.Building) []ioRingCell
 		}
 	}
 	return out
-}
-
-func settleBuildingPortInput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) {
-	if ws == nil || building == nil || building.Storage == nil {
-		return
-	}
-	portRemaining := portCapacity(port)
-	if portRemaining <= 0 {
-		return
-	}
-
-	for portRemaining > 0 {
-		candidate, ok := selectInputCandidate(ws, conveyors, building, port, ring)
-		if !ok {
-			return
-		}
-		limit := min(portRemaining, candidate.quantity)
-		accepted, _, err := model.StoragePortPreviewInput(building, port.ID, candidate.itemID, limit)
-		if err != nil || accepted <= 0 {
-			return
-		}
-		moved := candidate.conveyor.Conveyor.TakeAt(candidate.buffer, accepted)
-		if len(moved) == 0 {
-			return
-		}
-		inserted, _, err := model.StoragePortInput(building, port.ID, candidate.itemID, accepted)
-		if err != nil {
-			candidate.conveyor.Conveyor.InsertAt(candidate.buffer, moved)
-			return
-		}
-		if inserted < accepted {
-			_, rollback := splitStacksByQty(moved, inserted)
-			candidate.conveyor.Conveyor.InsertAt(candidate.buffer, rollback)
-		}
-		portRemaining -= inserted
-		recordConveyorDeparture(ws, candidate.conveyor, inserted)
-	}
 }
 
 func settleBuildingPortOutput(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) {
@@ -324,100 +287,6 @@ func sortedIOPorts(ports []model.IOPort) []model.IOPort {
 		return out[i].ID < out[j].ID
 	})
 	return out
-}
-
-// selectInputCandidate scans the footprint ring: any belt whose output points
-// into the footprint (i.e. at the ring cell's facing direction) is an input
-// source, regardless of which footprint cell it touches.
-func selectInputCandidate(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building, port model.IOPort, ring []ioRingCell) (buildingInputCandidate, bool) {
-	if ws == nil || building == nil {
-		return buildingInputCandidate{}, false
-	}
-	needs := buildingRecipeInputNeeds(building)
-	var best buildingInputCandidate
-	found := false
-	for idx, cell := range ring {
-		neighborID := ws.TileBuilding[model.TileKey(cell.pos.X, cell.pos.Y)]
-		if neighborID == "" {
-			continue
-		}
-		neighbor := conveyors[neighborID]
-		if neighbor == nil || neighbor.Conveyor == nil {
-			continue
-		}
-		if neighbor.OwnerID != building.OwnerID {
-			continue
-		}
-		if neighbor.Conveyor.Output != cell.facing {
-			continue
-		}
-		candidate, ok := selectConveyorInputCandidate(building, neighbor, port, cell.facing, idx, needs)
-		if !ok {
-			continue
-		}
-		if !found || compareInputCandidates(building, candidate, best) {
-			best = candidate
-			found = true
-		}
-	}
-	return best, found
-}
-
-func selectConveyorInputCandidate(
-	building *model.Building,
-	conveyor *model.Building,
-	port model.IOPort,
-	dir model.ConveyorDirection,
-	order int,
-	needs map[string]int,
-) (buildingInputCandidate, bool) {
-	if conveyor == nil || conveyor.Conveyor == nil || len(conveyor.Conveyor.Buffer) == 0 {
-		return buildingInputCandidate{}, false
-	}
-	if len(needs) == 0 {
-		stack, ok := peekConveyorFront(conveyor.Conveyor)
-		if !ok || !ioPortAllowsItem(port, stack.ItemID) {
-			return buildingInputCandidate{}, false
-		}
-		return buildingInputCandidate{
-			order:    order,
-			buffer:   0,
-			dir:      dir,
-			conveyor: conveyor,
-			itemID:   stack.ItemID,
-			quantity: stack.Quantity,
-		}, true
-	}
-
-	var best buildingInputCandidate
-	found := false
-	for idx, stack := range conveyor.Conveyor.Buffer {
-		if stack.Quantity <= 0 {
-			continue
-		}
-		if !ioPortAllowsItem(port, stack.ItemID) {
-			continue
-		}
-		if _, ok := needs[stack.ItemID]; !ok {
-			continue
-		}
-		candidate := buildingInputCandidate{
-			order:    order,
-			buffer:   idx,
-			dir:      dir,
-			conveyor: conveyor,
-			itemID:   stack.ItemID,
-			quantity: stack.Quantity,
-		}
-		if !found || compareInputCandidates(building, candidate, best) {
-			best = candidate
-			found = true
-		}
-	}
-	if !found {
-		return buildingInputCandidate{}, false
-	}
-	return best, true
 }
 
 func selectOutputItem(building *model.Building, port model.IOPort, dir model.ConveyorDirection) string {

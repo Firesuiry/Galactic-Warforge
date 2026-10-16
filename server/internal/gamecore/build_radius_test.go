@@ -12,7 +12,6 @@ func TestD2BuildRadiusAllowsRemoteBuildNearHQ(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 	grantAllItems(ws, "p1", 100)
 

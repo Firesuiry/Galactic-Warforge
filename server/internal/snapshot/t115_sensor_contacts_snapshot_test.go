@@ -12,7 +12,7 @@ func TestT115SnapshotRoundTripPreservesSensorContacts(t *testing.T) {
 	ws.Players["p1"] = &model.PlayerState{
 		PlayerID:  "p1",
 		IsAlive:   true,
-		Resources: model.Resources{Minerals: 100, Energy: 50},
+		Resources: model.Resources{Energy: 50},
 	}
 	ws.SensorContacts = map[string]*model.SensorContactState{
 		"p1": {

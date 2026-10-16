@@ -19,9 +19,6 @@ func TestPowerShortageShutdown(t *testing.T) {
 	if consumer.Runtime.State != model.BuildingWorkNoPower {
 		t.Fatalf("expected consumer no_power, got %s", consumer.Runtime.State)
 	}
-	if ws.Players["p1"].Resources.Minerals != 0 {
-		t.Fatalf("expected minerals unchanged, got %d", ws.Players["p1"].Resources.Minerals)
-	}
 	if ws.Players["p1"].Resources.Energy != 20 {
 		t.Fatalf("expected energy unchanged, got %d", ws.Players["p1"].Resources.Energy)
 	}
@@ -143,12 +140,9 @@ func TestPowerShortageRefreshesNoPowerReasonWhenCoverageBecomesUnderPower(t *tes
 func newPowerTestWorld() *model.WorldState {
 	ws := model.NewWorldState("p1", 8)
 	ws.Players["p1"] = &model.PlayerState{
-		PlayerID: "p1",
-		IsAlive:  true,
-		Resources: model.Resources{
-			Minerals: 0,
-			Energy:   20,
-		},
+		PlayerID:  "p1",
+		IsAlive:   true,
+		Resources: model.Resources{Energy: 20},
 	}
 	return ws
 }

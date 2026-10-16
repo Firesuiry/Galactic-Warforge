@@ -14,6 +14,7 @@ import (
 	"siliconworld/internal/gamedir"
 	"siliconworld/internal/gateway"
 	"siliconworld/internal/mapconfig"
+	"siliconworld/internal/model"
 	"siliconworld/internal/startup"
 )
 
@@ -99,10 +100,11 @@ func summaryPlayers(body map[string]any) []string {
 func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 	srv, rt, _ := newResettableServer(t)
 
-	// 旧局：p1 带 bootstrap，世界里有 4242 矿物。
+	// 旧局：p1 带 bootstrap，背包里留一件可辨认的物品（第 16 轮起没有矿物池，
+	// 用背包物品证明旧局状态与新局互不串味）。
 	oldSess := rt.Current()
 	oldSess.Core.World().Lock()
-	oldSess.Core.World().Players["p1"].Resources.Minerals = 4242
+	oldSess.Core.World().Players["p1"].AddItems([]model.ItemAmount{{ItemID: "quantum_chip", Quantity: 7}}, 0)
 	oldSess.Core.World().Unlock()
 	oldSess.Bus.Subscribe("legacy-sub", nil)
 
@@ -111,8 +113,8 @@ func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 		t.Fatalf("old summary: %d", rec.Code)
 	}
 	oldSummary := decodeGameBody(t, rec)
-	if got := oldSummary["players"].(map[string]any)["p1"].(map[string]any)["resources"].(map[string]any)["minerals"]; got != float64(4242) {
-		t.Fatalf("old world minerals mismatch: %v", got)
+	if got := oldSummary["players"].(map[string]any)["p1"].(map[string]any)["inventory"].(map[string]any)["quantum_chip"]; got != float64(7) {
+		t.Fatalf("old world inventory mismatch: %v", got)
 	}
 
 	// admin 开新局：换种子、关黑雾、sandbox 胜利模式、全新玩家。
@@ -174,8 +176,11 @@ func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 	if _, ok := newPlayers["p1"]; ok {
 		t.Fatalf("old player p1 must not exist in new game summary")
 	}
-	if got := newPlayers["q2"].(map[string]any)["resources"].(map[string]any)["minerals"]; got != float64(200) {
-		t.Fatalf("new world must reset to default resources (200), got minerals=%v (old game had 4242)", got)
+	if got := newPlayers["q2"].(map[string]any)["resources"].(map[string]any)["energy"]; got != float64(0) {
+		t.Fatalf("new world must reset resources, got energy=%v", got)
+	}
+	if inv, ok := newPlayers["q2"].(map[string]any)["inventory"]; ok && len(inv.(map[string]any)) != 0 {
+		t.Fatalf("new world must not inherit the old inventory, got %v", inv)
 	}
 
 	// 旧局所有 key 立即失效。

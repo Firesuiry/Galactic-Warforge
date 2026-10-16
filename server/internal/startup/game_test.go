@@ -139,6 +139,9 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 	}
 	app.Current().Core.World().Lock()
 	app.Current().Core.World().Tick = 42
+	// 第 16 轮起没有矿物池：用背包物品 + 电网结余证明状态被持久化并恢复。
+	app.Current().Core.World().Players["p1"].AddItems([]model.ItemAmount{{ItemID: model.ItemQuantumChip, Quantity: 5}}, 0)
+	app.Current().Core.World().Players["p1"].Resources.Energy = 77
 	app.Current().Core.World().Unlock()
 	if _, err := app.Current().Core.Save("manual"); err != nil {
 		t.Fatalf("manual save: %v", err)
@@ -169,8 +172,8 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 		t.Fatalf("expected %d buildings after resume, got %d", baseCount, got)
 	}
 	player := resumed.Current().Core.World().Players["p1"]
-	if player == nil || player.Resources.Minerals != 200 || player.Resources.Energy != 100 {
-		t.Fatalf("expected player resources restored, got %+v", player)
+	if player == nil || player.Resources.Energy != 77 || player.Inventory[model.ItemQuantumChip] != 5 {
+		t.Fatalf("expected player state restored, got %+v", player)
 	}
 }
 
@@ -271,9 +274,7 @@ players:
   - player_id: p1
     key: key1
     bootstrap:
-      minerals: 4321
-      energy: 876
-      inventory:
+      items:
         - item_id: frame_material
           quantity: 6
         - item_id: quantum_chip
@@ -334,7 +335,7 @@ overrides:
 	if player == nil {
 		t.Fatal("expected bootstrap player p1")
 	}
-	if player.Resources.Minerals != 4321 || player.Resources.Energy != 876 {
+	if player.Resources.Energy != 0 {
 		t.Fatalf("unexpected bootstrap resources: %+v", player.Resources)
 	}
 	if player.Inventory[model.ItemFrameMaterial] != 6 || player.Inventory[model.ItemQuantumChip] != 4 {

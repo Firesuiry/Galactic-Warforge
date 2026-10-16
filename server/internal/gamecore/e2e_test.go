@@ -268,7 +268,6 @@ func TestE2E_VerticalLaunchingSiloUsesDefaultRocketRecipe(t *testing.T) {
 	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 
 	pos, err := findOpenTile(ws, 2)
@@ -320,7 +319,6 @@ func TestE2E_LogisticsStationConstructionRequiresManufacturedVehicles(t *testing
 	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
 	player.Resources.Energy = 10000
 
 	pos, err := findOpenTile(ws, 2)
@@ -380,10 +378,6 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
-	player.Resources.Minerals = 10000
-	player.Resources.Energy = 10000
-	beforeMinerals := player.Resources.Minerals
-	beforeEnergy := player.Resources.Energy
 	beforeInventory := player.Inventory.Clone()
 
 	pos, err := findOpenTile(ws, 2)
@@ -423,9 +417,6 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 		core.processTick()
 	}
 
-	if player.Resources.Minerals != beforeMinerals || player.Resources.Energy != beforeEnergy {
-		t.Fatalf("expected materials unchanged after failed completion, got minerals=%d energy=%d", player.Resources.Minerals, player.Resources.Energy)
-	}
 	if len(player.Inventory) != len(beforeInventory) {
 		t.Fatalf("expected inventory unchanged after failed completion")
 	}

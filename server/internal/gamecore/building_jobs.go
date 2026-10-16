@@ -122,8 +122,6 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	refund := model.BuildingDemolishRefundWithRate(building.Type, building.Level, refundRate)
 	player := ws.Players[building.OwnerID]
 	if player != nil {
-		player.Resources.Minerals += refund.Minerals
-		player.Resources.Energy += refund.Energy
 		// 拆除返还同样受机甲背包上限约束（背包永远不会超过上限）。
 		player.AddItems(refund.Items, mechaInventoryCapacity(ws, nil, player))
 	}

@@ -1134,6 +1134,7 @@ export async function cmdConfigureSorter(args: string[], { api }: CommandContext
  const usage='Usage: configure_sorter <building_id> [--mode allow|deny] [--items iron_ore,copper_ore] [--planet <id>]';
  if(args.includes('--help') || parsed.positionals.length!==1) return fmtError(usage);
  try {
+  // 分拣器方向由建造朝向决定（背面取货、正面放货），这里只配过滤。
   const allowed=new Set(['mode','items','planet']);
   for(const [key,value] of Object.entries(parsed.options)) if(!allowed.has(key)||typeof value!=='string') throw new Error('无效选项 '+key);
   const mode=getStringOption(parsed,'mode')??'allow';

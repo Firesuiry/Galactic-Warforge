@@ -20,7 +20,6 @@ func TestLongRunStability(t *testing.T) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 1_000_000
 	ws.Players["p1"].Resources.Energy = 1_000_000
 	ws.RUnlock()
 	grantAllItems(ws, "p1", 100)
@@ -165,7 +164,6 @@ func TestLongRunStabilityWithSubscriber(t *testing.T) {
 	ws := core.World()
 
 	ws.RLock()
-	ws.Players["p1"].Resources.Minerals = 500_000
 	ws.Players["p1"].Resources.Energy = 500_000
 	ws.RUnlock()
 

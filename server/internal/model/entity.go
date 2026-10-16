@@ -245,15 +245,6 @@ func (u *Unit) HasPath() bool {
 	return u != nil && u.PathIndex < len(u.Path)
 }
 
-// BuildingCost returns the resource cost to build a building type.
-func BuildingCost(btype BuildingType) (minerals, energy int) {
-	def, ok := BuildingDefinitionByID(btype)
-	if !ok {
-		return 0, 0
-	}
-	return def.BuildCost.Minerals, def.BuildCost.Energy
-}
-
 // UnitStats returns default stats for a unit type (units.yaml)。
 // 未定义的单位类型只带类型与待命姿态。
 func UnitStats(utype UnitType) Unit {

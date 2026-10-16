@@ -521,9 +521,7 @@ func collectConstructionTasks(ws *model.WorldState, playerID string) []Construct
 			ConveyorDirection: task.ConveyorDirection,
 			RecipeID:          task.RecipeID,
 			Cost: model.BuildCost{
-				Minerals: task.Cost.Minerals,
-				Energy:   task.Cost.Energy,
-				Items:    costItems,
+				Items: costItems,
 			},
 			State:             task.State,
 			WaitReason:        task.WaitReason,

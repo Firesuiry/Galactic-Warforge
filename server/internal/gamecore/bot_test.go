@@ -26,9 +26,9 @@ func newBotTestCore(t *testing.T, botDifficulty string) *GameCore {
 		},
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},
+			// bot 开局物资包：第 16 轮起是实物（直接进背包）。
 			{PlayerID: "p2", Key: "key2", Bot: botDifficulty, Bootstrap: config.PlayerBootstrapConfig{
-				Minerals: 5000, Energy: 2000,
-				Inventory: []config.BootstrapItemConfig{
+				Items: []config.BootstrapItemConfig{
 					{ItemID: model.ItemIronOre, Quantity: 80},
 					{ItemID: model.ItemCopperOre, Quantity: 40},
 					{ItemID: model.ItemCoal, Quantity: 40},
@@ -98,7 +98,6 @@ func TestA1BotProducesArmyAndAttacks(t *testing.T) {
 
 	// 直接预置 p2 的产能条件：矿+电+制造台（贴着 p2 实际的基地，满足建造半径），加速到进攻阶段。
 	p2 := ws.Players["p2"]
-	p2.Resources.Minerals = 9000
 	p2.Resources.Energy = 5000
 	var home model.Position
 	for _, b := range ws.Buildings {
@@ -168,7 +167,6 @@ func TestA1BotBuildsTurretWhenThreatened(t *testing.T) {
 	ws := core.World()
 	p2 := ws.Players["p2"]
 	grantTechs(ws, "p2", "weapon_system")
-	p2.Resources.Minerals = 4000
 	p2.Resources.Energy = 2000
 	inv := p2.EnsureInventory()
 	inv[model.ItemCircuitBoard] = 8
@@ -219,7 +217,6 @@ func TestA1BotProducesMechaWhenAffordable(t *testing.T) {
 	botFillIndustry(t, ws, "p2", home, botTuningFor("hard"))
 	botQuietExecutor(ws, "p2")
 	p2 := ws.Players["p2"]
-	p2.Resources.Minerals = 500
 	p2.Resources.Energy = 200
 	// 清空会让研究站建得起的物品，避免研究命令挤掉出兵。
 	p2.Inventory = model.ItemInventory{}
@@ -256,7 +253,6 @@ func TestA1BotResearchesWhenMatricesReady(t *testing.T) {
 	lab.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, lab)
 	lab.Storage.EnsureInventory()[model.ItemElectromagneticMatrix] = 10
-	ws.Players["p2"].Resources.Minerals = 20
 	ws.Players["p2"].Resources.Energy = 10
 
 	tuning := botTuningFor("normal")
@@ -287,7 +283,6 @@ func TestA1BotSkipsResearchWithoutMatrices(t *testing.T) {
 	lab := newBuilding("lab-p2-empty", model.BuildingTypeMatrixLab, "p2", *labPos)
 	lab.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, lab)
-	ws.Players["p2"].Resources.Minerals = 20
 	ws.Players["p2"].Resources.Energy = 10
 
 	tuning := botTuningFor("normal")
@@ -310,7 +305,6 @@ func TestA1BotDecisionsDeterministic(t *testing.T) {
 	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", botTileAtDistance(t, ws, home, 8))
 	grantTechs(ws, "p2", "weapon_system")
 	p2 := ws.Players["p2"]
-	p2.Resources.Minerals = 4000
 	p2.Resources.Energy = 2000
 	inv := p2.EnsureInventory()
 	inv[model.ItemCircuitBoard] = 8

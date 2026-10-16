@@ -53,7 +53,7 @@ cd server && go run ./cmd/server -config config-dev.yaml -map-config map.yaml
 - `battlefield.victory_rule`：`elimination` / `mission_complete` / `hybrid` / `sandbox`（永不判胜）；仓库内 `config*.yaml` 默认 `hybrid`（科研胜利与消灭胜同时有效）。
 - `battlefield.enemy_difficulty`：`off|easy|normal|hard`（默认 normal，off 为和平模式）。
 - 每名玩家只预完成 `dyson_sphere_program`，它直接解锁 `matrix_lab`、`wind_turbine`、`mining_machine`、`arc_smelter`、`tesla_tower`、`conveyor_belt_mk1`、`sorter_mk1`、`assembling_machine_mk1`。
-- 启动包：`minerals = 240`、`energy = 100`，不送矩阵。第一门 `electromagnetism`（10 电磁矩阵）须自产：铁→磁铁→磁线圈，铜→电路板，磁线圈 + 电路板→`electromagnetic_matrix`（配方无需研究，`assembling_machine_mk1` / `matrix_lab` / `self_evolution_lab` 可产）。
+- 启动包：`bootstrap.items`（`gear 32 / circuit_board 15 / iron_ingot 96 / magnetic_coil 22 / stone_brick 3`，直接进背包、绕过背包上限），不送矩阵。第 16 轮起没有 `minerals`/`energy` 启动量：建造只扣背包物品。第一门 `electromagnetism`（10 电磁矩阵）须自产：铁→磁铁→磁线圈，铜→电路板，磁线圈 + 电路板→`electromagnetic_matrix`（配方无需研究，`assembling_machine_mk1` / `matrix_lab` / `self_evolution_lab` 可产）。
 - `battlefield_analysis_base` 不发电，先补 `wind_turbine` 否则研究站无电。
 - 出生点：每个基地 `spawnMineDistance`（默认 `operate_range-2`，config-dev 为 16）内保证有 `iron_ore` 与 `copper_ore` 有限矿脉（缺失则注入 `Total=2000 / BaseYield=8`）；出生点半径 24 cell 平整为可建地形。基地 HQ 是 5×5 占地，落位用 `FindFootprintOrigin` 找整块可落的原点。
 - starter 闭环示例：`build 3 2 wind_turbine` → `build 4 2 tesla_tower` → `build 5 1 mining_machine`；矩阵投产后 `build 2 3 matrix_lab` → `transfer <lab> electromagnetic_matrix 10` → `start_research electromagnetism`。
@@ -70,7 +70,7 @@ cd server && go run ./cmd/server -config config-skirmish.yaml -map-config map-sk
 - `battlefield.dark_fog_calm_ticks`（任何配置可用，默认 6000）：黑雾被激怒后多久恢复中立，见 5.4。
 - `battlefield.bot_first_attack_tick`（任何配置可用，默认 0 = 不限）：bot 军团首次主动进攻的最早 tick；遭遇战设 60000（约 100 分钟），之前军团只守家。
 - bot 波次冷却（`botTuning.waveCooldown`，代码内定：easy 12000 / normal 6000 / hard 2000 tick）：上一波军团编队出发后至少隔这么久才编下一波，否则散兵一攒够 `attackAt` 门槛就又是一波（试玩 1014 层 11：easy 首攻后每 300–600 tick 连推一波，玩家 8 个步兵被逐波耗光）。冷却锚点 `last_wave_tick` 存在 `PlayerState.Bot`（`model.BotRuntimeState`）上随存档持久化，读档后继续倒计时；旧存档没有该字段 = 零值 = 没发过波，不受限。同轮：军团平均弹药不低、但**任何一名**作战单位弹尽（弹药比 < `resupplyBelowAmmo`）时整队回补给站/基地，不再原地僵持（`botLegionStats` 的 `minAmmo`）。回归测试 `bot_wave_cooldown_test.go`。
-- **无开局物资包（2026-10-10 起）**：双方背包为空，`players[].bootstrap` 只留 `minerals 400` / `energy 100`——建造要花 minerals/energy，而两者在「第一座矿机通电」之前没有任何产出途径（矿机通电后 minerals 按 `minerals_kickback=1` 自增长），必须留启动量，否则双方都会卡死。玩家与 bot 同一份，全部靠「手动采矿 → 手搓 → 早期建筑 → 产线」起步（DSP 式）。
+- **开局物资包（第 16 轮起为实物，2026-10-15）**：`players[].bootstrap.items` = `gear 32 / circuit_board 15 / iron_ingot 96 / magnetic_coil 22 / stone_brick 3`，够「3 风机 + 2 矿机 + 1 熔炉 + 3 电塔 + 20 传送带 + 4 分拣器」再加约 20% 余量（由 `server/data/buildings.yaml` 的 `build_cost.items` 累加得到）。物资直接进背包（绕过背包上限）。玩家与 bot 同一份，之后靠「手动采矿 → 手搓 → 熔炉产出 → 产线」续料（DSP 式）。
   - 回归测试：`TestSkirmishFromZeroOpeningByTick6000`（空背包开局链不变量：风机/电塔/矿机通电，快）、`TestSkirmishFromZeroChainIsWalkable`（开局链走到兵营/研究站无死锁）、`TestSkirmishFromZeroFullMatch`（两 seed 整局 75000 tick，记录里程碑/首攻/存活，`-short` 跳过）、`TestSkirmishBotOpensAndAttacksInWindow`（bot 起基地、出兵、编军团，`bot_first_attack_tick` 之后首次进攻玩家）、`TestSkirmishDefenseProbe`（从零布防到 tick 75000 的存活探针）。
 
 ### 官方中后期场景（`config-midgame.yaml` + `map-midgame.yaml`）
@@ -80,7 +80,7 @@ cd server && go run ./cmd/server -config config-midgame.yaml -map-config map-mid
 ```
 
 - `battlefield.initial_active_planet_id = planet-1-2`（新局默认焦点行星；续档不覆盖）。`map-midgame.yaml` 用 `overrides.planets.planet-1-2.kind = gas_giant` 强制气态行星。
-- `players[].bootstrap`：`minerals 5000`、`energy 3000`、`frame_material / deuterium_fuel_rod / quantum_chip / solar_sail` 各 16、`small_carrier_rocket` 4；`completed_techs` 覆盖物流、戴森组件、射线接收、垂直发射、`signal_tower`、`plasma_turret`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`integrated_logistics`、`photon_mining`、`annihilation` 等（直接完成列表，不递归补前置）。
+- `players[].bootstrap`：`items` = `frame_material / deuterium_fuel_rod / quantum_chip / solar_sail` 各 16、`small_carrier_rocket` 4（第 16 轮起原 `minerals 5000` / `energy 3000` 折算成这批实物料）；`completed_techs` 覆盖物流、戴森组件、射线接收、垂直发射、`signal_tower`、`plasma_turret`、`gravity_matrix`、`planetary_shield`、`self_evolution`、`integrated_logistics`、`photon_mining`、`annihilation` 等（直接完成列表，不递归补前置）。
 - 故意不预置 `dirac_inversion`、`antimatter_fuel_rod` 与 `prototype` / `precision_drone` / `corvette` / `destroyer`，用于验证 `photon` 模式门禁、人造恒星空燃料边界以及完整军工闭环。
 - `scenario_bootstrap.planets[]` 在 `planet-1-2` 通过与正常建造同源的 `completeConstructionTask()` 落 `tesla_tower`、`wind_turbine`、`ray_receiver(power)`、`em_rail_ejector`、`vertical_launching_silo`；`scenario_bootstrap.systems[]` 在 `sys-1` 预置最小戴森层与太阳帆轨道。启动即可在 `planet-1-1` / `planet-1-2` 间切换。
 
@@ -193,7 +193,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `configure_logistics_slot` | planet | `entity_id` | `scope`, `item_id`, `mode`, `local_storage`, `remove?` | `configure_logistics_slot` | 配置物流物品槽；remove移除无库存、无端口或在途引用的空槽 |
 | `configure_logistics_station` | planet | `entity_id` | `input_priority?`, `output_priority?`, `drone_capacity?`, `interstellar?`, `belt_ports?` | `configure_logistics_station` | Configure logistics station capacity, priority and interstellar switches |
 | `configure_mecha_logistics` | planet | `entity_id` | `requests` | `configure_mecha_logistics` | 替换机甲配送请求，最多 8 项，none 清空 |
-| `configure_sorter` | planet | `entity_id` | `input_directions`, `output_directions`, `filter_mode?`, `filter_items?` | `configure_sorter` | 设置分拣器方向和物品过滤 |
+| `configure_sorter` | planet | `entity_id` | `filter_mode?`, `filter_items?` | `configure_sorter` | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | planet | `entity_id` | `input_directions`, `output_directions`, `input_priority?`, `output_priority?`, `output_filters?` | `configure_splitter` | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | planet | `entity_id` | `target_belt_id`, `window_ticks`, `minimum_items_per_tick`, `alerts_enabled` | `configure_traffic_monitor` | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
 | `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
@@ -244,6 +244,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
 - `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。
+- `configure_sorter`：只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
@@ -338,13 +339,16 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 喷涂机 `spray_coater`（`proliferator_mk1` 解锁，耗电 2）：北侧皮带或 `transfer_item` 补增产剂，西进东出。每份 Mk.I/II/III 提供 12/24/60 喷涂单位，每件货物耗 1 单位、获得 4/6/8 次效果；已喷涂货物直接通过；缺剂显示 `no_proliferator` 但货物原样通过。普通制造台的完整增产链路仍待补齐。
 - 对撞机 `miniature_particle_collider`（`miniature_collider` 解锁，耗电 24，建造须指定 `recipe_id`）：`deuterium_collision`（10 氢 → 5 氘，300 tick）、`strange_matter`（2 粒子容器 + 10 氘 + 2 铁块 → 1 奇异物质，480 tick，需 `strange_matter`）、`antimatter`（2 临界光子 → 2 反物质 + 2 氢，120 tick，需 `dirac_inversion`）。
 - `plasma_capsule`：1 钛合金 + 1 粒子容器 + 2 氢，60 tick，`plasma_turret` 解锁。
-- minerals 收入：采集建筑**本 tick 实际落地**的量 × `MineralsKickback`（`mining_machine = 1.0`、`advanced_mining_machine = 0.5`、流体采集 0）直充矿物池；计入 `production_stats.by_item["minerals"]`。`advanced_mining_machine` 的 `coverage_radius = 2` 可多脉同采。
-- **矿脉消耗恒等于实际产出（试玩 1015）**：采集结算先「规划」本 tick 各覆盖矿脉的产量，再把产物按矿种落进本地存储（输出缓冲 → 主库存），**只按实际落地的数量扣矿脉**：不变量「矿脉 `remaining` 的减少量 == 实际产出量」对每种矿都成立。旧实现每 tick 无条件按全速扣矿脉，缓冲满后 8 个节点被抽干到 0 而矿石从未落地（试玩实测 tick 8000 全部枯竭、皮带与熔炉里一块矿石都没有）。**产出落不下就不扣矿脉、也不回充 minerals**：本地存储（主库存 + 输出缓冲）都满时该矿机 `output_blocked`，玩家取出矿石（或接上传送带）后自动恢复挖矿与收入。
+- **没有矿物池（第 16 轮起）**：采集建筑只把矿石实物落进自己的输出缓冲（→ 主库存），不再有任何回充。`production_stats.by_item` 只按矿种计数（如 `fire_ice`）。`advanced_mining_machine` 的 `coverage_radius = 2` 可多脉同采。
+- **矿脉消耗恒等于实际产出（试玩 1015）**：采集结算先「规划」本 tick 各覆盖矿脉的产量，再把产物按矿种落进本地存储（输出缓冲 → 主库存），**只按实际落地的数量扣矿脉**：不变量「矿脉 `remaining` 的减少量 == 实际产出量」对每种矿都成立。旧实现每 tick 无条件按全速扣矿脉，缓冲满后 8 个节点被抽干到 0 而矿石从未落地（试玩实测 tick 8000 全部枯竭、皮带与熔炉里一块矿石都没有）。**产出落不下就不扣矿脉**：本地存储（主库存 + 输出缓冲）都满时该矿机 `output_blocked`，玩家取出矿石（或接上传送带）后自动恢复挖矿。
 
 ### 5.6 物流
 
 - 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。
-- 分拣器按“抓”结算：每 tick 抓取次数 = `speed`，mk1–3 每抓剥 1 件，`pile_sorter` 整堆；`sorter_cargo_stacking` 每级 +1 每抓堆数。`configure_sorter`：方向非空、合法、不重叠，过滤 `allow|deny`，失败原子拒绝。仅 `running` 时搬运；`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
+- 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（`sorter_mk1/2/3` 的 `range` = 1/2/3，`pile_sorter` = 3）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
+- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
+- `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
+- 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
 - 自动集装机 `automatic_piler`（`integrated_logistics` 解锁，吞吐 2）：把散货压成 2x 堆（`sorter_cargo_integration` 后 4x），出货每吞吐单位一整堆，满仓背压。
 - 分流器 `splitter`：独立 runtime 6 件/tick、缓存 24 件；默认西进、东/南/北出。`configure_splitter` **完整替换**配置：省略优先级或传 `""` 清除，省略过滤或传 `{}` 清除；方向仅 `north|east|south|west`，输入输出各非空且互斥。优先级为“可用优先”：优先口不可用时尝试其他合格口；未过滤出口也可接收过滤物品；全部堵塞时留在缓存，不丢不复制。`input_cursor` / `output_cursor` 为轮转游标，`transferred_items` / `last_transfer_tick` 为统计；重配只重置游标。
 - `configure_traffic_monitor`（耗电 1）：完整替换配置，绑定球面相邻己方 Mk.I/II/III 皮带（空字符串清绑定），`window_ticks` 1..600，`minimum_items_per_tick` 0..60。`building.traffic_monitor` 含 `state`（`sampling|flowing|idle|low_flow|blocked|unconfigured|no_power|paused|target_missing|target_inactive`）、`samples[]`、`items_per_tick`、`total_items`、`alert_active` 等；告警变化时发 `traffic_monitor_alert`。
@@ -419,10 +423,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `executor`：即 `executors[active_planet_id]`（该行星没有执行体时省略），字段 `unit_id` / `build_efficiency` / `operate_range` / `concurrent_tasks` / `research_boost`。Web 用 `unit_id` 请求 `/path`，以 `operate_range` 为 `stop_range` 分段靠近。
 - `tech`：`completed_techs`（`{tech_id: level}`）、`current_research`、`research_queue`、`total_researched`。研究条目字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason`（`waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`）/ `speed_multiplier`（供电倍率，1 = 满速）/ `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`。矩阵 ID 统一为 `electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
 - `combat_tech`：`unlocked_techs` / `current_research` / `research_progress`。
-- `resources.energy`、`/state/stats.energy_stats`、`/networks` 共用同一 tick 的 `PowerSettlementSnapshot`。
+- `resources` 只有 `energy` 一个字段（第 16 轮删除了 `minerals`）：它是电网结余的**只读展示**，不再参与建造/升级/发射的扣费。`resources.energy`、`/state/stats.energy_stats`、`/networks` 共用同一 tick 的 `PowerSettlementSnapshot`。
 
 **`GET /state/stats`**：`player_id`、`tick`，以及：
-- `production_stats`：`total_output` / `by_building_type` / `by_item` / `efficiency`。只统计本 tick 真实落库/落站的产出（配方产物与副产物、采集入库、矿物直充、轨道采集）；本 tick 无产出时归零；`efficiency` 是 `ProductionMonitor` 采样均值。
+- `production_stats`：`total_output` / `by_building_type` / `by_item` / `efficiency`。只统计本 tick 真实落库/落站的产出（配方产物与副产物、采集入库、轨道采集）；本 tick 无产出时归零；`efficiency` 是 `ProductionMonitor` 采样均值。
 - `energy_stats`：`generation`（电网真实供电，含射线接收与储能放电）/ `consumption`（真实需求）/ `storage` / `current_stored`（储能建筑电量）/ `shortage_ticks`。
 - `logistics_stats`：`throughput` / `avg_distance` / `avg_travel_time` / `deliveries`。
 - `combat_stats`：`units_killed` / `units_lost` / `buildings_destroyed` / `buildings_lost` / `threat_level` / `highest_threat`。双边计数：受害方为玩家实体计损失，击杀方为不同归属玩家计击杀；击杀黑雾单位计 `units_killed`，摧毁黑雾巢穴计 `buildings_destroyed`（黑雾自身没有战损）；军团不单独计数（按成员单位计）。
@@ -512,7 +516,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ### 6.6 目录
 
 **`GET /catalog`**：不可变展示元数据，数据来自 `server/data/*.yaml`（或 `game_data_dir`）。
-- `buildings[]`：`id` / `name` / `category` / `subcategory` / `footprint` / `build_cost` / `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech`（由科技树反查）/ `combat_range`（战斗建筑）/ `power_range`（无线供电建筑）/ `icon_key` / `color`。`automatic_piler` 以外的主线建筑均 `buildable=true`。
+- `buildings[]`：`id` / `name` / `category` / `subcategory` / `footprint` / `build_cost`（第 16 轮起只有 `items[]`：`{item_id, quantity}`，不再有 `minerals`/`energy`）/ `buildable` / `default_recipe_id` / `requires_resource_node` / `can_produce_units` / `unlock_tech`（由科技树反查）/ `combat_range`（战斗建筑）/ `power_range`（无线供电建筑）/ `icon_key` / `color`。`automatic_piler` 以外的主线建筑均 `buildable=true`。
 - `items[]`：`id` / `name` / `category` / `form` / `stack_limit` / `unit_volume` / `container_id` / `is_rare` / `mecha_fuel_energy` / 弹种分档 / `icon_key` / `color`。
 - `recipes[]`：`id` / `inputs` / `outputs` / `byproducts` / `duration` / `energy_cost` / `building_types` / `tech_unlock` / `handcraft_allowed`。
 - `techs[]`：`id` / `name` / `name_en` / `category` / `type` / `level` / `prerequisites` / `cost` / `unlocks` / `effects` / `leads_to`（桥接科技的后继方向）/ `max_level`。只返回公开科技；unlock ID 为 canonical ID；未落地的恒星系/终局配方解锁（如 `proliferator_mk3`、`thruster`、`photon_combiner`、`space_warper`）会被裁掉。**`cost` 是当前局 `battlefield.pace_research` 缩放后的实际成本**（与 `current_research.required_cost` / `total_cost` 同源，取整规则一致），UI 直接显示即可，不要再乘倍率。
@@ -586,13 +590,13 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   "players": [
     { "player_id": "p1", "key": "key_a", "role": "admin" },
     { "player_id": "p2", "key": "key_b", "team_id": "team-b", "bot": "normal",
-      "bootstrap": { "minerals": 500, "inventory": [{ "item_id": "frame_material", "quantity": 6 }] } }
+      "bootstrap": { "items": [{ "item_id": "frame_material", "quantity": 6 }, { "item_id": "circuit_board", "quantity": 20 }] } }
   ]
 }
 ```
 
 - `map_seed` 可选（缺省随机）；地图拓扑沿用启动时的 map 配置，未知字段 400。
-- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 executor / permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方的启动量（`minerals`/`energy`，无物品背包）；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份启动量）。
+- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 executor / permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方的开局物资包（`bootstrap.items`）；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份物资包）。
 - `players` 必填非空，`player_id` / `key` 必填且唯一；`role=admin|commander|observer`；`team_id` 缺省同名玩家配置，再缺省 `player_id`；`bot=easy|normal|hard`（空为人类，bot 走同一命令接口）；`bootstrap` 结构同 `config.yaml` 的 `players[].bootstrap`。
 - 语义：校验通过后先写新局 `meta.json` / `save.json`（失败 500，旧局不变）再原子切换；旧 key 立即 401，旧 SSE 被断开；并发请求串行执行，后到者覆盖。进程级配置不变。
 - 响应 `201`，结构同 `GET /games/current`（`tick=0`）。客户端须用新 key 重新登录、重新订阅 SSE 并全量拉取状态。
@@ -639,7 +643,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
 | `enemy_attack_seen` | `bool` | 该玩家是否已被**敌方玩家**造成过伤害/损失（黑雾偷袭不算） |
 
-「玩家可用物资」口径：`PlayerState.Inventory`（就是机甲背包，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）；`minerals` / `energy` 是资源池，不在物品背包里。
+「玩家可用物资」口径：`PlayerState.Inventory`（就是机甲背包，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）。第 16 轮去掉资金维度后建造/升级只扣背包物品，玩家级资源池只剩 `resources.energy`（电网结余的只读展示）。
 
 **`POST /checkpoints/{name}/load`**（仅 admin）：热加载存档点。
 - 按存档内的 `battlefield` / `players` 与固化的地图拓扑重建对局，写入 `data_dir` 作为当前局存档，原子替换当前对局（与 `POST /games/new` 同样的互斥与 autosave 处理）。
@@ -697,7 +701,7 @@ GameEvent：
 ## 8. 关键概念与事实源
 
 - **焦点行星与全局默认行星**：`players[pid].focus_planet_id` 决定该玩家命令的默认落点；`active_planet_id` 只是冷启动兜底。所有已加载行星都在模拟。
-- **同一事实源**：summary 的 `resources.energy`、stats 的 `energy_stats`、`/networks` 共享 `PowerSettlementSnapshot`；产出统计、矿物直充共享 `ProductionSettlementSnapshot`。不同接口之间不会出现中途值分叉。
+- **同一事实源**：summary 的 `resources.energy`、stats 的 `energy_stats`、`/networks` 共享 `PowerSettlementSnapshot`；产出统计（含采集入库）共享 `ProductionSettlementSnapshot`。不同接口之间不会出现中途值分叉。
 - **异步命令**：`accepted` ≠ 成功；以 `command_result` 为准，建造再看 `entity_created` 与 `building_state_changed`。
 - **可见性**：单位与敌方小队受战争迷雾约束；inspect 不可见返回 404；scene 未探索格不下发地形高度与资源。
 - **持久化一致性**：存档、回放、回滚都保留 space runtime、战斗 runtime、机甲任务、配送器、分馏随机状态、结算报告；回放 `digest` 用于校验一致性。

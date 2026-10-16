@@ -79,10 +79,9 @@ type Footprint struct {
 }
 
 // BuildCost describes the construction cost of a building.
+// 第 16 轮起只有 items：minerals/energy 两个字段已删除，建造与升级一律扣背包物品。
 type BuildCost struct {
-	Minerals int          `json:"minerals" yaml:"minerals,omitempty"`
-	Energy   int          `json:"energy" yaml:"energy,omitempty"`
-	Items    []ItemAmount `json:"items,omitempty" yaml:"items,omitempty"`
+	Items []ItemAmount `json:"items,omitempty" yaml:"items,omitempty"`
 }
 
 // BuildingDefinition defines immutable data for a building type.
@@ -102,6 +101,10 @@ type BuildingDefinition struct {
 	DefaultRecipeID      string               `json:"default_recipe_id,omitempty" yaml:"default_recipe_id,omitempty"`
 	RequiresResourceNode bool                 `json:"requires_resource_node,omitempty" yaml:"requires_resource_node,omitempty"`
 	CanProduceUnits      bool                 `json:"can_produce_units,omitempty" yaml:"can_produce_units,omitempty"`
+	// DirectBeltIO 为 true 时该建筑保留与相邻传送带的直连 IO（settleBuildingIO）：
+	// 采集类（采矿机 / 水泵 / 抽油机 / 轨道采集器）、物流站、以及分流器 / 叠层器 /
+	// 流速监测器这类带上设备。其余建筑一律经分拣器进出货（第 16 轮契约 §3）。
+	DirectBeltIO bool `json:"direct_belt_io,omitempty" yaml:"direct_belt_io,omitempty"`
 	// BuildRadius 建造中心半径（D2）：>0 时该建筑覆盖的半径内允许直接建造，
 	// 无需执行体在场。0 表示不是建造中心。
 	BuildRadius int `json:"build_radius,omitempty" yaml:"build_radius,omitempty"`
@@ -113,6 +116,13 @@ var (
 	buildingCatalogMu sync.RWMutex
 	buildingCatalog   map[BuildingType]BuildingDefinition
 )
+
+// BuildingHasDirectBeltIO 报告该建筑类型是否保留与相邻传送带的直连 IO。
+// 数据来源是 buildings.yaml 的 direct_belt_io 标记（第 16 轮契约 §3）。
+func BuildingHasDirectBeltIO(id BuildingType) bool {
+	def, ok := BuildingDefinitionByID(id)
+	return ok && def.DirectBeltIO
+}
 
 // BuildingDefinitionByID returns the definition for a building id.
 func BuildingDefinitionByID(id BuildingType) (BuildingDefinition, bool) {
@@ -203,9 +213,6 @@ func validateBuildingDefinition(def BuildingDefinition, recipeByID func(string) 
 	}
 	if def.Footprint.Width <= 0 || def.Footprint.Height <= 0 {
 		return fmt.Errorf("building %s has invalid footprint", def.ID)
-	}
-	if def.BuildCost.Minerals < 0 || def.BuildCost.Energy < 0 {
-		return fmt.Errorf("building %s has negative build cost", def.ID)
 	}
 	for _, item := range def.BuildCost.Items {
 		if item.ItemID == "" || item.Quantity <= 0 {

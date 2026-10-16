@@ -82,7 +82,7 @@ func TestPlanetRuntimeReturnsOwnRuntimeViews(t *testing.T) {
 		BuildingType: model.BuildingTypeArcSmelter,
 		Position:     model.Position{X: 2, Y: 2},
 		State:        model.ConstructionPending,
-		Cost:         model.BuildCost{Minerals: 12, Energy: 4},
+		Cost:         model.BuildCost{Items: []model.ItemAmount{{ItemID: "circuit_board", Quantity: 4}}},
 	}
 	if err := ws.Construction.Enqueue(ws, task); err != nil {
 		t.Fatalf("enqueue task: %v", err)

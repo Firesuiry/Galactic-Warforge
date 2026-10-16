@@ -146,9 +146,9 @@ func TestDeploySquadCatalogAcceptsExactlyOneForm(t *testing.T) {
 	}
 }
 
-// 分拣器/分流器的方向与过滤物品在目录里必须是数组：服务端 configure_sorter /
-// configure_splitter 都按数组解析载荷，目录声明成 string 会让 GUI/CLI/agent
-// 生成出必被拒绝的单个字符串（2026-10-12 遗留问题 3）。
+// 分流器的方向与分拣器的过滤物品在目录里必须是数组：服务端按数组解析载荷，
+// 目录声明成 string 会让 GUI/CLI/agent 生成出必被拒绝的单个字符串
+// （2026-10-12 遗留问题 3）。分拣器方向已改为跟随建造朝向，目录不再声明。
 func TestCommandCatalogDirectionPayloadsAreArrays(t *testing.T) {
 	byType := map[string]model.CommandCatalogEntry{}
 	for _, entry := range model.BuildCommandCatalog().Commands {
@@ -187,11 +187,16 @@ func TestCommandCatalogDirectionPayloadsAreArrays(t *testing.T) {
 			t.Fatalf("%s payload.%s items = %v, want string items", cmdType, field, fieldSchema["items"])
 		}
 	}
-	for _, cmdType := range []string{"configure_sorter", "configure_splitter"} {
+	// 分拣器方向由建造朝向决定（第 16 轮契约 §2），目录不再声明方向字段；
+	// 分流器仍按方向数组配置。
+	for _, cmdType := range []string{"configure_splitter"} {
 		assertArrayField(cmdType, "input_directions")
 		assertArrayField(cmdType, "output_directions")
 	}
 	assertArrayField("configure_sorter", "filter_items")
+	if _, ok := payloadProps("configure_sorter")["input_directions"]; ok {
+		t.Fatal("configure_sorter must not declare input_directions any more")
+	}
 
 	// filter_mode 仍是 allow|deny 枚举字符串。
 	modeSchema, ok := payloadProps("configure_sorter")["filter_mode"].(map[string]any)

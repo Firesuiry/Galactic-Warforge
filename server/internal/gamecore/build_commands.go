@@ -23,6 +23,20 @@ func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAm
 	return model.ItemAmount{}, false
 }
 
+// missingItemMessage 统一的「缺料」回执文案：缺哪种物品、缺几个、背包现有几个。
+// 建造/升级/施工预留共用，玩家与 bot 都靠它判断该去手搓还是去取货。
+func missingItemMessage(inv model.ItemInventory, cost []model.ItemAmount) (string, bool) {
+	missing, short := missingItem(inv, cost)
+	if !short {
+		return "", false
+	}
+	have := 0
+	if inv != nil {
+		have = inv[missing.ItemID]
+	}
+	return fmt.Sprintf("缺少 %d 个「%s」（背包现有 %d）", missing.Quantity-have, itemDisplayName(missing.ItemID), have), true
+}
+
 type buildPayload struct {
 	BuildingType model.BuildingType `json:"building_type" payload:"required"`
 	RecipeID     string             `json:"recipe_id"`
@@ -203,21 +217,10 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	var approachUnit *model.Unit
 	var approachPath []model.Position
 	// Check resource cost (availability validation)
-	mCost, eCost := def.BuildCost.Minerals, def.BuildCost.Energy
 	player = ws.Players[playerID]
-	if player.Resources.Minerals < mCost {
+	if msg, short := missingItemMessage(player.Inventory, def.BuildCost.Items); short {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("矿物不足：需要 %d，当前 %d", mCost, player.Resources.Minerals)
-		return res, nil
-	}
-	if player.Resources.Energy < eCost {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("能量不足：需要 %d，当前 %d", eCost, player.Resources.Energy)
-		return res, nil
-	}
-	if missing, ok := missingItem(player.Inventory, def.BuildCost.Items); ok {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("建造缺少 %d 个「%s」", missing.Quantity, itemDisplayName(missing.ItemID))
+		res.Message = msg
 		return res, nil
 	}
 
@@ -1140,23 +1143,11 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 	}
 
 	cost := model.BuildingUpgradeCost(building.Type, building.Level)
-	upgradeCostM := cost.Minerals
-	upgradeCostE := cost.Energy
 
 	player := ws.Players[playerID]
-	if player.Resources.Minerals < upgradeCostM {
+	if msg, short := missingItemMessage(player.Inventory, cost.Items); short {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("升级需要 %d 矿物", upgradeCostM)
-		return res, nil
-	}
-	if player.Resources.Energy < upgradeCostE {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("升级需要 %d 能量", upgradeCostE)
-		return res, nil
-	}
-	if missing, ok := missingItem(player.Inventory, cost.Items); ok {
-		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("升级缺少 %d 个「%s」", missing.Quantity, itemDisplayName(missing.ItemID))
+		res.Message = msg
 		return res, nil
 	}
 
@@ -1170,11 +1161,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		return res, nil
 	}
 
-	player.Resources.Minerals -= upgradeCostM
-	player.Resources.Energy -= upgradeCostE
 	if !player.DeductItems(cost.Items) {
-		player.Resources.Minerals += upgradeCostM
-		player.Resources.Energy += upgradeCostE
 		res.Code = model.CodeInsufficientResource
 		res.Message = "升级所需物品不足"
 		return res, nil
