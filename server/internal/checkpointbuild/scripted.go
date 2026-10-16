@@ -26,6 +26,16 @@ import (
 // `checkpointbuild -export -layer <name> -player p1 -from-tick … -to-tick … -write`
 // 覆盖同一份 JSON 即可，脚本化生成只是兜底。
 
+// FallbackNote 是「脚本化兜底」这层身份写进构建记录 note 的尾注。
+//
+// 第 16 轮（去资金实物经济 + DSP 分拣器）把矿物货币删掉、生产建筑改成只能经
+// 分拣器进出货，此前所有存档点（含它们背后的构建记录）一并作废。仓库里能跑的
+// 只有这批用 -generate 重新产出的记录，所以要显式标出来：它是兜底，不是试玩
+// 实录；等第 16 轮的纯 UI 试玩跑完，用审计日志导出覆盖同一份 JSON。
+const FallbackNote = "构建记录为**脚本化兜底**（`checkpointbuild -generate` 产出，第 16 轮分拣器布局）：" +
+	"第 16 轮把矿物货币删掉、生产建筑只能经分拣器进出货，旧存档点全部作废；" +
+	"待第 16 轮纯 UI 从 cp-root 试玩的审计日志导出后，用 `-export -write` 覆盖本文件。"
+
 // ScriptLayer 描述一层由脚本开局的哪几段组成。
 type ScriptLayer struct {
 	Name string
@@ -49,7 +59,7 @@ func EarlyScriptLayers() []ScriptLayer {
 		{
 			Name:  "cp-power",
 			Roles: []string{"wind1", "tesla1"},
-			Note: "L1 cp-power（脚本化重建）：从 cp-root 读档，建第一座风力涡轮机 + 第一座电力感应塔，玩家第一次拿到电。构建记录由引擎脚本化开局导出（无试玩记录时的兜底），重建即回放这批命令。",
+			Note:  "L1 cp-power（脚本化重建）：从 cp-root 读档，建第一座风力涡轮机 + 第一座电力感应塔，玩家第一次拿到电。构建记录由引擎脚本化开局导出（无试玩记录时的兜底），重建即回放这批命令。",
 			Contract: checkpoint.Contract{Checks: []checkpoint.ContractCheck{
 				{Kind: "game_not_finished"},
 				{Kind: "player_alive", Player: "p1"},
@@ -61,7 +71,7 @@ func EarlyScriptLayers() []ScriptLayer {
 		{
 			Name:  "cp-mining",
 			Roles: []string{"ironMiner", "ironBelt", "ironSorter", "ironSmelter"},
-			Note: "L2 cp-mining（脚本化重建）：从 cp-power 读档，把采矿机落在纯铁矿脉上、用「传送带 + 分拣器」把矿石送进电弧熔炉（第 16 轮契约 §3：生产建筑不再与传送带直连，矿机出矿到带子、分拣器从带子取货投进熔炉），矿机通电出矿、熔炉出铁块。矿机一律配出口，否则几 tick 就被自己的产出堵死（试玩 1015 口径）。",
+			Note:  "L2 cp-mining（脚本化重建）：从 cp-power 读档，把采矿机落在纯铁矿脉上、用「传送带 + 分拣器」把矿石送进电弧熔炉（第 16 轮契约 §3：生产建筑不再与传送带直连，矿机出矿到带子、分拣器从带子取货投进熔炉），矿机通电出矿、熔炉出铁块。矿机一律配出口，否则几 tick 就被自己的产出堵死（试玩 1015 口径）。",
 			Contract: checkpoint.Contract{Checks: []checkpoint.ContractCheck{
 				{Kind: "game_not_finished"},
 				{Kind: "player_alive", Player: "p1"},
@@ -74,7 +84,7 @@ func EarlyScriptLayers() []ScriptLayer {
 		{
 			Name:  "cp-base-a",
 			Roles: []string{"tesla2", "copperMiner", "copperBelt", "copperSorter", "copperSmelter", "wind2"},
-			Note: "L3 cp-base-a（脚本化重建）：从 cp-mining 读档，补第二座电塔与第二座风机，把铜矿机 + 带子 + 分拣器 + 铜熔炉照铁线同款建好，基地有铁铜两条产线。契约卡 2 台采矿机 + 1 座熔炉必须 running。",
+			Note:  "L3 cp-base-a（脚本化重建）：从 cp-mining 读档，补第二座电塔与第二座风机，把铜矿机 + 带子 + 分拣器 + 铜熔炉照铁线同款建好，基地有铁铜两条产线。契约卡 2 台采矿机 + 1 座熔炉必须 running。",
 			Contract: checkpoint.Contract{Checks: []checkpoint.ContractCheck{
 				{Kind: "game_not_finished"},
 				{Kind: "player_alive", Player: "p1"},
@@ -87,7 +97,7 @@ func EarlyScriptLayers() []ScriptLayer {
 		{
 			Name:  "cp-base",
 			Roles: []string{"assembler"},
-			Note: "L4 cp-base（脚本化重建）：从 cp-base-a 读档，落地制造台 Mk.I（配方 gear），齿轮产线起点，基地成型。契约沿用旧 cp-base 的口径（熔炉与制造台必须 running）。",
+			Note:  "L4 cp-base（脚本化重建）：从 cp-base-a 读档，落地制造台 Mk.I（配方 gear），齿轮产线起点，基地成型。契约沿用旧 cp-base 的口径（熔炉与制造台必须 running）。",
 			Contract: checkpoint.Contract{Checks: []checkpoint.ContractCheck{
 				{Kind: "game_not_finished"},
 				{Kind: "player_alive", Player: "p1"},
@@ -110,7 +120,7 @@ func RootLayer() checkpoint.BuildSpec {
 		Target: model.CommandTarget{Layer: "planet", PlanetID: "planet-1-1"},
 	}
 	return checkpoint.BuildSpec{
-		Note:  "1014 遭遇战从零开局（无物资包：背包空、矿物 400、能量 100；bot easy，首攻 60000，时限 180000）。根层不读父档：按 server/config-skirmish.yaml + map-skirmish.yaml 开新局（seed skirmish-seed-001），推进到 tick 27 存档。",
+		Note:  "遭遇战从零开局（第 16 轮：矿物货币已删除，开局物资包改走 bootstrap.items —— 齿轮 32 / 电路板 15 / 铁块 96 / 磁线圈 22 / 石砖 3，直接进背包；bot easy，首攻 60000，时限 180000）。根层不读父档：按 server/config-skirmish.yaml + map-skirmish.yaml 开新局（seed skirmish-seed-001），推进到 tick 27 存档。 " + FallbackNote,
 		Steps: []checkpoint.BuildStep{{Cmd: &rootAnchor, Note: "开局锚点：一条不会改局面的查询型命令（sync_active_planet 只改视图焦点）。根层的重建方式是按配置开新局，这条命令只是让「构建记录必须有步骤」这条约束成立。"}},
 		// 落点与脚本化生成对齐：生成时也是先推进到 tick 27 再跑开局脚本，
 		// 这样 cp-power 读 cp-root 的档就停在同一 tick。
@@ -186,7 +196,7 @@ func (r *Runner) GenerateEarlySpecs() (map[string]*checkpoint.BuildSpec, error) 
 			endTick = next.IssueTick
 		}
 		specs[layer.Name] = &checkpoint.BuildSpec{
-			Note:     layer.Note,
+			Note:     layer.Note + " " + FallbackNote,
 			Steps:    steps,
 			EndTick:  endTick,
 			Contract: layer.Contract,

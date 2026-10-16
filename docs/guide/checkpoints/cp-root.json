@@ -1,6 +1,9 @@
 {
   "parent": "",
-  "note": "1014 遭遇战从零开局（无物资包：背包空、矿物 400、能量 100；bot easy，首攻 60000，时限 180000）。根层不读父档：按 server/config-skirmish.yaml + map-skirmish.yaml 开新局（seed skirmish-seed-001），推进到 tick 27 存档。",
+  "note": "遭遇战从零开局（第 16 轮：矿物货币已删除，开局物资包改走 bootstrap.items —— 齿轮 32 / 电路板 15 / 铁块 96 / 磁线圈 22 / 石砖 3，直接进背包；bot easy，首攻 60000，时限 180000）。根层不读父档：按 server/config-skirmish.yaml + map-skirmish.yaml 开新局（seed skirmish-seed-001），推进到 tick 27 存档。 构建记录为**脚本化兜底**（`checkpointbuild -generate` 产出，第 16 轮分拣器布局）：第 16 轮把矿物货币删掉、生产建筑只能经分拣器进出货，旧存档点全部作废；待第 16 轮纯 UI 从 cp-root 试玩的审计日志导出后，用 `-export -write` 覆盖本文件。",
+  "build": [
+    "切到行星视图（开局锚点）"
+  ],
   "steps": [
     {
       "cmd": {

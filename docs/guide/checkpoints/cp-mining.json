@@ -1,264 +1,19 @@
 {
   "parent": "cp-power",
-  "note": "L2 cp-mining（脚本化重建）：从 cp-power 读档，把采矿机落在纯铁矿脉上、用一条传送带把矿石送进电弧熔炉，矿机通电出矿、熔炉出铁块。矿机一律配出口，否则几 tick 就被自己的产出堵死（试玩 1015 口径）。",
+  "note": "L2 cp-mining（脚本化重建）：从 cp-power 读档，把采矿机落在纯铁矿脉上、用「传送带 + 分拣器」把矿石送进电弧熔炉（第 16 轮契约 §3：生产建筑不再与传送带直连，矿机出矿到带子、分拣器从带子取货投进熔炉），矿机通电出矿、熔炉出铁块。矿机一律配出口，否则几 tick 就被自己的产出堵死（试玩 1015 口径）。 构建记录为**脚本化兜底**（`checkpointbuild -generate` 产出，第 16 轮分拣器布局）：第 16 轮把矿物货币删掉、生产建筑只能经分拣器进出货，旧存档点全部作废；待第 16 轮纯 UI 从 cp-root 试玩的审计日志导出后，用 `-export -write` 覆盖本文件。",
+  "build": [
+    "快进到 tick 33",
+    "采矿机 (57,140)",
+    "快进到 tick 36",
+    "传送带 (60,141) 朝向 east",
+    "快进到 tick 39",
+    "分拣器 (61,141) rotation 90°",
+    "快进到 tick 42",
+    "电弧熔炉 (62,140) 配方 smelt_iron"
+  ],
   "steps": [
     {
-      "advance_to_tick": 1163
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1183
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1303
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-15"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1323
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_copper"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1443
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "circuit_board"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1503
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1523
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1643
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "gear"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1683
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1723
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1963
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 1983
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_magnet"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2103
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "resource_id": "res-15"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2113
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "smelt_copper"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2173
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "magnetic_coil"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2203
+      "advance_to_tick": 33
     },
     {
       "cmd": {
@@ -278,92 +33,7 @@
       }
     },
     {
-      "advance_to_tick": 2206
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2216
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2276
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "gear"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2296
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2316
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2436
+      "advance_to_tick": 36
     },
     {
       "cmd": {
@@ -383,263 +53,7 @@
       }
     },
     {
-      "advance_to_tick": 2439
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2479
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2719
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "resource_id": "res-15"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2759
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "recipe_id": "smelt_copper"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 2999
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "recipe_id": "circuit_board"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3119
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3159
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 4,
-          "recipe_id": "smelt_iron"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3399
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "res-8"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3419
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_magnet"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3539
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "resource_id": "res-15"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3549
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "smelt_copper"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3609
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 1,
-          "recipe_id": "magnetic_coil"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3639
-    },
-    {
-      "cmd": {
-        "type": "move",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40",
-          "position": {
-            "x": 50,
-            "y": 130,
-            "z": 0
-          }
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3651
-    },
-    {
-      "cmd": {
-        "type": "mine_resource",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "resource_id": "planet-1-1-res-3012"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3671
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "quantity": 2,
-          "recipe_id": "smelt_stone"
-        }
-      }
-    },
-    {
-      "advance_to_tick": 3771
+      "advance_to_tick": 39
     },
     {
       "cmd": {
@@ -648,6 +62,27 @@
           "layer": "planet",
           "position": {
             "x": 61,
+            "y": 141,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 90
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 62,
             "y": 140,
             "z": 0
           }
@@ -660,7 +95,7 @@
       }
     }
   ],
-  "end_tick": 3774,
+  "end_tick": 45,
   "contract": {
     "checks": [
       {
@@ -680,6 +115,12 @@
         "kind": "building_running_gte",
         "player": "p1",
         "type": "mining_machine",
+        "n": 1
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
         "n": 1
       },
       {
