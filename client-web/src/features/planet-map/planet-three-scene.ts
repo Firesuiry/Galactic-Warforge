@@ -908,18 +908,22 @@ export class PlanetThreeScene {
       this.marks.add(this.tileOutline(tile, color));
     };
     // 传送带死端（试玩 1016 U7）：带尾对着空地且带上还压着货——货推到带尾就走不动，
-    // 只会堆满后堵回上游（玩家看到的是「熔炉产物阻塞」）。在带尾前方画红色短杠。
+    // 只会堆满后堵回上游（玩家看到的是「熔炉产物阻塞」）。在带尾前方画一道红色短杠。
     if (this.interaction.layers.logistics) {
       const faceSize = this.data.planet.surface.face_size;
       for (const deadEnd of beltDeadEnds(Object.values(this.data.planet.buildings ?? {}), faceSize)) {
         const { east, south } = tileFrame(deadEnd.aheadTile, faceSize);
         const normal = tileNormal(deadEnd.aheadTile, faceSize);
         const vector = directionVector(deadEnd.direction);
-        // 短杠垂直于流向：沿「南」轴（east×normal）铺一条细带。
-        const half = this.tileScale() * .3;
-        const loop = [-half, 0, half].map(offset => normal.clone().multiplyScalar(RADIUS + this.tileScale() * .07)
-          .addScaledVector(south, offset * vector.x).addScaledVector(east, -offset * vector.y));
-        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + this.tileScale() * .07, Math.max(this.tileScale() * .06, .02)), this.markMaterial('#ff5757', .95));
+        // 短杠垂直于流向：在格平面内沿 (east, south) 基底的 (-v.y, v.x) 方向铺一条细带。
+        // 注意 loop 是**单位法线**，偏移量是弧度 = 世界长度 / RADIUS（写 0.3 会得到 30 格长的线）。
+        const ts = this.tileScale();
+        const half = (ts * .3) / RADIUS;
+        const loop = [-half, 0, half].map(offset => normal.clone()
+          .addScaledVector(south, offset * vector.x)
+          .addScaledVector(east, -offset * vector.y)
+          .normalize());
+        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .07, Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
         mesh.renderOrder = 13;
         this.marks.add(mesh);
       }
