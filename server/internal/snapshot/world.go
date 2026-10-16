@@ -43,14 +43,18 @@ type WorldSnapshot struct {
 
 // BuildingSnapshot is a snapshot-friendly building payload.
 type BuildingSnapshot struct {
-	ID                string                       `json:"id"`
-	Type              model.BuildingType           `json:"type"`
-	OwnerID           string                       `json:"owner_id"`
-	Position          model.Position               `json:"position"`
-	HP                int                          `json:"hp"`
-	MaxHP             int                          `json:"max_hp"`
-	Level             int                          `json:"level"`
-	VisionRange       int                          `json:"vision_range"`
+	ID          string             `json:"id"`
+	Type        model.BuildingType `json:"type"`
+	OwnerID     string             `json:"owner_id"`
+	Position    model.Position     `json:"position"`
+	HP          int                `json:"hp"`
+	MaxHP       int                `json:"max_hp"`
+	Level       int                `json:"level"`
+	VisionRange int                `json:"vision_range"`
+	// Rotation 是建造朝向。分拣器的取/放端（背面取货、正面放货）直接由它派生
+	// （model.SorterFacingAxis），矿机定下的开采矿种也按它算；漏存会让读档后的
+	// 分拣器退化成 rotation=0，整条产线停摆（第 16 轮 cp-base 读档即复现）。
+	Rotation          model.PlanRotation           `json:"rotation,omitempty"`
 	Runtime           model.BuildingRuntime        `json:"runtime"`
 	Storage           *model.StorageState          `json:"storage,omitempty"`
 	Distributor       *model.DistributorState      `json:"distributor,omitempty"`
