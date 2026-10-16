@@ -473,6 +473,18 @@ function BuildingStorageSection({
             void submitWithdraw();
           }}
         >
+          {/* 试玩 1016 U4：反方向操作（装料）过去只在抽屉 → 工作台 →「研究与装料」里，
+              与就地的「取出」不对称。这里在同一个表单区给对称入口，落地页仍是同一个表单。 */}
+          {canControl && onOpenWorkflow ? (
+            <button
+              className="secondary-button"
+              onClick={() => onOpenWorkflow("research")}
+              title="打开工作台「研究与装料」，把背包里的物品装进这座建筑"
+              type="button"
+            >
+              装入建筑
+            </button>
+          ) : null}
           <label className="field">
             <span>取出物品</span>
             <select

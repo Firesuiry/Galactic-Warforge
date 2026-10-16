@@ -603,6 +603,47 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(onOpenWorkflow).toHaveBeenCalledWith("research");
   });
 
+  it("试玩 1016 U4：取出表单里也有对称的「装入建筑」入口（不必翻到工作台）", () => {
+    const planet = createPlanet();
+    // 带库存的生产建筑：只有它会渲染「取出」表单。
+    (planet.buildings as Record<string, unknown>)["b-smelt"] = {
+      id: "b-smelt",
+      type: "smelter",
+      owner_id: "p1",
+      position: { x: 3, y: 3, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 2, height: 2 } },
+        functions: { storage: { capacity: 50 } },
+        state: "running",
+      },
+      storage: { inventory: { iron_ingot: 12 } },
+    };
+    const onOpenWorkflow = vi.fn();
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-smelt",
+      position: { x: 3, y: 3, z: 0 },
+    });
+
+    render(
+      <PlanetEntityPanel
+        catalog={{ items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView}
+        onOpenWorkflow={onOpenWorkflow}
+        planet={planet as never}
+      />,
+    );
+
+    expect(screen.getByRole("form", { name: "取出物品表单" })).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: "装入建筑" });
+    // 取出表单里那一个（列表最后一个）：点它就打开同一个「研究与装料」落地页。
+    fireEvent.click(buttons[buttons.length - 1]);
+    expect(onOpenWorkflow).toHaveBeenCalledWith("research");
+  });
+
   it("回归（试玩 1013 bug-1013-2）：手搓缺料时保持玩家选中的配方并说明缺什么", () => {
     const planet = createPlanet();
     (planet.buildings as Record<string, unknown>)["b-lab-2"] = {
