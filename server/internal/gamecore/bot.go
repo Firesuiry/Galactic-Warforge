@@ -1439,14 +1439,20 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		// 那种才是实际产出。落点覆盖框里最多的不是候选矿种时（混合矿簇），先记下
 		// 这个兜底落点、继续找真正能采到目标矿的位置；全都找不到才用它，保证
 		// bot 不会因为「找不到纯矿落点」而永远建不出矿机。
-		if model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin) == node.Kind {
+		mined := model.MiningItemAt(ws, model.BuildingTypeMiningMachine, model.PlanRotation0, origin)
+		if mined == node.Kind {
 			return issue(model.Command{
 				Type:    model.CmdBuild,
 				Target:  model.CommandTarget{Layer: "planet", Position: &origin},
 				Payload: map[string]any{"building_type": string(model.BuildingTypeMiningMachine)},
 			})
 		}
-		if fallback == nil {
+		// 兜底落点：优先「这台矿机会采目标矿种」的落点（哪怕它离候选矿点远一点），
+		// 只有在完全找不到时（覆盖框里根本没有该矿种）才退而求其次。
+		// 判据必须是「落点采到的 == 目标矿」，不能只看覆盖框里有没有该矿种：
+		// 混合矿簇里矿机按平票规则可能选中另一种矿，矿机就成了永远产错矿的死资产
+		// （实测 pt1010 局：p2 三台矿机里两台卡在采不到铁，整局产线停摆）。
+		if mined != "" && fallback == nil {
 			fallback = &origin
 		}
 	}
