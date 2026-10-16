@@ -16,8 +16,8 @@ import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { getItemColorValue } from './item-colors';
 import { DIRECTION_NAMES, logisticsArrows } from './logistics-direction';
-import { getItemDisplayName } from './model';
-import { sorterFilterOptions, toggleSorterFilterItem } from './sorter-filter';
+import { getBuildingDisplayName, getItemDisplayName } from './model';
+import { sorterEndpointStatuses, sorterFilterOptions, toggleSorterFilterItem } from './sorter-filter';
 
 /** 面板内部的草稿：两个字段都必填，提交时原样作为 `SorterFilterConfig` 下发。 */
 type SorterFilterDraft = Required<SorterFilterConfig>;
@@ -30,7 +30,16 @@ function readConfig(b: Building): SorterFilterDraft {
   };
 }
 
-export function SorterControls({ building, catalog, planetId, canControl }: { building: Building; catalog?: CatalogView; planetId: string; canControl: boolean }) {
+export function SorterControls({ building, buildings, catalog, faceSize, planetId, canControl }: {
+  building: Building;
+  /** 同星球可见建筑：按与服务端同一套规则推「取货端/放货端有没有接上」（试玩 1016 U8）。 */
+  buildings?: readonly Building[];
+  catalog?: CatalogView;
+  /** 面内格边长（跨面步进用）。 */
+  faceSize?: number;
+  planetId: string;
+  canControl: boolean;
+}) {
   const client = useApiClient();
   const [draft, setDraft] = useState(() => readConfig(building));
   const [query, setQuery] = useState('');
@@ -42,6 +51,12 @@ export function SorterControls({ building, catalog, planetId, canControl }: { bu
   const route = arrows.length === 0
     ? '方向未定'
     : arrows.map((arrow) => `${arrow.from ? `背面 ${DIRECTION_NAMES[arrow.from]} → ` : ''}正面 ${DIRECTION_NAMES[arrow.to]}`).join('、');
+  // 端点连通性（试玩 1016 U8）：服务端不给这个字段，这里按同一套规则在客户端推。
+  const endpoints = useMemo(
+    () => sorterEndpointStatuses(building, buildings ?? [], faceSize ?? 1),
+    [building, buildings, faceSize],
+  );
+  const blocked = endpoints.filter((endpoint) => endpoint.ok === false);
   const options = useMemo(() => sorterFilterOptions(catalog, draft.filter_items, query), [catalog, draft.filter_items, query]);
   async function submit() {
     if (pending || !canControl) return;
@@ -55,6 +70,33 @@ export function SorterControls({ building, catalog, planetId, canControl }: { bu
     <form onSubmit={e => { e.preventDefault(); void submit(); }}><fieldset disabled={!canControl || pending}>
       <legend>搬运方向</legend>
       <p data-testid="sorter-direction">{route}</p>
+      {/* 试玩 1016 U8：反向/空转的分拣器过去只写「运行中 / 停机原因 -」，
+          玩家只能靠「流向」那行文字猜朝向对不对。这里直接点名哪一端接不上。 */}
+      {endpoints.length > 0 ? (
+        <ul className="sorter-endpoints" data-testid="sorter-endpoints">
+          {endpoints.map((endpoint) => (
+            <li className={endpoint.ok === false ? 'is-bad' : endpoint.ok === null ? 'is-unknown' : 'is-ok'} key={endpoint.side}>
+              <span className="sorter-endpoints__side">{endpoint.side === 'take' ? '取货端' : '放货端'}</span>
+              <span className="sorter-endpoints__where">
+                {DIRECTION_NAMES[endpoint.direction]} ({endpoint.tile.x}, {endpoint.tile.y})
+                {endpoint.buildingType ? ` · ${getBuildingDisplayName(catalog, endpoint.buildingType)}` : ''}
+              </span>
+              <span className="sorter-endpoints__state">
+                {endpoint.ok === true
+                  ? '已接上'
+                  : endpoint.ok === null
+                    ? '数据不足（该格不在当前场景窗口内）'
+                    : endpoint.problem}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {blocked.length > 0 ? (
+        <p className="sorter-endpoints__warn" role="status" data-testid="sorter-endpoint-warning">
+          这条搬运路线走不通：{blocked.map((endpoint) => `${endpoint.side === 'take' ? '取货端' : '放货端'}${endpoint.problem ?? '接不上'}`).join('；')}。
+        </p>
+      ) : null}
       <p>方向由建造时的朝向决定（背面取货、正面放货），R 键旋转；这里只配过滤。</p>
       <label>过滤模式<select aria-label="过滤模式" value={draft.filter_mode} onChange={e => setDraft({ ...draft, filter_mode: e.target.value as 'allow' | 'deny' })}><option value="allow">仅搬运所选</option><option value="deny">排除所选</option></select></label>
       <div className="sorter-filter">

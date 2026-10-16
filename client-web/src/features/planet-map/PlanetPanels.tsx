@@ -1020,7 +1020,7 @@ export function PlanetEntityPanel({
 
         {building.type === "traffic_monitor" ? <TrafficMonitorControls key={building.id} building={building} buildings={Object.values(planet.buildings ?? {})} faceSize={planet.surface?.face_size ?? 1} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <UnitProductionControls key={building.id+"-production"} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id===session.playerId}/>
-        {building.sorter ? <SorterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
+        {building.sorter ? <SorterControls key={building.id} building={building} buildings={Object.values(planet.buildings ?? {})} catalog={catalog} faceSize={planet.surface?.face_size ?? 1} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         {building.type === "splitter" ? <SplitterControls key={building.id} building={building} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} /> : null}
         <ProcessingStatus building={building} />
         <BuildingStorageSection

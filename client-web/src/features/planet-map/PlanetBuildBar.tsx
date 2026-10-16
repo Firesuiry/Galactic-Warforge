@@ -34,7 +34,7 @@ import {
   nextBeltDirection,
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
-import { isSorterBuilding } from '@/features/planet-map/logistics-direction';
+import { isSorterBuilding, DIRECTION_NAMES, OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns } from '@/features/planet-map/logistics-direction';
 import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
 import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
@@ -122,6 +122,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   const activeBuildingType = interactionMode.kind === 'build' ? interactionMode.buildingType : null;
   const buildMode = interactionMode.kind === 'build';
   const beltMode = buildMode && isConveyorBeltBuilding(activeBuildingType ?? '');
+  const sorterMode = buildMode && isSorterBuilding({ type: activeBuildingType ?? '' });
   const buildDirection = interactionMode.kind === 'build' ? interactionMode.direction : 'auto';
   const activeRecipeId = interactionMode.kind === 'build' ? interactionMode.recipeId : undefined;
   const completedTechIds = useMemo(
@@ -404,8 +405,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               </span>
             ) : (
               <span className="planet-build-bar__hint">
-                {isSorterBuilding({ type: activeBuildingType ?? '' })
-                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上青色箭头 = 取货端，琥珀 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                {sorterMode
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
                   : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
@@ -415,7 +416,16 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               title="旋转建筑或传送带方向（快捷键 R）"
               onClick={cycleBeltDirection}
             >
-              方向：{beltMode ? DIRECTION_LABELS[buildDirection] : (interactionMode.kind === 'build' ? interactionMode.rotation ?? 0 : 0) + '°'} · R 旋转
+              {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写「方位：东」，分拣器另标
+                  「（取货端 西 → 放货端 东）」，不再一套显角度一套显方位。 */}
+              方位：{beltMode
+                ? DIRECTION_LABELS[buildDirection]
+                : (() => {
+                    const facing = ROTATION_FACING[rotationTurns(interactionMode.kind === 'build' ? interactionMode.rotation : 0)];
+                    return sorterMode
+                      ? `${DIRECTION_NAMES[facing]}（取货端 ${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]} → 放货端 ${DIRECTION_NAMES[facing]}）`
+                      : DIRECTION_NAMES[facing];
+                  })()} · R 旋转
             </button>
             {availableRecipes.length > 0 ? (
               <select

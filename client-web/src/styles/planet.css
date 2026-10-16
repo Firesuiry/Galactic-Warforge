@@ -2340,3 +2340,14 @@ body:has([data-planet-minimap]) {
 .sorter-filter__id { color:#6f8d99; font-size:10px; }
 .sorter-filter__check { color:#6ee7b7; font-weight:700; }
 .sorter-filter__empty { padding:8px; color:#8fb0bd; font-size:11px; }
+
+/* 分拣器端点连通性（试玩 1016 U8）：直接点名哪一端接不上，不再只写「运行中」。 */
+.sorter-endpoints { margin:6px 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:3px; font-size:11px; }
+.sorter-endpoints li { display:flex; flex-wrap:wrap; gap:6px; padding:3px 6px; border-radius:5px; background:#0c161e; }
+.sorter-endpoints li.is-ok { border-left:3px solid #6ee7b7; }
+.sorter-endpoints li.is-bad { border-left:3px solid #ff8a8a; color:#ffd7d7; }
+.sorter-endpoints li.is-unknown { border-left:3px solid #ffd76a; color:#ffe6b0; }
+.sorter-endpoints__side { font-weight:600; }
+.sorter-endpoints__where { color:#8fb0bd; }
+.sorter-endpoints__state { flex:1; }
+.sorter-endpoints__warn { margin:4px 0; color:#ffb4b4; font-size:11px; }

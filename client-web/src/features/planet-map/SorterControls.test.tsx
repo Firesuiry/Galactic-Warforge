@@ -21,8 +21,8 @@ const catalog = {
     { id: 'iron_ingot', name: '铁块', color: '#e6e8f4' },
   ],
 } as CatalogView;
-function show(value = building, canControl = true) {
-  return render(<SorterControls building={value} catalog={catalog} planetId="planet-1-1" canControl={canControl} />);
+function show(value = building, canControl = true, buildings?: readonly Building[]) {
+  return render(<SorterControls building={value} buildings={buildings} catalog={catalog} faceSize={8} planetId="planet-1-1" canControl={canControl} />);
 }
 /** 候选列表容器（`role=option` 也被 <select> 的 <option> 占用，断言要限定在列表里）。 */
 function list() {
@@ -84,6 +84,25 @@ it('试玩 1016 U2：搜索无命中时给一句提示，而不是空列表', ()
   fireEvent.change(screen.getByLabelText('搜索过滤物品'), { target: { value: '不存在' } });
   expect(list().queryAllByRole('option')).toHaveLength(0);
   expect(screen.getByText(/没有匹配的物品/)).toBeInTheDocument();
+});
+
+it('试玩 1016 U8：反向/空转分拣器在面板里点名哪一端接不上', () => {
+  // 西侧带子朝东（可取货）、东侧没有任何建筑 → 放货端不接收。
+  show();
+  const endpoints = screen.getByTestId('sorter-endpoints');
+  expect(endpoints).toHaveTextContent('取货端');
+  expect(endpoints).toHaveTextContent('放货端');
+  expect(screen.getByTestId('sorter-endpoint-warning')).toHaveTextContent('这条搬运路线走不通');
+});
+
+it('试玩 1016 U8：两端都接上时不给告警', () => {
+  show(building, true, [
+    building,
+    { ...building, id: 'belt-w', type: 'conveyor_belt_mk1', position: { x: 1, y: 2, z: 0 }, sorter: undefined, conveyor: { input: 'auto', output: 'east' } } as unknown as Building,
+    { ...building, id: 'smelter-e', type: 'arc_smelter', position: { x: 3, y: 2, z: 0 }, sorter: undefined, runtime: { params: { energy_consume: 0, energy_generate: 0, capacity: 0, footprint: { width: 1, height: 1 }, io_ports: [{ id: 'in', direction: 'input', offset: { x: 0, y: 0 }, capacity: 4 }] }, state: 'running' } } as unknown as Building,
+  ]);
+  expect(screen.queryByTestId('sorter-endpoint-warning')).toBeNull();
+  expect(screen.getByTestId('sorter-endpoints')).toHaveTextContent('已接上');
 });
 
 it('preserves the draft on transport ticks but follows authoritative filter changes', () => {

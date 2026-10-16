@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CatalogView } from '@shared/types';
+import type { Building, CatalogView } from '@shared/types';
 
-import { sorterFilterOptions, toggleSorterFilterItem } from './sorter-filter';
+import { sorterEndpointStatuses, sorterFilterOptions, toggleSorterFilterItem } from './sorter-filter';
 
 const catalog = {
   items: [
