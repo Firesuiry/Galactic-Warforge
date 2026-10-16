@@ -447,9 +447,10 @@ func (op *zeroOpening) buildNext() {
 	// 注定被拒的回执（实测整局 800+ 条，回执日志被「缺少 N 个「电路板」」刷满；
 	// 真人玩家看到料不够不会去点建造，而是接着手搓/等机器出货）。所以下发前先按
 	// 背包自查一次：缺料就直接回去备料（`nextMechaAction` 会沿手搓链下钻），
-	// 不产生回执。矿机（s.node != nil）仍照原样下发：它的料由 `feedIndustry`
-	// 从自己的机器里取（`planForSteps` 会备），且它落点要现算。
-	if s.node == nil && !op.player.HasItems(buildingCost(s.btype)) {
+	// 不产生回执。矿机同样自查（实测剩下 28 条回执全是采矿机的「缺少 N 个
+	// 电路板/磁线圈/齿轮/铁块」——采矿机的料由 `feedIndustry` 从自己的机器里取，
+	// 一样是「料够了才发命令」）。
+	if !op.player.HasItems(buildingCost(s.btype)) {
 		op.pendingShort = true
 		return
 	}
