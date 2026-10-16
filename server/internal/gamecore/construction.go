@@ -704,10 +704,11 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			return nil, fmt.Errorf("施工占地的地基正在拆除")
 		}
 	}
-	// 落成前把站在占地里的地面单位推到占地外（命令下达后单位可能自己走进即将
-	// 合拢的占地，落成后它会被永久砌在墙里）。一处空位都找不到时返回
-	// errFootprintOccupied 推迟落成，由施工队列保持任务在施工中并写明排队原因。
-	displaced, displacedOK := displaceFootprintUnits(ws, task, tiles)
+	// 落成前先算好"把站在占地里的地面单位推到占地外"的方案（命令下达后单位可能
+	// 自己走进即将合拢的占地，落成后它会被永久砌在墙里）。方案不改状态；真正挪动
+	// 放在建筑索引成功之后（见下面 applyFootprintDisplacement），一处合格空位都
+	// 找不到时返回 errFootprintOccupied 推迟落成，由施工队列保持任务在施工中。
+	displacement, displacedOK := planFootprintDisplacement(ws, task, tiles)
 	if !displacedOK {
 		return nil, errFootprintOccupied
 	}
@@ -804,6 +805,9 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		model.RegisterLogisticsStation(ws, b)
 	}
 	model.RegisterPowerGridBuilding(ws, b)
+	// 建筑已索引成功，让开的单位此刻才真正挪位：让开与落成是同一件事的两半，
+	// 前面任何一步失败都不会留下"单位被推走、建筑却没建起来"的中间态。
+	displaced := applyFootprintDisplacement(ws, displacement)
 
 	events := []*model.GameEvent{
 		{
