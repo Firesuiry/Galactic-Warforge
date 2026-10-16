@@ -50,7 +50,14 @@ function coverageCounts(
   // 与服务端 CollectorCoverageCells 同口径：至少外扩 1 圈，coverage_radius 更大时取它。
   const rings = Math.max(1, entry?.coverage_radius ?? 1);
   const size = planet.map_width / 3;
-  const resources = getResourceList(planet);
+  // 格 → 矿种索引：一格最多一条矿脉（服务端 Grid 每格一个 ResourceNodeID）。
+  const kindAt = new Map<string, string>();
+  for (const resource of getResourceList(planet)) {
+    // 枯竭的矿脉服务端不算（MiningItemAt 跳过 Depleted）。
+    if (resource.depleted) continue;
+    const tile = toTilePoint(resource.position);
+    kindAt.set(`${tile.x},${tile.y}`, resource.kind);
+  }
   const counts = new Map<string, number>();
   const seen = new Set<string>();
   for (let dy = -rings; dy < height + rings; dy += 1) {
@@ -60,13 +67,9 @@ function coverageCounts(
       // 球面 offset 在面接缝/极点附近可能走回同一格：去重，与服务端 seen 同口径。
       if (seen.has(key)) continue;
       seen.add(key);
-      const node = resources.find((resource) => {
-        const tile = toTilePoint(resource.position);
-        return tile.x === cell.x && tile.y === cell.y;
-      });
-      // 枯竭的矿脉服务端不算（MiningItemAt 跳过 Depleted）。
-      if (!node || node.depleted) continue;
-      counts.set(node.kind, (counts.get(node.kind) ?? 0) + 1);
+      const kind = kindAt.get(key);
+      if (!kind) continue;
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
     }
   }
   return [...counts.entries()]
