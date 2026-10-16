@@ -37,6 +37,9 @@ func TestSkirmishDefenseProbe(t *testing.T) {
 		// 都不改变交火顺序），只保留 hold，省一半墙钟时间。
 		for _, stance := range []string{"hold"} {
 			t.Run(seed+"/"+stance, func(t *testing.T) {
+				// 探针各自建 GameCore/WorldState（newSkirmishCoreForSeed）与
+				// zeroOpening，不碰包级可变状态，seed 之间可以并行跑。
+				t.Parallel()
 				runSkirmishDefenseProbe(t, seed, stance)
 			})
 		}

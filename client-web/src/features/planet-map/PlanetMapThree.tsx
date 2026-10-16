@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Bug, Crosshair, Globe2, House, Layers, Minus, Plus, Settings2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
-import type { CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
+import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
 import { traceBeltStroke } from './belt-stroke';
@@ -40,6 +40,8 @@ interface Props {
   planet: PlanetRenderView;
   catalog?: CatalogView;
   inventory?: ItemInventory;
+  /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，画红色短杠（试玩 1016 B1）。 */
+  alerts?: AlertEntry[];
   fog?: FogMapView | PlanetSceneView;
   overview?: PlanetOverviewView;
   networks?: PlanetNetworksView;
@@ -265,7 +267,7 @@ export function PlanetMapThree(props: Props) {
   useEffect(() => {
     if (!ready) return;
     scene.current?.setData({ ...props, playerId: session.playerId });
-  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.inventory, props.runtime, props.networks, props.darkFogHostile, session.playerId]);
+  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.inventory, props.runtime, props.networks, props.darkFogHostile, props.alerts, session.playerId]);
 
   useEffect(() => {
     if (ready) scene.current?.setQuality(quality);

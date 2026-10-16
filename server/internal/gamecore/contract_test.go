@@ -148,3 +148,95 @@ func TestEnemyAttackSeenIgnoresDarkFogAttacks(t *testing.T) {
 		t.Fatal("敌方玩家击杀应判定为被攻击")
 	}
 }
+
+// research_progress_gte：只有真在推进（进度 > 0）才通过；卡在 waiting_matrix 时
+// 进度停在 0，这条谓词就是「研究确实在跑」的可执行断言（cp-research-start 用）。
+func TestResearchProgressPredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	player := ws.Players["p1"]
+	player.Tech = model.NewPlayerTechState("p1")
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+
+	check := checkpoint.ContractCheck{Kind: "research_progress_gte", Player: "p1", TechID: "electromagnetism", N: 1}
+	if result := eval(check); result.Passed || result.Actual != "0" {
+		t.Fatalf("没有进行中的研究必须失败，got %+v", result)
+	}
+
+	player.Tech.CurrentResearch = &model.PlayerResearch{TechID: "electromagnetism", State: model.ResearchInProgress, Progress: 3, BlockedReason: "waiting_matrix"}
+	if result := eval(check); !result.Passed || result.Actual != "3" {
+		t.Fatalf("进度 3 >= 1 应通过，got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "research_progress_gte", Player: "p1", N: 4}); result.Passed {
+		t.Fatalf("进度 3 < 4 应失败，got %+v", result)
+	}
+	// 指定了 tech_id 时要求正在研究的就是它。
+	if result := eval(checkpoint.ContractCheck{Kind: "research_progress_gte", Player: "p1", TechID: "dirac_inversion", N: 1}); result.Passed || result.Actual != "3" {
+		t.Fatalf("研究的是别的科技应失败并报实际进度，got %+v", result)
+	}
+}
+
+// building_item_gte：数的是「玩家该类建筑库存里」的物品（主库存 + 输入/输出缓冲），
+// 用来断言「产线真的把货送进了那台机器」。
+func TestBuildingItemPredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	player := ws.Players["p1"]
+
+	lab := newBuilding("lab-item", model.BuildingTypeMatrixLab, "p1", model.Position{X: 6, Y: 6})
+	placeBuilding(ws, lab)
+	lab.Storage.EnsureInventory()[model.ItemElectromagneticMatrix] = 2
+	lab.Storage.EnsureOutputBuffer()[model.ItemElectromagneticMatrix] = 3
+
+	// 背包里的矩阵不算数：谓词只看建筑库存。
+	player.Inventory = model.ItemInventory{model.ItemElectromagneticMatrix: 99}
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+	check := checkpoint.ContractCheck{Kind: "building_item_gte", Player: "p1", Type: string(model.BuildingTypeMatrixLab), ItemID: string(model.ItemElectromagneticMatrix), N: 5}
+	if result := eval(check); !result.Passed || result.Actual != "5" {
+		t.Fatalf("研究站库存 2+3=5 应通过，got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "building_item_gte", Player: "p1", Type: string(model.BuildingTypeMatrixLab), ItemID: string(model.ItemElectromagneticMatrix), N: 6}); result.Passed {
+		t.Fatalf("要求 6 应失败，got %+v", result)
+	}
+	// 建筑类型不匹配时不计入（另一台制造台里的矩阵不算研究站的）。
+	other := newBuilding("asm-item", model.BuildingTypeAssemblingMachineMk1, "p1", model.Position{X: 20, Y: 20})
+	placeBuilding(ws, other)
+	other.Storage.EnsureInventory()[model.ItemElectromagneticMatrix] = 40
+	if result := eval(check); !result.Passed || result.Actual != "5" {
+		t.Fatalf("只应数研究站里的矩阵，got %+v", result)
+	}
+}
+
+// no_alert_since：自给定 tick 起没有该类生产告警才通过（type 可选，只看该建筑类型）。
+func TestNoAlertSincePredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	belt := newBuilding("belt-alert", model.BuildingTypeConveyorBeltMk1, "p1", model.Position{X: 6, Y: 6})
+	placeBuilding(ws, belt)
+	core.AlertHistory().Record([]*model.ProductionAlert{{
+		AlertID: "alert-300-belt-alert-belt_blocked", Tick: 300, PlayerID: "p1",
+		BuildingID: belt.ID, BuildingType: belt.Type, AlertType: model.AlertTypeBeltBlocked,
+	}})
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "no_alert_since", AlertType: string(model.AlertTypeBeltBlocked), Tick: 300}); result.Passed || result.Actual != "1" {
+		t.Fatalf("tick 300 起的告警应被数到并判失败，got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "no_alert_since", AlertType: string(model.AlertTypeBeltBlocked), Tick: 301}); !result.Passed || result.Actual != "0" {
+		t.Fatalf("tick 301 之后应无告警，got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "no_alert_since", AlertType: string(model.AlertTypeInputShortage), Tick: 0}); !result.Passed {
+		t.Fatalf("别的告警类型不应影响，got %+v", result)
+	}
+	if result := eval(checkpoint.ContractCheck{Kind: "no_alert_since", AlertType: string(model.AlertTypeBeltBlocked), Type: string(model.BuildingTypeMatrixLab), Tick: 0}); !result.Passed {
+		t.Fatalf("限定建筑类型后不该命中传送带的告警，got %+v", result)
+	}
+}

@@ -283,6 +283,8 @@ export const TRANSLATIONS = {
     output_blocked: "产物阻塞",
     throughput_drop: "产能下降",
     backlog: "堆积升高",
+    unit_spawn_blocked: "出厂口被占满",
+    belt_blocked: "传送带堵塞",
   },
   severity: {
     info: "提示",

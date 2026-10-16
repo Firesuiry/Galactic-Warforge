@@ -43,18 +43,17 @@ type WorldSnapshot struct {
 
 // BuildingSnapshot is a snapshot-friendly building payload.
 type BuildingSnapshot struct {
-	ID                string                       `json:"id"`
-	Type              model.BuildingType           `json:"type"`
-	OwnerID           string                       `json:"owner_id"`
-	Position          model.Position               `json:"position"`
-	HP                int                          `json:"hp"`
-	MaxHP             int                          `json:"max_hp"`
-	Level             int                          `json:"level"`
-	VisionRange       int                          `json:"vision_range"`
-	// Rotation 是建筑朝向（0/90/180/270）。分拣器的取货端/放货端由它派生
-	// （model.SorterFacingAxis：背面取货、正面放货），采集机的覆盖框也按它算
-	// （model.CollectorCoverageCells）。快照里漏掉它会让读档后的分拣器全部变成
-	// 朝北、采集机覆盖框回到 0° 朝向——产线静默停摆（存档点重建实测）。
+	ID          string             `json:"id"`
+	Type        model.BuildingType `json:"type"`
+	OwnerID     string             `json:"owner_id"`
+	Position    model.Position     `json:"position"`
+	HP          int                `json:"hp"`
+	MaxHP       int                `json:"max_hp"`
+	Level       int                `json:"level"`
+	VisionRange int                `json:"vision_range"`
+	// Rotation 是建造朝向。分拣器的取/放端（背面取货、正面放货）直接由它派生
+	// （model.SorterFacingAxis），采集机的覆盖框也按它算（model.CollectorCoverageCells）；
+	// 漏存会让读档后的分拣器退化成 rotation=0，整条产线停摆（第 16 轮 cp-base 读档即复现）。
 	Rotation model.PlanRotation `json:"rotation,omitempty"`
 	// MiningItem 是采集建筑建成时定下的唯一开采矿种（见 model.MiningItemAt）：
 	// 覆盖框里数量最多的那种矿，平票取物品 ID 较小者。漏掉它会让读档后的矿机

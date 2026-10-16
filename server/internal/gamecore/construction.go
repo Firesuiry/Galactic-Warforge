@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -120,6 +121,14 @@ const (
 	constructionRegionSize          = 8
 	defaultConstructionDurationTick = 1
 )
+
+// WaitReasonFootprintOccupied：施工完成时占地里还站着地面单位、而它一格空位都
+// 让不出来（占地被围得水泄不通）。任务保持"施工中"原地等待，不落成也不取消，
+// 等单位自己走开。见 displaceFootprintUnits / completeConstructionTask。
+const WaitReasonFootprintOccupied = "footprint_occupied"
+
+// errFootprintOccupied 占地被地面单位占住且无处可推：落成推迟（不是失败）。
+var errFootprintOccupied = errors.New("施工占地内仍有地面单位无法让开")
 
 // maxVerticalStackHeight returns how many layers a player may stack for
 // vertically stackable buildings: the ground layer plus one extra layer per
@@ -551,6 +560,13 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 		evts, err := gc.completeConstructionTask(ws, task)
+		if errors.Is(err, errFootprintOccupied) {
+			// 占地里有地面单位、且它一格空位都让不出来（占地被围得水泄不通）：
+			// 保持"施工中"原地等待，等它自己走开再落成。绝不把单位封进墙里，
+			// 也不整单取消（材料已经投进去了）。
+			noteConstructionWait(ws, task, WaitReasonFootprintOccupied)
+			continue
+		}
 		if err != nil {
 			task.Error = err.Error()
 			_ = ws.Construction.Transition(task.ID, model.ConstructionCancelled)
@@ -688,6 +704,14 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			return nil, fmt.Errorf("施工占地的地基正在拆除")
 		}
 	}
+	// 落成前先算好"把站在占地里的地面单位推到占地外"的方案（命令下达后单位可能
+	// 自己走进即将合拢的占地，落成后它会被永久砌在墙里）。方案不改状态；真正挪动
+	// 放在建筑索引成功之后（见下面 applyFootprintDisplacement），一处合格空位都
+	// 找不到时返回 errFootprintOccupied 推迟落成，由施工队列保持任务在施工中。
+	displacement, displacedOK := planFootprintDisplacement(ws, task, tiles)
+	if !displacedOK {
+		return nil, errFootprintOccupied
+	}
 	profile := model.BuildingProfileFor(task.BuildingType, 1)
 	id := ws.NextEntityID("b")
 	b := &model.Building{
@@ -781,6 +805,9 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		model.RegisterLogisticsStation(ws, b)
 	}
 	model.RegisterPowerGridBuilding(ws, b)
+	// 建筑已索引成功，让开的单位此刻才真正挪位：让开与落成是同一件事的两半，
+	// 前面任何一步失败都不会留下"单位被推走、建筑却没建起来"的中间态。
+	displaced := applyFootprintDisplacement(ws, displacement)
 
 	events := []*model.GameEvent{
 		{
@@ -793,6 +820,8 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 			},
 		},
 	}
+	// 让开的单位带位移事件下发：客户端据此把它们挪到占地外，而不是继续画在墙里。
+	events = append(events, footprintDisplacementEvents(displaced)...)
 	return events, nil
 }
 

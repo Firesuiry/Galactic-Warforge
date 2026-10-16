@@ -72,6 +72,9 @@ function stubFetch(alerts: unknown[]) {
     if (url.pathname === '/catalog') {
       return Promise.resolve(jsonResponse(catalog));
     }
+    if (url.pathname === '/games/current') {
+      return Promise.resolve(jsonResponse({ max_tick_rate: 10, tick: 120, active_planet_id: 'planet-1-1' }));
+    }
     return Promise.reject(new Error(`unexpected url ${url.pathname}`));
   }));
 }
@@ -148,6 +151,55 @@ describe('AlertBar', () => {
 
     expect(usePlanetViewStore.getState().selected).toMatchObject({ kind: 'building', id: 'b-9' });
     // 点完收起列表
+    expect(screen.queryByTestId('alert-bar-list')).not.toBeInTheDocument();
+  });
+
+  it('传送带堵塞条目显示位置/件数/时长（中文，不裸显 belt_blocked）', async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      alertEntry({
+        alert_id: 'a-belt',
+        tick: 500,
+        building_id: 'b-9',
+        building_type: 'conveyor_belt_mk1',
+        alert_type: 'belt_blocked',
+        message: '建筑 b-9：传送带被堵，物品运不出去',
+        details: { position: { x: 12, y: 7, z: 0 }, queued_items: 5, blocked_ticks: 300 },
+      }),
+    ]);
+    renderAlertBar('/planet/planet-1-1');
+    const summary = await screen.findByRole('button', { name: '产线警报' });
+    expect(summary.textContent).toContain('传送带堵塞');
+
+    await user.click(summary);
+    const row = screen.getByTestId('alert-bar-list').querySelector('.alert-bar__row') as HTMLElement;
+    expect(row.textContent).toContain('(12, 7)：5 件货 30 秒没动');
+    expect(row.getAttribute('title')).toBe('传送带堵塞 (12, 7)：5 件货 30 秒没动');
+    expect(row.textContent).not.toMatch(/[a-z]+_[a-z]+/);
+    expect(row.textContent).not.toContain('belt_blocked');
+  });
+
+  it('点传送带堵塞条目：镜头聚焦被堵的带格（不再选中建筑）', async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      alertEntry({
+        alert_id: 'a-belt',
+        tick: 500,
+        building_id: 'b-9',
+        building_type: 'conveyor_belt_mk1',
+        alert_type: 'belt_blocked',
+        message: '建筑 b-9：传送带被堵，物品运不出去',
+        details: { position: { x: 12, y: 7, z: 0 }, queued_items: 5, blocked_ticks: 300 },
+      }),
+    ]);
+    renderAlertBar('/planet/planet-1-1');
+    await user.click(await screen.findByRole('button', { name: '产线警报' }));
+    const row = screen.getByTestId('alert-bar-list').querySelector('.alert-bar__row') as HTMLElement;
+    await user.click(row);
+
+    const state = usePlanetViewStore.getState();
+    expect(state.selected).toMatchObject({ kind: 'tile', position: { x: 12, y: 7 } });
+    expect(state.focusRequest?.position).toMatchObject({ x: 12, y: 7 });
     expect(screen.queryByTestId('alert-bar-list')).not.toBeInTheDocument();
   });
 

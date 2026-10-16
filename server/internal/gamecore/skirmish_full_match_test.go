@@ -49,6 +49,10 @@ func TestSkirmishFullMatchRegression(t *testing.T) {
 	}
 	for _, seed := range []string{"skirmish-seed-001", "pt1009-seed", "pt1009-g2", "pt1010-85s8io", "pt1010-g4", "pt1011-0e2bz1"} {
 		t.Run(seed, func(t *testing.T) {
+			// 每个 seed 建自己的 GameCore/WorldState（见 newSkirmishCoreForSeed），
+			// 不碰任何包级可变状态（bot 决策只用 core 自带的 rng，地图生成用
+			// mapgen 的局部 rng），因此 seed 之间可以并行跑。
+			t.Parallel()
 			runSkirmishFullMatch(t, seed)
 		})
 	}

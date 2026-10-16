@@ -526,6 +526,7 @@ it('建造任务排队原因给中文说明，未知原因原样透出', () => {
   expect(describeConstructionWait('insufficient_materials')).toContain('材料未到齐');
   expect(describeConstructionWait('executor_concurrent_limit')).toContain('执行体正在施工其他任务');
   expect(describeConstructionWait('region_concurrent_limit')).toContain('区域');
+  expect(describeConstructionWait('footprint_occupied')).toContain('占地里有单位让不开');
   expect(describeConstructionWait(undefined)).toBeNull();
   expect(describeConstructionWait('')).toBeNull();
   expect(describeConstructionWait('mystery_reason')).toBe('mystery_reason');

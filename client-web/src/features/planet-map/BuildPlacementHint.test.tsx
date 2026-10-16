@@ -131,3 +131,80 @@ describe('BuildPlacementHint 未探索区不本地拦截（试玩 1009 F）', ()
     expect(hint).not.toHaveTextContent('无法建造');
   });
 });
+
+describe('BuildPlacementHint 采集建筑「将开采哪一种矿」（第 16 轮契约 §5.1）', () => {
+  const catalog = {
+    buildings: [
+      { id: 'mining_machine', name: '采矿机', buildable: true, requires_resource_node: true, coverage_radius: 1, footprint: { width: 3, height: 3 } },
+    ],
+    items: [
+      { id: 'iron_ore', name: '铁矿' },
+      { id: 'copper_ore', name: '铜矿' },
+    ],
+  } as never;
+
+  /** 3×3 矿机锚点 (5,6)：覆盖框 4..8 × 5..9。 */
+  function planetWith(resources: Array<{ kind: string; x: number; y: number }>) {
+    const planet = makePlanet();
+    planet.resources = resources.map((resource, index) => ({
+      id: `res-${index}`,
+      planet_id: 'planet-1-1',
+      kind: resource.kind,
+      behavior: 'finite',
+      position: { x: resource.x, y: resource.y, z: 0 },
+      remaining: 100,
+    })) as never;
+    return planet;
+  }
+
+  beforeEach(() => {
+    resetPlanetViewStore();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'mining_machine',
+      direction: 'auto',
+    });
+  });
+
+  it('只有一种矿：绿字「将开采：铁矿」，不带警示', () => {
+    render(
+      <BuildPlacementHint
+        catalog={catalog}
+        planet={planetWith([{ kind: 'iron_ore', x: 6, y: 7 }, { kind: 'iron_ore', x: 7, y: 7 }])}
+        playerId="p1"
+      />,
+    );
+    pointAt({ x: 5, y: 6 });
+
+    const hint = screen.getByTestId('build-mining-hint');
+    expect(hint).toHaveTextContent('将开采：铁矿');
+    expect(hint).not.toHaveTextContent('不会开采');
+    expect(hint.className).not.toContain('mining-mixed');
+  });
+
+  it('覆盖内混了别的矿种：警示色 + 列出不会开采的矿种与格数', () => {
+    render(
+      <BuildPlacementHint
+        catalog={catalog}
+        planet={planetWith([
+          { kind: 'iron_ore', x: 5, y: 6 },
+          { kind: 'copper_ore', x: 6, y: 6 }, { kind: 'copper_ore', x: 7, y: 6 }, { kind: 'copper_ore', x: 8, y: 6 },
+        ])}
+        playerId="p1"
+      />,
+    );
+    pointAt({ x: 5, y: 6 });
+
+    const hint = screen.getByTestId('build-mining-hint');
+    expect(hint).toHaveTextContent('将开采：铜矿（覆盖内还有：铁矿×1，不会开采）');
+    expect(hint.className).toContain('build-placement-hint--mining-mixed');
+  });
+
+  it('覆盖框里没有矿（预检拦截）时不显示「将开采」，仍报本地原因', () => {
+    render(<BuildPlacementHint catalog={catalog} planet={planetWith([])} playerId="p1" />);
+    pointAt({ x: 5, y: 6 });
+
+    expect(screen.queryByTestId('build-mining-hint')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('无法建造：需要建在资源点上');
+  });
+});

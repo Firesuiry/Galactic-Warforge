@@ -23,12 +23,13 @@ import { ConveyorGeometry } from './three/conveyor-geometry';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
 import { beltDeadEnds } from './sorter-filter';
-import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
+import { blockedBeltMarks } from './belt-blocked-marks';
+import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isCardinalDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
 import { PointerPress } from './pointer-press';
-import type { Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
+import type { AlertEntry, Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCatalogEntry, getItemDisplayName, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
 import { getItemColorValue } from './item-colors';
 import { isOwnStalledBuilding } from './power-status';
@@ -52,6 +53,8 @@ export interface PlanetThreeData {
   darkFogHostile?: boolean;
   /** 玩家背包：建造预览缺料时标红。 */
   inventory?: ItemInventory;
+  /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，画红色短杠（试玩 1016 B1）。 */
+  alerts?: AlertEntry[];
 }
 export interface PlanetThreeInteraction {
   selected: SelectedEntity | null;
@@ -925,6 +928,27 @@ export class PlanetThreeScene {
           .normalize());
         const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .07, Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
         mesh.renderOrder = 13;
+        this.marks.add(mesh);
+      }
+    }
+    // 传送带堵塞（试玩 1016 B1）：服务端 belt_blocked 告警指向被堵的带格本身
+    // （上游矿机的「产物阻塞」只是症状）。与死端同一道红杠、同一位置口径，
+    // 判定见 blockedBeltMarks（只标本行星上确实存在、且告警仍成立的带格）。
+    if (this.interaction.layers.logistics && this.data.alerts?.length) {
+      const faceSize = this.data.planet.surface.face_size;
+      const ts = this.tileScale();
+      for (const mark of blockedBeltMarks(this.data.alerts, Object.values(this.data.planet.buildings ?? {}))) {
+        const { east, south } = tileFrame(mark.tile, faceSize);
+        const normal = tileNormal(mark.tile, faceSize);
+        const output = mark.belt.conveyor?.output;
+        const vector = isCardinalDirection(output) ? directionVector(output) : { x: 1, y: 0 };
+        const half = (ts * .3) / RADIUS;
+        const loop = [-half, 0, half].map(offset => normal.clone()
+          .addScaledVector(south, offset * vector.x)
+          .addScaledVector(east, -offset * vector.y)
+          .normalize());
+        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .07, Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
+        mesh.renderOrder = 14;
         this.marks.add(mesh);
       }
     }
