@@ -73,6 +73,7 @@ import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, tr
 import { buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from '@/features/planet-map/logistics-direction';
 import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
 import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
+import { beltDeadEnds } from '@/features/planet-map/sorter-filter';
 import {
   PlanetEffectPool,
   specsFromPlanetBattleEvent,
@@ -674,6 +675,8 @@ const COLOR_GHOST_BLOCKED = 0xff5757;
 const COLOR_GHOST_TAKE = 0x6ee7f7;
 /** 分拣器「取 → 放」有向线颜色（与流向纹的琥珀区分，一眼看出起止端）。 */
 const SORTER_ROUTE_COLOR = 0x8ef0ff;
+/** 传送带死端告警色（试玩 1016 U7）：带尾对着空地且带上还压着货。 */
+const COLOR_DEAD_END = 0xff5757;
 const COLOR_RANGE_COMBAT = 0xff922b;
 
 /**
@@ -756,6 +759,8 @@ export class PlanetScene {
   private readonly powerGraphics: Graphics;
   private readonly resourcesLayer: Container;
   private readonly constructionGraphics: Graphics;
+  /** 传送带死端告警（试玩 1016 U7）：带尾对着空地时的红色短杠。 */
+  private readonly deadEndGraphics: Graphics;
   private readonly entitiesLayer: Container;
   private readonly logisticsGraphics: Graphics;
   private readonly threatGraphics: Graphics;
@@ -869,6 +874,7 @@ export class PlanetScene {
     this.powerGraphics = new Graphics();
     this.resourcesLayer = new Container();
     this.constructionGraphics = new Graphics();
+    this.deadEndGraphics = new Graphics();
     this.entitiesLayer = new Container();
     // 遮挡排序：建筑+单位同容器按 tile 底部 y 排序（zIndex 单位为小数 tile 坐标，
     // 建筑取 footprint 底行，单位取平滑移动中的显示位置），y 小者先画被高建筑遮挡。
@@ -902,6 +908,8 @@ export class PlanetScene {
     this.world.addChild(this.powerGraphics);
     this.world.addChild(this.resourcesLayer);
     this.world.addChild(this.constructionGraphics);
+    // 死端告警画在工地之上、实体之下：它是带子的状态标注，不该压住建筑本身。
+    this.world.addChild(this.deadEndGraphics);
     this.world.addChild(this.entitiesLayer);
     this.world.addChild(this.logisticsGraphics);
     this.world.addChild(this.threatGraphics);
@@ -1854,6 +1862,8 @@ export class PlanetScene {
     this.powerGraphics.visible = !overview && layers.power;
     this.resourcesLayer.visible = !overview && layers.resources;
     this.constructionGraphics.visible = !overview && layers.construction;
+    // 死端告警跟物流图层：它是传送带的排布问题，物流层关掉时一起隐藏。
+    this.deadEndGraphics.visible = !overview && layers.logistics;
     // 建筑/单位同处一个排序容器，图层开关落到逐节点 visible（zIndex 排序不受影响）。
     for (const node of this.buildingNodes.values()) {
       node.container.visible = !overview && layers.buildings;
@@ -2662,10 +2672,24 @@ export class PlanetScene {
 
   private redrawLogistics(input: PlanetSceneEntitiesInput | null) {
     const g = this.logisticsGraphics.clear();
+    const deadEnds = this.deadEndGraphics.clear();
     if (!input) {
       return;
     }
     const ts = this.tileSize;
+    // 传送带死端告警（试玩 1016 U7）：带尾对着空地且带上还压着货——货堆到带尾就走不动，
+    // 之后只会堵回上游（玩家看到的是「熔炉产物阻塞」）。这里在带尾画一道红色短杠。
+    if (input.layers.logistics) {
+      const faceSize = (this.baseInput?.planet.map_width ?? 3) / 3;
+      for (const deadEnd of beltDeadEnds(input.visible.buildings, faceSize)) {
+        const { x: tx, y: ty } = directionVector(deadEnd.direction);
+        const cx = this.pxCenterX(deadEnd.aheadTile.x);
+        const cy = this.pxCenterY(deadEnd.aheadTile.y);
+        const arm = Math.max(4, ts * 0.3);
+        deadEnds.moveTo(cx - ty * arm, cy + tx * arm).lineTo(cx + ty * arm, cy - tx * arm)
+          .stroke({ width: 3, color: COLOR_DEAD_END, alpha: 0.95 });
+      }
+    }
     for (const drone of input.visible.logisticsDrones) {
       const start = toTilePoint(drone.position);
       if (drone.target_pos) {

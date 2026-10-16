@@ -22,7 +22,8 @@ import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
-import { logisticsArrows, stepTile, buildGhostDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
+import { beltDeadEnds } from './sorter-filter';
+import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
@@ -906,6 +907,23 @@ export class PlanetThreeScene {
     const add = (tile: TilePoint, color: string) => {
       this.marks.add(this.tileOutline(tile, color));
     };
+    // 传送带死端（试玩 1016 U7）：带尾对着空地且带上还压着货——货推到带尾就走不动，
+    // 只会堆满后堵回上游（玩家看到的是「熔炉产物阻塞」）。在带尾前方画红色短杠。
+    if (this.interaction.layers.logistics) {
+      const faceSize = this.data.planet.surface.face_size;
+      for (const deadEnd of beltDeadEnds(Object.values(this.data.planet.buildings ?? {}), faceSize)) {
+        const { east, south } = tileFrame(deadEnd.aheadTile, faceSize);
+        const normal = tileNormal(deadEnd.aheadTile, faceSize);
+        const vector = directionVector(deadEnd.direction);
+        // 短杠垂直于流向：沿「南」轴（east×normal）铺一条细带。
+        const half = this.tileScale() * .3;
+        const loop = [-half, 0, half].map(offset => normal.clone().multiplyScalar(RADIUS + this.tileScale() * .07)
+          .addScaledVector(south, offset * vector.x).addScaledVector(east, -offset * vector.y));
+        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + this.tileScale() * .07, Math.max(this.tileScale() * .06, .02)), this.markMaterial('#ff5757', .95));
+        mesh.renderOrder = 13;
+        this.marks.add(mesh);
+      }
+    }
     const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
     if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
     // 多选单位：每个单位一个选中标记（主选中环之外追加）

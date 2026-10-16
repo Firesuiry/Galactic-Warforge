@@ -183,3 +183,41 @@ function containsCell(building: Building, tile: TilePoint, faceSize: number): bo
   }
   return false;
 }
+
+export interface BeltDeadEnd {
+  id: string;
+  /** 带子自身的格（告警短杠画在这里）。 */
+  tile: TilePoint;
+  /** 朝向轴上的邻格（死端时是空的；也是短杠朝向）。 */
+  aheadTile: TilePoint;
+  direction: CardinalDirection;
+}
+
+/**
+ * 传送带死端（试玩 1016 U7）：带子按自己的输出方向看过去，**前方一格不是任何建筑**
+ * 且带上还压着货——货推到带尾就走不动了，只会堆满后堵回上游（玩家看到的是「熔炉产物
+ * 阻塞」，其实问题在带尾没接东西）。这里只报「有货 + 死端」，空带子不算问题。
+ *
+ * 判定按输出方向的**相邻一格**（不是占地扫描）：传送带是 1×1，能不能收下货只取决于
+ * 正前方那一格。
+ */
+export function beltDeadEnds(
+  buildings: readonly Building[],
+  faceSize: number,
+): BeltDeadEnd[] {
+  const result: BeltDeadEnd[] = [];
+  for (const building of buildings) {
+    if (!building.conveyor || building.splitter) continue;
+    if (building.runtime?.state && building.runtime.state !== 'running') continue;
+    const output = building.conveyor.output;
+    if (output !== 'north' && output !== 'east' && output !== 'south' && output !== 'west') continue;
+    const cargo = (building.conveyor.buffer ?? []).reduce((sum, stack) => sum + (stack.quantity ?? 0), 0);
+    if (cargo <= 0) continue;
+    const tile: TilePoint = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
+    const aheadTile = stepTile(tile, output, faceSize).tile;
+    const blocked = buildings.some((candidate) => candidate.id !== building.id && containsCell(candidate, aheadTile, faceSize));
+    if (blocked) continue;
+    result.push({ id: building.id, tile, aheadTile, direction: output });
+  }
+  return result;
+}
