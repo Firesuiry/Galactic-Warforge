@@ -82,12 +82,20 @@ describe('分拣器端点连通性提示（试玩 1016 U8）', () => {
 
   it('前方什么都没有：给出「没有可取的物品 / 不接收」', () => {
     const unit = sorter();
-    const statuses = sorterEndpointStatuses(unit, [unit], 16);
+    const statuses = sorterEndpointStatuses(unit, [unit], 16, { x: 0, y: 0, width: 32, height: 32 });
     expect(statuses[0].problem).toContain('没有可取的物品');
     expect(statuses[1].problem).toContain('不接收');
     // 端点格仍报出来（玩家据此知道分拣器在看哪一格）。
     expect(statuses[0].tile).toEqual({ x: 4, y: 5 });
     expect(statuses[1].tile).toEqual({ x: 6, y: 5 });
+  });
+
+  it('端点格不在本机场景窗口内时不下结论：ok=null（不误报「接不上」）', () => {
+    const unit = sorter();
+    // 场景窗口在别处（相机移开了）：端点格没有数据，不能断言「前方空着」。
+    const statuses = sorterEndpointStatuses(unit, [unit], 16, { x: 100, y: 100, width: 16, height: 16 });
+    expect(statuses.map((status) => status.ok)).toEqual([null, null]);
+    expect(statuses[0].problem).toContain('不在当前场景窗口内');
   });
 
   it('建筑没有端口数据（旧存档/采集类）时不下结论：ok=null', () => {

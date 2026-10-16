@@ -88,19 +88,25 @@ export interface SorterEndpointStatus {
  *
  * 服务端没有下发「取货端/放货端有没有接上」的字段（`SorterState` 只有 cycle_ticks /
  * range / filter / last_transfer），玩家看到的是「运行中 / 停机原因 -」，只能靠抽屉里
- * 那行「流向」文字猜朝向对不对。这里按**与服务端同一套规则**在客户端推一遍：
+ * 那行「流向」文字猜朝向对不对。这里按**与服务端同一套规则**在客户端推一遍。
  *
- * - 端点只认己方建筑，且沿朝向轴最近的那个非空格就是端点（服务端 `sorterFindEndpoint`
- *   找到建筑就返回，中间的空格只是继续往前扫）；
- * - 传送带端点：取货要求带子朝分拣器方向输出；放货要求该侧允许输入；
- * - 建筑端点：取货要求该建筑有输出端口（或它自己就是产出的机器），放货要求有输入端口。
+ * 口径（`server/internal/gamecore/sorter_settlement.go` 的 `sorterFindEndpoint`）：
+ * - 沿朝向轴从分拣器所在格**逐格**向外扫，**第一个非空格**就是端点（中间的格
+ *   `TileBuilding` 为空时 continue，继续往前）；所以本函数也只扫到第一个占格为止。
+ * - 端点必须己方；传送带端点取货要求 `output == 朝向的反向`、放货要求该侧允许输入
+ *   （`conveyorAllowedInputs`：输出侧不收、input 受限时只收那一侧）。
+ * - 端点是「建筑」（不占 TileBuilding 的多格建筑按占地判定）时，取货要有输出端口、
+ *   放货要有输入端口。
  *
- * 数据不足（端点格不在场景窗口里）返回 `ok: null`，绝不下「接不上」的结论。
+ * 结论分三档：`true` 接得上 / `false` 接不上（附原因）/ `null` 数据不足（端点不在本机
+ * 场景窗口里，或建筑没有端口数据），**绝不在数据不足时下「接不上」的结论**。
  */
 export function sorterEndpointStatuses(
   building: Building,
   buildings: readonly Building[],
   faceSize: number,
+  /** 本机场景窗口（`/scene` 的 bounds）：只有窗口内的格子才能下「空着」的结论。 */
+  bounds?: { x: number; y: number; width: number; height: number },
 ): SorterEndpointStatus[] {
   const { arrows } = logisticsArrows(building);
   const arrow = arrows[0];
@@ -127,6 +133,11 @@ export function sorterEndpointStatuses(
       }
     }
     const base = { side, direction, tile };
+    // 端点格可能不在本机场景窗口里（/scene 只返回相机窗口内的建筑）：那种情况下
+    // 「前方没有建筑」是**数据不足**而不是事实，报 ok: null，不给玩家错误结论。
+    if (!endpoint && bounds && !tileInBounds(tile, bounds)) {
+      return { ...base, ok: null, problem: '端点格不在当前场景窗口内，暂时看不出接没接上' };
+    }
     if (!endpoint) return { ...base, ok: false, problem: side === 'take' ? '取货端没有可取的物品（前方没有建筑/传送带）' : '放货端不接收（前方没有建筑/传送带）' };
     if (endpoint.owner_id !== owner) {
       return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind: endpoint.conveyor ? 'belt' : 'building', ok: false, problem: '端点不属于你（分拣器只服务自己的建筑）' };
@@ -167,6 +178,12 @@ export function sorterEndpointStatuses(
       problem: side === 'take' ? '取货端没有可取的物品（该建筑没有输出口）' : '放货端不接收（该建筑没有输入口）',
     };
   });
+}
+
+/** 该格是否落在本机场景窗口里。 */
+function tileInBounds(tile: TilePoint, bounds: { x: number; y: number; width: number; height: number }): boolean {
+  return tile.x >= bounds.x && tile.x < bounds.x + bounds.width
+    && tile.y >= bounds.y && tile.y < bounds.y + bounds.height;
 }
 
 /** 建筑是否占着这一格（按 footprint 展开）。 */

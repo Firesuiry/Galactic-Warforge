@@ -30,13 +30,15 @@ function readConfig(b: Building): SorterFilterDraft {
   };
 }
 
-export function SorterControls({ building, buildings, catalog, faceSize, planetId, canControl }: {
+export function SorterControls({ building, buildings, catalog, faceSize, planetId, canControl, sceneBounds }: {
   building: Building;
   /** 同星球可见建筑：按与服务端同一套规则推「取货端/放货端有没有接上」（试玩 1016 U8）。 */
   buildings?: readonly Building[];
   catalog?: CatalogView;
   /** 面内格边长（跨面步进用）。 */
   faceSize?: number;
+  /** 本机场景窗口（`/scene` 的 bounds）：端点落在窗口外时不下「空着」的结论。 */
+  sceneBounds?: { x: number; y: number; width: number; height: number };
   planetId: string;
   canControl: boolean;
 }) {
@@ -53,8 +55,8 @@ export function SorterControls({ building, buildings, catalog, faceSize, planetI
     : arrows.map((arrow) => `${arrow.from ? `背面 ${DIRECTION_NAMES[arrow.from]} → ` : ''}正面 ${DIRECTION_NAMES[arrow.to]}`).join('、');
   // 端点连通性（试玩 1016 U8）：服务端不给这个字段，这里按同一套规则在客户端推。
   const endpoints = useMemo(
-    () => sorterEndpointStatuses(building, buildings ?? [], faceSize ?? 1),
-    [building, buildings, faceSize],
+    () => sorterEndpointStatuses(building, buildings ?? [], faceSize ?? 1, sceneBounds),
+    [building, buildings, faceSize, sceneBounds],
   );
   const blocked = endpoints.filter((endpoint) => endpoint.ok === false);
   const options = useMemo(() => sorterFilterOptions(catalog, draft.filter_items, query), [catalog, draft.filter_items, query]);
