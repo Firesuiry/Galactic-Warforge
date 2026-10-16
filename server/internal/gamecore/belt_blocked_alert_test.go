@@ -138,6 +138,28 @@ func TestDeadEndBeltRaisesBeltBlockedAlert(t *testing.T) {
 	}
 }
 
+// 停机的带子（断电 / 暂停）不算「被堵」：它本来就不动，报警只会误导玩家查下游。
+func TestStoppedBeltDoesNotRaiseBeltBlockedAlert(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 8)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+
+	belt := newConveyorBuilding("belt-dead", model.Position{X: 1, Y: 1}, model.ConveyorEast)
+	belt.Runtime.State = model.BuildingWorkNoPower
+	attachBuilding(ws, belt)
+	belt.Conveyor.Insert(model.ItemIronOre, 2)
+
+	for tick := int64(1); tick <= beltBlockedWarnTicks+5; tick++ {
+		ws.Tick = tick
+		settleConveyors(ws)
+		if events := settleBeltBlockAlerts(ws); len(events) != 0 {
+			t.Fatalf("停机的带子不该报警（tick %d）", tick)
+		}
+	}
+	if belt.Conveyor.BlockedTicks != 0 {
+		t.Fatalf("停机带子的堵塞计数应保持 0，got %d", belt.Conveyor.BlockedTicks)
+	}
+}
+
 // 正常流动的带子（下游收得下）不报警：动过一件就归零。
 func TestFlowingBeltDoesNotRaiseBeltBlockedAlert(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 8)

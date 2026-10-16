@@ -94,7 +94,9 @@ func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
 		if ws.ConveyorTraffic != nil && ws.ConveyorTraffic.Tick == ws.Tick {
 			moved = ws.ConveyorTraffic.Departed[id]
 		}
-		if conveyor.TotalItems() == 0 || moved > 0 {
+		// 停机的带子（断电、暂停）不算「被堵」：它本来就不动，报警只会误导玩家
+		// 去查下游。清掉计数与既有告警。
+		if conveyor.TotalItems() == 0 || moved > 0 || !conveyorActive(building) {
 			conveyor.BlockedTicks = 0
 			if building.ProductionMonitor != nil {
 				building.ProductionMonitor.Alert(model.AlertTypeBeltBlocked, false, ws.Tick, 0)
