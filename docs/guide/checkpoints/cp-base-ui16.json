@@ -1,0 +1,667 @@
+{
+  "parent": "cp-root",
+  "note": "第 16 轮纯 UI 试玩 A 段（worktree r16-integration，`playtest-up.sh 41 --tick-rate 4`，新局 skirmish 从 tick 0）导出的构建记录。**导出不完整**：存档点的审计日志被快照保留窗口裁掉了——服务端在每次快照时执行 `TrimAuditBeforeTick(oldest)`，`server.snapshot_retention_ticks=6000`，存 cp-base-ui16（tick 47470）时审计日志只剩 tick ≈41470 之后的条目，所以导出的 68 步只覆盖 tick 41508–47037（手搓铁块/铜块/电路板/磁铁/磁线圈 → 制造台 Mk.I → 装料 → 启动研究），**不含**风机 / 电塔 / 矿机 / 传送带 / 分拣器 / 电弧熔炉 / 矩阵研究站的建造段（那些都在 tick \u003c 41500）。要让 `-export` 拿到 cp-root→cp-base 的完整构建记录，需要先把 `snapshot_retention_ticks` 提到 ≥ 整局长度（或加一个不裁剪审计日志的开关）再跑一次纯 UI 试玩。本局实际建成的布局与逐步截图见 tmp/playtest-1016/测试报告A.md（矿机(55,136) → 带(58,137,东) → 分拣器(59,137, rot 90) → 电弧熔炉(60,137, smelt_iron) → 分拣器(63,138, rot 90) → 带(64..66,138,东)；矩阵研究站(58,141)、制造台 Mk.I(61,141, 电磁矩阵)、风机(60,146)/(63,146)、电塔(57,142)、HQ(54,144)）。",
+  "steps": [
+    {
+      "advance_to_tick": 41508
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41597
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41631
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41717
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41751
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41837
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41871
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41959
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 41993
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42080
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42113
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42202
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42235
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42322
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42356
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42443
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 42477
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 44817
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_building",
+          "item_id": "magnetic_coil",
+          "quantity": 11
+        }
+      }
+    },
+    {
+      "advance_to_tick": 44895
+    },
+    {
+      "cmd": {
+        "type": "move",
+        "target": {
+          "layer": "planet",
+          "entity_ids": [
+            "u-40"
+          ],
+          "position": {
+            "x": 54,
+            "y": 141,
+            "z": 0
+          }
+        }
+      }
+    },
+    {
+      "advance_to_tick": 44932
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "resource_id": "res-15"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 45063
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-146"
+        },
+        "payload": {
+          "building_id": "b-146",
+          "direction": "to_player",
+          "item_id": "iron_ore",
+          "quantity": 6
+        }
+      }
+    },
+    {
+      "advance_to_tick": 45094
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "recipe_id": "smelt_iron"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 45558
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "recipe_id": "smelt_copper"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46020
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "quantity": 6,
+          "recipe_id": "circuit_board"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46533
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_building",
+          "item_id": "circuit_board",
+          "quantity": 6
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46624
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46659
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 6
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46726
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46761
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46827
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46861
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46927
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-157"
+        },
+        "payload": {
+          "building_id": "b-157",
+          "direction": "to_player",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 20
+        }
+      }
+    },
+    {
+      "advance_to_tick": 46962
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "entity_id": "b-148"
+        },
+        "payload": {
+          "building_id": "b-148",
+          "direction": "to_building",
+          "item_id": "electromagnetic_matrix",
+          "quantity": 1
+        }
+      }
+    },
+    {
+      "advance_to_tick": 47037
+    },
+    {
+      "cmd": {
+        "type": "start_research",
+        "target": {
+          "layer": "planet"
+        },
+        "payload": {
+          "tech_id": "electromagnetism"
+        }
+      }
+    }
+  ],
+  "end_tick": 47470,
+  "contract": {
+    "checks": [
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 2
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "mining_machine",
+        "n": 1
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "arc_smelter",
+        "n": 1
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "n": 1
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "assembling_machine_mk1",
+        "n": 1
+      },
+      {
+        "kind": "tech_researched",
+        "player": "p1",
+        "tech_id": "electromagnetism"
+      }
+    ]
+  }
+}
