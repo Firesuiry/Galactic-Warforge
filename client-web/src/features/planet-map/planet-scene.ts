@@ -70,7 +70,7 @@ import {
   resolveHarvestPulse,
 } from '@/features/planet-map/planet-logistics-flow';
 import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from '@/features/planet-map/transport-haul';
-import { buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections } from '@/features/planet-map/logistics-direction';
+import { buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from '@/features/planet-map/logistics-direction';
 import { advanceLogisticsFlow, createLogisticsFlowSprite, logisticsFlowSpriteKey } from '@/features/planet-map/logistics-flow-marks';
 import { logisticsArrows, resolveLogisticsDirection } from '@/features/planet-map/logistics-direction';
 import {
@@ -390,6 +390,42 @@ export function buildingSortKey(tileY: number, footprintHeight: number): number 
 /** 单位遮挡排序键：平滑移动中的显示位置 y（像素）换算成小数 tile 坐标，随移动逐帧更新。 */
 export function unitSortKey(posY: number, tileSize: number): number {
   return posY / Math.max(tileSize, 1e-6);
+}
+
+/** 2D 幽灵箭头的半支线段：尾端贴格心、尖端朝该侧伸出（像素坐标）。 */
+export interface GhostArrowStroke {
+  direction: CardinalDirection;
+  /** 取货端（背面）用青色、放货端（正面）用绿色：两端一眼可分。 */
+  role: 'take' | 'drop';
+  tail: { x: number; y: number };
+  tip: { x: number; y: number };
+}
+
+/**
+ * 分拣器幽灵的「取（背面）→ 放（正面）」两支半支箭头（像素坐标）。
+ *
+ * 每支只画从格心朝该侧的半支（tail 在格心附近、tip 伸出约 0.36 格）：两支背向分开，
+ * 都压格心会糊成一个「叉」，玩家看不出哪端取货、哪端放货。朝向来自
+ * `sorterGhostDirections`（与 3D 顶面箭头、服务端 `SorterFacing` 同源），非分拣器返回 null。
+ */
+export function resolveSorterGhostArrows(
+  buildingType: string,
+  rotation: number | undefined,
+  center: { x: number; y: number },
+  tileSize: number,
+): GhostArrowStroke[] | null {
+  const routes = sorterGhostDirections(buildingType, rotation);
+  if (!routes) return null;
+  const stroke = (direction: CardinalDirection, role: 'take' | 'drop'): GhostArrowStroke => {
+    const vector = directionVector(direction);
+    return {
+      direction,
+      role,
+      tail: { x: center.x + vector.x * tileSize * .1, y: center.y + vector.y * tileSize * .1 },
+      tip: { x: center.x + vector.x * tileSize * .36, y: center.y + vector.y * tileSize * .36 },
+    };
+  };
+  return [stroke(routes.from, 'take'), stroke(routes.to, 'drop')];
 }
 
 /**
@@ -2790,30 +2826,25 @@ export class PlanetScene {
       // 分拣器幽灵：取 → 放 两端箭头（第 16 轮契约：背面取货、正面放货，方向跟 rotation 走）。
       // 与传送带箭头同处一个分支：幽灵 footprint 画完后立刻叠方向，不再另开一个永远走不到的
       // 分支（原先的判断在 assessment 存在时被上面的 return 短路，箭头根本画不出来）。
-      // 每支只画「从格心朝该侧」的半支，两支背向分开、不在格心叠成叉。
+      // 每支只画「从格心朝该侧」的半支，两支背向分开、不在格心叠成叉（端点算法见
+      // resolveSorterGhostArrows，有单测）。
       if (isSorterBuilding({ type: mode.buildingType })) {
-        const routes = sorterGhostDirections(mode.buildingType, mode.rotation);
-        if (routes) {
-          const cx = this.pxTileX(hoveredTile.x) + (assessment.footprint.width / 2) * ts;
-          const cy = this.pxTileY(hoveredTile.y) + (assessment.footprint.height / 2) * ts;
-          for (const [direction, color] of [
-            [routes.from, COLOR_GHOST_TAKE],
-            [routes.to, COLOR_GHOST_OK],
-          ] as [typeof routes.to, number][]) {
-            const vector = directionVector(direction);
-            const tailX = cx + vector.x * ts * 0.1;
-            const tailY = cy + vector.y * ts * 0.1;
-            const tipX = cx + vector.x * ts * 0.36;
-            const tipY = cy + vector.y * ts * 0.36;
-            const wing = ts * 0.16;
-            g.moveTo(tailX, tailY)
-              .lineTo(tipX, tipY)
-              .moveTo(tipX, tipY)
-              .lineTo(tipX - vector.x * wing - vector.y * wing, tipY - vector.y * wing - vector.x * wing)
-              .moveTo(tipX, tipY)
-              .lineTo(tipX - vector.x * wing + vector.y * wing, tipY - vector.y * wing + vector.x * wing)
-              .stroke({ width: 2.5, color, alpha: 0.95 });
-          }
+        const arrows = resolveSorterGhostArrows(
+          mode.buildingType,
+          mode.rotation,
+          { x: this.pxTileX(hoveredTile.x) + (assessment.footprint.width / 2) * ts, y: this.pxTileY(hoveredTile.y) + (assessment.footprint.height / 2) * ts },
+          ts,
+        );
+        for (const arrow of arrows ?? []) {
+          const { x: tx, y: ty } = directionVector(arrow.direction);
+          const wing = ts * 0.16;
+          g.moveTo(arrow.tail.x, arrow.tail.y)
+            .lineTo(arrow.tip.x, arrow.tip.y)
+            .moveTo(arrow.tip.x, arrow.tip.y)
+            .lineTo(arrow.tip.x - tx * wing - ty * wing, arrow.tip.y - ty * wing - tx * wing)
+            .moveTo(arrow.tip.x, arrow.tip.y)
+            .lineTo(arrow.tip.x - tx * wing + ty * wing, arrow.tip.y - ty * wing + tx * wing)
+            .stroke({ width: 2.5, color: arrow.role === 'take' ? COLOR_GHOST_TAKE : COLOR_GHOST_OK, alpha: 0.95 });
         }
       }
       return;

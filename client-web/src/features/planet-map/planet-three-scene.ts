@@ -12,6 +12,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { ghostArrowGeometry, ghostArrowTransform } from './three/ghost-arrow';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -20,7 +21,7 @@ import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { LogisticsDirectionMarks, directionArrowTexture, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
-import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
+import { logisticsArrows, stepTile, buildGhostDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
@@ -1087,6 +1088,7 @@ export class PlanetThreeScene {
    * 一个朝 direction 的箭头（贴格中心，指示物流输出侧）；分拣器取货端用另一色区分。
    * `scale` 缩小整支箭头、`along` 沿 direction 把箭头推离格心——分拣器用这两个参数把
    * 「背面取货 / 正面放货」两支箭头分开摆在格子的前后半格，叠在格心只会糊成一个叉。
+   * 平铺姿态与四向可见性见 `three/ghost-arrow`（PlaneGeometry 不转就会立起来侧对相机）。
    */
   private ghostArrow(
     tile: TilePoint,
@@ -1097,24 +1099,17 @@ export class PlanetThreeScene {
     along = 0,
   ) {
     const size = this.tileScale();
-    const faceSize = this.data!.planet.surface.face_size;
-    const { east, south } = tileFrame(tile, faceSize);
-    const normal = this.normal(tile.x, tile.y);
-    const vector = directionVector(direction);
-    // PlaneGeometry 默认躺在局部 XY 平面（竖着的）：绕局部 X 转 -90° 让它平铺在局部 XZ 平面。
-    // 不转的话，朝北/南的箭头会立起来侧对相机，从上方看整条消失（传送带朝北时 ghost 上没有箭头）。
-    const geometry = new THREE.PlaneGeometry(size * .82 * scale, size * .82 * scale);
-    geometry.rotateX(-Math.PI / 2);
     const mesh = new THREE.Mesh(
-      geometry,
+      ghostArrowGeometry(size, scale),
       new THREE.MeshBasicMaterial({ map: directionArrowTexture(), color, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
     );
-    mesh.position.copy(normal).multiplyScalar(RADIUS + size * (elevated ? .18 : .1));
-    if (along) mesh.position.addScaledVector(east, vector.x * along * size).addScaledVector(south, vector.y * along * size);
-    // 贴格平面（局部 +X = 东、+Y = 格法线、+Z = 南，与建筑模型同一套基底），再绕格法线
-    // 把纹理里的 chevron（指向局部 +X）转到 direction。
-    mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
-    mesh.rotateY(Math.atan2(-vector.y, vector.x));
+    const { position, quaternion } = ghostArrowTransform(tile, direction, this.data!.planet.surface.face_size, RADIUS, {
+      size,
+      lift: elevated ? .18 : .1,
+      along,
+    });
+    mesh.position.copy(position);
+    mesh.quaternion.copy(quaternion);
     mesh.renderOrder = 20;
     this.ghostMarks.add(mesh);
   }

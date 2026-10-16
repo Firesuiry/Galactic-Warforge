@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest';
+
+import { directionVector } from '@/features/planet-map/logistics-direction';
+import { resolveSorterGhostArrows } from '@/features/planet-map/planet-scene';
+
+/**
+ * §4 建造幽灵：分拣器两支箭头（取 → 放）必须**背向分开**摆在格子的前后半格。
+ * 叠在格心会糊成一个「叉」，玩家看不出哪端取货、哪端放货（试玩 1015 反馈）。
+ * 箭头几何与朝向推导在 3D/2D 两处共用同一份端点（logistics-direction），
+ * 这里只校验 2D 那一份的坐标。
+ */
+describe('2D 分拣器幽灵箭头', () => {
+  const center = { x: 100, y: 200 };
+  const ts = 40;
+
+  it('每个 rotation 产出取（背面）/放（正面）两支，端点背向分开', () => {
+    for (const rotation of [0, 90, 180, 270]) {
+      const arrows = resolveSorterGhostArrows('sorter_mk1', rotation, center, ts)!;
+      expect(arrows).toHaveLength(2);
+      const [take, drop] = arrows;
+      expect(take.role).toBe('take');
+      expect(drop.role).toBe('drop');
+      // 取货端在背面、放货端在正面：两端的矢量方向相反。
+      const takeVector = directionVector(take.direction);
+      const dropVector = directionVector(drop.direction);
+      expect(takeVector.x).toBeCloseTo(-dropVector.x, 9);
+      expect(takeVector.y).toBeCloseTo(-dropVector.y, 9);
+      // 尾端都在格心附近（不跨过格心画到对面半格）。
+      for (const arrow of arrows) {
+        expect(Math.hypot(arrow.tail.x - center.x, arrow.tail.y - center.y)).toBeLessThan(ts * .2);
+        // 尖端朝各自方向伸出半格以内，两支不重叠。
+        expect(Math.hypot(arrow.tip.x - center.x, arrow.tip.y - center.y)).toBeLessThanOrEqual(ts * .5);
+      }
+      // 两支的尖端在格心的相反两侧。
+      const dropSide = (drop.tip.x - center.x) * dropVector.x + (drop.tip.y - center.y) * dropVector.y;
+      const takeSide = (take.tip.x - center.x) * takeVector.x + (take.tip.y - center.y) * takeVector.y;
+      expect(dropSide).toBeGreaterThan(0);
+      expect(takeSide).toBeGreaterThan(0);
+      expect(Math.hypot(drop.tip.x - take.tip.x, drop.tip.y - take.tip.y)).toBeGreaterThan(ts * .5);
+    }
+  });
+
+  it('非分拣器没有箭头', () => {
+    expect(resolveSorterGhostArrows('conveyor_belt_mk1', 0, center, ts)).toBeNull();
+    expect(resolveSorterGhostArrows('arc_smelter', 90, center, ts)).toBeNull();
+  });
+
+  it('rotation 决定朝向（0 北 / 90 东 / 180 南 / 270 西）', () => {
+    expect(resolveSorterGhostArrows('sorter_mk1', 0, center, ts)!.map((arrow) => arrow.direction)).toEqual(['south', 'north']);
+    expect(resolveSorterGhostArrows('sorter_mk1', 90, center, ts)!.map((arrow) => arrow.direction)).toEqual(['west', 'east']);
+    expect(resolveSorterGhostArrows('sorter_mk1', 180, center, ts)!.map((arrow) => arrow.direction)).toEqual(['north', 'south']);
+    expect(resolveSorterGhostArrows('sorter_mk1', 270, center, ts)!.map((arrow) => arrow.direction)).toEqual(['east', 'west']);
+  });
+});
