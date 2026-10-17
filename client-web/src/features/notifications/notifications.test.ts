@@ -329,6 +329,32 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
   });
 
+  it('production_alert：sorter_stalled 写清原因/分拣器坐标/目标机器与坐标', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a-sorter',
+        // 告警挂在分拣器上：building_id/building_type 是分拣器本身，
+        // details.building_id/target_type/target_position 才是被喂料的目标机器。
+        building_id: 'b-42',
+        building_type: 'sorter_mk1',
+        alert_type: 'sorter_stalled',
+        message: 'sorter b-42 stalled',
+        details: {
+          reason: 'drop_blocked',
+          building_id: 'b-164',
+          target_type: 'arc_smelter',
+          position: { x: 3, y: 6, z: 0 },
+          target_position: { x: 61, y: 135, z: 0 },
+        },
+      },
+    }));
+    expect(mapped?.toast.kind).toBe('warning');
+    expect(mapped?.toast.title).toBe('分拣器停工');
+    expect(mapped?.toast.body).toBe('放货端收不下 (3, 6) → 电弧熔炉 (61, 135)');
+    expect(mapped?.toast.mergeKey).toBe('production_alert:b-42:sorter_stalled');
+    expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
+  });
+
   it('rocket_launched → info（不配音）', () => {    const mapped = toastFromGameEvent(gameEvent('rocket_launched', { count: 2 }));
     expect(mapped?.toast.kind).toBe('info');
     expect(mapped?.toast.body).toBe('×2');

@@ -218,6 +218,9 @@ export function AlertBar() {
    *   并选中它（与其他带位置的告警同一口径；带格选中会带出该格的详情）；
    * - `haul_unreachable` 指向**目标建筑**（details.building_id），并带上坐标：
    *   运输机器人到不了它，玩家要看的正是这座建筑的位置；
+   * - `sorter_stalled` 指向**分拣器本身**（告警的 building_id），坐标用
+   *   details.position（分拣器自己的位置）；details.target_position 是目标机器，
+   *   不能拿来当分拣器的坐标；
    * - 其余告警指向建筑：行星页内选中它（服务端告警通常不带坐标，这里不编造位置）；
    * - 不在行星页时带深链跳到活跃行星（带位置的告警额外带 x/y 直接聚焦）。
    */

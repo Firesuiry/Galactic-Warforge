@@ -11,7 +11,7 @@
  * - 文案中文、简洁游戏化；名称尽量走 i18n 字典（建筑/科技）。
  */
 
-import { beltBlockedDetail, haulUnreachableDetail } from '@shared/alerts';
+import { beltBlockedDetail, haulUnreachableDetail, sorterStalledDetail } from '@shared/alerts';
 import type { GameEventDetail } from '@shared/types';
 
 import { GAME_FINISHED_MESSAGE, isGameFinishedResult, toPlayerFacingMessage } from '@/common/player-facing-error';
@@ -367,18 +367,32 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
           (buildingId) => (buildingId === haulTargetId && haulTargetType ? translateBuildingType(haulTargetType) : undefined),
         )
         : '';
+      // 分拣器停工（sorter_stalled）：告警挂在分拣器上，details.building_id /
+      // target_type 是被喂料的目标机器，details.position 是分拣器自己的坐标，
+      // details.target_position 才是目标坐标。文案与警报条共用 sorterStalledDetail。
+      const sorterStalled = alertType === 'sorter_stalled';
+      const sorterTargetType = asString(haulDetails.target_type);
+      const sorterDetail = sorterStalled
+        ? sorterStalledDetail(
+          { details: haulDetails },
+          () => (sorterTargetType ? translateBuildingType(sorterTargetType) : undefined),
+        )
+        : '';
       return {
         toast: {
           // 断电类：danger + 常驻（sticky）且不套用产线节流——
           // 否则第二次断电提醒会被节流吞掉（试玩报告 F）。
           kind: power ? 'danger' : 'warning',
-          title: power ? '建筑断电' : beltBlocked ? `${buildingLabel}：传送带堵塞` : haulUnreachable ? '运输机器人到不了目标' : '产线告警',
+          title: power ? '建筑断电' : beltBlocked ? `${buildingLabel}：传送带堵塞` : haulUnreachable ? '运输机器人到不了目标' : sorterStalled ? '分拣器停工' : '产线告警',
           body: beltBlocked
             ? [buildingLabel, beltDetail || issue, positionLabel].filter(Boolean).join('：') || undefined
             : haulUnreachable
               // haulDetail 已经含目标建筑与坐标：不再追加一遍位置。
               ? haulDetail || issue || undefined
-              : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
+              : sorterStalled
+                // sorterDetail 已经含原因/分拣器坐标/目标建筑与坐标。
+                ? sorterDetail || issue || undefined
+                : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，
           // 不合并会刷屏）；键含建筑 id，不同建筑的同类告警分开显示。

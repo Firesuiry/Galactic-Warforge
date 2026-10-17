@@ -303,7 +303,8 @@ describe('AlertBar', () => {
         alert_id: 'a-sorter',
         tick: 900,
         // 服务端契约：告警挂在分拣器上，details.building_id 是放货端的目标机器，
-        // details.target_type 是目标建筑类型。
+        // details.target_type 是目标建筑类型，details.position 是分拣器自己的坐标，
+        // details.target_position 才是目标机器的坐标。
         building_id: 'b-42',
         building_type: 'sorter_mk1',
         alert_type: 'sorter_stalled',
@@ -312,7 +313,8 @@ describe('AlertBar', () => {
           reason: 'no_power',
           building_id: 'b-164',
           target_type: 'arc_smelter',
-          position: { x: 61, y: 135, z: 0 },
+          position: { x: 3, y: 6, z: 0 },
+          target_position: { x: 61, y: 135, z: 0 },
         },
       }),
     ]);
@@ -325,6 +327,9 @@ describe('AlertBar', () => {
     const row = screen.getByTestId('alert-bar-list').querySelector('.alert-bar__row') as HTMLElement;
     expect(row.textContent).toContain('分拣器断电');
     expect(row.textContent).toContain('电弧熔炉');
+    // 目标建筑后面跟的是目标坐标，不是分拣器自己的 (3, 6)。
+    expect(row.textContent).toContain('电弧熔炉 (61, 135)');
+    expect(row.textContent).not.toContain('电弧熔炉 (3, 6)');
     expect(row.textContent).not.toMatch(/[a-z]+_[a-z]+/);
   });
 });

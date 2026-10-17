@@ -104,6 +104,23 @@ function asFiniteNumber(value: unknown): number | undefined {
 }
 
 /**
+ * 解析一个 `{x, y}` 位置值（`details.position` / `details.target_position` 共用）。
+ * 不是带数值坐标的对象就返回 null——绝不编造坐标。
+ */
+export function alertPositionValue(value: unknown): AlertTilePosition | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+  const x = asFiniteNumber(source.x);
+  const y = asFiniteNumber(source.y);
+  if (x === undefined || y === undefined) {
+    return null;
+  }
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+/**
  * 告警 `details` 里的位置：`details.position`（服务端 `model.Position`）或 `details.{x,y}`。
  * 没有就返回 null——绝不编造坐标（只有部分告警类型带位置，如 `belt_blocked`）。
  */
@@ -113,14 +130,7 @@ export function alertDetailsPosition(
   if (!details) {
     return null;
   }
-  const nested = details.position;
-  const source = (typeof nested === 'object' && nested !== null ? nested : details) as Record<string, unknown>;
-  const x = asFiniteNumber(source.x);
-  const y = asFiniteNumber(source.y);
-  if (x === undefined || y === undefined) {
-    return null;
-  }
-  return { x: Math.round(x), y: Math.round(y) };
+  return alertPositionValue(details.position) ?? alertPositionValue(details);
 }
 
 /** 把 tick 数换算成秒（速率缺失时按服务端预设 10 tps）。 */
@@ -224,7 +234,9 @@ export function haulUnreachableText(
 /** `sorter_stalled` 的 reason 枚举 → 中文说明（服务端 `sorter_stall_alert.go`）。 */
 export const SORTER_STALL_REASON_LABELS: Record<string, string> = {
   no_power: '分拣器断电',
-  paused: '分拣器已暂停',
+  // paused 是旧存档/旧服的写法（当时暂停与故障都报 paused），仍要能显示。
+  paused: '分拣器未运行',
+  not_running: '分拣器未运行',
   pick_empty: '取货端没有它认的货',
   drop_blocked: '放货端收不下',
 };
@@ -235,8 +247,14 @@ export function sorterStallReasonLabel(reason: unknown): string {
 }
 
 /**
- * 分拣器停工的细节段：`分拣器断电 → 电弧熔炉 (61, 135)`。
- * details 带 `reason` / `building_id` / `position`；缺哪项就少写哪段。
+ * 分拣器停工的细节段：`分拣器断电 (3, 6) → 电弧熔炉 (61, 135)`。
+ *
+ * details 契约（服务端 `sorter_stall_alert.go`）：
+ * - `position` 是**分拣器自己**的坐标（告警挂在分拣器上）；
+ * - `building_id` / `target_type` / `target_position` 是放货端落到的**目标建筑**。
+ *
+ * 目标坐标只取 `target_position`——绝不拿分拣器自己的 `position` 冒充目标坐标。
+ * 缺哪项就少写哪段，不写占位符。
  */
 export function sorterStalledDetail(
   alert: Pick<AlertEntry, 'details'>,
@@ -244,13 +262,16 @@ export function sorterStalledDetail(
 ): string {
   const details = alert.details ?? {};
   const reason = sorterStallReasonLabel(details.reason);
+  const sorterPosition = alertPositionValue(details.position);
   const buildingId = typeof details.building_id === 'string' ? details.building_id : '';
-  const position = alertDetailsPosition(details);
+  const targetPosition = alertPositionValue(details.target_position);
   const target = buildingId
-    ? `${buildingName?.(buildingId) ?? buildingId}${position ? ` (${position.x}, ${position.y})` : ''}`
-    : position ? `(${position.x}, ${position.y})` : '';
+    ? `${buildingName?.(buildingId) ?? buildingId}${targetPosition ? ` (${targetPosition.x}, ${targetPosition.y})` : ''}`
+    : targetPosition ? `(${targetPosition.x}, ${targetPosition.y})` : '';
   const parts: string[] = [];
-  if (reason) parts.push(reason);
+  if (reason) {
+    parts.push(sorterPosition ? `${reason} (${sorterPosition.x}, ${sorterPosition.y})` : reason);
+  }
   if (target) parts.push(`→ ${target}`);
   return parts.join(' ');
 }

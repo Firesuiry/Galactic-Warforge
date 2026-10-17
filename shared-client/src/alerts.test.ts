@@ -144,21 +144,41 @@ describe('sorter_stalled（分拣器停工）', () => {
     expect(alertTypeLabel('sorter_stalled')).toBe('分拣器停工');
     const entry = alert({
       alert_type: 'sorter_stalled',
-      details: { reason: 'no_power', building_id: 'b-77', position: { x: 61, y: 135, z: 0 } },
+      details: {
+        reason: 'no_power',
+        building_id: 'b-77',
+        target_type: 'arc_smelter',
+        position: { x: 3, y: 6, z: 0 },
+        target_position: { x: 61, y: 135, z: 0 },
+      },
     });
-    expect(sorterStalledDetail(entry)).toBe('分拣器断电 → b-77 (61, 135)');
+    // 目标坐标取 target_position，绝不拿分拣器自己的 position 冒充。
+    expect(sorterStalledDetail(entry)).toBe('分拣器断电 (3, 6) → b-77 (61, 135)');
     expect(sorterStalledDetail(entry, (id) => (id === 'b-77' ? '电弧熔炉' : undefined)))
-      .toBe('分拣器断电 → 电弧熔炉 (61, 135)');
-    expect(sorterStalledText(entry)).toBe('分拣器停工 分拣器断电 → b-77 (61, 135)');
-    expect(formatAlertText(entry)).toBe('分拣器停工 分拣器断电 → b-77 (61, 135)');
+      .toBe('分拣器断电 (3, 6) → 电弧熔炉 (61, 135)');
+    expect(sorterStalledText(entry)).toBe('分拣器停工 分拣器断电 (3, 6) → b-77 (61, 135)');
+    expect(formatAlertText(entry)).toBe('分拣器停工 分拣器断电 (3, 6) → b-77 (61, 135)');
     expect(formatAlertText(entry)).not.toContain('sorter_stalled');
     expect(formatAlertText(entry)).not.toContain('no_power');
+  });
+
+  it('目标建筑缺 target_position 时不借用分拣器坐标', () => {
+    // 服务端旧存档/目标建筑已消失时只有分拣器自己的 position：
+    // 目标段不能写成 b-77 (3, 6)——那是分拣器的位置。
+    const entry = alert({
+      alert_type: 'sorter_stalled',
+      details: { reason: 'no_power', building_id: 'b-77', position: { x: 3, y: 6 } },
+    });
+    expect(sorterStalledDetail(entry)).toBe('分拣器断电 (3, 6) → b-77');
+    expect(sorterStalledDetail(entry)).not.toContain('b-77 (3, 6)');
   });
 
   it('四种 reason 都有中文；未知 reason 不裸显，details 缺项不写占位符', () => {
     const detail = (reason: string) => sorterStalledDetail(alert({ alert_type: 'sorter_stalled', details: { reason } }));
     expect(detail('no_power')).toBe('分拣器断电');
-    expect(detail('paused')).toBe('分拣器已暂停');
+    expect(detail('not_running')).toBe('分拣器未运行');
+    // 旧服/旧存档的 paused 与 not_running 同一文案（暂停与故障合并）。
+    expect(detail('paused')).toBe('分拣器未运行');
     expect(detail('pick_empty')).toBe('取货端没有它认的货');
     expect(detail('drop_blocked')).toBe('放货端收不下');
     expect(detail('mystery_reason')).toBe('');
