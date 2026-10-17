@@ -1693,9 +1693,8 @@
 
 /* 锁定：灰化 + 锁角标（解锁条件在 title/aria-label） */
 .planet-build-card--locked {
-  opacity:.45;
   filter:grayscale(.75);
-  cursor:not-allowed;
+  cursor:pointer;
 }
 
 /* 负担不起：格变暗 + 右上角红点（细节在悬停浮层）。 */
@@ -2392,4 +2391,33 @@ body:has([data-planet-minimap]) {
 }
 .planet-load-form__result--error {
   color: var(--danger, #ff6b6b);
+}
+
+/* 未解锁建造卡（试玩 1016 U6）：按分类常驻、灰化、排在本分类已解锁卡之后；
+   造价条位置改写「需研究：<科技名>」，可点（点开底部状态行的解锁说明）。 */
+.planet-build-card--locked {
+  cursor:pointer;
+  opacity:.5;
+}
+
+.planet-build-card__unlock {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:1px 2px 2px;
+  font-size:9px;
+  line-height:1.15;
+  color:#ffd48a;
+  background:#04070fcc;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* 底部状态行里的「尚未解锁：需研究 X」（与缺料条同一行内联，颜色区分）。 */
+.planet-build-bar__locked {
+  color:#ffd48a;
+  font-size:.74rem;
+  font-weight:600;
 }
