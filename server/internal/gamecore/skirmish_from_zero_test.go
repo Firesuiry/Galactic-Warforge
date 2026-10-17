@@ -589,7 +589,15 @@ func (op *zeroOpening) sweepInventory() {
 	if op.inventoryUsed() <= op.mechaCapacity()/3 {
 		return
 	}
-	for item, qty := range op.player.Inventory {
+	// 物品按 ID 排序：dumpToIndustry 会下发 transfer_item 命令，map 迭代顺序
+	// 会让同一状态下发命令的顺序每次不同（脚本化玩家的确定性要求）。
+	items := make([]string, 0, len(op.player.Inventory))
+	for item := range op.player.Inventory {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	for _, item := range items {
+		qty := op.player.Inventory[item]
 		if qty <= 0 || needed[item] {
 			continue
 		}
@@ -1352,9 +1360,16 @@ func (op *zeroOpening) feedIndustry() {
 	}
 	// 制造台：每台按自己的配方喂料（多台同配方也各自喂）。
 	feedAssembler := func(recipeID string, inputs map[string]int) {
+		// 喂料顺序按物品 ID 排序：load 会下发 transfer_item 命令，map 迭代顺序
+		// 会让同一状态下发命令的顺序每次不同（脚本化玩家的确定性要求）。
+		items := make([]string, 0, len(inputs))
+		for item := range inputs {
+			items = append(items, item)
+		}
+		sort.Strings(items)
 		for _, b := range byRecipe[recipeID] {
-			for item, qty := range inputs {
-				load(b, item, qty, true)
+			for _, item := range items {
+				load(b, item, inputs[item], true)
 			}
 		}
 	}
@@ -1534,7 +1549,15 @@ func (op *zeroOpening) relieveBackpackFull(depots []*model.Building) {
 // byRecipeCache 按配方把 p1 的生产建筑分组的轻量快照（兜底疏通用）。
 func (op *zeroOpening) byRecipeCache() map[string][]*model.Building {
 	out := map[string][]*model.Building{}
-	for _, b := range op.ws.Buildings {
+	// 建筑按 ID 排序后再分组：调用方（feedOreToSmelters / oreDemandFor）按列表
+	// 顺序决定先喂哪台机器，map 迭代顺序会让同一状态下发命令的顺序每次不同。
+	ids := make([]string, 0, len(op.ws.Buildings))
+	for id := range op.ws.Buildings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		b := op.ws.Buildings[id]
 		if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Storage == nil || b.Production == nil {
 			continue
 		}
