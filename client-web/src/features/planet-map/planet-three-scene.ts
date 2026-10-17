@@ -1191,7 +1191,9 @@ export class PlanetThreeScene {
     const offset = ghostLabelOffset(size, scale, along);
     const frame = tileFrame(tile, this.data!.planet.surface.face_size);
     sprite.position.copy(position)
-      .multiplyScalar((position.length() + size * .3) / Math.max(position.length(), 1e-6))
+      // 标签已在箭头外侧，不需要高抬：0.14 格即可避免被箭头面片遮住，
+      // 抬太高（旧版 0.3）在斜视角下会把标签推得离箭头很远。
+      .multiplyScalar((position.length() + size * .14) / Math.max(position.length(), 1e-6))
       .addScaledVector(frame.east, outward.x * offset)
       .addScaledVector(frame.south, outward.y * offset);
     sprite.scale.set(size * GHOST_LABEL_SCALE, size * GHOST_LABEL_SCALE, 1);
