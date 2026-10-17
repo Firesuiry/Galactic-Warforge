@@ -97,6 +97,13 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 		haul.Phase = model.HaulPhaseToTarget
 		return []*model.GameEvent{haulTaskEvent(robot, "auto_haul_deliver")}
 	}
+	// 车上有货但眼下无处可送：只允许「带货改派」，绝不派普通单——普通单会去
+	// 起点装另一种物品，装货逻辑与车上货种不符时货会凭空消失（试玩 1016 复审）。
+	// 带着货待命，等下一次派单或其它建筑出现需求。
+	if haul.CargoQuantity() > 0 {
+		haulClearTask(robot)
+		return nil
+	}
 
 	demands := haulDemands(ws, claims)
 	if len(demands) == 0 {

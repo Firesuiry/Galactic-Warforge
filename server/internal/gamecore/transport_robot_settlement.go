@@ -347,6 +347,16 @@ func haulLoadAtSource(ws *model.WorldState, robot *model.Unit) []*model.GameEven
 		haul.Phase = model.HaulPhaseWaitingSource
 		return nil
 	}
+	// 车上已有别的货：先于 Provide 拒绝——Load 只接受与车上同种（或空车）的货，
+	// 先扣源再装不进去会让货凭空消失。
+	if haul.CargoQuantity() > 0 && haul.Cargo.ItemID != itemID {
+		if haul.Mode == model.HaulModeAuto {
+			haulClearTask(robot)
+			return nil
+		}
+		haul.Phase = model.HaulPhaseWaitingSource
+		return nil
+	}
 	available := haulPickupQuantity(source, itemID)
 	if available <= 0 {
 		// 自动模式：供给端已经取空（或被别的机器人抢空）→ 释放认领、等下一次派单。
@@ -366,7 +376,20 @@ func haulLoadAtSource(ws *model.WorldState, robot *model.Unit) []*model.GameEven
 		haul.Phase = model.HaulPhaseWaitingSource
 		return nil
 	}
-	haul.Load(itemID, taken)
+	if loaded := haul.Load(itemID, taken); loaded < taken {
+		// 兜底（正常已被上面的货种/容量校验挡住）：装不进的部分直接还回源的主库存，
+		// 不经过 Load（槽位满时 Load 也收不下），绝不凭空消失。
+		source.Storage.EnsureInventory()[itemID] += taken - loaded
+		taken = loaded
+		if taken <= 0 {
+			if haul.Mode == model.HaulModeAuto {
+				haulClearTask(robot)
+				return nil
+			}
+			haul.Phase = model.HaulPhaseWaitingSource
+			return nil
+		}
+	}
 	// 自动模式：按实际取到量修正认领（取不到 4 件时不能继续占着供给的余量）。
 	haulTrimClaim(haul, taken)
 	haul.Phase = model.HaulPhaseToTarget
