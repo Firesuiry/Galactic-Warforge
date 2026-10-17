@@ -33,12 +33,29 @@ func (building *Building) IsFeedbackItem(itemID string) bool {
 	return false
 }
 
-// ExportableItemQuantity excludes unprocessed feedback inputs from belt/pipe output.
+// IsProductionMachine 报告该建筑是否「把配方原料加工成产物」（熔炉、制造台、
+// 研究站、精炼厂……，即带 production 功能模块的建筑）。
+//
+// DSP 口径（试玩 1016 报告 B-2）：分拣器 / 传送带 / 管道 / 运输机器人从生产建筑
+// 取货时只能拿产物，绝不能把机器正在吃的原料抽走——否则熔炉的输出分拣器会把
+// 刚到货的铁矿搬上产物带，机器永远吃不饱。原料留在主库存 / 输入缓冲里，只有
+// 产物会进输出缓冲。
+func (building *Building) IsProductionMachine() bool {
+	return building != nil && building.Runtime.Functions.Production != nil
+}
+
+// ExportableItemQuantity returns how many units of itemID may leave the building
+// through logistics (belt / sorter / pipe / haul).
+//
+// 生产建筑只出产物（输出缓冲）：主库存里的同种物品可能是尚未加工的原料或
+// 玩家装入的料，不能当成品搬走。仓储类（储物仓、补给站、物流站、HQ 等没有
+// production 功能的建筑）的主库存本来就是给别人用的，照旧可导出。
+// 循环配方的反馈料（IsFeedbackItem）即使对生产建筑也只算输出缓冲里的产物份额。
 func (building *Building) ExportableItemQuantity(itemID string) int {
 	if building == nil || building.Storage == nil {
 		return 0
 	}
-	if building.IsFeedbackItem(itemID) {
+	if building.IsFeedbackItem(itemID) || building.IsProductionMachine() {
 		return building.Storage.OutputBuffer[itemID]
 	}
 	return building.Storage.OutputQuantity(itemID)
