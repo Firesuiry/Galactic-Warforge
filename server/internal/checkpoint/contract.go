@@ -23,6 +23,7 @@ import "siliconworld/internal/model"
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
 //	item_gte            {item_id, n}    玩家可用物资 >= n
 //	no_alert_since      {alert_type, tick, type?}  从 tick 起没有该类型的生产告警
+//	item_growth         {position, item_id, growth, advance_ticks?}（构建步骤，非契约）
 //	dark_fog_hostile    {bool}          黑雾对该玩家是否敌对
 //	enemy_attack_seen   {bool}          该玩家是否已被敌方玩家造成过伤害/损失
 //

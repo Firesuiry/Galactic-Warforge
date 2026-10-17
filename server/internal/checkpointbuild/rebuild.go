@@ -266,6 +266,16 @@ func (r *Runner) RebuildLayer(spec *checkpoint.BuildSpec, name string) (result L
 				core.AdvanceTick()
 			}
 			r.logf("  [%d/%d] advance_to_tick %d → tick %d", index+1, len(spec.Steps), target, core.CurrentTick())
+		case step.ItemGrowth != nil:
+			// 「产线流动」断言：推进一段窗口，要求落点建筑里的物品存量增长。
+			// 放在这里（契约校验之前）是为了让失败信息直接指向「第几步」，
+			// 而不是只报一条 building_item_at_gte 的存量结果。
+			message, err := r.runItemGrowth(core, *step.ItemGrowth)
+			if err != nil {
+				result.StepFailure = fmt.Sprintf("第 %d 步 item_growth 失败: %s", index+1, err)
+				return result
+			}
+			r.logf("  [%d/%d] %s", index+1, len(spec.Steps), message)
 		case step.WaitUntil != nil:
 			deadline := core.CurrentTick() + step.Timeout()
 			predicate := checkpoint.Contract{Checks: []checkpoint.ContractCheck{*step.WaitUntil}}

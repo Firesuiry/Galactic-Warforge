@@ -24,6 +24,9 @@ import (
 //	{"advance_to_tick": 4096}      快进到指定 tick
 //	{"wait_until": {契约谓词}, "timeout_ticks": 600}
 //	                               等谓词成立；超时即失败并报出卡在哪一步
+//	{"item_growth": {"position", "item_id", "growth", "advance_ticks"}}
+//	                               推进若干 tick，断言某建筑里某物品的存量增长
+//	                               达到阈值（「产线此刻真的在流动」）
 type BuildStep struct {
 	// Cmd 是一条命令，字段与 POST /commands 的 commands[] 元素一致。
 	Cmd *model.Command `json:"cmd,omitempty"`
@@ -33,6 +36,10 @@ type BuildStep struct {
 	WaitUntil *ContractCheck `json:"wait_until,omitempty"`
 	// TimeoutTicks 是 WaitUntil 的超时（tick）。缺省 600。
 	TimeoutTicks int64 `json:"timeout_ticks,omitempty"`
+	// ItemGrowth 是「产线流动」断言：推进若干 tick，断言某建筑里某物品的存量
+	// 增长达到阈值。用于证明产线此刻真的在流动，而不是只留下读档前攒下的存量
+	// （试玩 1016 报告问题 1）。执行方见 internal/checkpointbuild。
+	ItemGrowth *ItemGrowthStep `json:"item_growth,omitempty"`
 	// Note 是给人看的说明，重建时忽略。
 	Note string `json:"note,omitempty"`
 }
@@ -49,6 +56,9 @@ func (s BuildStep) Validate() error {
 	if s.WaitUntil != nil {
 		kinds++
 	}
+	if s.ItemGrowth != nil {
+		kinds++
+	}
 	if kinds != 1 {
 		return fmt.Errorf("构建步骤必须恰好是 cmd / advance_to_tick / wait_until 之一")
 	}
@@ -57,6 +67,14 @@ func (s BuildStep) Validate() error {
 	}
 	if s.WaitUntil != nil && s.WaitUntil.Kind == "" {
 		return fmt.Errorf("构建步骤的 wait_until 缺少 kind")
+	}
+	if s.ItemGrowth != nil {
+		if s.ItemGrowth.Growth <= 0 {
+			return fmt.Errorf("构建步骤的 item_growth 缺少正数 growth")
+		}
+		if s.ItemGrowth.ItemID == "" {
+			return fmt.Errorf("构建步骤的 item_growth 缺少 item_id")
+		}
 	}
 	if s.AdvanceToTick != nil && *s.AdvanceToTick < 0 {
 		return fmt.Errorf("构建步骤的 advance_to_tick 不能为负")
@@ -198,4 +216,40 @@ func ExportBuildSteps(entries []*model.AuditEntry, opts ExportOptions) ([]BuildS
 		lastTick = item.tick
 	}
 	return steps, rejected, nil
+}
+
+// ItemGrowthStep 是构建记录里的「产线流动」步骤：推进 AdvanceTicks 个 tick，
+// 断言 Position 上该玩家建筑的 ItemID 存量增长 ≥ Growth。
+//
+// 存量断言（building_item_at_gte）只能证明「曾经产出过」；死锁的产线照样能让
+// 它通过（试玩 1016 报告问题 1）。item_growth 先数一次、推进一段、再数一次，
+// 差值为负或不够大即失败。
+type ItemGrowthStep struct {
+	// Position 是被观察建筑的锚点格。
+	Position model.Position `json:"position"`
+	// ItemID 是观察的物品。
+	ItemID string `json:"item_id"`
+	// Growth 是要求的最小增量（≥ 1）。
+	Growth int `json:"growth"`
+	// AdvanceTicks 是观察窗口（tick）。缺省 600。
+	AdvanceTicks int64 `json:"advance_ticks,omitempty"`
+}
+
+// Window 返回观察窗口的 tick 数（缺省 600）。
+func (g ItemGrowthStep) Window() int64 {
+	if g.AdvanceTicks > 0 {
+		return g.AdvanceTicks
+	}
+	return 600
+}
+
+// Validate 检查一条 item_growth 是否可执行。
+func (g ItemGrowthStep) Validate() error {
+	if g.Growth <= 0 {
+		return fmt.Errorf("item_growth 的 growth 必须为正数")
+	}
+	if g.ItemID == "" {
+		return fmt.Errorf("item_growth 缺少 item_id")
+	}
+	return nil
 }
