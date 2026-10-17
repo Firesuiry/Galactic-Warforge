@@ -1,0 +1,577 @@
+{
+  "parent": "cp-base",
+  "note": "cp-haul-unreachable：从 cp-base（tick 6282）读档，专门复现「运输机器人到不了目标建筑」（试玩 1016 问题 3）。做法：在 (75,148) 建一座电弧熔炉（配方 smelt_iron），用它占地外圈一圈 1×1 传送带把 3×3 占地的全部落点占满——熔炉外圈没有任何可站立格。再从 HQ 生产一台运输机器人（出厂默认 auto 模式），让它自动去给这座熔炉送铁矿石。契约：机器人在连续 3 次规划不出落点后放弃这一单并给熔炉发一条 haul_unreachable 告警（新增谓词 building_alert_since：该落点建筑自本层起点起确实出现过一条仍成立的该类告警；实现见 auto_haul_unreachable.go）。",
+  "steps": [
+    {
+      "advance_to_tick": 6300
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-105"
+        },
+        "payload": {
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 40,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-97"
+        },
+        "payload": {
+          "building_id": "b-97",
+          "item_id": "copper_ingot",
+          "quantity": 20,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "circuit_board",
+        "n": 4
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 75,
+            "y": 148,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "arc_smelter",
+          "recipe_id": "smelt_iron"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "arc_smelter",
+        "n": 3
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 72,
+            "y": 148,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "arc_smelter",
+        "n": 3
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-105"
+        },
+        "payload": {
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 40,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "gear",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "gear",
+        "n": 16
+      },
+      "timeout_ticks": 400
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 74,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 74,
+            "y": 148,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 74,
+            "y": 149,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 74,
+            "y": 150,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 74,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 75,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 75,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 76,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 76,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 77,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 77,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 78,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 78,
+            "y": 148,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 78,
+            "y": 149,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 78,
+            "y": 150,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "position": {
+            "x": 78,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 8000
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "gear",
+          "quantity": 6
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "gear",
+        "n": 6
+      },
+      "timeout_ticks": 400
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "iron_ingot",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "gear",
+          "quantity": 4,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "produce",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "unit_type": "transport_robot"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "unit_count_gte",
+        "player": "p1",
+        "type": "transport_robot",
+        "n": 1
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "advance_to_tick": 12000
+    }
+  ],
+  "contract": {
+    "checks": [
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "unit_count_gte",
+        "player": "p1",
+        "type": "transport_robot",
+        "n": 1
+      },
+      {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "arc_smelter",
+        "n": 3
+      },
+      {
+        "kind": "building_alert_since",
+        "player": "p1",
+        "alert_type": "haul_unreachable",
+        "tick": 6282,
+        "position": {
+          "x": 75,
+          "y": 148,
+          "z": 0
+        }
+      }
+    ]
+  }
+}
