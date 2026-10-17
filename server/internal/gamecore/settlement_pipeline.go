@@ -86,7 +86,16 @@ func newSettlementPipeline() settlementPipeline {
 			events = append(events, settleUnitMovement(ws)...)
 			// 运输机器人（§2）的装卸与路线循环：必须在移动之后，才能看到本 tick
 			// 是否走到了建筑外圈。
-			events = append(events, settleTransportRobots(ws)...)
+			haulEvents := settleTransportRobots(ws)
+			events = append(events, haulEvents...)
+			// haul_unreachable（自动模式到不了目标）与其它产线告警同口径进告警历史。
+			if gc.alertHistory != nil {
+				for _, evt := range haulEvents {
+					if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
+						gc.alertHistory.Record([]*model.ProductionAlert{alert})
+					}
+				}
+			}
 			gc.prof.mark("unit_movement")
 			events = append(events, settleUnitCombat(ws)...)
 			settleCombatTech(ws, gc.spaceRuntime)

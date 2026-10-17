@@ -88,6 +88,7 @@ func haulGiveUpUnreachable(ws *model.WorldState, robot *model.Unit, building *mo
 		events = append(events, alertEvent)
 	}
 	// 车上的货不能凭空消失：优先送给另一台缺同种原料的建筑，否则送回最近仓储。
+	// 改派在这里立即生效（派单 tick 时调用方会跳过本 tick 的重新派单）。
 	if cargoItem != "" {
 		if claim := haulDeliveryFallback(ws, robot, cargoItem); claim != nil {
 			haul.Claim = claim

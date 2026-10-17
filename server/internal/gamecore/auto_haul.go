@@ -150,6 +150,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 
 // assignHaulFromCargo 车上有货且还有别的建筑缺同种原料时，直接改送过去。
 // 这是「上一条任务结束时货没送出去」的优先去向（§2.1 收尾规则）。
+// 本机器人到不了的建筑（冷却期内）跳过，避免刚放弃又送回去。
 func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulClaimBook) *model.HaulClaim {
 	haul := robot.Haul
 	quantity := haul.CargoQuantity()
@@ -163,6 +164,9 @@ func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulCl
 	demands := haulDemands(ws, claims)
 	for _, demand := range demands {
 		if demand.itemID != itemID {
+			continue
+		}
+		if haulCooldownActive(haul, demand.buildingID, ws.Tick) {
 			continue
 		}
 		if accepted, _ := haulDepositPreview(ws.Buildings[demand.buildingID], itemID, quantity); accepted <= 0 {
@@ -497,6 +501,9 @@ func haulDeliveryFallback(ws *model.WorldState, robot *model.Unit, itemID string
 	book := haulClaims(ws)
 	for _, demand := range haulDemands(ws, book) {
 		if demand.itemID != itemID {
+			continue
+		}
+		if haulCooldownActive(robot.Haul, demand.buildingID, ws.Tick) {
 			continue
 		}
 		if accepted, _ := haulDepositPreview(ws.Buildings[demand.buildingID], itemID, quantity); accepted <= 0 {
