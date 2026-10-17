@@ -36,6 +36,8 @@ func alertAggregationKey(alert *model.ProductionAlert) string {
 
 // Record appends alerts and enforces size limit. Repeats of an already
 // recorded (building, alert type) pair update the existing entry in place.
+// 重新出现的告警会把条目恢复成 active（旧条目保留 first tick / repeat 计数，
+// 只刷新 active / last_tick）。
 func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 	if len(alerts) == 0 {
 		return
@@ -46,6 +48,8 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 		if alert == nil {
 			continue
 		}
+		alert.Active = true
+		alert.ResolvedTick = 0
 		key := alertAggregationKey(alert)
 		if pos, ok := ah.keys[key]; ok {
 			existing := ah.alerts[pos]
@@ -54,6 +58,8 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 			existing.Severity = alert.Severity
 			existing.Metrics = alert.Metrics
 			existing.Details = alert.Details
+			existing.Active = true
+			existing.ResolvedTick = 0
 			continue
 		}
 		ah.alerts = append(ah.alerts, alert)
@@ -67,6 +73,27 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 	trim := len(ah.alerts) - ah.limit
 	ah.alerts = ah.alerts[trim:]
 	ah.rebuildIndex()
+}
+
+// Resolve 把「已解除」的告警条目标记为 inactive：问题第一次解除时写
+// ResolvedTick（重复调用不改写），之后快照里的 active=false，客户端据此
+// 撤掉告警条与地图红标（试玩 1016 报告问题 2）。没有对应条目时什么都不做。
+func (ah *AlertHistory) Resolve(playerID, buildingID string, alertType model.ProductionAlertType, tick int64) {
+	if ah == nil || buildingID == "" {
+		return
+	}
+	ah.mu.Lock()
+	defer ah.mu.Unlock()
+	pos, ok := ah.keys[alertAggregationKey(&model.ProductionAlert{BuildingID: buildingID, AlertType: alertType})]
+	if !ok {
+		return
+	}
+	alert := ah.alerts[pos]
+	if alert == nil || !alert.Active || alert.PlayerID != playerID {
+		return
+	}
+	alert.Active = false
+	alert.ResolvedTick = tick
 }
 
 func (ah *AlertHistory) All() []*model.ProductionAlert {

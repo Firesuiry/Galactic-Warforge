@@ -49,6 +49,7 @@ func newSettlementPipeline() settlementPipeline {
 		}
 		// 行星运行时是最重的一段：按子步骤分段计时（同名跨行星累加），
 		// 剩余未单列的部分落在 "planetary_runtime" 名下。
+		var resolutions []alertResolution
 		for _, ws := range frame.worlds {
 			ws.DarkFogCalmTicks = gc.cfg.Battlefield.DarkFogCalmTicks
 			events = append(events, settleMechas(ws)...)
@@ -79,7 +80,9 @@ func newSettlementPipeline() settlementPipeline {
 			settleLogisticsStationIO(ws)
 			settleStorage(ws)
 			gc.prof.mark("logistics_production")
-			events = append(events, settleUnitProduction(ws)...)
+			unitEvents, unitResolved := settleUnitProduction(ws)
+			events = append(events, unitEvents...)
+			resolutions = append(resolutions, unitResolved...)
 			settleAmmunitionSupply(ws)
 			events = append(events, settleTurrets(ws)...)
 			gc.prof.mark("units_turrets")
@@ -98,8 +101,9 @@ func newSettlementPipeline() settlementPipeline {
 			// 带堵告警要在生产监视器之前统计：本 tick 的「动过没有」由
 			// ConveyorTraffic 记账，此刻已经写满（settleConveyors 之后的所有
 			// 搬运都会记进去）。
-			beltEvents := settleBeltBlockAlerts(ws)
+			beltEvents, beltResolved := settleBeltBlockAlerts(ws)
 			events = append(events, beltEvents...)
+			resolutions = append(resolutions, beltResolved...)
 			if gc.alertHistory != nil {
 				for _, evt := range beltEvents {
 					if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
@@ -109,10 +113,18 @@ func newSettlementPipeline() settlementPipeline {
 			}
 
 			if gc.monitor != nil {
-				monEvents, alerts := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
+				monEvents, alerts, monResolved := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
 				events = append(events, monEvents...)
+				resolutions = append(resolutions, monResolved...)
 				if gc.alertHistory != nil && len(alerts) > 0 {
 					gc.alertHistory.Record(alerts)
+				}
+			}
+			// 解除的告警写回历史：快照里的条目 active=false（试玩 1016 报告问题 2）。
+			// 必须在新告警 Record 之后执行，避免同一 tick 先解除再重现时把新条目误标。
+			if gc.alertHistory != nil {
+				for _, res := range resolutions {
+					gc.alertHistory.Resolve(res.playerID, res.buildingID, res.alertType, res.tick)
 				}
 			}
 

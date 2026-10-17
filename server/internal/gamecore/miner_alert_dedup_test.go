@@ -22,7 +22,7 @@ func TestJammedMinerAlertsOncePerRemindWindow(t *testing.T) {
 		ws.Tick = tick
 		settleResources(ws)
 		settleStorage(ws)
-		_, alerts := pm.settleProductionMonitoring(ws, tick)
+		_, alerts, _ := pm.settleProductionMonitoring(ws, tick)
 		return len(alerts)
 	}
 
@@ -53,7 +53,7 @@ func TestJammedMinerAlertsOncePerRemindWindow(t *testing.T) {
 	ws.Tick = firstAlertTick + model.ProductionAlertRemindTicks*2
 	settleResources(ws)
 	settleStorage(ws)
-	events, alerts := pm.settleProductionMonitoring(ws, ws.Tick)
+	events, alerts, _ := pm.settleProductionMonitoring(ws, ws.Tick)
 	if len(alerts) != 1 || len(events) != 1 {
 		t.Fatalf("expected 1 alert / 1 event on reminder, got %d alerts / %d events", len(alerts), len(events))
 	}

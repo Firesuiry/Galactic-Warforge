@@ -593,11 +593,13 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 	ws.Players["p1"].Stats.CombatStats.UnitsKilled = 4
 
 	// Enemy alert should be filtered out; keep newest own alerts within limit.
+	// a5 已解除（active=false）：briefing 只收仍成立的告警，历史走 snapshot。
 	alerts := []*model.ProductionAlert{
-		{AlertID: "a1", Tick: 10, PlayerID: "p1", Message: "old"},
-		{AlertID: "a2", Tick: 20, PlayerID: "p2", Message: "enemy"},
-		{AlertID: "a3", Tick: 30, PlayerID: "p1", Message: "mid"},
-		{AlertID: "a4", Tick: 40, PlayerID: "p1", Message: "new"},
+		{AlertID: "a1", Tick: 10, PlayerID: "p1", Message: "old", Active: true},
+		{AlertID: "a2", Tick: 20, PlayerID: "p2", Message: "enemy", Active: true},
+		{AlertID: "a3", Tick: 30, PlayerID: "p1", Message: "mid", Active: true},
+		{AlertID: "a4", Tick: 40, PlayerID: "p1", Message: "new", Active: true},
+		{AlertID: "a5", Tick: 45, PlayerID: "p1", Message: "resolved", Active: false},
 	}
 
 	spaceRuntime := model.NewSpaceRuntimeState()

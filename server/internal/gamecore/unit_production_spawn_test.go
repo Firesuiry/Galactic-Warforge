@@ -74,7 +74,8 @@ func runUnitProduction(ws *model.WorldState, b *model.Building, ticks int) []*mo
 			return events
 		}
 		ws.Tick++
-		events = append(events, settleUnitProduction(ws)...)
+		unitEvents, _ := settleUnitProduction(ws)
+		events = append(events, unitEvents...)
 	}
 	return events
 }

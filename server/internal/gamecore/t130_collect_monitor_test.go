@@ -52,7 +52,7 @@ func TestCollectorMonitoringRaisesOutputBlockedWhenStorageFull(t *testing.T) {
 	fillStorage(60, 6, 14, model.ItemWater, pump)
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	events, alerts := pm.settleProductionMonitoring(ws, 25)
+	events, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	if len(alerts) == 0 {
 		t.Fatal("expected output_blocked alert for jammed collector, got none")
 	}
@@ -85,7 +85,7 @@ func TestMiningMachineMonitoringRaisesOutputBlockedWhenStorageFull(t *testing.T)
 	fillStorage(48, 4, 8, model.ItemSiliconOre, miner)
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	_, alerts := pm.settleProductionMonitoring(ws, 25)
+	_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	if !alertTypes(alerts)[model.AlertTypeOutputBlocked] {
 		t.Fatalf("expected output_blocked alert for jammed miner, got %v", alertTypes(alerts))
 	}
@@ -108,7 +108,7 @@ func TestCollectorMonitoringStaysQuietWhileOutputDrains(t *testing.T) {
 			fillStorage(tc.inv, tc.in, tc.out, model.ItemSiliconOre, miner)
 
 			pm := newProductionMonitor(newTestMonitorConfig())
-			_, alerts := pm.settleProductionMonitoring(ws, 25)
+			_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 			if len(alerts) != 0 {
 				t.Fatalf("expected no alerts, got %v", alertTypes(alerts))
 			}
@@ -123,25 +123,25 @@ func TestCollectorMonitoringRespectsAlertCooldown(t *testing.T) {
 	fillStorage(48, 4, 8, model.ItemSiliconOre, miner)
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	if _, alerts := pm.settleProductionMonitoring(ws, 25); len(alerts) != 1 {
+	if _, alerts, _ := pm.settleProductionMonitoring(ws, 25); len(alerts) != 1 {
 		t.Fatalf("expected first alert at tick 25, got %d", len(alerts))
 	}
 	for _, tick := range []int64{30, 45, 1000, 25 + model.ProductionAlertRemindTicks - 5} {
-		if _, alerts := pm.settleProductionMonitoring(ws, tick); len(alerts) != 0 {
+		if _, alerts, _ := pm.settleProductionMonitoring(ws, tick); len(alerts) != 0 {
 			t.Fatalf("persistent blockage must not repeat at tick %d, got %d", tick, len(alerts))
 		}
 	}
-	if _, alerts := pm.settleProductionMonitoring(ws, 25+model.ProductionAlertRemindTicks); len(alerts) != 1 {
+	if _, alerts, _ := pm.settleProductionMonitoring(ws, 25+model.ProductionAlertRemindTicks); len(alerts) != 1 {
 		t.Fatalf("expected reminder after %d ticks, got %d", model.ProductionAlertRemindTicks, len(alerts))
 	}
 	// 解除后重新堵塞：新一轮告警。
 	miner.Storage.Inventory, miner.Storage.InputBuffer, miner.Storage.OutputBuffer = model.ItemInventory{}, model.ItemInventory{}, model.ItemInventory{}
 	base := 25 + model.ProductionAlertRemindTicks
-	if _, alerts := pm.settleProductionMonitoring(ws, base+5); len(alerts) != 0 {
+	if _, alerts, _ := pm.settleProductionMonitoring(ws, base+5); len(alerts) != 0 {
 		t.Fatalf("cleared blockage must not alert, got %d", len(alerts))
 	}
 	fillStorage(48, 4, 8, model.ItemSiliconOre, miner)
-	if _, alerts := pm.settleProductionMonitoring(ws, base+40); len(alerts) != 1 {
+	if _, alerts, _ := pm.settleProductionMonitoring(ws, base+40); len(alerts) != 1 {
 		t.Fatalf("recurring blockage must alert again, got %d", len(alerts))
 	}
 }
@@ -152,7 +152,7 @@ func TestCollectorMonitoringRaisesPowerShortage(t *testing.T) {
 	pump.Runtime.State = model.BuildingWorkNoPower
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	_, alerts := pm.settleProductionMonitoring(ws, 25)
+	_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	if !alertTypes(alerts)[model.AlertTypePowerShortage] {
 		t.Fatalf("expected power_shortage alert, got %v", alertTypes(alerts))
 	}
@@ -174,7 +174,7 @@ func TestProductionBuildingMonitoringUnaffected(t *testing.T) {
 	ws.Buildings[smelter.ID] = smelter
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	_, alerts := pm.settleProductionMonitoring(ws, 25)
+	_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	if !alertTypes(alerts)[model.AlertTypePowerShortage] {
 		t.Fatalf("expected power_shortage alert for production building, got %v", alertTypes(alerts))
 	}

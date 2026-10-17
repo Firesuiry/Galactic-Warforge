@@ -208,7 +208,7 @@ func TestFullOutputReportsBlockedReason(t *testing.T) {
 
 	// 监控采样（同一 tick 值）也必须报产物阻塞告警。
 	pm := newProductionMonitor(newTestMonitorConfig())
-	if _, alerts := pm.settleProductionMonitoring(ws, 0); len(alerts) == 0 {
+	if _, alerts, _ := pm.settleProductionMonitoring(ws, 0); len(alerts) == 0 {
 		t.Fatalf("expected an output_blocked production alert")
 	} else {
 		found := false

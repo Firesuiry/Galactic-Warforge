@@ -64,14 +64,15 @@ func conveyorInsertCapacity(ws *model.WorldState, target *model.Building) int {
 const beltBlockedWarnTicks = 300
 
 // settleBeltBlockAlerts 统计每条带子「有货但连续不动」的 tick 数，超过阈值
-// 就发一条 belt_blocked 告警（指向带格本身）。
+// 就发一条 belt_blocked 告警（指向带格本身）。第二个返回值是本 tick 解除的
+// 告警（带子恢复流动 / 清空 / 停机），由调用方写回告警历史标记 inactive。
 //
 // 为什么要有：带尾对着空地、或下游分拣器/建筑不收这个物品时，货会永久堆在
 // 带上，上游矿机随后被自己的输出缓冲堵住——玩家在活动流里只看到「采矿机
 // 产物阻塞」，会去查矿机而不是查带子（试玩 1016 报告 B1/U7）。
-func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
+func settleBeltBlockAlerts(ws *model.WorldState) ([]*model.GameEvent, []alertResolution) {
 	if ws == nil {
-		return nil
+		return nil, nil
 	}
 	ids := make([]string, 0, len(ws.Buildings))
 	for id, building := range ws.Buildings {
@@ -80,10 +81,11 @@ func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
 		}
 	}
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
 	}
 	sort.Strings(ids)
 	var events []*model.GameEvent
+	var resolved []alertResolution
 	for _, id := range ids {
 		building := ws.Buildings[id]
 		conveyor := building.Conveyor
@@ -99,7 +101,9 @@ func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
 		if conveyor.TotalItems() == 0 || moved > 0 || !conveyorActive(building) {
 			conveyor.BlockedTicks = 0
 			if building.ProductionMonitor != nil {
-				building.ProductionMonitor.Alert(model.AlertTypeBeltBlocked, false, ws.Tick, 0)
+				if _, cleared := monitorAlert(building.ProductionMonitor, model.AlertTypeBeltBlocked, false, ws.Tick, 0); cleared {
+					resolved = append(resolved, alertResolution{playerID: building.OwnerID, buildingID: building.ID, alertType: model.AlertTypeBeltBlocked, tick: ws.Tick})
+				}
 			}
 			continue
 		}
@@ -110,12 +114,13 @@ func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
 		if building.ProductionMonitor == nil {
 			building.ProductionMonitor = model.NewProductionMonitorState()
 		}
-		if !building.ProductionMonitor.Alert(model.AlertTypeBeltBlocked, true, ws.Tick, beltBlockedWarnTicks) {
+		if fired, _ := monitorAlert(building.ProductionMonitor, model.AlertTypeBeltBlocked, true, ws.Tick, beltBlockedWarnTicks); !fired {
 			continue
 		}
 		alert := &model.ProductionAlert{
 			AlertID:      fmt.Sprintf("alert-%d-%s-%s", ws.Tick, building.ID, model.AlertTypeBeltBlocked),
 			Tick:         ws.Tick,
+			Active:       true,
 			PlayerID:     building.OwnerID,
 			BuildingID:   building.ID,
 			BuildingType: building.Type,
@@ -135,7 +140,7 @@ func settleBeltBlockAlerts(ws *model.WorldState) []*model.GameEvent {
 			Payload:         map[string]any{"alert": alert},
 		})
 	}
-	return events
+	return events, resolved
 }
 
 // compressPilerBuffer regroups the buffer into piles of at most pileHeight

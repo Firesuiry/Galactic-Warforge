@@ -56,16 +56,24 @@ func unitProductionEvent(b *model.Building) *model.GameEvent {
 	return &model.GameEvent{EventType: model.EvtBuildingStateChanged, VisibilityScope: b.OwnerID, Payload: map[string]any{"entity_id": b.ID, "unit_queue": append([]model.UnitProductionOrder(nil), b.UnitQueue...), "rally_point": b.RallyPoint}}
 }
 
-func settleUnitProduction(ws *model.WorldState) []*model.GameEvent {
+func settleUnitProduction(ws *model.WorldState) ([]*model.GameEvent, []alertResolution) {
 	ids := make([]string, 0, len(ws.Buildings))
 	for id := range ws.Buildings {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	var events []*model.GameEvent
+	var resolved []alertResolution
 	for _, id := range ids {
 		b := ws.Buildings[id]
-		if b == nil || b.HP <= 0 || len(b.UnitQueue) == 0 {
+		if b == nil || b.HP <= 0 {
+			continue
+		}
+		if len(b.UnitQueue) == 0 {
+			// 队列空了：出厂口堵塞的告警条件不再成立，解除（快照里 active=false）。
+			if _, cleared := monitorAlert(b.ProductionMonitor, model.AlertTypeUnitSpawnBlocked, false, ws.Tick, 0); cleared {
+				resolved = append(resolved, alertResolution{playerID: b.OwnerID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
+			}
 			continue
 		}
 		if ok, _ := buildingOperationalForCommand(ws, b); !ok {
@@ -100,9 +108,13 @@ func settleUnitProduction(ws *model.WorldState) []*model.GameEvent {
 			}
 		}
 		b.UnitQueue = b.UnitQueue[1:]
+		// 出生成功：出厂口不再被占，解除 unit_spawn_blocked。
+		if _, cleared := monitorAlert(b.ProductionMonitor, model.AlertTypeUnitSpawnBlocked, false, ws.Tick, 0); cleared {
+			resolved = append(resolved, alertResolution{playerID: b.OwnerID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
+		}
 		events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: b.OwnerID, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": ws.PlanetID}}, unitProductionEvent(b))
 	}
-	return events
+	return events, resolved
 }
 
 // unitSpawnBlockedEvents 出生点被占满时的一条中文告警：同一建筑持续堵塞时
@@ -115,12 +127,13 @@ func unitSpawnBlockedEvents(ws *model.WorldState, b *model.Building) []*model.Ga
 	if b.ProductionMonitor == nil {
 		b.ProductionMonitor = model.NewProductionMonitorState()
 	}
-	if !b.ProductionMonitor.Alert(model.AlertTypeUnitSpawnBlocked, true, ws.Tick, model.ProductionAlertRemindTicks) {
+	if fired, _ := monitorAlert(b.ProductionMonitor, model.AlertTypeUnitSpawnBlocked, true, ws.Tick, model.ProductionAlertRemindTicks); !fired {
 		return nil
 	}
 	alert := &model.ProductionAlert{
 		AlertID:      fmt.Sprintf("alert-%d-%s-%s", ws.Tick, b.ID, model.AlertTypeUnitSpawnBlocked),
 		Tick:         ws.Tick,
+		Active:       true,
 		PlayerID:     b.OwnerID,
 		BuildingID:   b.ID,
 		BuildingType: b.Type,
