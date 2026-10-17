@@ -919,6 +919,61 @@ func TestProductionAlertSnapshotEndpoint(t *testing.T) {
 	}
 }
 
+// 告警快照必须显式带 active 字段（客户端按它判断是否还要显示/画标记）：
+// 未解除的 true，已解除的 false（试玩 1016 报告问题 2）。
+func TestProductionAlertSnapshotExposesActiveField(t *testing.T) {
+	srv, core := newTestServer(t)
+	core.AlertHistory().Record([]*model.ProductionAlert{{
+		AlertID: "alert-100-belt-belt_blocked", Tick: 100, Active: true, PlayerID: "p1",
+		BuildingID: "belt-1", BuildingType: model.BuildingTypeConveyorBeltMk1,
+		AlertType: model.AlertTypeBeltBlocked, Severity: model.AlertSeverityWarning,
+	}})
+	core.AlertHistory().Record([]*model.ProductionAlert{{
+		AlertID: "alert-110-miner-output_blocked", Tick: 110, Active: true, PlayerID: "p1",
+		BuildingID: "miner-1", BuildingType: model.BuildingTypeMiningMachine,
+		AlertType: model.AlertTypeOutputBlocked, Severity: model.AlertSeverityWarning,
+	}})
+	core.AlertHistory().Resolve("p1", "miner-1", model.AlertTypeOutputBlocked, 200)
+
+	req := httptest.NewRequest("GET", "/alerts/production/snapshot?since_tick=0", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 原始 JSON 必须带 "active"（不是 omitempty 省略掉）。
+	var raw struct {
+		Alerts []map[string]any `json:"alerts"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	byID := make(map[string]map[string]any, len(raw.Alerts))
+	for _, alert := range raw.Alerts {
+		id, _ := alert["alert_id"].(string)
+		byID[id] = alert
+	}
+	blocked, ok := byID["alert-100-belt-belt_blocked"]
+	if !ok {
+		t.Fatalf("missing belt_blocked alert, got %v", raw.Alerts)
+	}
+	if active, ok := blocked["active"].(bool); !ok || !active {
+		t.Fatalf("belt_blocked must expose active=true, got %v", blocked["active"])
+	}
+	resolved, ok := byID["alert-110-miner-output_blocked"]
+	if !ok {
+		t.Fatalf("missing output_blocked alert, got %v", raw.Alerts)
+	}
+	if active, ok := resolved["active"].(bool); !ok || active {
+		t.Fatalf("resolved alert must expose active=false, got %v", resolved["active"])
+	}
+	if tick, ok := resolved["resolved_tick"].(float64); !ok || int64(tick) != 200 {
+		t.Fatalf("resolved alert must expose resolved_tick=200, got %v", resolved["resolved_tick"])
+	}
+}
+
 func TestSaveEndpoint(t *testing.T) {
 	srv, core := newTestServer(t)
 	core.AttachGameDir(gamedir.Open(t.TempDir()), minimalSaveMetaFile(), snapshot.Capture(core.World(), core.Discovery()))

@@ -222,6 +222,12 @@ func filterRecentAlerts(alerts []*model.ProductionAlert, playerID string, limit 
 		if alert == nil || alert.PlayerID != playerID {
 			continue
 		}
+		// 已解除的告警不再进「最近告警」：briefing 是给玩家/agent 的当前态势，
+		// 挂着 active=false 的历史条目只会让人以为问题还在（试玩 1016 问题 2）。
+		// 完整历史（含已解除）仍可从 GET /alerts/production/snapshot 取。
+		if !alert.Active {
+			continue
+		}
 		filtered = append(filtered, alert)
 	}
 	if len(filtered) > limit {

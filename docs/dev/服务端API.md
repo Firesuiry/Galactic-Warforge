@@ -350,6 +350,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（`sorter_mk1/2/3` 的 `range` = 1/2/3，`pile_sorter` = 3）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
 - **取货端是传送带时扫描整段带子**（试玩 1016 报告 B1）：按顺序取第一个「过滤允许 + 放货端收得下」的栈，跳过被过滤掉或目标不收的物品，其余货的顺序不变。旧实现只看队首那一栈——队首是下游不要的矿种时后面的货永远取不到，配上「带尾对着分拣器、下游不收」的布局就是整线死锁（带满 → 上游矿机输出缓冲满 → 矿机停采）。带子长期堵死时另发 `belt_blocked` 告警（见 §6.7）。
 - 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
+- **从生产建筑取货只拿产物**（试玩 1016 报告 B-2，DSP 口径）：分拣器 / 传送带直连 / 管道 / 运输机器人对带 `production` 功能的建筑（熔炉、制造台、研究站、精炼厂、化工厂……）只导出**输出缓冲**里的成品；主库存 / 输入缓冲里尚未加工的原料不会被抽走（否则输出端分拣器会把刚到货的铁矿搬上产物带，机器永远吃不饱）。仓储类建筑（储物仓、储液罐、补给站、物流站、战场分析基站等无 `production` 功能的建筑）主库存整仓可导出。循环配方的反馈料同样只算输出缓冲里的产物份额。玩家手工取货（`transfer_item` `direction=to_player`）不受此限，仍可取出机器里的原料。
 - `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
 - 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
 - 自动集装机 `automatic_piler`（`integrated_logistics` 解锁，吞吐 2）：把散货压成 2x 堆（`sorter_cargo_integration` 后 4x），出货每吞吐单位一整堆，满仓背压。
@@ -543,8 +544,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /alerts/production/snapshot`**：产线告警补拉。
 - 参数：`after_alert_id`（推荐）、`since_tick`、`limit`（默认 `alert_history_limit`）。
-- 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
+- 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、**`active`**、`resolved_tick`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
+- **`active`（bool，始终出现）**：该告警当前是否仍成立。出现时 `true`；问题解除后变为 `false` 并写入 `resolved_tick`（解除的 tick，之后不再改写）。客户端应只显示/画标记 `active=true` 的条目——历史条目保留在快照里供复盘（试玩 1016 报告问题 2：旧实现只清内部状态，快照条目一直挂着冻结的 `last_tick`，带子恢复流动后红标也不消失）。同一建筑同类问题再次出现时复用原条目（`alert_id` 不变），`active` 恢复为 `true`、`resolved_tick` 清零。所有告警类型（`belt_blocked` / `power_shortage` / `input_shortage` / `output_blocked` / `backlog` / `throughput_drop` / `unit_spawn_blocked`）统一走这条规则。
 - 同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。
+- `GET /state/agent-briefing` 的 `recent_alerts` 只收 `active=true` 的条目（完整历史走本接口）。
 - `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked` / `belt_blocked` / `haul_unreachable`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。`belt_blocked` 指向**传送带格本身**：带上有货却连续 300 tick（`beltBlockedWarnTicks`）一件都没动出去（带尾对着空地、下游分拣器/建筑不收这个物品），message 写「传送带被堵，物品运不出去」，`details` 带 `position` / `queued_items` / `blocked_ticks`；货被取走或开始流动后解除——避免玩家把上游矿机的「产物阻塞」误当成根因（试玩 1016 报告 B1/U7）。`haul_unreachable` 指向**运输机器人到不了的建筑**：自动模式机器人连续多次找不到落点/路径后放弃该目标时发出，message 写「建筑 <id>：运输机器人到不了」，`details` 带 `unit_id` / `building_id` / `position`；同一建筑持续成立期间只发一次，机器人重新到达该建筑（或建筑被拆除）后解除。见 §5.6 运输机器人自动模式。
 
 **`POST /save`**（仅 admin）：请求 `{reason?}`；响应 `ok` / `tick` / `saved_at` / `path` / `trigger`。只覆盖当前 `save.json`，写盘失败 500。

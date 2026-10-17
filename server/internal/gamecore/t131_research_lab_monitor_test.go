@@ -35,7 +35,7 @@ func TestResearchModeLabSkipsThroughputAlerts(t *testing.T) {
 			}
 
 			pm := newProductionMonitor(newTestMonitorConfig())
-			_, alerts := pm.settleProductionMonitoring(ws, 25)
+			_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 			if len(alerts) != 0 {
 				t.Fatalf("research-mode lab must not raise line alerts, got %v", alertTypes(alerts))
 			}
@@ -59,7 +59,7 @@ func TestResearchModeLabStillAlertsOnPowerShortage(t *testing.T) {
 	lab.Runtime.State = model.BuildingWorkNoPower
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	_, alerts := pm.settleProductionMonitoring(ws, 25)
+	_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	types := alertTypes(alerts)
 	if !types[model.AlertTypePowerShortage] {
 		t.Fatalf("expected power_shortage for unpowered research lab, got %v", types)
@@ -94,7 +94,7 @@ func TestLabWithRecipeStillRaisesInputShortage(t *testing.T) {
 	}
 
 	pm := newProductionMonitor(newTestMonitorConfig())
-	_, alerts := pm.settleProductionMonitoring(ws, 25)
+	_, alerts, _ := pm.settleProductionMonitoring(ws, 25)
 	types := alertTypes(alerts)
 	// With throughput>0, empty input buffer and zero conveyor moves, either
 	// input_shortage or throughput_drop is expected for a production recipe.

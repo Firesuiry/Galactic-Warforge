@@ -38,14 +38,35 @@ func (pm *productionMonitor) cooldownTicks() int64 {
 	return pm.cfg.AlertCooldownTicks
 }
 
+// alertResolution 标记「某建筑某类告警在本 tick 解除」，由 GameCore 写回告警
+// 历史（AlertHistory.Resolve），让快照里的条目 active=false。
+type alertResolution struct {
+	playerID   string
+	buildingID string
+	alertType  model.ProductionAlertType
+	tick       int64
+}
+
+// monitorAlert 是 model.ProductionMonitorState.Alert 的包装：返回是否发告警、
+// 以及本次是否「由持续中转为解除」（此前 ActiveAlerts 里为 true，调用后为 false）。
+func monitorAlert(state *model.ProductionMonitorState, alertType model.ProductionAlertType, condition bool, tick, cooldown int64) (fired, resolved bool) {
+	if state == nil {
+		return false, false
+	}
+	wasActive := state.ActiveAlerts[alertType]
+	fired, active := state.Alert(alertType, condition, tick, cooldown)
+	return fired, wasActive && !active
+}
+
 // settleProductionMonitoring samples production and collection buildings and generates alerts.
-func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, currentTick int64) ([]*model.GameEvent, []*model.ProductionAlert) {
+// 第二个返回值是新告警（写历史），第三个是已解除的告警（把历史条目标记为 inactive）。
+func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, currentTick int64) ([]*model.GameEvent, []*model.ProductionAlert, []alertResolution) {
 	if ws == nil || pm == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	interval := pm.sampleInterval()
 	if interval <= 0 || currentTick%interval != 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	ids := make([]string, 0, len(ws.Buildings))
@@ -54,7 +75,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 	}
 	sort.Strings(ids)
 	if len(ids) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	maxEntities := pm.maxEntities()
@@ -68,6 +89,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 
 	var events []*model.GameEvent
 	var alerts []*model.ProductionAlert
+	var resolved []alertResolution
 
 	for i := 0; i < maxEntities; i++ {
 		idx := (start + i) % len(ids)
@@ -135,7 +157,8 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 			}
 		}
 
-		newAlerts := pm.evaluateAlerts(building, currentTick, backlog, throughput, inputShortage, outputBlocked)
+		newAlerts, newResolutions := pm.evaluateAlerts(building, currentTick, backlog, throughput, inputShortage, outputBlocked)
+		resolved = append(resolved, newResolutions...)
 		if len(newAlerts) == 0 {
 			continue
 		}
@@ -152,7 +175,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 	}
 
 	pm.nextIdx = (start + maxEntities) % len(ids)
-	return events, alerts
+	return events, alerts, resolved
 }
 
 // storageOutputBlocked reports whether produced items can no longer leave the
@@ -173,13 +196,27 @@ func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
 	return storage.ReservedSpace() <= 0
 }
 
-func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) []*model.ProductionAlert {
+// evaluateAlerts 评估本建筑的全部告警类型：返回新告警与本次解除的告警。
+// 每类告警都要走一遍 Alert（即便条件为 false），解除状态才会被看到并写回历史。
+func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) ([]*model.ProductionAlert, []alertResolution) {
 	if pm == nil || building == nil || building.ProductionMonitor == nil {
-		return nil
+		return nil, nil
 	}
 	var alerts []*model.ProductionAlert
+	var resolved []alertResolution
 	state := building.ProductionMonitor
 	cooldown := pm.cooldownTicks()
+	// 统一处理「发告警 / 解除」：解除时把历史条目标记为 inactive（试玩 1016
+	// 报告问题 2——旧实现只清 ActiveAlerts，快照里的条目永远挂着）。
+	track := func(alertType model.ProductionAlertType, condition bool, build func() *model.ProductionAlert) {
+		fired, cleared := monitorAlert(state, alertType, condition, tick, cooldown)
+		if cleared {
+			resolved = append(resolved, alertResolution{playerID: building.OwnerID, buildingID: building.ID, alertType: alertType, tick: tick})
+		}
+		if fired {
+			alerts = append(alerts, build())
+		}
+	}
 	// Collectors have no recipe inputs, so only power and output blockage apply.
 	collector := building.Runtime.Functions.Production == nil
 	// Research-mode labs (empty recipe) are idle research stations, not factories.
@@ -187,37 +224,38 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	// Factory-line throughput metrics only apply to true production buildings.
 	lineAlerts := !collector && !researchMode
 
-	if state.Alert(model.AlertTypePowerShortage, building.Runtime.State == model.BuildingWorkNoPower, tick, cooldown) {
+	track(model.AlertTypePowerShortage, building.Runtime.State == model.BuildingWorkNoPower, func() *model.ProductionAlert {
 		details := map[string]any{"power_priority": building.Runtime.Params.PowerPriority}
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypePowerShortage, model.AlertSeverityWarning, state.LastStats, details))
-	}
+		return pm.buildAlert(building, tick, model.AlertTypePowerShortage, model.AlertSeverityWarning, state.LastStats, details)
+	})
 
 	backlogRatio := 0.0
 	if throughput > 0 {
 		backlogRatio = float64(backlog) / float64(throughput)
 	}
-	if state.Alert(model.AlertTypeBacklog, lineAlerts && throughput > 0 && backlogRatio >= pm.cfg.BacklogWarnRatio, tick, cooldown) {
+	backlogWarn := lineAlerts && throughput > 0 && backlogRatio >= pm.cfg.BacklogWarnRatio
+	track(model.AlertTypeBacklog, backlogWarn, func() *model.ProductionAlert {
 		severity := model.AlertSeverityWarning
 		if backlogRatio >= pm.cfg.BacklogCriticalRatio {
 			severity = model.AlertSeverityCritical
 		}
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeBacklog, severity, state.LastStats, map[string]any{"backlog_ratio": backlogRatio}))
-	}
+		return pm.buildAlert(building, tick, model.AlertTypeBacklog, severity, state.LastStats, map[string]any{"backlog_ratio": backlogRatio})
+	})
 
-	if state.Alert(model.AlertTypeInputShortage, lineAlerts && inputShortage, tick, cooldown) {
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil))
-	}
+	track(model.AlertTypeInputShortage, lineAlerts && inputShortage, func() *model.ProductionAlert {
+		return pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil)
+	})
 
-	if state.Alert(model.AlertTypeOutputBlocked, outputBlocked, tick, cooldown) {
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeOutputBlocked, model.AlertSeverityWarning, state.LastStats, nil))
-	}
+	track(model.AlertTypeOutputBlocked, outputBlocked, func() *model.ProductionAlert {
+		return pm.buildAlert(building, tick, model.AlertTypeOutputBlocked, model.AlertSeverityWarning, state.LastStats, nil)
+	})
 
 	eff := state.LastStats.Efficiency
-	if state.Alert(model.AlertTypeThroughputDrop, lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio, tick, cooldown) {
-		alerts = append(alerts, pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, map[string]any{"efficiency": eff}))
-	}
+	track(model.AlertTypeThroughputDrop, lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio, func() *model.ProductionAlert {
+		return pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, map[string]any{"efficiency": eff})
+	})
 
-	return alerts
+	return alerts, resolved
 }
 
 func (pm *productionMonitor) buildAlert(
@@ -232,6 +270,7 @@ func (pm *productionMonitor) buildAlert(
 	return &model.ProductionAlert{
 		AlertID:      alertID,
 		Tick:         tick,
+		Active:       true,
 		PlayerID:     building.OwnerID,
 		BuildingID:   building.ID,
 		BuildingType: building.Type,

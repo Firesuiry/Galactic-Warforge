@@ -33,11 +33,19 @@ const (
 // Alerts are aggregated per (building, alert type): repeated occurrences do
 // not create new entries, they bump RepeatCount and LastTick on the existing
 // entry instead.
+//
+// Active 是「问题当前是否仍成立」：产生时置 true，问题解除后置 false 并记下
+// ResolvedTick。快照里的历史条目会保留（供复盘），客户端按 Active 判断是否
+// 还要显示/画标记——试玩 1016 报告问题 2：旧实现只清 ProductionMonitor 的
+// ActiveAlerts，历史条目与快照一直挂着冻结的 last_tick，带子恢复流动后
+// 告警也永远不消失。
 type ProductionAlert struct {
 	AlertID      string                  `json:"alert_id"`
 	Tick         int64                   `json:"tick"`
 	LastTick     int64                   `json:"last_tick,omitempty"`
 	RepeatCount  int                     `json:"repeat_count,omitempty"`
+	Active       bool                    `json:"active"`
+	ResolvedTick int64                   `json:"resolved_tick,omitempty"`
 	PlayerID     string                  `json:"player_id"`
 	BuildingID   string                  `json:"building_id"`
 	BuildingType BuildingType            `json:"building_type"`
@@ -133,24 +141,28 @@ func (m *ProductionMonitorState) RegisterSample(tick int64, moved, backlog, thro
 const ProductionAlertRemindTicks int64 = 3000
 
 // Alert 按告警条件决定本次采样是否发出告警（发出时记账）：
-//   - 条件不成立：清除持续状态，不发；
+//   - 条件不成立：清除持续状态，不发（返回的 active 为 false，调用方据此把
+//     历史条目标记为已解除）；
 //   - 新出现：距上次同类告警满 cooldown 才发（防抖动）；
 //   - 持续中：每 ProductionAlertRemindTicks 提醒一次。
-func (m *ProductionMonitorState) Alert(alertType ProductionAlertType, condition bool, tick, cooldown int64) bool {
+//
+// 返回 (发告警, 当前是否仍成立)。条件不成立时第二个返回值是 false——即便
+// 之前没有记录过该告警，调用方也可以据此统一处理「已解除」。
+func (m *ProductionMonitorState) Alert(alertType ProductionAlertType, condition bool, tick, cooldown int64) (bool, bool) {
 	if m == nil {
-		return condition
+		return condition, condition
 	}
 	if !condition {
 		delete(m.ActiveAlerts, alertType)
-		return false
+		return false, false
 	}
 	last, seen := m.LastAlertAt[alertType]
 	if m.ActiveAlerts[alertType] {
 		if tick-last < ProductionAlertRemindTicks {
-			return false
+			return false, true
 		}
 	} else if seen && tick-last < cooldown {
-		return false
+		return false, true
 	}
 	if m.LastAlertAt == nil {
 		m.LastAlertAt = make(map[ProductionAlertType]int64)
@@ -160,7 +172,7 @@ func (m *ProductionMonitorState) Alert(alertType ProductionAlertType, condition 
 	}
 	m.LastAlertAt[alertType] = tick
 	m.ActiveAlerts[alertType] = true
-	return true
+	return true, true
 }
 
 // AlertMessage returns a player-facing Chinese message for alert type.

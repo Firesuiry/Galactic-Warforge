@@ -99,7 +99,8 @@ func TestDeadEndBeltRaisesBeltBlockedAlert(t *testing.T) {
 	for tick := int64(1); tick <= beltBlockedWarnTicks+5; tick++ {
 		ws.Tick = tick
 		settleConveyors(ws)
-		for _, evt := range settleBeltBlockAlerts(ws) {
+		beltEvents, _ := settleBeltBlockAlerts(ws)
+		for _, evt := range beltEvents {
 			if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
 				alerts = append(alerts, alert)
 			}
@@ -127,7 +128,7 @@ func TestDeadEndBeltRaisesBeltBlockedAlert(t *testing.T) {
 	belt.Conveyor.Buffer = nil
 	ws.Tick++
 	settleConveyors(ws)
-	if events := settleBeltBlockAlerts(ws); len(events) != 0 {
+	if events, _ := settleBeltBlockAlerts(ws); len(events) != 0 {
 		t.Fatalf("带子清空后不该再报警，got %d 条", len(events))
 	}
 	if belt.Conveyor.BlockedTicks != 0 {
@@ -151,7 +152,7 @@ func TestStoppedBeltDoesNotRaiseBeltBlockedAlert(t *testing.T) {
 	for tick := int64(1); tick <= beltBlockedWarnTicks+5; tick++ {
 		ws.Tick = tick
 		settleConveyors(ws)
-		if events := settleBeltBlockAlerts(ws); len(events) != 0 {
+		if events, _ := settleBeltBlockAlerts(ws); len(events) != 0 {
 			t.Fatalf("停机的带子不该报警（tick %d）", tick)
 		}
 	}
@@ -177,7 +178,7 @@ func TestFlowingBeltDoesNotRaiseBeltBlockedAlert(t *testing.T) {
 	for tick := int64(1); tick <= beltBlockedWarnTicks+5; tick++ {
 		ws.Tick = tick
 		settleConveyors(ws)
-		if events := settleBeltBlockAlerts(ws); len(events) != 0 {
+		if events, _ := settleBeltBlockAlerts(ws); len(events) != 0 {
 			t.Fatalf("流动中的带子不该报警（tick %d）", tick)
 		}
 		// 末端带每 tick 清空，模拟下游一直在消耗：整条线保持流动。
