@@ -49,7 +49,7 @@ import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
-import { formatInventorySummary } from "@/features/inventory-summary";
+import { formatInventorySummary, inventorySlotUsage } from "@/features/inventory-summary";
 import {
   extractAlertFromEvent,
   parseEnabledLayers,
@@ -757,6 +757,7 @@ export function PlanetPage() {
   const currentPlayer = summary?.players?.[session.playerId];
   const liveTick = Math.max(summary?.tick ?? 0, planet.tick);
   const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
+  const slotUsage = inventorySlotUsage(currentPlayer);
   const currentResearchName = getTechDisplayName(
     catalog,
     currentPlayer?.tech?.current_research?.tech_id ?? "",
@@ -1008,11 +1009,20 @@ export function PlanetPage() {
               <div className="planet-title-chip__chips">
                 <div
                   className="hero-chip"
-                  title={`电网结余（只读展示）· 背包库存：${inventorySummary}`}
+                  title={`电网结余（只读展示）· 背包库存：${inventorySummary}${slotUsage ? ` · 已用 ${slotUsage.used}/${slotUsage.total} 格` : ""}`}
                 >
                   <Icon iconKey="tesla_tower" color="#ffb454" size={18} />
                   <span>电网结余 {currentPlayer?.resources?.energy ?? 0}</span>
                 </div>
+                {slotUsage ? (
+                  <div
+                    className={`hero-chip${slotUsage.used >= slotUsage.total ? " hero-chip--danger" : ""}`}
+                    title={`背包格数（每格按物品堆叠上限装填）：已用 ${slotUsage.used} / ${slotUsage.total} 格`}
+                  >
+                    <Icon iconKey="iron_ingot" color="#5fb0ff" size={18} />
+                    <span>背包 {slotUsage.used}/{slotUsage.total} 格</span>
+                  </div>
+                ) : null}
                 <div className="hero-chip">
                   <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
                   <span>

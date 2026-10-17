@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
 import { resolveEarlyGameNextAction } from '@/features/early-game-next';
-import { formatInventorySummary } from '@/features/inventory-summary';
+import { formatInventorySummary, inventorySlotUsage } from '@/features/inventory-summary';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { MiniGalaxyMap } from '@/features/starmap/MiniGalaxyMap';
 import { planetColorOf } from '@/features/starmap/model';
@@ -264,6 +264,7 @@ export function OverviewPage() {
   const resources = currentPlayer?.resources;
   const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
   const inventoryTotal = Object.values(currentPlayer?.inventory ?? {}).reduce((sum, quantity) => sum + quantity, 0);
+  const slotUsage = inventorySlotUsage(currentPlayer);
   const currentResearch = currentPlayer?.tech?.current_research;
   const researchPercent = currentResearch && currentResearch.total_cost > 0
     ? Math.min(100, Math.round((currentResearch.progress / currentResearch.total_cost) * 100))
@@ -439,7 +440,9 @@ export function OverviewPage() {
                   <span>背包物资</span>
                 </div>
                 <strong className="command-resource__value">{formatNumber(inventoryTotal)}</strong>
-                <span className="command-resource__meta">产出 +{stats.production_stats.total_output}/t</span>
+                <span className="command-resource__meta">
+                  {slotUsage ? `已用 ${slotUsage.used}/${slotUsage.total} 格` : '容量未知'} · 产出 +{stats.production_stats.total_output}/t
+                </span>
                 <span className="command-resource__meta command-resource__meta--dim">{inventorySummary}</span>
               </article>
               <article className="command-resource">
