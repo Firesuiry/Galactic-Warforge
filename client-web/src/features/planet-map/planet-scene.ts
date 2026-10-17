@@ -404,13 +404,25 @@ export interface GhostArrowStroke {
 
 /**
  * 分拣器幽灵箭头的画法（试玩 1016 U1）：两端必须**形状**可分，不能只靠颜色。
- * 取货端空心细描边 + 「取」，放货端实心粗线 + 「放」。
- * 与 3D 的 `three/ghost-arrow-texture`（空心/实心纹理）同一口径。
+ * 取货端空心虚线描边 + 「取」，放货端实心粗线 + 「放」。
+ * 与 3D 的 `three/ghost-arrow-texture`（空心虚线/实心纹理）同一口径。
+ *
+ * 试玩 1016 复核：旧版取货端只有 1.5px 细线，缩到小格宽后与实心端一样糊成一根线；
+ * 现在空心端也加到 2.5px 并画成虚线（`dash`），与实心端的粗杆（4.5px）拉出线型差异。
  */
-export function sorterGhostArrowStyle(role: 'take' | 'drop'): { shaftWidth: number; wingWidth: number; filled: boolean; label: string } {
+export interface SorterGhostArrowStyle {
+  shaftWidth: number;
+  wingWidth: number;
+  filled: boolean;
+  /** 虚线段长（像素）；0 = 实线。只有空心端用。 */
+  dash: number;
+  label: string;
+}
+
+export function sorterGhostArrowStyle(role: 'take' | 'drop'): SorterGhostArrowStyle {
   return role === 'take'
-    ? { shaftWidth: 1.5, wingWidth: 1.5, filled: false, label: '取' }
-    : { shaftWidth: 4, wingWidth: 2.5, filled: true, label: '放' };
+    ? { shaftWidth: 2.5, wingWidth: 2, filled: false, dash: 5, label: '取' }
+    : { shaftWidth: 4.5, wingWidth: 2.5, filled: true, dash: 0, label: '放' };
 }
 
 /**
@@ -438,6 +450,33 @@ export function resolveSorterGhostArrows(
     };
   };
   return [stroke(routes.from, 'take'), stroke(routes.to, 'drop')];
+}
+
+/**
+ * 把线段按 dash / gap 切成若干子段（纯几何，便于单测）。
+ * 2D 幽灵箭头用它画取货端的虚线（Pixi Graphics 没有原生 dash 描边）。
+ * 最后一段不足一个 dash 时保留余量，保证尖端/尾端不会因为缺口而「断头」。
+ */
+export function dashSegments(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  dash: number,
+  gap: number,
+): [{ x: number; y: number }, { x: number; y: number }][] {
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  if (length <= 0 || dash <= 0) return [[from, to]];
+  const ux = (to.x - from.x) / length;
+  const uy = (to.y - from.y) / length;
+  const step = dash + Math.max(gap, 0);
+  const pieces: [{ x: number; y: number }, { x: number; y: number }][] = [];
+  for (let offset = 0; offset < length; offset += step) {
+    const end = Math.min(offset + dash, length);
+    pieces.push([
+      { x: from.x + ux * offset, y: from.y + uy * offset },
+      { x: from.x + ux * end, y: from.y + uy * end },
+    ]);
+  }
+  return pieces;
 }
 
 /**
@@ -671,7 +710,7 @@ const COLOR_DETECTION = 0xffd43b;
 const COLOR_SELECTED = 0xffd166;
 const COLOR_GHOST_OK = 0x6ee7b7;
 const COLOR_GHOST_BLOCKED = 0xff5757;
-/** 分拣器 ghost 的取货端箭头（背面）：青色与放货端（正面，绿）区分。 */
+/** 分拣器 ghost 的取货端箭头（背面）：青色与放货端（正面，琥珀）区分。 */
 const COLOR_GHOST_TAKE = 0x6ee7f7;
 /** 分拣器「取 → 放」有向线颜色（与流向纹的琥珀区分，一眼看出起止端）。 */
 const SORTER_ROUTE_COLOR = 0x8ef0ff;
@@ -2877,17 +2916,28 @@ export class PlanetScene {
           const wing = ts * 0.16;
           const color = arrow.role === 'take' ? COLOR_GHOST_TAKE : COLOR_GHOST_OK;
           const style = sorterGhostArrowStyle(arrow.role);
-          // 空心 = 细描边不填充；实心 = 粗杆 + 粗箭头（与 3D 的空心/实心纹理同口径）。
-          g.moveTo(arrow.tail.x, arrow.tail.y)
-            .lineTo(arrow.tip.x, arrow.tip.y)
-            .moveTo(arrow.tip.x, arrow.tip.y)
-            .lineTo(arrow.tip.x - tx * wing - ty * wing, arrow.tip.y - ty * wing - tx * wing)
-            .moveTo(arrow.tip.x, arrow.tip.y)
-            .lineTo(arrow.tip.x - tx * wing + ty * wing, arrow.tip.y - ty * wing + tx * wing)
-            .stroke({ width: style.shaftWidth, color, alpha: 0.95 });
+          // 空心 = 虚线描边不填充；实心 = 粗杆 + 粗箭头（与 3D 的空心虚线/实心纹理同口径）。
+          // 线段几何：杆 + 两条箭头翼。取货端按 dash 切段，放货端整段实线。
+          const segments: [{ x: number; y: number }, { x: number; y: number }][] = [
+            [arrow.tail, arrow.tip],
+            [arrow.tip, { x: arrow.tip.x - tx * wing - ty * wing, y: arrow.tip.y - ty * wing - tx * wing }],
+            [arrow.tip, { x: arrow.tip.x - tx * wing + ty * wing, y: arrow.tip.y - ty * wing + tx * wing }],
+          ];
+          const strokeSegments = (width: number, strokeColor: number, alpha: number) => {
+            for (const [from, to] of segments) {
+              const pieces = style.dash > 0 ? dashSegments(from, to, style.dash, style.dash * .8) : [[from, to] as const];
+              for (const [start, end] of pieces) {
+                g.moveTo(start.x, start.y).lineTo(end.x, end.y).stroke({ width, color: strokeColor, alpha });
+              }
+            }
+          };
+          // 深色底描边（先画宽一档的黑边，再压角色色），与 3D 纹理的深色反差同口径。
+          strokeSegments(style.shaftWidth + 3, 0x040a12, 0.75);
+          strokeSegments(style.shaftWidth, color, 1);
           if (style.filled) {
-            // 实心端：杆身再压一道粗线，与空心端的细描边形成明显粗细对比。
-            g.moveTo(arrow.tail.x, arrow.tail.y).lineTo(arrow.tip.x, arrow.tip.y).stroke({ width: style.wingWidth + 1.5, color, alpha: 0.95 });
+            // 实心端：杆身再压一道粗线，与空心端的虚线描边形成明显粗细/线型对比。
+            g.moveTo(arrow.tail.x, arrow.tail.y).lineTo(arrow.tip.x, arrow.tip.y)
+              .stroke({ width: style.wingWidth + 2.5, color, alpha: 1 });
           }
           this.sorterGhostLabel(arrow, color, ts);
         }
