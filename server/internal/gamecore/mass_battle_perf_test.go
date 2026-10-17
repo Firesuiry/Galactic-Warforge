@@ -44,7 +44,7 @@ func TestMassBattle300UnitsTickBudget(t *testing.T) {
 		ws.Tick++
 		settleAmmunitionSupply(ws)
 		settleUnitMovement(ws)
-		events := settleUnitCombat(ws)
+		events := settleUnitCombat(ws, nil)
 		settleCombatRuntime(ws, ws.Tick)
 		d := time.Since(start)
 		total += d

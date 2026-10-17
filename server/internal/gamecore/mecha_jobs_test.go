@@ -348,7 +348,7 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 	}
 	for i := 0; i < 40 && ws.Units[unit.ID] != nil; i++ {
 		ws.Tick++
-		settleUnitCombat(ws)
+		settleUnitCombat(ws, nil)
 	}
 	if ws.Units[unit.ID] != nil || player.Inventory[model.ItemIronIngot] != 1 || player.Inventory[model.ItemGear] != 1 {
 		t.Fatalf("combat deletion lost/duplicated reservation: %+v inventory=%v unit=%+v", result, player.Inventory, ws.Units[unit.ID])

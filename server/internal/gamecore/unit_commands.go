@@ -288,7 +288,7 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 				return *failure, nil
 			}
 			consumeUnitAmmunition(attacker)
-			events = append(events, fireAtTarget(ws, attacker, target)...)
+			events = append(events, fireAtTarget(ws, gc.alertHistory, attacker, target)...)
 			attacker.LastAttackTick = ws.Tick
 			events = append(events, mechaStateEvent(attacker))
 			continue

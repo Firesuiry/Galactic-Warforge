@@ -1310,7 +1310,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		return res, events
 	}
 
-	events = demolishBuilding(ws, building, rule.RefundRate)
+	events = demolishBuilding(ws, gc.alertHistory, building, rule.RefundRate)
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK

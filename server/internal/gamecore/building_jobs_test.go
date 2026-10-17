@@ -40,7 +40,7 @@ func TestUpgradeJobProgress(t *testing.T) {
 		t.Fatalf("expected building paused, got %s", building.Runtime.State)
 	}
 
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	if building.Job == nil || building.Job.RemainingTicks != 1 {
 		t.Fatalf("expected remaining ticks 1, got %v", building.Job)
 	}
@@ -48,7 +48,7 @@ func TestUpgradeJobProgress(t *testing.T) {
 		t.Fatalf("expected level unchanged before completion, got %d", building.Level)
 	}
 
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	if building.Job != nil {
 		t.Fatalf("expected job cleared after completion")
 	}
@@ -93,7 +93,7 @@ func TestDemolishJobRefund(t *testing.T) {
 		t.Fatalf("expected no item refund before completion, got %+v", player.Inventory)
 	}
 
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	if _, ok := ws.Buildings[building.ID]; ok {
 		t.Fatalf("expected building removed after demolish")
 	}
@@ -162,7 +162,7 @@ func TestDemolishRefundItems(t *testing.T) {
 		t.Fatalf("expected no item refund before completion")
 	}
 
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	if player.Inventory[model.ItemGear] != 4 {
 		t.Fatalf("expected item refund after demolish completion, got %d", player.Inventory[model.ItemGear])
 	}
@@ -256,7 +256,7 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	if res, _ := execCommand(gc, model.CmdDemolish, ws, building.OwnerID, cmd); res.Code != model.CodeOK {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	if got := player.InventoryCount(); got > capacity {
 		t.Fatalf("demolish refund pushed the bag over capacity: %d/%d", got, capacity)
 	}
@@ -273,7 +273,7 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	if res, _ := execCommand(gc2, model.CmdDemolish, ws2, building2.OwnerID, cmd2); res.Code != model.CodeOK {
 		t.Fatalf("second demolish: %s", res.Message)
 	}
-	settleBuildingJobs(ws2)
+	settleBuildingJobs(ws2, nil)
 	if player2.Inventory[model.ItemGear] != 4 {
 		t.Fatalf("expected item refund after demolish completion, got %d", player2.Inventory[model.ItemGear])
 	}

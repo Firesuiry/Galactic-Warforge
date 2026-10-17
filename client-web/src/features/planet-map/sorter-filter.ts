@@ -141,7 +141,7 @@ export function sorterEndpointStatuses(
     if (!endpoint && bounds && !tileInBounds(tile, bounds)) {
       return { ...base, ok: null, problem: '端点格不在当前场景窗口内，暂时看不出接没接上' };
     }
-    if (!endpoint) return { ...base, ok: false, problem: side === 'take' ? '取货端没有可取的物品（前方没有建筑/传送带）' : '放货端不接收（前方没有建筑/传送带）' };
+    if (!endpoint) return { ...base, ok: false, problem: side === 'take' ? '没有可取的物品（前方没有建筑/传送带）' : '不接收（前方没有建筑/传送带）' };
     if (endpoint.owner_id !== owner) {
       return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind: endpoint.conveyor ? 'belt' : 'building', ok: false, problem: '端点不属于你（分拣器只服务自己的建筑）' };
     }
@@ -173,8 +173,8 @@ export function sorterEndpointStatuses(
         ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok,
         ...(ok ? {} : {
           problem: inputRestricted
-            ? `放货端的传送带不接收这个方向：它被限制为只从${DIRECTION_NAMES[beltState.input as CardinalDirection]}侧输入（分拣器在${DIRECTION_NAMES[direction]}侧）`
-            : `放货端的传送带不接收这个方向：带子朝${output ? DIRECTION_NAMES[output] : '未知'}输出（输出侧不收）`,
+            ? `传送带不接收这个方向：它被限制为只从${DIRECTION_NAMES[beltState.input as CardinalDirection]}侧输入（分拣器在${DIRECTION_NAMES[direction]}侧）`
+            : `传送带不接收这个方向：带子朝${output ? DIRECTION_NAMES[output] : '未知'}输出（输出侧不收）`,
         }),
       };
     }
@@ -186,7 +186,7 @@ export function sorterEndpointStatuses(
     if (ports.length === 0) return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok: null };
     return {
       ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok: false,
-      problem: side === 'take' ? '取货端没有可取的物品（该建筑没有输出口）' : '放货端不接收（该建筑没有输入口）',
+      problem: side === 'take' ? '没有可取的物品（该建筑没有输出口）' : '不接收（该建筑没有输入口）',
     };
   });
 }

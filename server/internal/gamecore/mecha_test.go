@@ -200,7 +200,7 @@ func TestPlayerMechaShieldAbsorbsAttackThenRechargesUsingEnergy(t *testing.T) {
 	if res.Code != model.CodeOK {
 		t.Fatalf("attack order failed: %+v", res)
 	}
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	// 空闲机甲被打会自动还手（耗能），这里只验证护盾，把能量复位。
 	unit.Mecha.Energy = 100
 	// 机枪 vs 重甲系数 0.75：(15-8)×0.75=5，护盾 20→15。

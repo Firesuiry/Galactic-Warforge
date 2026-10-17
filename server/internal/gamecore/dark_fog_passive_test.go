@@ -151,7 +151,7 @@ func TestMechaAutoFiresWhenIdle(t *testing.T) {
 	mecha.Path = []model.Position{{X: 1, Y: 1}, {X: 1, Y: 2}}
 	mecha.PathIndex = 1
 	mecha.PathIntent = model.PathIntentTask
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if enemy.HP != enemy.MaxHP || !mecha.HasPath() || mecha.PathIntent != model.PathIntentTask {
 		t.Fatal("task walk without a threat must keep walking and not divert fire")
 	}
@@ -160,7 +160,7 @@ func TestMechaAutoFiresWhenIdle(t *testing.T) {
 	ws.TileUnits[model.TileKey(2, 1)] = []string{enemy.ID}
 	mecha.ClearMovement()
 	ws.Tick++
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if enemy.HP == enemy.MaxHP {
 		t.Fatal("idle mecha must auto-fire at hostile unit in range")
 	}
@@ -173,7 +173,7 @@ func TestMechaAutoFiresWhenIdle(t *testing.T) {
 	ws.TileUnits[model.TileKey(2, 1)] = nil
 	fog := spawnWorldTestUnit(ws, model.UnitTypeDarkFog, model.DarkFogOwnerID, model.Position{X: 2, Y: 1})
 	ws.Tick += 100
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if fog.HP != fog.MaxHP || ws.Players["p1"].DarkFog.Hostile {
 		t.Fatal("mecha must not auto-provoke neutral dark fog")
 	}

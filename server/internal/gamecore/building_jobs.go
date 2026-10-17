@@ -1,6 +1,8 @@
 package gamecore
 
 import (
+	"sort"
+
 	"siliconworld/internal/model"
 	"siliconworld/internal/terrain"
 )
@@ -32,7 +34,13 @@ func countActiveExecutorUsage(worlds []*model.WorldState) map[string]int {
 	return usage
 }
 
-func settleBuildingJobs(ws *model.WorldState) []*model.GameEvent {
+// settleBuildingJobs 推进建筑作业（升级/拆除）。
+//
+// alerts 用于在拆除完成时解除该建筑名下仍成立的产线告警：建筑一旦消失，
+// 它的 belt_blocked / haul_unreachable / output_blocked 等条件永远不会再被
+// 结算，不在这里收尾就会在告警条里留下「建筑已不存在」的悬挂条目
+// （试玩 1016 严重 3）。nil 时跳过（只关心作业本身的测试）。
+func settleBuildingJobs(ws *model.WorldState, alerts *AlertHistory) []*model.GameEvent {
 	if ws == nil {
 		return nil
 	}
@@ -69,12 +77,11 @@ func settleBuildingJobs(ws *model.WorldState) []*model.GameEvent {
 				})
 			}
 		case model.BuildingJobDemolish:
-			events = append(events, demolishBuilding(ws, building, job.RefundRate)...)
+			events = append(events, demolishBuilding(ws, alerts, building, job.RefundRate)...)
 		}
 	}
 	return events
 }
-
 func applyUpgrade(building *model.Building, level int, prevState model.BuildingWorkState) {
 	if building == nil {
 		return
@@ -103,7 +110,9 @@ func applyUpgrade(building *model.Building, level int, prevState model.BuildingW
 	}
 }
 
-func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate float64) []*model.GameEvent {
+// demolishBuilding 移除一座建筑（含叠在其上的层），返还材料并发 entity_destroyed。
+// alerts 非 nil 时同步解除该建筑名下仍成立的全部产线告警。
+func demolishBuilding(ws *model.WorldState, alerts *AlertHistory, building *model.Building, refundRate float64) []*model.GameEvent {
 	if ws == nil || building == nil {
 		return nil
 	}
@@ -116,7 +125,7 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 		if ws.Buildings[layer.ID] != layer {
 			continue
 		}
-		events = append(events, demolishBuilding(ws, layer, refundRate)...)
+		events = append(events, demolishBuilding(ws, alerts, layer, refundRate)...)
 	}
 
 	refund := model.BuildingDemolishRefundWithRate(building.Type, building.Level, refundRate)
@@ -127,6 +136,9 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 	}
 
 	entityID := building.ID
+	// 建筑消失了，它名下的产线告警全部解除（试玩 1016 严重 3）。先取「仍成立
+	// 的类型」写进事件，再解除历史条目：客户端/审计能看出随建筑一起消失的问题。
+	resolvedTypes := resolveBuildingAlerts(alerts, building.OwnerID, ws.PlanetID, entityID, ws.Tick)
 	detachStationFleet(ws, entityID)
 	model.UnregisterLogisticsStation(ws, entityID)
 	model.UnregisterPowerGridBuilding(ws, entityID)
@@ -142,17 +154,48 @@ func demolishBuilding(ws *model.WorldState, building *model.Building, refundRate
 		}
 	}
 
+	payload := map[string]any{
+		"entity_id":   entityID,
+		"entity_kind": "building",
+		"entity_type": string(building.Type),
+		"owner_id":    building.OwnerID,
+		"reason":      "demolish",
+	}
+	if len(resolvedTypes) > 0 {
+		payload["resolved_alert_types"] = resolvedTypes
+	}
 	return append(events, &model.GameEvent{
 		EventType:       model.EvtEntityDestroyed,
 		VisibilityScope: building.OwnerID,
-		Payload: map[string]any{
-			"entity_id":   entityID,
-			"entity_kind": "building",
-			"entity_type": string(building.Type),
-			"owner_id":    building.OwnerID,
-			"reason":      "demolish",
-		},
+		Payload:         payload,
 	})
+}
+
+// resolveBuildingAlerts 解除某座建筑仍成立的全部产线告警，返回被解除的告警类型
+// （稳定顺序，供 entity_destroyed 事件使用）。alerts 为 nil 时什么都不做。
+func resolveBuildingAlerts(alerts *AlertHistory, playerID, planetID, buildingID string, tick int64) []string {
+	if alerts == nil {
+		return nil
+	}
+	var types []string
+	for _, alert := range alerts.All() {
+		if alert == nil || !alert.Active || alert.BuildingID != buildingID {
+			continue
+		}
+		if alert.PlanetID != "" && planetID != "" && alert.PlanetID != planetID {
+			continue
+		}
+		if playerID != "" && alert.PlayerID != playerID {
+			continue
+		}
+		types = append(types, string(alert.AlertType))
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	sort.Strings(types)
+	alerts.ResolveBuilding(playerID, planetID, buildingID, tick)
+	return types
 }
 
 func detachStationFleet(ws *model.WorldState, stationID string) {

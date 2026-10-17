@@ -34,7 +34,7 @@ func TestGapR3UngroupedUnitDoesNotChaseDistantEnemy(t *testing.T) {
 	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d <= unit.AggroRange {
 		t.Fatalf("fixture distance %d is not beyond aggro %d", d, unit.AggroRange)
 	}
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 	if unit.AttackTarget != "" || unit.HasPath() {
 		t.Fatalf("distant enemy must not be auto-acquired nor chased, got target %q path %v", unit.AttackTarget, unit.Path)
 	}
@@ -52,7 +52,7 @@ func TestGapR3UnitPursuesInsideAggroOutsideWeaponRange(t *testing.T) {
 		t.Fatalf("fixture distance %d should be inside aggro and outside weapon range", dist)
 	}
 
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 	if unit.AttackTarget != enemy.ID {
 		t.Fatalf("in-radius enemy should be selected, got %q", unit.AttackTarget)
 	}
@@ -81,7 +81,7 @@ func TestGapR3HoldUnitOnlyEngagesInsideWeaponRange(t *testing.T) {
 	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d <= unit.AttackRange || d > unit.AggroRange {
 		t.Fatalf("fixture distance %d should be inside aggro and outside weapon range", d)
 	}
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 	if unit.AttackTarget != "" || unit.HasPath() || damageEventsFor(events, enemy.ID) != 0 {
 		t.Fatalf("hold stance must not acquire or chase outside weapon range, got target %q path %v", unit.AttackTarget, unit.Path)
 	}
@@ -95,7 +95,7 @@ func TestGapR3HoldUnitOnlyEngagesInsideWeaponRange(t *testing.T) {
 	if d := ws.SurfaceDistance(unit.Position, enemy.Position); d > unit.AttackRange {
 		t.Fatalf("moved enemy distance %d must be inside weapon range", d)
 	}
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if unit.AttackTarget != enemy.ID {
 		t.Fatalf("hold stance should engage inside weapon range, got %q", unit.AttackTarget)
 	}

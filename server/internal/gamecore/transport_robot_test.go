@@ -507,7 +507,7 @@ func TestHaulRobotKilledByEnemy(t *testing.T) {
 	if res.Status != model.StatusExecuted {
 		t.Fatalf("attack: %s %s", res.Code, res.Message)
 	}
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if ws.Units[robot.ID] != nil {
 		t.Fatalf("运输机器人未被击杀（HP=%d）", robot.HP)
 	}

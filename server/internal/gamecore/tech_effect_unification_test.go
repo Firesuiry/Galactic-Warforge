@@ -331,7 +331,7 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 		t.Fatalf("refund must wait for job completion, got %+v", player.Inventory)
 	}
 
-	settleBuildingJobs(ws)
+	settleBuildingJobs(ws, nil)
 	for _, id := range []string{base.ID, layer1.ID, layer2.ID} {
 		if _, ok := ws.Buildings[id]; ok {
 			t.Fatalf("building %s survived job-path cascade demolish", id)

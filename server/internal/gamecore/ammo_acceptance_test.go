@@ -28,7 +28,7 @@ func stepAmmoBattle(ws *model.WorldState, ticks int) []*model.GameEvent {
 		ws.Tick++
 		settleAmmunitionSupply(ws)
 		events = append(events, settleUnitMovement(ws)...)
-		events = append(events, settleUnitCombat(ws)...)
+		events = append(events, settleUnitCombat(ws, nil)...)
 	}
 	return events
 }
@@ -127,7 +127,7 @@ func TestDestroyingSupplyStationCeasesFrontlineFire(t *testing.T) {
 		t.Fatalf("supply station must sustain fire, only %d shots", shots)
 	}
 
-	destroyBuildingCombat(ws, station, foe.ID, "p2", "unit")
+	destroyBuildingCombat(ws, nil, station, foe.ID, "p2", "unit")
 	if ws.Buildings[station.ID] != nil {
 		t.Fatal("station should be gone")
 	}

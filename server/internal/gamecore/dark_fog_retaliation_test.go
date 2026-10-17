@@ -34,7 +34,7 @@ func TestDarkFogRetaliationDoesNotExtendHostility(t *testing.T) {
 
 	for i := 0; i < 30; i++ {
 		ws.Tick++
-		settleUnitCombat(ws)
+		settleUnitCombat(ws, nil)
 	}
 	if soldier.HP == soldierHP {
 		t.Fatal("soldier should have traded fire with the attacking dark fog unit")
@@ -65,7 +65,7 @@ func TestDarkFogAggressiveAttackExtendsHostility(t *testing.T) {
 	soldier.AttackTarget = fog.ID
 
 	ws.Tick++
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 
 	if fog.HP == fog.MaxHP {
 		t.Fatal("soldier should have damaged the target")
@@ -101,7 +101,7 @@ func TestDarkFogStrikeOnNestIsAlwaysAggressive(t *testing.T) {
 		t.Fatalf("attack on a neutral nest must be accepted, got %s (%s)", res.Code, res.Message)
 	}
 	ws.Tick++
-	events = append(events, settleUnitCombat(ws)...)
+	events = append(events, settleUnitCombat(ws, nil)...)
 	if len(eventsOfType(events, model.EvtDarkFogProvoked)) != 1 {
 		t.Fatalf("attacking a nest must provoke the dark fog, events=%+v", eventsOfType(events, model.EvtDarkFogProvoked))
 	}
@@ -351,7 +351,7 @@ func TestDarkFogRaidScenarioPlayerSurvivesAndCalms(t *testing.T) {
 	for i := 0; i < 60 && provokedAt < 0; i++ {
 		ws.Tick++
 		settleUnitMovement(ws)
-		settleUnitCombat(ws)
+		settleUnitCombat(ws, nil)
 		if ws.Players["p1"].DarkFog.Hostile {
 			provokedAt = ws.Tick
 		}
@@ -382,7 +382,7 @@ func TestDarkFogRaidScenarioPlayerSurvivesAndCalms(t *testing.T) {
 	for ws.Tick < until+2000 {
 		ws.Tick++
 		events = append(events, settleUnitMovement(ws)...)
-		events = append(events, settleUnitCombat(ws)...)
+		events = append(events, settleUnitCombat(ws, nil)...)
 		settleAmmunitionSupply(ws)
 		events = append(events, core.settleEnemyForces(ws)...)
 		calmEvents := settleDarkFogCalm(ws.Players, ws.Tick)

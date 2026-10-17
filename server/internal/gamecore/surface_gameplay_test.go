@@ -180,7 +180,7 @@ func TestSurfaceMultiTileConstructionReservationAndDemolition(t *testing.T) {
 	for _, b := range ws.Buildings {
 		building = b
 	}
-	demolishBuilding(ws, building, 0)
+	demolishBuilding(ws, nil, building, 0)
 	if len(ws.TileBuilding) != 0 || len(ws.Buildings) != 0 {
 		t.Fatal("demolition did not release full footprint")
 	}
@@ -205,7 +205,7 @@ func TestSurfaceCombatDestructionClearsFullFootprint(t *testing.T) {
 	}
 	for i := 0; i < 40 && len(ws.Buildings) != 0; i++ {
 		ws.Tick++
-		settleUnitCombat(ws)
+		settleUnitCombat(ws, nil)
 	}
 	if len(ws.TileBuilding) != 0 || len(ws.Buildings) != 0 {
 		t.Fatal("destruction left occupied footprint")

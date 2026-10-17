@@ -41,7 +41,7 @@ func stepSquad(ws *model.WorldState, ticks int) {
 		settleCombatRuntime(ws, ws.Tick)
 		settleAmmunitionSupply(ws)
 		settleUnitMovement(ws)
-		settleUnitCombat(ws)
+		settleUnitCombat(ws, nil)
 	}
 }
 

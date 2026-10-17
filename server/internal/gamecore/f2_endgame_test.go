@@ -172,7 +172,7 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	// 1) 单位互杀（settleUnitCombat 端到端）：p1 士兵一枪击毙 1HP 的 p2 士兵。
 	attacker := addUnit("att-1", "p1", model.Position{X: 3, Y: 3}, 100)
 	victim := addUnit("vic-1", "p2", model.Position{X: 4, Y: 3}, 1)
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if _, ok := ws.Units[victim.ID]; ok {
 		t.Fatal("victim unit must be removed after lethal hit")
 	}
@@ -192,7 +192,7 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	placeBuilding(ws, building)
 	attacker.AttackTarget = building.ID
 	attacker.Stance = model.UnitStanceHold
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if _, ok := ws.Buildings[building.ID]; ok {
 		t.Fatal("victim building must be removed after lethal hit")
 	}
@@ -229,7 +229,7 @@ func TestF2BilateralCombatStats(t *testing.T) {
 	dfUnit := addUnit("df-unit", model.DarkFogOwnerID, model.Position{X: 3, Y: 3}, 1)
 	attacker.AttackTarget = dfUnit.ID
 	attacker.LastAttackTick = 0
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if _, ok := ws.Units[dfUnit.ID]; ok {
 		t.Fatal("dark fog unit must be removed after lethal hit")
 	}
@@ -255,7 +255,7 @@ func TestF2StatsSurviveSaveRestore(t *testing.T) {
 
 	building := newBuilding("bld-save", model.BuildingTypeSolarPanel, "p2", model.Position{X: 3, Y: 3})
 	placeBuilding(ws, building)
-	destroyBuildingCombat(ws, building, "killer-1", "p1", "unit")
+	destroyBuildingCombat(ws, nil, building, "killer-1", "p1", "unit")
 
 	p1Victim := model.UnitStats(model.UnitTypeSoldier)
 	p1Victim.ID, p1Victim.OwnerID = "vic-save-p1", "p1"

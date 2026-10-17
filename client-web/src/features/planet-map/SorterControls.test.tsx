@@ -95,6 +95,33 @@ it('试玩 1016 U8：反向/空转分拣器在面板里点名哪一端接不上'
   expect(screen.getByTestId('sorter-endpoint-warning')).toHaveTextContent('这条搬运路线走不通');
 });
 
+// 试玩 1016 缺陷 4：problem 文本本身不带「取货端/放货端」前缀（前缀由渲染层
+// 按 side 加一次），否则警告句会出现「取货端取货端没有可取的物品」。
+it('试玩 1016 缺陷 4：走不通的警告句端点前缀只出现一次', () => {
+  show();
+  const warning = screen.getByTestId('sorter-endpoint-warning');
+  expect(warning).toHaveTextContent('这条搬运路线走不通：取货端没有可取的物品（前方没有建筑/传送带）；放货端不接收');
+  expect(warning).not.toHaveTextContent('取货端取货端');
+  expect(warning).not.toHaveTextContent('放货端放货端');
+  // 端点逐条的 problem 也不重复前缀（前缀在相邻的 side 列里）。
+  const endpointText = screen.getByTestId('sorter-endpoints').textContent ?? '';
+  expect(endpointText).not.toContain('取货端取货端');
+  expect(endpointText).not.toContain('放货端放货端');
+});
+
+it('试玩 1016 缺陷 4：传送带方向不接收时也不重复「放货端」前缀', () => {
+  // 放货端在东侧 (3,2)；带子 input 受限为南（只收南侧插入）→ 分拣器从西侧放货被拒。
+  show(undefined, true, [
+    building,
+    { ...building, id: 'belt-w', type: 'conveyor_belt_mk1', position: { x: 1, y: 2, z: 0 }, sorter: undefined, conveyor: { input: 'auto', output: 'east' } } as unknown as Building,
+    { ...building, id: 'belt-e', type: 'conveyor_belt_mk1', position: { x: 3, y: 2, z: 0 }, sorter: undefined, conveyor: { input: 'south', output: 'east' } } as unknown as Building,
+  ]);
+  const warning = screen.getByTestId('sorter-endpoint-warning');
+  expect(warning).toHaveTextContent('放货端传送带不接收这个方向');
+  expect(warning).not.toHaveTextContent('放货端的传送带');
+  expect(warning).not.toHaveTextContent('放货端放货端');
+});
+
 it('试玩 1016 U8：两端都接上时不给告警', () => {
   show(building, true, [
     building,

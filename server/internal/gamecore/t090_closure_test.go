@@ -367,7 +367,7 @@ func TestT091PlanetaryShieldGeneratorChargesAndAbsorbsDamage(t *testing.T) {
 	var events []*model.GameEvent
 	for i := 0; i < 3 && generator.HP == beforeHP; i++ {
 		ws.Tick++
-		events = append(events, settleUnitCombat(ws)...)
+		events = append(events, settleUnitCombat(ws, nil)...)
 	}
 	if generator.HP != beforeHP {
 		t.Fatalf("expected planetary shield to absorb enemy attack before HP loss, before=%d after=%d", beforeHP, generator.HP)

@@ -88,7 +88,8 @@ func canAttack(ws *model.WorldState, attackerOwner, targetOwner string) bool {
 }
 
 // settleUnitCombat 每 tick 结算一次世界单位交战。
-func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
+// alerts 非 nil 时，被摧毁建筑名下仍成立的产线告警随之解除（试玩 1016 严重 3）。
+func settleUnitCombat(ws *model.WorldState, alerts *AlertHistory) []*model.GameEvent {
 	if ws == nil || len(ws.Units) == 0 {
 		return nil
 	}
@@ -107,7 +108,7 @@ func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
 		if unit.Mecha != nil {
 			model.SyncMechaCapabilities(unit, ws.Players[unit.OwnerID])
 		}
-		events = append(events, settleOneUnitCombat(ws, unit)...)
+		events = append(events, settleOneUnitCombat(ws, alerts, unit)...)
 	}
 
 	// 静态黑雾反击（实体化黑雾单位由 E1 引入后与此并存：巢穴等静态强度点仍会还手）。
@@ -116,13 +117,13 @@ func settleUnitCombat(ws *model.WorldState) []*model.GameEvent {
 }
 
 // settleOneUnitCombat 结算单个单位的索敌、追击与开火。
-func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+func settleOneUnitCombat(ws *model.WorldState, alerts *AlertHistory, unit *model.Unit) []*model.GameEvent {
 	if unit.Attack <= 0 {
 		return resumeFormation(ws, unit)
 	}
 	if unit.Mecha != nil {
 		// 执行体（玩家机甲）是英雄单位：不追击，空闲时只在射程内自动还击/索敌。
-		return settleMechaAutoFire(ws, unit)
+		return settleMechaAutoFire(ws, alerts, unit)
 	}
 	var events []*model.GameEvent
 
@@ -223,7 +224,7 @@ func settleOneUnitCombat(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 	if !consumeUnitAmmunition(unit) {
 		return events
 	}
-	events = append(events, fireAtTarget(ws, unit, target)...)
+	events = append(events, fireAtTarget(ws, alerts, unit, target)...)
 	unit.LastAttackTick = ws.Tick
 	return events
 }
@@ -431,7 +432,7 @@ const maxInt32 = int(^uint32(0) >> 1)
 //   - 路径是自动交战的追击（PathIntentCombat）：继续追，进射程就开火。
 //
 // 自动开火不写 AttackTarget，并保留两发的能量，避免把机甲打到无法行动。
-func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+func settleMechaAutoFire(ws *model.WorldState, alerts *AlertHistory, unit *model.Unit) []*model.GameEvent {
 	explicit := unit.AttackTarget != ""
 	var target *unitCombatTarget
 	if explicit {
@@ -469,7 +470,7 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 				return mechaStandDown(ws, unit)
 			}
 			if !taskWalk {
-				return mechaFireWhileMoving(ws, unit)
+				return mechaFireWhileMoving(ws, alerts, unit)
 			}
 			// 作业驱动的行走：只有真被威胁才打断作业，否则继续赶路。
 			if !mechaThreatened(ws, unit) {
@@ -547,7 +548,7 @@ func settleMechaAutoFire(ws *model.WorldState, unit *model.Unit) []*model.GameEv
 		return nil
 	}
 	consumeUnitAmmunition(unit)
-	events := fireAtTarget(ws, unit, target)
+	events := fireAtTarget(ws, alerts, unit, target)
 	unit.LastAttackTick = ws.Tick
 	events = append(events, mechaStateEvent(unit))
 	return events
@@ -569,7 +570,7 @@ func mechaThreatened(ws *model.WorldState, unit *model.Unit) bool {
 
 // mechaFireWhileMoving 边走边打：机甲正沿玩家命令/追击路径前进时不改路径、不停下，
 // 只对 AttackRange 内最近的敌对目标（优先 LastAttackerID）按冷却开火。
-func mechaFireWhileMoving(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
+func mechaFireWhileMoving(ws *model.WorldState, alerts *AlertHistory, unit *model.Unit) []*model.GameEvent {
 	// 低能量时不主动交火（保留两发能量，避免把机甲打到无法行动）。
 	if unit.Mecha.Energy < 2*unit.Mecha.AttackEnergyCost {
 		return nil
@@ -601,7 +602,7 @@ func mechaFireWhileMoving(ws *model.WorldState, unit *model.Unit) []*model.GameE
 		return nil
 	}
 	consumeUnitAmmunition(unit)
-	events := fireAtTarget(ws, unit, target)
+	events := fireAtTarget(ws, alerts, unit, target)
 	unit.LastAttackTick = ws.Tick
 	events = append(events, mechaStateEvent(unit))
 	return events
@@ -656,7 +657,8 @@ func mechaStandDown(ws *model.WorldState, unit *model.Unit) []*model.GameEvent {
 }
 
 // fireAtTarget 对目标开火并结算伤害（含死亡处理与事件）。
-func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarget) []*model.GameEvent {
+// alerts 非 nil 时，被摧毁建筑名下仍成立的产线告警随之解除（试玩 1016 严重 3）。
+func fireAtTarget(ws *model.WorldState, alerts *AlertHistory, unit *model.Unit, target *unitCombatTarget) []*model.GameEvent {
 	var events []*model.GameEvent
 	if target.ownerID == model.DarkFogOwnerID {
 		events = append(events, provokeDarkFog(ws, unit.OwnerID, darkFogStrikeIsAggressive(ws, unit, target))...)
@@ -716,7 +718,7 @@ func fireAtTarget(ws *model.WorldState, unit *model.Unit, target *unitCombatTarg
 			})
 		}
 		if b.HP <= 0 {
-			events = append(events, destroyBuildingCombat(ws, b, unit.ID, unit.OwnerID, "unit"))
+			events = append(events, destroyBuildingCombat(ws, alerts, b, unit.ID, unit.OwnerID, "unit"))
 		}
 	case "enemy_force":
 		force := target.force
@@ -834,24 +836,30 @@ func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, s
 }
 
 // destroyBuildingCombat 统一战斗拆毁建筑的处理（含双边战损计数，F2）。
-func destroyBuildingCombat(ws *model.WorldState, b *model.Building, killerID, killerOwnerID, source string) *model.GameEvent {
+// alerts 非 nil 时解除该建筑名下仍成立的产线告警（试玩 1016 严重 3）。
+func destroyBuildingCombat(ws *model.WorldState, alerts *AlertHistory, b *model.Building, killerID, killerOwnerID, source string) *model.GameEvent {
 	recordCombatBuildingKill(ws, b.OwnerID, killerOwnerID)
+	resolvedTypes := resolveBuildingAlerts(alerts, b.OwnerID, ws.PlanetID, b.ID, ws.Tick)
 	delete(ws.Buildings, b.ID)
 	ws.UnindexBuilding(b)
 	detachStationFleet(ws, b.ID)
 	model.UnregisterLogisticsStation(ws, b.ID)
 	model.UnregisterPowerGridBuilding(ws, b.ID)
+	payload := map[string]any{
+		"entity_id":   b.ID,
+		"entity_kind": "building",
+		"entity_type": string(b.Type),
+		"owner_id":    b.OwnerID,
+		"killed_by":   killerID,
+		"source":      source,
+	}
+	if len(resolvedTypes) > 0 {
+		payload["resolved_alert_types"] = resolvedTypes
+	}
 	return &model.GameEvent{
 		EventType:       model.EvtEntityDestroyed,
 		VisibilityScope: "all",
-		Payload: map[string]any{
-			"entity_id":   b.ID,
-			"entity_kind": "building",
-			"entity_type": string(b.Type),
-			"owner_id":    b.OwnerID,
-			"killed_by":   killerID,
-			"source":      source,
-		},
+		Payload:         payload,
 	}
 }
 

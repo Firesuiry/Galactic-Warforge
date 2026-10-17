@@ -552,6 +552,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 同一行星同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。聚合键是 `planet_id + building_id + alert_type`：建筑 ID 只在行星内唯一，不同行星上的同 ID 建筑各自独立成立/解除。
 - **`planet_id`（string，可选）**：告警所在行星。旧存档里的历史条目没有这个字段，缺省不出现。
 - `GET /state/agent-briefing` 的 `recent_alerts` 只收 `active=true` 的条目（完整历史走本接口）。
+- **建筑消失即解除**：建筑被拆除（命令即时 / 拆除作业完成）或被战斗摧毁时，它名下仍成立的全部产线告警同步变为 `active=false` 并写入 `resolved_tick`（试玩 1016 严重 3：旧实现只在建筑仍存在时结算，拆除后告警条会留下一条「建筑已不存在、地图没有红标、无法修复」的悬挂条目）。对应的 `entity_destroyed` 事件在 `resolved_alert_types` 里列出随之解除的告警类型（无则不出现）。
 - `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked` / `belt_blocked` / `haul_unreachable`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。`belt_blocked` 指向**传送带格本身**：带上有货却连续 300 tick（`beltBlockedWarnTicks`）一件都没动出去（带尾对着空地、下游分拣器/建筑不收这个物品），message 写「传送带被堵，物品运不出去」，`details` 带 `position` / `queued_items` / `blocked_ticks`；货被取走或开始流动后解除——避免玩家把上游矿机的「产物阻塞」误当成根因（试玩 1016 报告 B1/U7）。`haul_unreachable` 指向**运输机器人到不了的建筑**：自动模式机器人连续多次找不到落点/路径后放弃该目标时发出，message 写「建筑 <id>：运输机器人到不了」，`details` 带 `unit_id` / `building_id` / `position`；同一建筑持续成立期间只发一次，机器人重新到达该建筑（或建筑被拆除）后解除。见 §5.6 运输机器人自动模式。
 
 **`POST /save`**（仅 admin）：请求 `{reason?}`；响应 `ok` / `tick` / `saved_at` / `path` / `trigger`。只覆盖当前 `save.json`，写盘失败 500。

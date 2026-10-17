@@ -23,7 +23,7 @@ func advanceRTT(ws *model.WorldState, ticks int) []*model.GameEvent {
 	for i := 0; i < ticks; i++ {
 		ws.Tick++
 		events = append(events, settleUnitMovement(ws)...)
-		events = append(events, settleUnitCombat(ws)...)
+		events = append(events, settleUnitCombat(ws, nil)...)
 	}
 	return events
 }

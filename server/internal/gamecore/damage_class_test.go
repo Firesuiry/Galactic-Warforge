@@ -54,7 +54,7 @@ func TestR6UnitDamageAppliesCoefficient(t *testing.T) {
 	gunner.AttackTarget = mechaVictim.ID
 	cannon.AttackTarget = soldierVictim.ID
 	ws.Tick++
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 
 	// 机枪 vs 重甲：(15-12)=3 × 0.75 = 2.25 → 2
 	if got, want := mechaVictim.MaxHP-mechaVictim.HP, 2; got != want {
@@ -75,7 +75,7 @@ func TestR6BuildingTakesCoefficientDamage(t *testing.T) {
 
 	cannon.AttackTarget = depot.ID
 	ws.Tick++
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 
 	// 加农 vs 建筑：(28-2)=26 × 1.5 = 39
 	if got, want := hpBefore-depot.HP, 39; got != want {

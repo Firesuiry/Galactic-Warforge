@@ -45,7 +45,7 @@ func driveBlackFogTicks(core *GameCore, ws *model.WorldState, ticks int) []*mode
 	for i := 0; i < ticks; i++ {
 		ws.Tick++
 		events = append(events, settleUnitMovement(ws)...)
-		events = append(events, settleUnitCombat(ws)...)
+		events = append(events, settleUnitCombat(ws, nil)...)
 		events = append(events, core.settleEnemyForces(ws)...)
 	}
 	return events

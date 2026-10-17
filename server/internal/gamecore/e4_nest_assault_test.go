@@ -202,7 +202,7 @@ func TestE4NestDestroyRewardsUnitPath(t *testing.T) {
 	spawnE4Nest(ws, "hive-e4", 3, 10, model.Position{X: 3, Y: 2})
 	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("nest should be destroyed, remaining %+v", ws.EnemyForces.Forces)
@@ -369,7 +369,7 @@ func TestE4NestRuinSurvivesSaveRestore(t *testing.T) {
 	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 	killer.AttackTarget = "hive-e4save"
 
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if len(ws.EnemyForces.NestRuins) != 1 || ws.EnemyForces.ThreatMeter != 200 {
 		t.Fatalf("pre-save state wrong: ruins=%+v meter=%v", ws.EnemyForces.NestRuins, ws.EnemyForces.ThreatMeter)
 	}

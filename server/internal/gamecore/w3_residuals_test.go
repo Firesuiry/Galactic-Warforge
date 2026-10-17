@@ -411,7 +411,7 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	looter := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 	looter.AttackTarget = "hive-research"
 	spawnLootTestForce(ws, "hive-research", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("hive should be destroyed, remaining %+v", ws.EnemyForces.Forces)
 	}

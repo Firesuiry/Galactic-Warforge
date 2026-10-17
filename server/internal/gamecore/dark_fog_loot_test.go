@@ -171,7 +171,7 @@ func TestCombatUnitKillGrantsDarkFogLoot(t *testing.T) {
 	unit := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("enemy force should be destroyed, remaining %+v", ws.EnemyForces.Forces)
@@ -214,7 +214,7 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 	spawnLootTestForce(ws, "hive-2", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 4})
 	p1unit.AttackTarget = "hive-1"
 
-	events := settleUnitCombat(ws)
+	events := settleUnitCombat(ws, nil)
 
 	if ws.Players["p1"].Inventory[model.ItemDarkFogMatrix] < 1 {
 		t.Fatalf("p1 should receive its own kill loot")
@@ -234,7 +234,7 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 	p2unit.AttackTarget = "hive-2"
 	p1Before := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]
 	ws.Tick++
-	events = settleUnitCombat(ws)
+	events = settleUnitCombat(ws, nil)
 	if ws.Players["p2"].Inventory[model.ItemDarkFogMatrix] < 1 {
 		t.Fatalf("p2 should receive its own kill loot")
 	}
@@ -316,7 +316,7 @@ func TestDarkFogLootSurvivesSaveRestore(t *testing.T) {
 	killer.AttackTarget = "hive-1"
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 
-	settleUnitCombat(ws)
+	settleUnitCombat(ws, nil)
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("enemy force should be destroyed before save")
 	}

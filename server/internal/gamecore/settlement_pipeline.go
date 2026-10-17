@@ -24,7 +24,7 @@ func newSettlementPipeline() settlementPipeline {
 		var events []*model.GameEvent
 		for _, ws := range frame.worlds {
 			events = append(events, gc.settleConstructionQueue(ws)...)
-			events = append(events, settleBuildingJobs(ws)...)
+			events = append(events, settleBuildingJobs(ws, gc.alertHistory)...)
 		}
 		return events
 	})
@@ -109,7 +109,7 @@ func newSettlementPipeline() settlementPipeline {
 				}
 			}
 			gc.prof.mark("unit_movement")
-			events = append(events, settleUnitCombat(ws)...)
+			events = append(events, settleUnitCombat(ws, gc.alertHistory)...)
 			settleCombatTech(ws, gc.spaceRuntime)
 			gc.prof.mark("unit_combat")
 			events = append(events, gc.settleEnemyForcesWithGrowth(ws)...)

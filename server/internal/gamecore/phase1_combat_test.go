@@ -15,13 +15,13 @@ func TestPhase1EmptyMagazineStopsUntilSupply(t *testing.T) {
 	a.AttackTarget = b.ID
 	b.HP = 500
 	b.MaxHP = 500
-	settleOneUnitCombat(ws, a)
+	settleOneUnitCombat(ws, nil, a)
 	hp := b.HP
 	if a.Ammo != 0 || a.CombatState != "no_ammunition" || hp >= 500 {
 		t.Fatal("first round was not consumed")
 	}
 	ws.Tick += a.AttackCooldownTick
-	settleOneUnitCombat(ws, a)
+	settleOneUnitCombat(ws, nil, a)
 	if b.HP != hp {
 		t.Fatal("empty unit fired")
 	}
@@ -34,7 +34,7 @@ func TestPhase1EmptyMagazineStopsUntilSupply(t *testing.T) {
 	if a.Ammo != 5 || a.AmmoItem != "titanium_ammo" || station.Storage.Inventory["titanium_ammo"] != 0 || station.Storage.Inventory["ammo_bullet"] != 20 {
 		t.Fatalf("tier priority or conservation failed: %+v %+v", a, station.Storage)
 	}
-	settleOneUnitCombat(ws, a)
+	settleOneUnitCombat(ws, nil, a)
 	if b.HP >= hp {
 		t.Fatal("resupplied unit did not resume firing")
 	}
@@ -42,7 +42,7 @@ func TestPhase1EmptyMagazineStopsUntilSupply(t *testing.T) {
 	a.Ammo = 0
 	ws.Tick += a.AttackCooldownTick
 	hp = b.HP
-	settleOneUnitCombat(ws, a)
+	settleOneUnitCombat(ws, nil, a)
 	if b.HP != hp {
 		t.Fatal("destroyed supply station allowed shooting")
 	}
@@ -128,20 +128,20 @@ func TestPhase1AirTargetingAndMinimumArtilleryRange(t *testing.T) {
 	gun := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 3, Y: 3})
 	drone := spawnWorldTestUnit(ws, model.UnitTypeAttackDrone, "p2", model.Position{X: 4, Y: 3})
 	gun.AttackTarget = drone.ID
-	settleOneUnitCombat(ws, gun)
+	settleOneUnitCombat(ws, nil, gun)
 	if drone.HP != drone.MaxHP || gun.Ammo != gun.AmmoCapacity {
 		t.Fatal("rifle hit aircraft")
 	}
 	missile := spawnWorldTestUnit(ws, model.UnitTypeMissileVehicle, "p1", model.Position{X: 5, Y: 3})
 	missile.AttackTarget = drone.ID
-	settleOneUnitCombat(ws, missile)
+	settleOneUnitCombat(ws, nil, missile)
 	if drone.HP == drone.MaxHP {
 		t.Fatal("missile failed to hit aircraft")
 	}
 	cannon := spawnWorldTestUnit(ws, model.UnitTypeArtillery, "p1", model.Position{X: 6, Y: 6})
 	enemy := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 7, Y: 6})
 	cannon.AttackTarget = enemy.ID
-	settleOneUnitCombat(ws, cannon)
+	settleOneUnitCombat(ws, nil, cannon)
 	if enemy.HP != enemy.MaxHP || cannon.Ammo != cannon.AmmoCapacity {
 		t.Fatal("artillery ignored minimum range")
 	}

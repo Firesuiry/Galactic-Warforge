@@ -36,7 +36,7 @@ func TestFoundationBuildsOnWaterAndDemolitionRestoresTerrain(t *testing.T) {
 	if foundation == nil || len(foundation.FoundationTerrain) != 1 {
 		t.Fatalf("foundation terrain provenance was not persisted: %+v", foundation)
 	}
-	demolishBuilding(ws, foundation, 0)
+	demolishBuilding(ws, nil, foundation, 0)
 	if ws.Grid[pos.Y][pos.X].Terrain != terrain.TileWater {
 		t.Fatalf("demolishing foundation should restore water terrain, got %s", ws.Grid[pos.Y][pos.X].Terrain)
 	}
@@ -130,11 +130,11 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	if res.Status != model.StatusFailed {
 		t.Fatal("occupied foundation can be demolished")
 	}
-	demolishBuilding(ws, factory, 0)
+	demolishBuilding(ws, nil, factory, 0)
 	if ws.Grid[4][4].Terrain != terrain.TileBuildable {
 		t.Fatal("factory demolition removed filled ground")
 	}
-	demolishBuilding(ws, foundation, 0)
+	demolishBuilding(ws, nil, foundation, 0)
 	if ws.Grid[4][4].Terrain != terrain.TileWater {
 		t.Fatal("original terrain not restored")
 	}
