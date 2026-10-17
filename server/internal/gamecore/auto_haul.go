@@ -540,6 +540,11 @@ func haulNearestStorage(ws *model.WorldState, robot *model.Unit, itemID string, 
 	sort.Strings(ids)
 	best, bestDistance := "", 0
 	for _, id := range ids {
+		// 到不了的仓储同样跳过：否则放弃这一单后 fallback 又把它派回同一座，
+		// 形成「放弃 → 改派回原目标 → 再放弃」的无限循环。
+		if haulCooldownActive(robot.Haul, id, ws.Tick) {
+			continue
+		}
 		building := ws.Buildings[id]
 		if accepted, _ := haulDepositPreview(building, itemID, quantity); accepted <= 0 {
 			continue

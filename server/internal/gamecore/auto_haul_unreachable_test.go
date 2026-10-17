@@ -237,3 +237,33 @@ func TestRouteModeHaulStillWaitsWhenUnreachable(t *testing.T) {
 		t.Fatalf("固定路线模式发了 %d 条 haul_unreachable 事件", got)
 	}
 }
+
+// 5) 车上有货、唯一能收货的仓储也被围死：fallback 必须跳过冷却中的建筑，
+//    否则「放弃 → 改派回原目标 → 再放弃」会无限循环（每 ~15 tick 一条放弃事件）。
+func TestAutoHaulFallbackSkipsCooldownNoGiveUpLoop(t *testing.T) {
+	core, ws := haulTestCoreWithFace(t, 48)
+	depot := placeAutoBuilding(t, ws, "b-depot", model.BuildingTypeDepotMk1, model.Position{X: 20, Y: 20})
+	encloseBuildingRing(t, ws, depot)
+	blocked := placeAutoSmelter(t, ws, "b-blocked", model.Position{X: 40, Y: 20})
+	encloseBuildingRing(t, ws, blocked)
+	robot := autoRobot(t, ws, model.Position{X: 30, Y: 20})
+	robot.Haul.Load(model.ItemIronOre, 4)
+
+	events := advanceAutoTicksEvents(core, ws, 1000)
+	gaveUp := 0
+	for _, evt := range events {
+		if evt != nil && evt.Payload["order"] == "auto_haul_unreachable" {
+			gaveUp++
+		}
+	}
+	// 两台建筑各放弃一次（之后都在冷却里，fallback 与派单都不再选它们）。
+	if gaveUp > 2 {
+		t.Fatalf("放弃事件 = %d，fallback 把货又派回了冷却中的建筑", gaveUp)
+	}
+	if robot.Haul.ToBuildingID == depot.ID || robot.Haul.ToBuildingID == blocked.ID {
+		t.Fatalf("机器人仍被派往到不了的建筑: %+v", robot.Haul)
+	}
+	if robot.Haul.CargoQuantity() != 4 {
+		t.Fatalf("车上的货不该丢: %+v", robot.Haul.Cargo)
+	}
+}
