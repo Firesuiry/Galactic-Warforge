@@ -557,11 +557,19 @@ func (op *zeroOpening) powerRescue() bool {
 // 但若建筑建成时配方为空（例如配方的 BuildingTypes 不含该建筑），
 // 这台机器就会永远待机——真人玩家会在机器面板里手动选配方，脚本在这里补。
 func (op *zeroOpening) repairRecipes() {
+	// 建筑按 ID 排序后再遍历：map 顺序随机，多台同型机器时命令下发顺序
+	// 会漂移，破坏整局模拟的确定性。
+	ids := make([]string, 0, len(op.ws.Buildings))
+	for id := range op.ws.Buildings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
 	for i, s := range op.steps {
 		if s.recipe == "" || i >= op.next {
 			continue
 		}
-		for _, b := range op.ws.Buildings {
+		for _, id := range ids {
+			b := op.ws.Buildings[id]
 			if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Type != s.btype || b.Production == nil {
 				continue
 			}
