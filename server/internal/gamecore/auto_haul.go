@@ -112,7 +112,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	demands := haulDemands(ws, claims, robot.OwnerID)
 	if len(demands) == 0 {
 		haulClearTask(robot)
-		// 没有可派的需求：缺料的建筑若都由分拣器喂料（被有意排除在派单外），
+		// 没有可派的需求：如果缺料的建筑全由分拣器喂料（被有意排除在派单外），
 		// 机器人不是「到不了」，而是本来就没有需要它送的活——写进 idle_detail，
 		// 客户端显示「自动待命：没有需要机器人送的（缺料机器都由分拣器喂料）」
 		// （试玩 1016 U16S 一般 1）。
@@ -447,7 +447,7 @@ func haulStarvedBuildings(ws *model.WorldState, demands []haulDemand) map[string
 	return starved
 }
 
-// haulNoDemandDetail 无需求时的中文说明：**缺料的建筑全部分拣器喂料**时写明，
+// haulNoDemandDetail 无需求时的中文说明：**缺料的建筑全部由分拣器喂料**时写明，
 // 否则为空（客户端回落到「没有缺料的建筑」）。只要还有一座缺料建筑不归分拣器管，
 // 就不能说「都由分拣器喂料」。
 func haulNoDemandDetail(ws *model.WorldState, ownerID string) string {
