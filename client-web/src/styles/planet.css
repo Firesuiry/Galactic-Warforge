@@ -1893,7 +1893,10 @@
 .planet-three__surface canvas { display:block; width:100%; height:100%; }
 /* §3.2 3D 镜头控制：竖排小图标 + 设置弹出层（原来是一大块常驻面板，压住左下角地图）。 */
 .planet-three__navigation { position:absolute; left:24px; bottom:150px; display:flex; flex-direction:column; gap:6px; align-items:flex-start; pointer-events:auto; }
-.planet-three__navigation:has(.planet-three__nav-cancel) .planet-three__nav-status { bottom:calc(100% + 38px); }
+/* 取消按钮与坐标/框选状态行收进同一条纵向栈（试玩 1017 K4-01 后复核）：
+   两者原来都锚在 bottom:100%+8px，取消按钮直接叠在坐标徽标「60,14」上。
+   栈贴图标列上方、由 flex 从上到下排（取消 → 状态行），不再需要魔法高度。 */
+.planet-three__nav-stack { position:absolute; left:0; bottom:calc(100% + 8px); display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
 /* §3.2 复核：3D 左下只留**一列**图标（全球视角 / 聚焦基地 / 放大 / 缩小 / 图层与视角 /
    选中对象 / 视角设置）。图层勾选与视角设置分别走各自的弹出层，不再另起一列。 */
 .planet-three__nav-rail { display:flex; flex-direction:column; gap:6px; padding:6px; border-radius:10px; border:1px solid #76cbd52e; background:#06131ece; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
@@ -1905,11 +1908,11 @@
 .planet-three__layers-grid label { display:flex; gap:5px; align-items:center; font-size:11px; }
 /* 状态行浮在图标列**上方**（--planet-hud-rail-top）：过去它接在列下面，
    列长到 8 个按钮时整块会沉到视口外（§3.2 复核）。 */
-.planet-three__nav-status { position:absolute; left:0; bottom:calc(100% + 8px); display:flex; flex-direction:column; gap:6px; align-items:flex-start; font-size:11px; color:#a6c4d1; }
+.planet-three__nav-status { display:flex; flex-direction:column; gap:6px; align-items:flex-start; font-size:11px; color:#a6c4d1; }
 .planet-three__nav-status small { max-width:280px; padding:3px 8px; border-radius:999px; background:#06131ece; }
 .planet-three__nav-status:empty { display:none; }
 /* 取消当前交互模式的按钮：单独一行贴在状态行上方（它可点，不能放进 pointer-events:none 的容器里）。 */
-.planet-three__nav-cancel { position:absolute; left:0; bottom:calc(100% + 8px); font-size:11px; }
+.planet-three__nav-cancel { font-size:11px; }
 /* 调试面板展开时（浮在同一位置、层级更高）让位：与 2D 状态行同一口径。 */
 .planet-map-shell:has(.debug-panel--open) .planet-three__nav-status { visibility:hidden; }
 .planet-three__eyebrow { color:#68dece; letter-spacing:3px; font-size:10px; }
