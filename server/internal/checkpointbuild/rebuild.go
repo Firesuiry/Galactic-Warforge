@@ -265,6 +265,10 @@ func (r *Runner) RebuildLayer(spec *checkpoint.BuildSpec, name string) (result L
 			for core.CurrentTick() < target {
 				core.AdvanceTick()
 			}
+			if failure := advanceTargetError(index+1, target, core.CurrentTick()); failure != "" {
+				result.StepFailure = failure
+				return result
+			}
 			r.logf("  [%d/%d] advance_to_tick %d → tick %d", index+1, len(spec.Steps), target, core.CurrentTick())
 		case step.ItemGrowth != nil:
 			// 「产线流动」断言：推进一段窗口，要求落点建筑里的物品存量增长。
@@ -345,6 +349,19 @@ func (r *Runner) RebuildChain(tree Tree, names []string) []LayerResult {
 // runCommand 把一条命令交给命令队列并在下一 tick 结算，返回回执与拒绝原因。
 // 走的是 gamecore.SubmitAndAdvance——与 POST /commands 同一条路径（入队 → 下一
 // tick 结算 → 读结果），因此重建时命令被拒的原因与线上完全一致。
+// advanceTargetError 报告「advance_to_tick 的目标已经过去」：前一条命令会自己
+// 推进一 tick（SubmitAndAdvance），记录里的下一条 advance_to_tick 若正好等于
+// 「命令前的 tick + 1」，旧实现会静默停在原地，后面的命令在「比记录晚一 tick」
+// 的状态下执行，失败信息完全对不上记录（试玩 1016 报告问题 1 排查时踩过）。
+// 目标已过去时返回给人看的失败原因，否则返回空串。
+func advanceTargetError(stepIndex int, target, current int64) string {
+	if target >= current {
+		return ""
+	}
+	return fmt.Sprintf("第 %d 步 advance_to_tick %d 已过去（当前 tick %d）：构建记录的时间线不单调",
+		stepIndex, target, current)
+}
+
 func runCommand(sess *startup.Session, cmd model.Command) (string, error) {
 	if sess == nil || sess.Core == nil {
 		return "", fmt.Errorf("没有活动对局")
