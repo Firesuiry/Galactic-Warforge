@@ -10,6 +10,7 @@ import { DEFAULT_SSE_SILENT_EVENT_TYPES } from "@shared/config";
 import type {
   AlertEntry,
   Building,
+  ItemInventory,
   CatalogView,
   CombatSquad,
   FogMapView,
@@ -28,6 +29,7 @@ import {
   buildSelectionExport,
   buildViewLinkSearchParams,
   buildViewportExport,
+  canReceiveTransferItems,
   constructionTaskLabel,
   describeAlert,
   describeConstructionWait,
@@ -43,6 +45,9 @@ import {
   getTerrainTile,
   getViewportTileBounds,
   getTechDisplayName,
+  initialBuildingLoadSelection,
+  listTransferItemOptions,
+  estimateTransferAcceptance,
   isLogisticsStationBuildingType,
   listLogisticsStationSettings,
   PLANET_LAYER_LABELS,
@@ -165,6 +170,8 @@ function BuildingStorageSection({
   canControl,
   completedTechIds,
   onOpenWorkflow,
+  playerInventory,
+  onCommandSettled,
 }: {
   building: Building;
   catalog?: CatalogView;
@@ -172,6 +179,10 @@ function BuildingStorageSection({
   canControl: boolean;
   /** 已完成科技（生产建筑配方下拉按 CanUseRecipeTech 过滤）。 */
   completedTechIds?: ReadonlySet<string>;
+  /** 玩家背包（「装入」表单只从背包扣，候选物品与数量上限都看它）。 */
+  playerInventory?: ItemInventory;
+  /** 命令结算后回调（刷新 summary，装入/取出后背包数量立刻更新）。 */
+  onCommandSettled?: () => void;
   /**
    * 打开工作台的某个命令工作流（试玩 1014 层 12 入口太深：装料/量产要点开抽屉→工作台→
    * 「研究与装料」子页签）。建筑详情里给一条直达快捷入口，落地页仍是同一个表单。
@@ -182,6 +193,21 @@ function BuildingStorageSection({
   const [withdrawItemId, setWithdrawItemId] = useState("");
   const [withdrawQuantity, setWithdrawQuantity] = useState("1");
   const [withdrawPending, setWithdrawPending] = useState(false);
+  /**
+   * 装入（transfer_item，direction=to_building）——试玩 1016 U4：过去只在
+   * 抽屉 → 工作台 →「研究与装料」里，与就地的「取出」不对称。
+   * 这里复用同一套口径（候选物品 = 背包有 ∩ 建筑会收，事前可收量估算），
+   * 目标建筑固定为当前选中的这座；工作台那条入口照旧可用。
+   */
+  // 默认物品/数量：首次挂载按当前建筑 + 背包算一次；之后只在「切换建筑 / 候选失效」时重算。
+  const [loadItemId, setLoadItemId] = useState(
+    () => initialBuildingLoadSelection(catalog, building, playerInventory).itemId,
+  );
+  const [loadQuantity, setLoadQuantity] = useState(
+    () => initialBuildingLoadSelection(catalog, building, playerInventory).quantity,
+  );
+  const [loadPending, setLoadPending] = useState(false);
+  const [loadResult, setLoadResult] = useState<{ ok: boolean; message: string } | null>(null);
   // 配方切换（set_recipe）：下拉选中即直接下发（试玩 1015 §6-5：旧实现必须再点
   // 「应用配方」，只选下拉时反馈区还停在上一条命令，看不出没生效）。
   const [recipePending, setRecipePending] = useState(false);
@@ -225,6 +251,67 @@ function BuildingStorageSection({
     Number.isInteger(withdrawQuantityValue) && withdrawQuantityValue > 0;
   const withdrawDisabled =
     withdrawPending || !canControl || !withdrawItemId || !withdrawQuantityValid;
+
+  // 装入：建筑必须有存储才收料（与工作台 transferTargets 同一判定）。
+  const canReceiveLoad = canReceiveTransferItems(building);
+  const loadItemOptions = useMemo(
+    () => (canReceiveLoad ? listTransferItemOptions(catalog, building, playerInventory) : []),
+    [canReceiveLoad, catalog, building, playerInventory],
+  );
+  // 默认物品/数量只在「切换建筑」或候选失效时重置（玩家选过的不覆盖，同工作台 bug-1013-5 口径）。
+  const loadContext = `${building.id}:${building.production?.recipe_id ?? ""}`;
+  const loadContextRef = useRef("");
+  useEffect(() => {
+    const stillAvailable =
+      loadItemId !== "" && loadItemOptions.some((item) => item.id === loadItemId);
+    if (loadContextRef.current !== loadContext || !stillAvailable) {
+      loadContextRef.current = loadContext;
+      const initial = initialBuildingLoadSelection(catalog, building, playerInventory);
+      // 首次挂载就按初始值渲染，避免 effect 里再 setState 一次（多一帧空表单 + 测试 act 警告）。
+      setLoadItemId((current) => (current === initial.itemId ? current : initial.itemId));
+      setLoadQuantity((current) => (current === initial.quantity ? current : initial.quantity));
+    }
+  }, [loadContext, loadItemId, loadItemOptions, catalog, building, playerInventory]);
+  const loadItemOwned = loadItemId ? (playerInventory?.[loadItemId] ?? 0) : 0;
+  // 数量输入只认纯数字（试玩 1017 K4b）：`type="number"` 允许 "1.5" / "1e3"，
+  // 过去 parseInt 会把它们悄悄截成 1，玩家以为装了 1000 个其实只装了 1 个。
+  const loadQuantityValid = /^\d+$/.test(loadQuantity) && Number.parseInt(loadQuantity, 10) > 0;
+  const loadQuantityValue = /^\d+$/.test(loadQuantity) ? Number.parseInt(loadQuantity, 10) : Number.NaN;
+  const loadQuantityOverOwned =
+    loadQuantity !== "" && loadQuantityValid && loadQuantityValue > loadItemOwned;
+  // 数量为空 = 服务端按「背包全部」装入（与工作台一致），但背包里必须有这件物品。
+  const loadDisabled =
+    loadPending || !canControl || !planetId || !loadItemId || !canReceiveLoad
+    || (loadQuantity !== "" && (!loadQuantityValid || loadQuantityOverOwned))
+    || (loadQuantity === "" && loadItemOwned <= 0);
+  // 切换物品时数量按新物品的持有量重算（试玩 1017 K4b）：旧数量原样留着的话，
+  // 换到一件只有 2 个的物品会静默禁用按钮，玩家看不出为什么。
+  const changeLoadItem = (nextItemId: string) => {
+    setLoadItemId(nextItemId);
+    const owned = nextItemId ? (playerInventory?.[nextItemId] ?? 0) : 0;
+    setLoadQuantity(owned > 0 ? String(Math.min(10, owned)) : "");
+    setLoadResult(null);
+  };
+  // 装入后背包刷新（部分装入 / 外部消耗）：持有量下降时把超出的数量夹回持有量。
+  // 只在持有量**变化**时夹，不覆盖玩家手输的超量（超量仍禁用按钮并给出原因）。
+  const previousLoadOwnedRef = useRef(loadItemOwned);
+  useEffect(() => {
+    const previous = previousLoadOwnedRef.current;
+    previousLoadOwnedRef.current = loadItemOwned;
+    if (previous === loadItemOwned || !/^\d+$/.test(loadQuantity)) {
+      return;
+    }
+    if (Number.parseInt(loadQuantity, 10) > loadItemOwned) {
+      // 夹回剩余持有量；背包清空时留空（按钮禁用并提示没有可装入的物品）。
+      setLoadQuantity(loadItemOwned > 0 ? String(loadItemOwned) : "");
+    }
+  }, [loadItemOwned, loadQuantity]);
+  const loadAcceptance = useMemo(
+    () => (canReceiveLoad && loadItemId
+      ? estimateTransferAcceptance(building, loadItemId, loadQuantityValue || loadItemOwned, loadItemOwned)
+      : null),
+    [canReceiveLoad, building, loadItemId, loadQuantityValue, loadItemOwned],
+  );
 
   // 配方下拉：只列该建筑类型支持且科技已解锁的配方（含「无配方」= 研究模式/空闲）。
   const recipeOptions = useMemo(
@@ -294,6 +381,52 @@ function BuildingStorageSection({
       }
     } finally {
       setRecipePending(false);
+    }
+  }
+
+  /**
+   * 装入（试玩 1016 U4）：与「取出」同一表单区，方向相反。数量留空 = 背包全部
+   * （服务端 execTransferItem 的口径），回执原话写回表单里。
+   */
+  async function submitLoad() {
+    if (loadDisabled) {
+      return;
+    }
+    setLoadPending(true);
+    setLoadResult(null);
+    try {
+      const response = await submitPlanetCommand({
+        commandType: "transfer_item",
+        planetId,
+        focus: { entityId: building.id, itemId: loadItemId },
+        execute: () =>
+          client.cmdTransferItem(
+            building.id,
+            loadItemId,
+            loadQuantityValue || loadItemOwned,
+            planetId,
+            "to_building",
+          ),
+        fetchAuthoritativeSnapshot: () =>
+          client.fetchEventSnapshot({
+            event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
+            limit: 50,
+          }),
+      });
+      const resultMessage = response?.results
+        ?.map((result) => result.message?.trim())
+        .filter(Boolean)
+        .join(" / ");
+      if (!response) {
+        setLoadResult({ ok: false, message: "装入提交失败：未能联系服务器，请重试" });
+      } else if (response.accepted) {
+        setLoadResult({ ok: true, message: resultMessage || "已装入" });
+      } else {
+        setLoadResult({ ok: false, message: `装入被拒：${resultMessage || "服务器未说明原因"}` });
+      }
+    } finally {
+      setLoadPending(false);
+      onCommandSettled?.();
     }
   }
 
@@ -481,18 +614,6 @@ function BuildingStorageSection({
             void submitWithdraw();
           }}
         >
-          {/* 试玩 1016 U4：反方向操作（装料）过去只在抽屉 → 工作台 →「研究与装料」里，
-              与就地的「取出」不对称。这里在同一个表单区给对称入口，落地页仍是同一个表单。 */}
-          {canControl && onOpenWorkflow ? (
-            <button
-              className="secondary-button"
-              onClick={() => onOpenWorkflow("research")}
-              title="打开工作台「研究与装料」，把背包里的物品装进这座建筑"
-              type="button"
-            >
-              装入建筑
-            </button>
-          ) : null}
           <label className="field">
             <span>取出物品</span>
             <select
@@ -527,6 +648,91 @@ function BuildingStorageSection({
           >
             {withdrawPending ? "取出中…" : "取出"}
           </button>
+        </form>
+      ) : null}
+      {/*
+        试玩 1016 U4：装入过去只在抽屉 → 工作台 →「研究与装料」里，与就地的「取出」
+        不对称。这里在取出表单正下方给同构的「装入」表单（同一条 transfer_item，
+        direction=to_building，目标建筑固定为当前选中的这座）；工作台那条入口照旧可用。
+        没有存储的建筑（风机/太阳能板等）不渲染表单，只写一句原因。
+      */}
+      {canControl && canReceiveLoad ? (
+        <form
+          aria-label="装入物品表单"
+          className="planet-withdraw-form planet-load-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitLoad();
+          }}
+        >
+          <label className="field">
+            <span>装入物品</span>
+            <select
+              aria-label="装入物品"
+              disabled={loadItemOptions.length === 0}
+              onChange={(event) => changeLoadItem(event.target.value)}
+              value={loadItemId}
+            >
+              <option value="">{loadItemOptions.length === 0 ? "背包里没有可装入的物品" : "选择物品"}</option>
+              {loadItemOptions.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {getItemDisplayName(catalog, item.id)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>数量</span>
+            <input
+              aria-label="装入数量"
+              disabled={loadItemOptions.length === 0}
+              min={1}
+              inputMode="numeric"
+              onChange={(event) => setLoadQuantity(event.target.value)}
+              placeholder="留空 = 全部"
+              type="text"
+              value={loadQuantity}
+            />
+          </label>
+          <button
+            className="secondary-button"
+            disabled={loadDisabled}
+            type="submit"
+          >
+            {loadPending ? "装入中…" : "装入"}
+          </button>
+          {/* 数量被拒的原因写清楚（试玩 1017 K4b）：过去只是静默禁用，玩家不知道是数字格式还是数量超了。 */}
+          {loadItemId && (loadQuantityOverOwned || (loadQuantity !== "" && !loadQuantityValid)) ? (
+            <p className="subtle-text planet-load-form__hint is-short" role="status">
+              {loadQuantityOverOwned
+                ? `数量超过背包里的 ${loadItemOwned} 个`
+                : "数量要填正整数（留空 = 全部装入）"}
+            </p>
+          ) : null}
+          {loadItemId ? (
+            <p className="subtle-text planet-load-form__hint">
+              背包 {getItemDisplayName(catalog, loadItemId)} {loadItemOwned} 个
+              {loadAcceptance?.blocked
+                ? ` · 目标建筑现在收不下：${loadAcceptance.reason}`
+                : loadAcceptance
+                  ? ` · 目标建筑还能收约 ${loadAcceptance.accepted} 个`
+                  : ""}
+            </p>
+          ) : (
+            <p className="subtle-text planet-load-form__hint" role="status">
+              {isResearchStationBuildingType(building.type) && !building.production?.recipe_id
+                ? "该研究站处于研究模式，只接受矩阵（研究耗材）；背包里现在没有矩阵。"
+                : "背包里没有这座建筑能接收的物品（按配方输入/准入规则过滤）。"}
+            </p>
+          )}
+          {loadResult ? (
+            <p
+              className={`subtle-text planet-load-form__result${loadResult.ok ? "" : " planet-load-form__result--error"}`}
+              role="status"
+            >
+              {loadResult.message}
+            </p>
+          ) : null}
         </form>
       ) : null}
     </section>
@@ -788,6 +994,8 @@ interface PlanetEntityPanelProps {
   knownOwnUnits?: ReadonlyMap<string, Unit>;
   /** 建筑详情的快捷入口：打开工作台对应命令工作流（装入建筑/切换配方/量产）。 */
   onOpenWorkflow?: (workflow: CommandWorkflowId) => void;
+  /** 命令结算后回调（装入/取出后刷新 summary，背包数量立刻更新）。 */
+  onCommandSettled?: () => void;
 }
 
 export function PlanetEntityPanel({
@@ -803,6 +1011,7 @@ export function PlanetEntityPanel({
   knownOwnUnits,
   tickRate,
   onOpenWorkflow,
+  onCommandSettled,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
   const { selected } = usePlanetViewStore(
@@ -1048,8 +1257,10 @@ export function PlanetEntityPanel({
           canControl={building.owner_id === session.playerId}
           catalog={catalog}
           completedTechIds={completedTechIds}
+          onCommandSettled={onCommandSettled}
           onOpenWorkflow={onOpenWorkflow}
           planetId={planet.planet_id}
+          playerInventory={summary?.players?.[session.playerId]?.inventory}
         />
         {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (
           <button key={candidate.id} className="secondary-button" onClick={() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: candidate.id, position: candidate.position })}>

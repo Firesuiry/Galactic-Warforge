@@ -19,6 +19,7 @@ import type {
 } from "@shared/types";
 
 import type { PlanetSceneWindow } from "@/features/planet-map/store";
+import { isResearchStationBuildingType } from "@/features/production-alerts";
 import {
   translateAlertType,
   translateBuildingState,
@@ -1646,4 +1647,29 @@ export function constructionTaskLabel(
   catalog?: CatalogView,
 ): string {
   return task.building_name || getBuildingDisplayName(catalog, task.building_type);
+}
+
+/**
+ * 建筑抽屉「装入」表单的初始状态（试玩 1016 U4）：与工作台「研究与装料」同一套口径，
+ * 但目标建筑固定为当前选中的建筑。
+ *
+ * - 物品候选 = 背包里有 ∩ 建筑真的会收（`listTransferItemOptions`）；
+ * - 默认物品：研究站优先电磁矩阵（开局缺矩阵的主线动作），其余取候选第一件；
+ * - 默认数量 = min(10, 背包持有量)，背包为空时留空（按钮禁用，不报一个假数字）。
+ * 数量为空时服务端按「背包全部」提交，这里只在背包确实为空时才留空。
+ */
+export function initialBuildingLoadSelection(
+  catalog: CatalogView | undefined,
+  building: Building | undefined,
+  inventory: ItemInventory | undefined,
+): { itemId: string; quantity: string } {
+  const options = listTransferItemOptions(catalog, building, inventory);
+  const preferredMatrixItemId =
+    options.find((item) => item.id === "electromagnetic_matrix")?.id ?? "";
+  const itemId =
+    building && isResearchStationBuildingType(building.type) && preferredMatrixItemId
+      ? preferredMatrixItemId
+      : options[0]?.id ?? "";
+  const owned = itemId ? (inventory?.[itemId] ?? 0) : 0;
+  return { itemId, quantity: owned > 0 ? String(Math.min(10, owned)) : "" };
 }

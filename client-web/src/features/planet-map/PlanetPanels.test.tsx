@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CatalogView, Unit } from "@shared/types";
@@ -642,7 +642,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(onOpenWorkflow).toHaveBeenCalledWith("research");
   });
 
-  it("试玩 1016 U4：取出表单里也有对称的「装入建筑」入口（不必翻到工作台）", () => {
+  it("试玩 1016 U4：取出表单旁有对称的「装入」表单（同一条 transfer_item，方向 to_building）", async () => {
     const planet = createPlanet();
     // 带库存的生产建筑：只有它会渲染「取出」表单。
     (planet.buildings as Record<string, unknown>)["b-smelt"] = {
@@ -673,14 +673,153 @@ describe("PlanetEntityPanel 建筑库存", () => {
         catalog={{ items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView}
         onOpenWorkflow={onOpenWorkflow}
         planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25 } } } } as never}
       />,
     );
 
     expect(screen.getByRole("form", { name: "取出物品表单" })).toBeInTheDocument();
-    const buttons = screen.getAllByRole("button", { name: "装入建筑" });
-    // 取出表单里那一个（列表最后一个）：点它就打开同一个「研究与装料」落地页。
-    fireEvent.click(buttons[buttons.length - 1]);
+    // 工作台的快捷入口仍在（落地页仍是同一个「研究与装料」表单）。
+    fireEvent.click(screen.getAllByRole("button", { name: "装入建筑" })[0]);
     expect(onOpenWorkflow).toHaveBeenCalledWith("research");
+
+    // 就地装入表单：候选物品 = 背包有 ∩ 建筑会收；默认数量 = min(10, 背包持有量)。
+    const form = screen.getByRole("form", { name: "装入物品表单" });
+    expect(form).toBeInTheDocument();
+    expect(within(form).getByRole("combobox", { name: "装入物品" })).toHaveValue("iron_ingot");
+    expect(within(form).getByRole("textbox", { name: "装入数量" })).toHaveValue("10");
+    expect(within(form).getByText(/背包 铁块 25 个/)).toBeInTheDocument();
+
+    fireEvent.change(within(form).getByRole("textbox", { name: "装入数量" }), { target: { value: "6" } });
+    fireEvent.submit(form);
+    await act(async () => {});
+
+    expect(mockClient.cmdTransferItem).toHaveBeenCalledWith(
+      "b-smelt",
+      "iron_ingot",
+      6,
+      "planet-1-1",
+      "to_building",
+    );
+  });
+
+  it("试玩 1016 U4：装入数量超过背包时按钮禁用；背包没有可收物品时说明原因", async () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-smelt"] = {
+      id: "b-smelt",
+      type: "smelter",
+      owner_id: "p1",
+      position: { x: 3, y: 3, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 2, height: 2 } },
+        functions: { storage: { capacity: 50 } },
+        state: "running",
+      },
+      storage: { inventory: { iron_ingot: 12 } },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-smelt",
+      position: { x: 3, y: 3, z: 0 },
+    });
+    const catalog = { items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView;
+
+    const { rerender } = render(
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 3 } } } } as never}
+      />,
+    );
+    const form = screen.getByRole("form", { name: "装入物品表单" });
+    const quantity = within(form).getByRole("textbox", { name: "装入数量" });
+    expect(quantity).toHaveValue("3");
+    fireEvent.change(quantity, { target: { value: "9" } });
+    expect(within(form).getByRole("button", { name: "装入" })).toBeDisabled();
+
+    // 背包清空：表单保留但给出「没有可装入的物品」的原因，按钮禁用。
+    rerender(
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: {} } } } as never}
+      />,
+    );
+    expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByText(/背包里没有这座建筑能接收的物品/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "装入" })).toBeDisabled();
+  });
+
+  it("试玩 1017 K4b：切换物品重算数量、非整数被拒并说明原因、刷新后夹回持有量", () => {
+    const planet = createPlanet();
+    // 无配方建筑：候选 = 背包里的一切（两件物品都能切换）。
+    (planet.buildings as Record<string, unknown>)["b-smelt"] = {
+      id: "b-smelt",
+      type: "smelter",
+      owner_id: "p1",
+      position: { x: 3, y: 3, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 2, height: 2 } },
+        functions: { storage: { capacity: 200 } },
+        state: "running",
+      },
+      storage: { inventory: {} },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-smelt",
+      position: { x: 3, y: 3, z: 0 },
+    });
+    const catalog = {
+      items: [{ id: "iron_ingot", name: "铁块" }, { id: "gear", name: "齿轮" }],
+    } as CatalogView;
+    const smelter = () => (
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25, gear: 2 } } } } as never}
+      />
+    );
+
+    const { rerender } = render(smelter());
+    const form = screen.getByRole("form", { name: "装入物品表单" });
+    const select = within(form).getByRole("combobox", { name: "装入物品" });
+    // 切到只有 2 个的齿轮：数量按新物品重算成 min(10, 2)，不再停在上一个物品的数量上。
+    fireEvent.change(select, { target: { value: "gear" } });
+    expect(within(form).getByRole("textbox", { name: "装入数量" })).toHaveValue("2");
+
+    // 非整数（"1.5" / "1e3"）：按钮禁用并给出格式原因，不再被 parseInt 静默截成 1。
+    fireEvent.change(within(form).getByRole("textbox", { name: "装入数量" }), { target: { value: "1.5" } });
+    expect(within(form).getByRole("button", { name: "装入" })).toBeDisabled();
+    expect(within(form).getByText(/数量要填正整数/)).toBeInTheDocument();
+    fireEvent.change(within(form).getByRole("textbox", { name: "装入数量" }), { target: { value: "1e3" } });
+    expect(within(form).getByRole("button", { name: "装入" })).toBeDisabled();
+
+    // 手输超过持有量：禁用并写明「数量超过背包里的 N 个」。
+    fireEvent.change(within(form).getByRole("textbox", { name: "装入数量" }), { target: { value: "9" } });
+    expect(within(form).getByRole("button", { name: "装入" })).toBeDisabled();
+    expect(within(form).getByText("数量超过背包里的 2 个")).toBeInTheDocument();
+
+    // 装入成功后的背包刷新：持有量涨到 20 不影响手输值，降到 4 时夹回 4。
+    fireEvent.change(within(form).getByRole("textbox", { name: "装入数量" }), { target: { value: "9" } });
+    const withOwned = (owned: number) => (
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25, gear: owned } } } } as never}
+      />
+    );
+    rerender(withOwned(20));
+    expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByRole("textbox", { name: "装入数量" })).toHaveValue("9");
+    rerender(withOwned(4));
+    expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByRole("textbox", { name: "装入数量" })).toHaveValue("4");
+    expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByRole("button", { name: "装入" })).toBeEnabled();
   });
 
   it("回归（试玩 1013 bug-1013-2）：手搓缺料时保持玩家选中的配方并说明缺什么", () => {

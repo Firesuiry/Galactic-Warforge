@@ -3,7 +3,7 @@ import * as THREE from 'three';
 
 import { directionVector, type CardinalDirection } from '../logistics-direction';
 import { tileFrame, tileNormal, surfaceTileSize } from './projection';
-import { ghostArrowGeometry, ghostArrowTransform } from './ghost-arrow';
+import { GHOST_LABEL_SCALE, ghostArrowGeometry, ghostArrowTransform, ghostLabelOffset } from './ghost-arrow';
 
 const DIRECTIONS: CardinalDirection[] = ['north', 'east', 'south', 'west'];
 const FACE_SIZE = 16;
@@ -82,6 +82,17 @@ describe('建造 ghost 箭头几何', () => {
     expect(toOffset.length()).toBeCloseTo(.26 * size, 4);
     expect(toOffset.clone().add(fromOffset).length()).toBeLessThan(1e-6);
     expect(east.length()).toBeCloseTo(1, 9);
+  });
+
+  it('「取」/「放」标签摆在箭头尖端之外、且明显小于箭头（试玩 1017 K4-04）', () => {
+    const size = surfaceTileSize(RADIUS, FACE_SIZE);
+    const arrowHalf = size * .82 * .62 * .5; // 分拣器箭头尖端离箭头中心的距离
+    const offset = ghostLabelOffset(size, .62, .26);
+    // 标签中心离格心的距离 = 箭头中心偏移 + 越过尖端；标签内缘仍要在尖端之外。
+    expect(offset - .26 * size).toBeGreaterThan(arrowHalf);
+    expect(offset - .26 * size - GHOST_LABEL_SCALE * size * .5).toBeGreaterThanOrEqual(arrowHalf);
+    // 标签尺寸约为箭头边长的 1/3（旧版 0.3 格 ≈ 箭头大小，会把箭头整个盖住）。
+    expect(GHOST_LABEL_SCALE).toBeLessThan(.82 * .62 * .5);
   });
 
   it('scale 只缩箭头尺寸，不改位置/姿态（分拣器两支缩到 0.62）', () => {

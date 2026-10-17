@@ -17,7 +17,8 @@
  */
 
 import { ChevronDown, Eye, EyeOff, Lock, Minimize2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import type { CatalogView, StateSummary } from '@shared/types';
 
@@ -74,7 +75,16 @@ function formatUnlockCondition(catalog: CatalogView | undefined, entry: BuildCat
   return missing.map((techId) => getTechDisplayName(catalog, techId)).join(' 或 ');
 }
 
-/** 分类页签（有序、去重）；空分类归到「其他」。 */
+/** 卡片的可建造性：锁定（未解锁）/ debugOnly（无科技声明）都不是正常玩法可建的。 */
+function entryLocked(entry: BuildCatalogEntryView) {
+  return entry.visibility === 'locked' || entry.visibility === 'debugOnly';
+}
+
+/**
+ * 分类页签（有序、去重）；空分类归到「其他」。
+ * 同一分类里**已解锁建筑排在前**、未解锁的灰化卡排在后面（试玩 1016 U6），
+ * 组内其余顺序沿用目录排序（推荐位 → 普通），保证每次渲染一致。
+ */
 function groupByCategory(entries: BuildCatalogEntryView[]): { id: string; label: string; entries: BuildCatalogEntryView[] }[] {
   const groups: { id: string; label: string; entries: BuildCatalogEntryView[] }[] = [];
   const index = new Map<string, number>();
@@ -91,6 +101,11 @@ function groupByCategory(entries: BuildCatalogEntryView[]): { id: string; label:
     } else {
       groups[existing].entries.push(entry);
     }
+  }
+  for (const group of groups) {
+    const unlocked = group.entries.filter((entry) => !entryLocked(entry));
+    const locked = group.entries.filter(entryLocked);
+    group.entries = [...unlocked, ...locked];
   }
   return groups;
 }
@@ -109,6 +124,12 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   // 当前分类页签（'auto' = 跟随选中建筑；玩家点页签后固定）。
   const [activeCategory, setActiveCategory] = useState<string | 'auto'>('auto');
+  /**
+   * 未解锁卡被点（试玩 1016 U6）：不进建造模式，只在状态行写「需研究：X」，
+   * 并给一个「去科技树」入口（只做路由跳转，不改任何游戏状态）。
+   */
+  const [lockedNotice, setLockedNotice] = useState<string | null>(null);
+  const navigate = useNavigate();
   // 新建筑尚无预渲染缩略图：加载失败则退回图标
   const [missingModels, setMissingModels] = useState<ReadonlySet<string>>(new Set());
   /**
@@ -212,10 +233,17 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     );
   }, [activeBuildingType, catalog, inventory]);
 
+  /**
+   * 分类页签里列出的建筑（试玩 1016 U6）：未解锁建筑**按分类**默认可见，
+   * 以灰化卡 + 「需研究：科技名」出现，排在本分类已解锁建筑之后。
+   * 旧实现整类隐藏，`1 电力` 只有风机一张卡，玩家看不出这一类还有哪些可研究解锁。
+   * 「显示调试建筑」开关只再放出 debugOnly（无科技声明、正常玩法拿不到的建筑）。
+   */
   const visibleEntries = useMemo(() => [
     ...workflow.catalog.recommended,
     ...workflow.catalog.unlocked,
-    ...(showLocked ? [...workflow.catalog.locked, ...workflow.catalog.debugOnly] : []),
+    ...workflow.catalog.locked,
+    ...(showLocked ? workflow.catalog.debugOnly : []),
   ], [workflow.catalog, showLocked]);
   const groups = useMemo(() => groupByCategory(visibleEntries), [visibleEntries]);
 
@@ -236,6 +264,27 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       setShortageNotice(null);
     }
   }, [shortageNotice, buildMode, shortageEntry, shortageMissing.length]);
+
+  // 未解锁提示行（试玩 1017 K4b）：切分类或进入建造模式就收起。旧实现只在
+  // lockedNoticeEntry 失效时才隐藏，切走再切回来提示还挂在底部，像一条常驻状态。
+  // 用 ref 记住上一次的分类（'auto' 也算一次切换）：首次挂载不算切换。
+  const previousCategoryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (previousCategoryRef.current === null) {
+      previousCategoryRef.current = activeCategory;
+      return;
+    }
+    if (previousCategoryRef.current === activeCategory) {
+      return;
+    }
+    previousCategoryRef.current = activeCategory;
+    setLockedNotice(null);
+  }, [activeCategory]);
+  useEffect(() => {
+    if (buildMode) {
+      setLockedNotice(null);
+    }
+  }, [buildMode]);
 
   // 数字键 1–9 切分类（输入控件聚焦时不抢按键）。
   //
@@ -277,7 +326,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     return null;
   }
 
-  // 选中建筑所在分类优先展示：点「显示未解锁」或点选卡片后总能看见它。
+  // 选中建筑所在分类优先展示：点「显示调试建筑」或点选卡片后总能看见它。
   const activeGroup = activeBuildingType
     ? groups.find((group) => group.entries.some((entry) => entry.id === activeBuildingType))
     : undefined;
@@ -285,6 +334,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     ? (activeGroup?.id ?? groups[0].id)
     : (groups.some((group) => group.id === activeCategory) ? activeCategory : groups[0].id);
   const currentGroup = groups.find((group) => group.id === currentGroupId) ?? groups[0];
+
   // 收起态：只留一行把手。
   if (docked) {
     return (
@@ -302,6 +352,14 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       </div>
     );
   }
+
+  // 未解锁卡的提示行：卡片随分类切走/科技补齐后自动收起，避免停在过期文案上。
+  const lockedNoticeEntry = lockedNotice
+    ? visibleEntries.find((entry) => entry.id === lockedNotice && entryLocked(entry))
+    : undefined;
+  const lockedNoticeUnlock = lockedNoticeEntry
+    ? formatUnlockCondition(catalog, lockedNoticeEntry, completedTechIds)
+    : '';
 
   const detailEntry = visibleEntries.find((entry) => entry.id === (hoveredId ?? activeBuildingType));
   const detail = detailEntry ? (() => {
@@ -351,7 +409,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       <div className="planet-build-bar__row">
         <div className="planet-build-bar__grid planet-build-bar__scroller" role="group" aria-label={`${currentGroup.label} 建筑`}>
           {currentGroup.entries.map((entry, index) => {
-            const locked = entry.visibility === 'locked' || entry.visibility === 'debugOnly';
+            const locked = entryLocked(entry);
             const active = entry.id === activeBuildingType;
             const name = translateBuildingType(entry.id, entry.name);
             const cost = formatCost(entry, (itemId) => getItemDisplayName(catalog, itemId));
@@ -359,17 +417,17 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             const unaffordable = !locked && items.some((item) => item.short);
             const unlockCondition = locked ? formatUnlockCondition(catalog, entry, completedTechIds) : '';
             const itemText = items.map((item) => `${getItemDisplayName(catalog, item.item_id)} ${item.owned}/${item.quantity}${item.short ? '（不足）' : ''}`).join('、');
-            const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（背包有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需要科技：${unlockCondition}` : ''}` : ''}`;
+            const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（背包有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需研究：${unlockCondition}` : ''}（点击查看解锁条件）` : ''}`;
             return (
               <button
                 key={entry.id}
                 className={`planet-build-card${active ? ' planet-build-card--active' : ''}${locked ? ' planet-build-card--locked' : ''}${unaffordable ? ' planet-build-card--unaffordable' : ''}`}
                 data-building-id={entry.id}
                 type="button"
-                disabled={locked}
-                // 缺料卡**仍然可点**（试玩 1016 摩擦 1）：点它不进建造模式，只弹出缺料清单
-                // （见 onClick）。不用 aria-disabled——原生可点才能让 Playwright/读屏器正常触发，
-                // 缺料状态走 data-shortage + 红点/置灰样式。
+                // 未解锁卡**原生可点**（试玩 1016 U6）：点了不进建造模式，只在状态行写
+                // 「需研究：X」并给「去科技树」入口。不用 disabled——灰化卡也要能被读屏器/测试点到，
+                // 锁定语义走 data-locked + aria-label 的「未解锁 · 需要科技」。
+                data-locked={locked || undefined}
                 data-shortage={unaffordable || undefined}
                 aria-label={title}
                 onMouseEnter={() => setHoveredId(entry.id)}
@@ -379,8 +437,12 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 onClick={() => {
                   sfx.uiClick();
                   if (locked) {
+                    // 不进建造模式，也不清掉玩家的建造模式：只把「需要哪项科技」摊开。
+                    setLockedNotice(entry.id);
+                    setShortageNotice(null);
                     return;
                   }
+                  setLockedNotice(null);
                   if (unaffordable) {
                     // 不进建造模式：把「还缺什么」直接显示在建造栏底部，并清掉正在进行的建造模式，
                     // 避免玩家以为已经进入放置状态。
@@ -401,14 +463,27 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 <span className="planet-build-card__icon">
                   {dimensional && !missingModels.has(entry.id) ? <img className="planet-build-card__model" src={`/assets/buildings/${entry.id}.png`} alt="" loading="lazy" onError={() => setMissingModels((prev) => new Set(prev).add(entry.id))} /> : <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />}
                   {locked ? (
-                    <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
+                    // 小锁角标贴在卡右上角（试玩 1017 K4-01）：旧版 11px 锁压在图中央，把建筑图整个盖住。
+                    <Lock aria-hidden="true" className="planet-build-card__lock" size={9} strokeWidth={2.5} />
                   ) : null}
                   {unaffordable ? <span aria-hidden="true" className="planet-build-card__shortage-dot" /> : null}
-                  {/* 数字键角标贴在图标左上角（DSP 口径）。 */}
-                  {index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
+                  {/* 数字键角标贴在图标左上角（DSP 口径）：只有已解锁建筑参与数字键选卡。 */}
+                  {!locked && index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
                 </span>
-                {/* 造价条：每项物品「背包有/需要」，任一不够整格置灰（§4）。 */}
-                {items.length > 0 ? (
+                {/* 未解锁：造价条位置改写成解锁条件（试玩 1016 U6），卡内直接可读，不必悬停。
+                    试玩 1017 K4-01：52px 卡里科技名一行放不下，改为最多两行小字。
+                    标签「需研究：」重复 4 张卡很占宽，改成只写科技名、前面挂一把小锁；
+                    完整名称同时写进 title（原生 tooltip）——截断时仍能读到全名。 */}
+                {locked ? (
+                  <span
+                    className="planet-build-card__unlock"
+                    title={unlockCondition ? `需研究：${unlockCondition}` : '需研究'}
+                    aria-hidden="true"
+                  >
+                    {unlockCondition ? <Lock className="planet-build-card__unlock-lock" size={8} strokeWidth={2.5} /> : null}
+                    {unlockCondition || '需研究'}
+                  </span>
+                ) : items.length > 0 ? (
                   <span aria-hidden="true" className="planet-build-card__cost">
                     {items.map((item) => (
                       <span key={item.item_id} className={`planet-build-card__cost-item${item.short ? ' is-short' : ''}`}>
@@ -433,12 +508,13 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           >
             <ChevronDown aria-hidden="true" className={categoriesOpen ? 'is-open' : ''} size={14} strokeWidth={2} />
           </button>
+          {/* 未解锁建筑现在按分类常驻（灰化卡 + 需研究），这个开关只再放出 debugOnly 建筑。 */}
           <button
             aria-expanded={showLocked}
-            aria-label={showLocked ? '隐藏未解锁' : '显示未解锁'}
+            aria-label={showLocked ? '隐藏调试建筑' : '显示调试建筑'}
             className="planet-build-bar__tool"
             onClick={() => setShowLocked((value) => !value)}
-            title={showLocked ? '隐藏未解锁' : '显示未解锁'}
+            title={showLocked ? '隐藏调试建筑' : '显示调试建筑（无科技声明、正常玩法拿不到）'}
             type="button"
           >
             {showLocked ? <Eye aria-hidden="true" size={14} strokeWidth={2} /> : <EyeOff aria-hidden="true" size={14} strokeWidth={2} />}
@@ -454,6 +530,33 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           </button>
         </div>
       </div>
+      {/* 未解锁卡被点（试玩 1016 U6）：不进建造模式，状态行写「需研究：科技名」，
+          并给一条去科技树的路由入口（纯跳转，不发命令）。 */}
+      {!buildMode && lockedNoticeEntry ? (
+        <div className="planet-build-bar__footer" data-testid="planet-build-locked">
+          <div className="planet-build-bar__status">
+            <span className="planet-build-bar__locked" role="status">
+              {translateBuildingType(lockedNoticeEntry.id, lockedNoticeEntry.name)} 尚未解锁
+              {lockedNoticeUnlock ? `：需研究 ${lockedNoticeUnlock}` : ''}
+            </span>
+            <button
+              className="planet-build-bar__control"
+              onClick={() => navigate('/tech')}
+              title="打开科技树，查看解锁这项建筑的研究路线"
+              type="button"
+            >
+              去科技树
+            </button>
+            <button
+              className="planet-build-bar__control"
+              onClick={() => setLockedNotice(null)}
+              type="button"
+            >
+              知道了
+            </button>
+          </div>
+        </div>
+      ) : null}
       {/* 底部提示行只在**选中了建筑**时显示（放置/缺料/方向/配方）；
           未选中的「选择建筑类型后在地图上点击放置」是常驻噪音，已删（§3.2 复核）。 */}
       {buildMode ? (
@@ -466,7 +569,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             ) : (
               <span className="planet-build-bar__hint">
                 {sorterMode
-                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上虚线空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
                   : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
@@ -475,16 +578,17 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               type="button"
               title="旋转建筑或传送带方向（快捷键 R；Shift+R 复位朝向）"
               onClick={cycleBeltDirection}
+              data-testid="planet-build-direction"
             >
-              {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写「方位：东」，分拣器另标
-                  「（取货端 西 → 放货端 东）」，不再一套显角度一套显方位。 */}
-              方位：{beltMode
-                ? DIRECTION_LABELS[buildDirection]
+              {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写中文方位，不再一套显角度一套显方位。
+                  分拣器写「朝向 东（从西取 → 往东放）」：朝向 = 放货端（正面），与机械臂/箭头一致。 */}
+              {beltMode
+                ? `方向：${DIRECTION_LABELS[buildDirection]}`
                 : (() => {
                     const facing = ROTATION_FACING[rotationTurns(interactionMode.kind === 'build' ? interactionMode.rotation : 0)];
                     return sorterMode
-                      ? `${DIRECTION_NAMES[facing]}（取货端 ${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]} → 放货端 ${DIRECTION_NAMES[facing]}）`
-                      : DIRECTION_NAMES[facing];
+                      ? `朝向 ${DIRECTION_NAMES[facing]}（从${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]}取 → 往${DIRECTION_NAMES[facing]}放）`
+                      : `朝向：${DIRECTION_NAMES[facing]}`;
                   })()} · R 旋转
             </button>
             {/* 误点 R 把带子铺反后不必再循环 3–4 次（试玩 1016 U-1）：一键回到默认朝向。 */}

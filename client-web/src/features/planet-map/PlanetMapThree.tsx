@@ -613,15 +613,20 @@ export function PlanetMapThree(props: Props) {
           </button>
         ) : null}
       </div>
-      <div className="planet-three__nav-status">
-        {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
-        {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
+      {/* 取消按钮与坐标/框选状态行叠在图标列上方（试玩 1017 K4-01 后复核）：
+          两者原来各自绝对定位到同一位置，取消按钮压住「60,14」坐标徽标。
+          收进同一条纵向栈（取消在上、状态行在下）后由 flex 排版，不再互相重叠。 */}
+      <div className="planet-three__nav-stack">
+        {interactionMode.kind !== 'inspect' ? (
+          <button className="secondary-button planet-three__nav-cancel" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>
+            取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
+          </button>
+        ) : null}
+        <div className="planet-three__nav-status">
+          {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
+          {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
+        </div>
       </div>
-      {interactionMode.kind !== 'inspect' ? (
-        <button className="secondary-button planet-three__nav-cancel" onClick={() => usePlanetViewStore.getState().exitInteractionMode()}>
-          取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
-        </button>
-      ) : null}
     </div>
   </div>;
 }

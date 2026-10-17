@@ -63,6 +63,19 @@ describe('3D 地图降级与交互退出', () => {
     expect(screen.queryByRole('button', { name: '取消建造 · Esc' })).not.toBeInTheDocument();
   });
 
+  it('试玩 1017 K4-01：取消按钮与坐标/框选状态行在同一条纵向栈里（不再互相重叠）', () => {
+    const { container } = render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' }));
+    const stack = container.querySelector('.planet-three__nav-stack');
+    expect(stack).not.toBeNull();
+    const cancel = screen.getByRole('button', { name: '取消建造 · Esc' });
+    const status = container.querySelector('.planet-three__nav-status');
+    // 两者是同一栈的直接子元素：取消在上、状态行在下，由 flex 排版而非各自绝对定位。
+    expect(cancel.parentElement).toBe(stack);
+    expect(status?.parentElement).toBe(stack);
+    expect(stack!.firstElementChild).toBe(cancel);
+  });
+
   it('右键地图退出移动模式', () => {
     render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'move' }));

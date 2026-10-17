@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -121,6 +122,11 @@ function makePlanet(): PlanetRenderView {
   } as PlanetRenderView;
 }
 
+/** 建造栏含「去科技树」路由按钮，渲染时需要一个 Router 上下文。 */
+function renderBuildBar(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe('PlanetBuildBar', () => {
   beforeEach(() => {
     resetPlanetViewStore();
@@ -146,7 +152,7 @@ describe('PlanetBuildBar', () => {
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
     const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
     // 买不起的卡片：仍然原生可点（缺料走 data-shortage），点了不进建造模式，只列出缺料清单
@@ -178,19 +184,19 @@ describe('PlanetBuildBar', () => {
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
     const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    const { rerender } = render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
+    const { rerender } = renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toHaveTextContent('齿轮 ×1（背包 0/1）');
 
     // 背包补齐 → 清单自动消失（不能停在「还缺…」的旧数字上）
     const richSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 5, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    rerender(<PlanetBuildBar catalog={itemCatalog} summary={richSummary} planet={makePlanet()} />);
+    rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={richSummary} planet={makePlanet()} /></MemoryRouter>);
     expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
 
     // 再次缺料并点开 → 进入建造模式（点另一张买得起的卡）时也收起
     const gearlessSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    rerender(<PlanetBuildBar catalog={itemCatalog} summary={gearlessSummary} planet={makePlanet()} />);
+    rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={gearlessSummary} planet={makePlanet()} /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toBeInTheDocument();
     await openCategory(user, '运输');
@@ -201,7 +207,7 @@ describe('PlanetBuildBar', () => {
 
   it('点击建筑卡片进入建造模式，再次点击退出', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
     await user.click(card);
@@ -215,17 +221,93 @@ describe('PlanetBuildBar', () => {
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
   });
 
-  it('未解锁建筑默认隐藏，可通过按钮展开', async () => {
+  it('未解锁建筑按分类常驻显示（灰化 + 需研究），排在已解锁建筑之后（试玩 1016 U6）', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
-    // matrix_lab 所需科技未完成，属 locked 组，默认隐藏；wind_turbine 已解锁默认可见
+    // 已解锁的风机在前
     expect(screen.getByRole('button', { name: /风力发电机/ })).toBeEnabled();
 
-    await user.click(screen.getByRole('button', { name: '显示未解锁' }));
+    // 研究分类：matrix_lab 未解锁但默认可见，卡上直接写科技名（小锁 = 需研究），压暗且可点
     await openCategory(user, '研究');
     const lockedCard = screen.getByRole('button', { name: /矩阵研究站/ });
-    expect(lockedCard).toBeDisabled();
+    expect(lockedCard).toBeInTheDocument();
+    expect(lockedCard).toHaveAttribute('data-locked', 'true');
+    expect(lockedCard).toBeEnabled();
+    // 卡内只写科技名（「需研究」前缀由小锁图标表达，title/aria-label 里仍有完整文案）。
+    expect(lockedCard.textContent).toContain('tech-electromagnetism');
+    expect(lockedCard.getAttribute('aria-label')).toContain('需研究：tech-electromagnetism');
+    // 点它不进建造模式，只在状态行给出解锁说明与去科技树入口
+    await user.click(lockedCard);
+    expect(usePlanetViewStore.getState().interactionMode.kind).not.toBe('build');
+    const notice = screen.getByTestId('planet-build-locked');
+    expect(notice).toHaveTextContent('矩阵研究站 尚未解锁：需研究 tech-electromagnetism');
+    expect(screen.getByRole('button', { name: '去科技树' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '知道了' }));
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+  });
+
+  it('试玩 1017 K4b：未解锁提示行随切分类/进入建造模式收起', async () => {
+    const user = userEvent.setup();
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    await openCategory(user, '研究');
+    await user.click(screen.getByRole('button', { name: /矩阵研究站/ }));
+    expect(screen.getByTestId('planet-build-locked')).toBeInTheDocument();
+
+    // 切到别的分类 → 提示收起；切回研究分类也不复活（旧实现切回来还挂着）。
+    await openCategory(user, '运输');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+    await openCategory(user, '研究');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+
+    // 再次点未解锁卡出提示，然后点一张买得起的卡进入建造模式 → 提示收起。
+    await user.click(screen.getByRole('button', { name: /矩阵研究站/ }));
+    expect(screen.getByTestId('planet-build-locked')).toBeInTheDocument();
+    await openCategory(user, '运输');
+    await user.click(screen.getByRole('button', { name: /传送带/ }));
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('build');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+  });
+
+  it('试玩 1017 K4-01：未解锁卡保留建筑图（只压暗）、小锁角标、科技名带完整 title', async () => {
+    const user = userEvent.setup();
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    // 已解锁卡不受影响：没有锁角标、没有解锁条。
+    const unlockedCard = screen.getByRole('button', { name: /风力发电机/ });
+    expect(unlockedCard.querySelector('.planet-build-card__lock')).toBeNull();
+    expect(unlockedCard.querySelector('.planet-build-card__unlock')).toBeNull();
+    await openCategory(user, '研究');
+    const lockedCard = screen.getByRole('button', { name: /矩阵研究站/ });
+    // 建筑图仍在（不再被大锁覆盖）；锁是独立的装饰角标。
+    expect(lockedCard.querySelector('.planet-build-card__icon')).not.toBeNull();
+    expect(lockedCard.querySelector('.planet-build-card__lock')).not.toBeNull();
+    // 科技名写在解锁条里，并把完整名称放进 title（两行截断时仍可悬停读全名）。
+    const unlock = lockedCard.querySelector('.planet-build-card__unlock');
+    expect(unlock).not.toBeNull();
+    expect(unlock?.textContent).toBe('tech-electromagnetism');
+    expect(unlock?.getAttribute('title')).toBe('需研究：tech-electromagnetism');
+  });
+
+  it('同一分类里已解锁建筑排在未解锁之前（试玩 1016 U6）', async () => {
+    const user = userEvent.setup();
+    // 研究分类里放一台已解锁的研究站 + 一台未解锁的矩阵研究站：已解锁的必须在前。
+    const mixedCatalog = {
+      ...catalog,
+      buildings: catalog.buildings?.map((entry) => entry.id === 'matrix_lab'
+        ? { ...entry, category: 'research' }
+        : entry.id === 'wind_turbine'
+          ? { ...entry, category: 'research' }
+          : entry),
+    } as CatalogView;
+    renderBuildBar(<PlanetBuildBar catalog={mixedCatalog} summary={summary} planet={makePlanet()} />);
+    await openCategory(user, '研究');
+    const ids = screen.getAllByRole('button')
+      .filter((button) => button.classList.contains('planet-build-card'))
+      .map((button) => button.getAttribute('data-building-id'));
+    expect(ids).toEqual(['wind_turbine', 'matrix_lab']);
+    // 数字键角标只给已解锁卡（未解锁卡不参与数字键选卡）。
+    expect(screen.getByRole('button', { name: /风力发电机/ }).textContent).toContain('1');
+    expect(screen.getByRole('button', { name: /矩阵研究站/ }).querySelector('.planet-build-card__hotkey')).toBeNull();
   });
 
   it('背包缺料的卡片置灰并逐项显示「背包有/需要」（§4）', () => {
@@ -244,7 +326,7 @@ describe('PlanetBuildBar', () => {
         },
       },
     };
-    render(<PlanetBuildBar catalog={catalog} summary={poorSummary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={poorSummary} planet={makePlanet()} />);
 
     // wind_turbine 要 铁块 6 / 齿轮 1，背包只有 4 / 0 → 整格置灰，逐项写出「背包有/需要」
     const card = screen.getByRole('button', { name: /风力发电机/ });
@@ -259,12 +341,27 @@ describe('PlanetBuildBar', () => {
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('齿轮 0/1（不足）'));
   });
 
+  it('试玩 1017：分类页签展开时，悬停浮层仍挂在栏上（由 CSS 抬到页签行上方，不盖页签）', () => {
+    const { container } = renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    // 页签默认展开（store 初始值）：浮层与页签行同属 .planet-build-bar，
+    // 浮层位置由 .planet-build-bar--categories-open .planet-build-bar__detail 的
+    // bottom（栏顶 + 页签行高度 + 间距）决定，因此浮层底边在页签行之上。
+    const bar = container.querySelector('.planet-build-bar')!;
+    expect(bar.className).toContain('planet-build-bar--categories-open');
+    expect(bar.querySelector('.planet-build-bar__categories')).not.toBeNull();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /风力发电机/ }));
+    const detail = screen.getByTestId('planet-build-detail');
+    // 浮层是栏的直接子元素（absolute 相对栏定位），不是页签行的子元素。
+    expect(detail.parentElement).toBe(bar);
+    expect(bar.querySelector('.planet-build-bar__categories')?.contains(detail)).toBe(false);
+  });
+
   it('卡片与悬停详情显示物品造价（背包有/需要，不足标红并列缺什么）', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
     const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { iron_ingot: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card.className).toContain('planet-build-card--unaffordable');
     // §3.2 复核：格子里只有图标 + 快捷键数字 + 造价条，物品造价同时走 aria-label 与悬停浮层。
@@ -286,7 +383,7 @@ describe('PlanetBuildBar', () => {
       ? { ...entry, build_cost: { items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
     const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { custom_plate: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
-    render(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
     // 卡片 aria-label 与悬停浮层都带中文物品名 + 背包有/需要（格内只留图标 + 造价条）
@@ -318,7 +415,7 @@ describe('PlanetBuildBar', () => {
         },
       },
     };
-    render(<PlanetBuildBar catalog={catalog} summary={richSummary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={richSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card).toBeEnabled();
@@ -333,13 +430,13 @@ describe('PlanetBuildBar', () => {
 
   it('传送带建造模式：方向按钮与 R 键循环切换方向', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
     // 普通建筑也支持 R 键旋转（试玩 1016 U3：统一显示方位，不再显示角度）
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：北');
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向：北');
     await user.keyboard('r');
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：东');
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向：东');
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
 
     await openCategory(user, '运输');
@@ -352,10 +449,11 @@ describe('PlanetBuildBar', () => {
     });
 
     // 按钮循环：east → north → south
-    const directionButton = screen.getByRole('button', { name: /^方位：东/ });
-    await user.click(directionButton);
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('方向：东');
+    await user.click(screen.getByTestId('planet-build-direction'));
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
-    await user.click(screen.getByRole('button', { name: /^方位：北/ }));
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('方向：北');
+    await user.click(screen.getByTestId('planet-build-direction'));
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'south' });
 
     // R 键循环：south → west → auto（auto 是显式选项，排在最后）
@@ -369,7 +467,7 @@ describe('PlanetBuildBar', () => {
 
   it('朝向复位：Shift+R 或「重置朝向」按钮一键回到默认（试玩 1016 U-1）', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
     await openCategory(user, '运输');
     await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
@@ -400,7 +498,7 @@ describe('PlanetBuildBar', () => {
 
   it('分拣器建造模式：R 旋转写 rotation、提示行说明取货/放货端（第 16 轮契约 §4）', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
     await openCategory(user, '运输');
     // 物流页里分拣器排在传送带后面。
@@ -414,14 +512,16 @@ describe('PlanetBuildBar', () => {
       buildingType: 'sorter_mk1',
       direction: 'auto',
     });
-    // 提示行给出朝向语义（空心 = 取货端，实心 = 放货端，试玩 1016 U1），而不是传送带的「箭头 = 物流方向」。
-    expect(screen.getByText(/空心箭头 = 取货端/)).toBeInTheDocument();
+    // 提示行给出朝向语义（虚线空心 = 取货端，实心 = 放货端，试玩 1016 U1），而不是传送带的「箭头 = 物流方向」。
+    expect(screen.getByText(/虚线空心箭头 = 取货端/)).toBeInTheDocument();
 
+    // 默认朝向（rotation=0 → 北）就写中文方位 + 取/放端，不显示角度（试玩 1016 U3）。
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向 北（从南取 → 往北放）');
     // 分拣器不是传送带：R 旋转走 rotation 档位（0 → 90 → 180 → 270 → 0）。
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 90 });
-    // 试玩 1016 U3：分拣器与传送带同一「方位」口径，并标出取/放端。
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：东（取货端 西 → 放货端 东）');
+    // 试玩 1016 U3：分拣器与传送带同一中文方位口径（不再显角度），并标出从哪取、往哪放。
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向 东（从西取 → 往东放）');
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 180 });
     await user.keyboard('r');
@@ -432,7 +532,7 @@ describe('PlanetBuildBar', () => {
 
   it('生产建筑建造模式：配方下拉选择后写入 interactionMode.recipeId', async () => {
     const user = userEvent.setup();
-    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
 
     // 无配方建筑不显示配方下拉
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
@@ -499,7 +599,7 @@ describe('PlanetBuildBar', () => {
         } as never,
       ],
     };
-    render(<PlanetBuildBar catalog={englishCatalog} summary={summary} planet={makePlanet()} />);
+    renderBuildBar(<PlanetBuildBar catalog={englishCatalog} summary={summary} planet={makePlanet()} />);
 
     expect(screen.getByRole('button', { name: /风力涡轮机/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Future Building X/ })).toBeInTheDocument();

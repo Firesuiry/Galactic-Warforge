@@ -6,9 +6,9 @@ import * as THREE from 'three';
  * 两支箭头必须**一眼分出取货/放货**（试玩 1016 U1：旧实现两端都用同一张实心箭头，
  * 只靠青/琥珀两色区分，3D 近景里两支都偏青黄，玩家只能靠形状猜哪端取货）。
  * 现在按角色分纹理：
- * - 取货端（背面）：**空心描边**（只描轮廓不填充）；
+ * - 取货端（背面）：**空心 + 虚线**描边（只描轮廓不填充，外加深色描边做反差）；
  * - 放货端（正面）：**实心**箭头。
- * 实心 vs 空心在缩到 0.62 格、任意光照/色调映射下都能分辨，不再依赖颜色。
+ * 实心 vs 空心虚线在缩到 0.62 格、任意光照/色调映射下都能分辨，不再依赖颜色。
  *
  * 与 `directionArrowTexture` 同口径：纹理里的 chevron 指向局部 +U（局部 +X），
  * 贴到格平面上的姿态由 `three/ghost-arrow` 决定。
@@ -24,11 +24,17 @@ export interface GhostArrowPaint {
   lineWidth: number;
   /** 轮廓整体内缩量（画布像素）：空心箭头缩一点，描边不贴边。 */
   inset: number;
+  /** true = 虚线描边（取货端）：形状之外再多一重「虚 vs 实」的区分。 */
+  dashed: boolean;
 }
 
 const PAINT: Record<GhostArrowRole, GhostArrowPaint> = {
-  take: { filled: false, lineWidth: 9, inset: 4 },
-  drop: { filled: true, lineWidth: 2, inset: 0 },
+  // 试玩 1016 U1 复核：取货端从「细空心」改为「空心 + 虚线 + 深色描边」，
+  // 放货端实心也加深色描边，两端在青/琥珀之外还有形状与线型两重区分。
+  // 试玩 1017 K4-04 复核：lineWidth 8 在 64px 画布里把 chevron 的洞几乎填满，
+  // 近景里仍读成一团色块。收细到 5 并放大内缩留白，空心轮廓与虚线间隔才看得出来。
+  take: { filled: false, lineWidth: 5, inset: 2, dashed: true },
+  drop: { filled: true, lineWidth: 3, inset: 0, dashed: false },
 };
 
 export function ghostArrowPaint(role: GhostArrowRole): GhostArrowPaint {
@@ -75,10 +81,16 @@ export function ghostArrowTexture(role: GhostArrowRole): THREE.CanvasTexture {
       ctx.fill();
       ctx.stroke();
     } else {
-      // 空心：只描边不填充；线宽与实心箭头主体同量级，缩到 0.62 格仍是清楚的轮廓。
+      // 空心 + 虚线：先压一道深色实线做反差（浅色地形上白线会糊），再描白色虚线。
+      ctx.strokeStyle = 'rgba(4,10,18,0.85)';
+      ctx.lineWidth = paint.lineWidth + 3;
+      ctx.stroke();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = paint.lineWidth;
+      // 虚线段更长、间隔更开：近景放大后仍能数出「一截一截」，而不是糊成实线。
+      if (paint.dashed) ctx.setLineDash([9, 9]);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
   const texture = new THREE.CanvasTexture(canvas);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { directionVector } from '@/features/planet-map/logistics-direction';
-import { resolveSorterGhostArrows, sorterGhostArrowStyle } from '@/features/planet-map/planet-scene';
+import { dashSegments, resolveSorterGhostArrows, sorterGhostArrowStyle, sorterGhostLabelPlacement } from '@/features/planet-map/planet-scene';
 
 /**
  * §4 建造幽灵：分拣器两支箭头（取 → 放）必须**背向分开**摆在格子的前后半格。
@@ -52,14 +52,49 @@ describe('2D 分拣器幽灵箭头', () => {
     expect(resolveSorterGhostArrows('sorter_mk1', 270, center, ts)!.map((arrow) => arrow.direction)).toEqual(['east', 'west']);
   });
 
-  it('试玩 1016 U1：取货端空心细描边 + 「取」，放货端实心粗线 + 「放」（不只靠颜色）', () => {
+  it('试玩 1016 U1：取货端空心虚线 + 「取」，放货端实心粗线 + 「放」（不只靠颜色）', () => {
     const take = sorterGhostArrowStyle('take');
     const drop = sorterGhostArrowStyle('drop');
     expect(take.filled).toBe(false);
     expect(drop.filled).toBe(true);
     expect(take.label).toBe('取');
     expect(drop.label).toBe('放');
-    // 粗细必须拉开：空心端细、实心端粗，低缩放档也读得出形状差异。
-    expect(drop.shaftWidth).toBeGreaterThan(take.shaftWidth * 2);
+    // 线型差异：取货端虚线、放货端实线（与 3D 纹理的 dashed 同口径）。
+    expect(take.dash).toBeGreaterThan(0);
+    expect(drop.dash).toBe(0);
+    // 粗细必须拉开：空心端描边细、实心端粗，低缩放档也读得出形状差异。
+    expect(drop.shaftWidth).toBeGreaterThan(take.shaftWidth * 1.5);
+    // 取货端也不能细到看不见（旧版 1.5px 在小格宽下与实心端一样糊）。
+    expect(take.shaftWidth).toBeGreaterThanOrEqual(2);
+  });
+
+  it('试玩 1017 K4-05：「取」/「放」标签缩到约 2/3 并完全落在箭头尖端之外', () => {
+    for (const ts of [24, 40, 64]) {
+      const { fontSize, gap } = sorterGhostLabelPlacement(ts);
+      // 字号比旧版（ts * .5，上限 14）小至少三成，且不低于可读下限。
+      expect(fontSize).toBeLessThanOrEqual(ts * 0.5 * 0.75 + 1e-9);
+      expect(fontSize).toBeGreaterThanOrEqual(7);
+      // 标签内缘（中心 - 半字宽）必须在尖端之外：不压箭头本体。
+      expect(gap - fontSize * 0.5).toBeGreaterThan(0);
+    }
+    // 小格宽也不放大字号（旧版下限 9px 会把整格盖住）。
+    expect(sorterGhostLabelPlacement(10).fontSize).toBe(7);
+    // 大格宽也不超过 10px：标签始终小于箭头本体。
+    expect(sorterGhostLabelPlacement(64).fontSize).toBe(10);
+  });
+
+  it('虚线切段：沿线段方向等距切分，首尾都落在线上，缺口不会被误算进实线', () => {
+    const pieces = dashSegments({ x: 0, y: 0 }, { x: 20, y: 0 }, 5, 3);
+    expect(pieces.length).toBeGreaterThan(1);
+    for (const [start, end] of pieces) {
+      expect(end.x).toBeGreaterThan(start.x);
+      expect(end.x - start.x).toBeLessThanOrEqual(5 + 1e-9);
+      expect(start.y).toBe(0);
+    }
+    // 第一段从尾端开始，最后一段在尖端收尾（不会因为取整丢掉末段）。
+    expect(pieces[0][0]).toEqual({ x: 0, y: 0 });
+    expect(pieces[pieces.length - 1][1].x).toBeCloseTo(20, 9);
+    // dash ≤ 0 退化为整段（实心端走这条）。
+    expect(dashSegments({ x: 0, y: 0 }, { x: 3, y: 4 }, 0, 0)).toEqual([[{ x: 0, y: 0 }, { x: 3, y: 4 }]]);
   });
 });

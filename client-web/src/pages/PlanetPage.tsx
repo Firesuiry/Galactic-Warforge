@@ -825,6 +825,7 @@ export function PlanetPage() {
               fog={planet}
               knownOwnUnits={knownOwnUnits}
               networks={networks}
+              onCommandSettled={refetchSummaryAfterCommand}
               onOpenWorkflow={openWorkflow}
               planet={planet}
               runtime={runtime}
