@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"sort"
 	"sync"
 
 	"siliconworld/internal/model"
@@ -14,7 +15,6 @@ type AlertHistory struct {
 	mu     sync.RWMutex
 	limit  int
 	alerts []*model.ProductionAlert
-	index  map[string]int
 	keys   map[string]int
 }
 
@@ -24,7 +24,6 @@ func NewAlertHistory(limit int) *AlertHistory {
 	}
 	return &AlertHistory{
 		limit: limit,
-		index: make(map[string]int),
 		keys:  make(map[string]int),
 	}
 }
@@ -66,9 +65,7 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 			continue
 		}
 		ah.alerts = append(ah.alerts, alert)
-		pos := len(ah.alerts) - 1
-		ah.index[alert.AlertID] = pos
-		ah.keys[key] = pos
+		ah.keys[key] = len(ah.alerts) - 1
 	}
 	if len(ah.alerts) <= ah.limit {
 		return
@@ -104,6 +101,37 @@ func (ah *AlertHistory) Resolve(playerID, planetID, buildingID string, alertType
 	alert.ResolvedTick = tick
 }
 
+// ResolveBuilding 解除某座建筑（某行星）当前仍成立的全部告警：
+// 建筑被拆除/摧毁后，它的 belt_blocked / haul_unreachable / output_blocked 等
+// 条件永远不会再被结算，只能在这里统一收尾，否则告警条里会留下一条
+// 「建筑已不存在、地图也没有红标、无法修复」的悬挂条目（试玩 1016 严重 3）。
+// 只按 (planet, building) 匹配，不动其它建筑；playerID 非空时只解除该玩家的条目。
+func (ah *AlertHistory) ResolveBuilding(playerID, planetID, buildingID string, tick int64) int {
+	if ah == nil || buildingID == "" {
+		return 0
+	}
+	ah.mu.Lock()
+	defer ah.mu.Unlock()
+	resolved := 0
+	for _, alert := range ah.alerts {
+		if alert == nil || !alert.Active || alert.BuildingID != buildingID {
+			continue
+		}
+		// 旧存档条目没有 planet_id：planetID 非空时也允许解除（与 Resolve 的
+		// 回退口径一致——同一建筑 ID 只在同行星内唯一，旧条目不会跨行星误伤）。
+		if alert.PlanetID != "" && planetID != "" && alert.PlanetID != planetID {
+			continue
+		}
+		if playerID != "" && alert.PlayerID != playerID {
+			continue
+		}
+		alert.Active = false
+		alert.ResolvedTick = tick
+		resolved++
+	}
+	return resolved
+}
+
 func (ah *AlertHistory) All() []*model.ProductionAlert {
 	ah.mu.RLock()
 	defer ah.mu.RUnlock()
@@ -120,55 +148,98 @@ func (ah *AlertHistory) ReplaceAll(alerts []*model.ProductionAlert) {
 	ah.rebuildIndex()
 }
 
-// Snapshot returns alerts after a given alert ID or since a tick.
+// Snapshot returns alerts for the production alert panel.
+//
+// 顺序（试玩 1016 严重 1）：仍成立的条目在前，按「最近一次发生」tick
+// （last_tick，缺省回退 tick）倒序——最新的告警永远排在最前，客户端只取
+// limit=50 也能看到刚发生的 haul_unreachable / belt_blocked；其后是已解除的
+// 历史条目，同样按最近 tick 倒序（供复盘）。旧实现按插入顺序（最老在前）
+// 返回，老对局里前 50 条全是早期告警，新告警永远进不了客户端。
+//
+// 分页：
+//   - after_alert_id 是本顺序里的游标，返回它之后的条目（找不到时从头开始）；
+//   - since_tick 过滤「最近一次发生 tick >= since_tick」的条目；
+//   - active_only 只返回仍成立的条目（顶栏/警报条/地图红标用）。
+//
+// 返回的 available_from_tick 是历史里最老的首次出现 tick（含已解除条目）。
 // 返回的是条目副本：序列化在 RUnlock 之后进行，直接交出内部指针会与
 // Resolve/Record 的原地修改形成数据竞争。
-func (ah *AlertHistory) Snapshot(afterAlertID string, sinceTick int64, limit int) ([]*model.ProductionAlert, string, bool, int64) {
+func (ah *AlertHistory) Snapshot(afterAlertID string, sinceTick int64, limit int, activeOnly bool) ([]*model.ProductionAlert, string, bool, int64) {
 	ah.mu.RLock()
 	defer ah.mu.RUnlock()
 
-	if limit <= 0 {
-		limit = len(ah.alerts)
-	}
 	availableFrom := int64(0)
 	if len(ah.alerts) > 0 {
 		availableFrom = ah.alerts[0].Tick
 	}
+	// 游标先在「完整顺序」里定位：active_only 下如果游标条目恰好刚被解除，
+	// 它仍是一个有效位置，不能退回从头开始（否则客户端会重复拉同一页）。
+	ordered := ah.orderedLocked(false)
 	start := 0
-	useTickFallback := true
 	if afterAlertID != "" {
-		if idx, ok := ah.index[afterAlertID]; ok {
-			start = idx + 1
-			useTickFallback = false
-		}
-	}
-	if useTickFallback && sinceTick > 0 {
-		found := false
-		for i, alert := range ah.alerts {
-			if alert.Tick >= sinceTick {
-				start = i
-				found = true
+		for i, alert := range ordered {
+			if alert.AlertID == afterAlertID {
+				start = i + 1
 				break
 			}
 		}
-		if !found {
-			start = len(ah.alerts)
+	}
+	filtered := make([]*model.ProductionAlert, 0, len(ordered))
+	for _, alert := range ordered[start:] {
+		if activeOnly && !alert.Active {
+			continue
 		}
+		if sinceTick > 0 && alertSortTick(alert) < sinceTick {
+			continue
+		}
+		filtered = append(filtered, alert)
 	}
-	if start >= len(ah.alerts) {
-		return nil, "", false, availableFrom
+	if limit <= 0 || limit > len(filtered) {
+		limit = len(filtered)
 	}
-	end := start + limit
-	if end > len(ah.alerts) {
-		end = len(ah.alerts)
-	}
-	result := cloneAlerts(ah.alerts[start:end])
+	result := cloneAlerts(filtered[:limit])
 	nextID := ""
 	if len(result) > 0 {
 		nextID = result[len(result)-1].AlertID
 	}
-	hasMore := end < len(ah.alerts)
+	hasMore := limit < len(filtered)
 	return result, nextID, hasMore, availableFrom
+}
+
+// alertSortTick 告警的「最近一次发生」tick：聚合条目用 LastTick，未重复过时回退 Tick。
+func alertSortTick(alert *model.ProductionAlert) int64 {
+	if alert == nil {
+		return 0
+	}
+	if alert.LastTick > alert.Tick {
+		return alert.LastTick
+	}
+	return alert.Tick
+}
+
+// orderedLocked 返回快照顺序（仍成立在前，其次按最近 tick 倒序）。
+// Callers must hold the read lock.
+func (ah *AlertHistory) orderedLocked(activeOnly bool) []*model.ProductionAlert {
+	ordered := make([]*model.ProductionAlert, 0, len(ah.alerts))
+	for _, alert := range ah.alerts {
+		if alert == nil || (activeOnly && !alert.Active) {
+			continue
+		}
+		ordered = append(ordered, alert)
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left, right := ordered[i], ordered[j]
+		if left.Active != right.Active {
+			return left.Active
+		}
+		leftTick, rightTick := alertSortTick(left), alertSortTick(right)
+		if leftTick != rightTick {
+			return leftTick > rightTick
+		}
+		// 同 tick 时按 alert_id 倒序，保证分页游标稳定、不随 map 顺序抖动。
+		return left.AlertID > right.AlertID
+	})
+	return ordered
 }
 
 // TrimAfterTick removes alerts with tick greater than target tick.
@@ -191,16 +262,14 @@ func (ah *AlertHistory) TrimAfterTick(tick int64) int {
 	return removed
 }
 
-// rebuildIndex recomputes the alert id and aggregation key indexes.
+// rebuildIndex recomputes the aggregation key index.
 // Callers must hold the write lock.
 func (ah *AlertHistory) rebuildIndex() {
-	ah.index = make(map[string]int, len(ah.alerts))
 	ah.keys = make(map[string]int, len(ah.alerts))
 	for i, alert := range ah.alerts {
 		if alert == nil {
 			continue
 		}
-		ah.index[alert.AlertID] = i
 		ah.keys[alertAggregationKey(alert)] = i
 	}
 }

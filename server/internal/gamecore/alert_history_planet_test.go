@@ -35,7 +35,7 @@ func TestAlertHistorySeparatesSameBuildingIDAcrossPlanets(t *testing.T) {
 	}
 
 	// 快照返回副本：改返回值不能改内部状态（审查问题 7）。
-	snap, _, _, _ := ah.Snapshot("", 0, 0)
+	snap, _, _, _ := ah.Snapshot("", 0, 0, false)
 	for _, alert := range snap {
 		if alert.PlanetID == "planet-1-2" {
 			alert.Active = false

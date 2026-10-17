@@ -543,7 +543,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 响应：`event_types` / `since_tick` / `after_event_id` / `available_from_tick` / `next_event_id` / `has_more` / `events[]`。事件按类型独立保留，高频事件不会挤掉 `command_result`。
 
 **`GET /alerts/production/snapshot`**：产线告警补拉。
-- 参数：`after_alert_id`（推荐）、`since_tick`、`limit`（默认 `alert_history_limit`）。
+- 参数：`after_alert_id`（推荐）、`since_tick`、`active_only`（bool，可选）、`limit`（默认 `alert_history_limit`）。
+- **排序**：仍成立（`active=true`）的条目在前，其后是已解除的历史条目；两组内都按「最近一次发生」tick（`last_tick`，未重复过回退 `tick`）**倒序**——最新告警永远排最前，客户端只取 `limit=50` 也能看到刚出现的 `haul_unreachable` / `belt_blocked`（试玩 1016 严重 1：旧实现按插入顺序从最老返回，新告警被挤出客户端视野）。
+- **`active_only=true`**：只返回仍成立的条目（顶栏计数 / 警报条 / 地图红标 / 选中条提示用）。`limit` 只作用于过滤后的结果，不会被已解除的历史条目挤占；非布尔值返回 400。
+- **分页**：`after_alert_id` 是上述顺序里的游标（返回它之后的条目）；`since_tick` 按「最近一次发生」tick 过滤（`last_tick >= since_tick`）；`has_more` / `next_alert_id` 与过滤后的结果一致。游标条目在 `active_only` 视图里恰好被解除时，仍按它在完整顺序里的位置继续，不会从头重拉。
 - 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、**`active`**、`resolved_tick`、`planet_id`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
 - **`active`（bool，始终出现）**：该告警当前是否仍成立。出现时 `true`；问题解除后变为 `false` 并写入 `resolved_tick`（解除的 tick，之后不再改写）。客户端应只显示/画标记 `active=true` 的条目——历史条目保留在快照里供复盘（试玩 1016 报告问题 2：旧实现只清内部状态，快照条目一直挂着冻结的 `last_tick`，带子恢复流动后红标也不消失）。同一建筑同类问题再次出现时复用原条目（`alert_id` 不变），`active` 恢复为 `true`、`resolved_tick` 清零。所有告警类型（`belt_blocked` / `power_shortage` / `input_shortage` / `output_blocked` / `backlog` / `throughput_drop` / `unit_spawn_blocked`）统一走这条规则。
 - 同一行星同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。聚合键是 `planet_id + building_id + alert_type`：建筑 ID 只在行星内唯一，不同行星上的同 ID 建筑各自独立成立/解除。

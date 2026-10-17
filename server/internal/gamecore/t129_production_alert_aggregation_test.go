@@ -89,29 +89,42 @@ func TestAlertHistoryKeepsDistinctStreamsSeparate(t *testing.T) {
 	}
 }
 
-// The cursor returned for pagination stays valid while repeats aggregate:
-// an aggregated update must not shift positions or mint new alert ids.
+// 游标分页按快照顺序（仍成立在前、最新在前）工作：翻页不会漏条目，
+// 聚合更新只刷新原条目（不产生新 alert_id、不新增条目）。
 func TestAlertHistoryCursorStableUnderAggregation(t *testing.T) {
 	ah := NewAlertHistory(10)
 	first := newTestAlert("b-1", model.AlertTypeBacklog, 100)
 	second := newTestAlert("b-2", model.AlertTypeBacklog, 105)
 	ah.Record([]*model.ProductionAlert{first, second})
 
-	alerts, nextID, hasMore, _ := ah.Snapshot(first.AlertID, 0, 10)
-	if hasMore || len(alerts) != 1 || alerts[0].AlertID != second.AlertID {
-		t.Fatalf("snapshot after first id must return only second alert, got %+v (next=%q more=%v)", alerts, nextID, hasMore)
+	// 最新在前：second(105) → first(100)；按 limit=1 翻两页恰好各取一条。
+	alerts, nextID, hasMore, _ := ah.Snapshot("", 0, 1, false)
+	if !hasMore || len(alerts) != 1 || alerts[0].AlertID != second.AlertID || nextID != second.AlertID {
+		t.Fatalf("first page must be the newest alert, got %+v (next=%q more=%v)", alerts, nextID, hasMore)
+	}
+	alerts, _, hasMore, _ = ah.Snapshot(second.AlertID, 0, 1, false)
+	if hasMore || len(alerts) != 1 || alerts[0].AlertID != first.AlertID {
+		t.Fatalf("second page must be the older alert, got %+v (more=%v)", alerts, hasMore)
 	}
 
+	// 聚合重复：原条目只刷新 last_tick/repeat_count，不新增条目、不新铸 alert_id。
 	repeat := newTestAlert("b-1", model.AlertTypeBacklog, 120)
 	ah.Record([]*model.ProductionAlert{repeat})
 
-	alerts, _, hasMore, _ = ah.Snapshot(second.AlertID, 0, 10)
-	if hasMore || len(alerts) != 0 {
-		t.Fatalf("aggregated repeat must not appear as a new entry after the cursor, got %d alerts (more=%v)", len(alerts), hasMore)
-	}
 	all := ah.All()
 	if len(all) != 2 || all[0].RepeatCount != 1 || all[0].LastTick != 120 {
 		t.Fatalf("expected repeat aggregated into first entry, got %+v", all)
+	}
+	ids := map[string]bool{}
+	alerts, _, _, _ = ah.Snapshot("", 0, 10, false)
+	for _, alert := range alerts {
+		if ids[alert.AlertID] {
+			t.Fatalf("聚合更新后同一 alert_id 出现了两次: %q", alert.AlertID)
+		}
+		ids[alert.AlertID] = true
+	}
+	if len(ids) != 2 {
+		t.Fatalf("聚合更新后条目数 = %d, want 2", len(ids))
 	}
 }
 

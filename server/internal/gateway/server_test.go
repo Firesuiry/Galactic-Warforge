@@ -974,8 +974,100 @@ func TestProductionAlertSnapshotExposesActiveField(t *testing.T) {
 	}
 }
 
-func TestSaveEndpoint(t *testing.T) {
+// 快照排序 + active_only（试玩 1016 严重 1）：仍成立的在前、最新的在前；
+// active_only=true 只返回仍成立的条目，limit 不再被已解除的历史条目挤占。
+func TestProductionAlertSnapshotOrdersActiveNewestFirst(t *testing.T) {
 	srv, core := newTestServer(t)
+	core.AlertHistory().Record([]*model.ProductionAlert{
+		{AlertID: "alert-100-old-belt_blocked", Tick: 100, Active: true, PlayerID: "p1",
+			BuildingID: "belt-1", BuildingType: model.BuildingTypeConveyorBeltMk1,
+			AlertType: model.AlertTypeBeltBlocked, Severity: model.AlertSeverityWarning},
+		{AlertID: "alert-21815-new-haul_unreachable", Tick: 21815, Active: true, PlayerID: "p1",
+			BuildingID: "smelter-1", BuildingType: model.BuildingTypeArcSmelter,
+			AlertType: model.AlertTypeHaulUnreachable, Severity: model.AlertSeverityWarning},
+		{AlertID: "alert-300-resolved-backlog", Tick: 300, Active: true, PlayerID: "p1",
+			BuildingID: "asm-1", BuildingType: model.BuildingTypeAssemblingMachineMk1,
+			AlertType: model.AlertTypeBacklog, Severity: model.AlertSeverityWarning},
+	})
+	core.AlertHistory().Resolve("p1", "", "asm-1", model.AlertTypeBacklog, 400)
+
+	fetch := func(query string) (model.ProductionAlertSnapshotResponse, []map[string]any) {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/alerts/production/snapshot"+query, nil)
+		req.Header.Set("Authorization", "Bearer key1")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d: %s", query, rec.Code, rec.Body.String())
+		}
+		var resp model.ProductionAlertSnapshotResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("invalid json: %v", err)
+		}
+		var raw struct {
+			Alerts []map[string]any `json:"alerts"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("invalid json: %v", err)
+		}
+		return resp, raw.Alerts
+	}
+
+	resp, _ := fetch("?limit=50")
+	if len(resp.Alerts) != 3 {
+		t.Fatalf("expected 3 alerts, got %d", len(resp.Alerts))
+	}
+	if resp.Alerts[0].AlertID != "alert-21815-new-haul_unreachable" {
+		t.Fatalf("最新且仍成立的 haul_unreachable 必须排第一，got %s", resp.Alerts[0].AlertID)
+	}
+	if resp.Alerts[1].AlertID != "alert-100-old-belt_blocked" || !resp.Alerts[1].Active {
+		t.Fatalf("第二条应是仍成立的 belt_blocked，got %s active=%v", resp.Alerts[1].AlertID, resp.Alerts[1].Active)
+	}
+	if resp.Alerts[2].AlertID != "alert-300-resolved-backlog" || resp.Alerts[2].Active {
+		t.Fatalf("已解除条目应排最后，got %s active=%v", resp.Alerts[2].AlertID, resp.Alerts[2].Active)
+	}
+
+	activeResp, _ := fetch("?limit=50&active_only=true")
+	if len(activeResp.Alerts) != 2 {
+		t.Fatalf("active_only 应返回 2 条，got %d", len(activeResp.Alerts))
+	}
+	for _, alert := range activeResp.Alerts {
+		if !alert.Active {
+			t.Fatalf("active_only 返回了已解除条目: %s", alert.AlertID)
+		}
+	}
+	if activeResp.Alerts[0].AlertID != "alert-21815-new-haul_unreachable" {
+		t.Fatalf("active_only 仍应最新在前，got %s", activeResp.Alerts[0].AlertID)
+	}
+
+	// 分页连贯：limit=1 两页按同一顺序拼起来 == 全量顺序。
+	first, _ := fetch("?limit=1")
+	if !first.HasMore || len(first.Alerts) != 1 || first.Alerts[0].AlertID != "alert-21815-new-haul_unreachable" {
+		t.Fatalf("第一页应为最新一条且 has_more=true，got %+v", first)
+	}
+	second, _ := fetch("?limit=1&after_alert_id=" + first.NextAlertID)
+	if len(second.Alerts) != 1 || second.Alerts[0].AlertID != "alert-100-old-belt_blocked" {
+		t.Fatalf("第二页应为次新一条，got %+v", second.Alerts)
+	}
+	third, _ := fetch("?limit=1&after_alert_id=" + second.NextAlertID)
+	if third.HasMore || len(third.Alerts) != 1 || third.Alerts[0].AlertID != "alert-300-resolved-backlog" {
+		t.Fatalf("第三页应为最后一条且 has_more=false，got %+v", third)
+	}
+}
+
+// active_only 参数校验：非布尔值必须 400，而不是静默忽略。
+func TestProductionAlertSnapshotRejectsInvalidActiveOnly(t *testing.T) {
+	srv, _ := newTestServer(t)
+	req := httptest.NewRequest("GET", "/alerts/production/snapshot?active_only=maybe", nil)
+	req.Header.Set("Authorization", "Bearer key1")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSaveEndpoint(t *testing.T) {	srv, core := newTestServer(t)
 	core.AttachGameDir(gamedir.Open(t.TempDir()), minimalSaveMetaFile(), snapshot.Capture(core.World(), core.Discovery()))
 
 	body := bytes.NewBufferString(`{"reason":"manual"}`)

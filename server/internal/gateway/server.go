@@ -1123,7 +1123,18 @@ func (s *Server) handleProductionAlertSnapshot(w http.ResponseWriter, r *http.Re
 	}
 
 	afterAlertID := q.Get("after_alert_id")
-	alerts, nextAlertID, hasMore, availableFrom := sess.Core.AlertHistory().Snapshot(afterAlertID, sinceTick, limit)
+	// active_only=true 只返回仍成立的告警：顶栏计数、警报条、地图红标、选中条提示
+	// 都只关心这些（试玩 1016 严重 1——只取 50 条时不能被已解除的历史条目挤掉）。
+	activeOnly := false
+	if v := q.Get("active_only"); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "active_only must be a boolean")
+			return
+		}
+		activeOnly = parsed
+	}
+	alerts, nextAlertID, hasMore, availableFrom := sess.Core.AlertHistory().Snapshot(afterAlertID, sinceTick, limit, activeOnly)
 
 	filtered := make([]*model.ProductionAlert, 0, len(alerts))
 	for _, alert := range alerts {

@@ -49,7 +49,7 @@ func beltAlertCore(t *testing.T) (*GameCore, *model.WorldState, *model.Building)
 
 // activeAlerts 返回该玩家快照里的 active 告警（按 alert_id 索引）。
 func activeAlerts(core *GameCore, playerID string) map[string]*model.ProductionAlert {
-	alerts, _, _, _ := core.AlertHistory().Snapshot("", 0, 0)
+	alerts, _, _, _ := core.AlertHistory().Snapshot("", 0, 0, false)
 	out := make(map[string]*model.ProductionAlert, len(alerts))
 	for _, alert := range alerts {
 		if alert != nil && alert.PlayerID == playerID && alert.Active {
@@ -60,7 +60,7 @@ func activeAlerts(core *GameCore, playerID string) map[string]*model.ProductionA
 }
 
 func alertByType(core *GameCore, playerID string, alertType model.ProductionAlertType) *model.ProductionAlert {
-	alerts, _, _, _ := core.AlertHistory().Snapshot("", 0, 0)
+	alerts, _, _, _ := core.AlertHistory().Snapshot("", 0, 0, false)
 	for _, alert := range alerts {
 		if alert != nil && alert.PlayerID == playerID && alert.AlertType == alertType {
 			return alert
