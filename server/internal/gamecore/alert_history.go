@@ -30,12 +30,14 @@ func NewAlertHistory(limit int) *AlertHistory {
 }
 
 // alertAggregationKey identifies the stream an alert belongs to.
+// 建筑 ID 只在行星内唯一（不同行星都有 b-1），必须带上行星，否则两颗行星上
+// 同 ID 建筑的同种告警会合并成一条、解除时也会互相误标。
 func alertAggregationKey(alert *model.ProductionAlert) string {
-	return string(alert.AlertType) + "|" + alert.BuildingID
+	return alert.PlanetID + "|" + string(alert.AlertType) + "|" + alert.BuildingID
 }
 
 // Record appends alerts and enforces size limit. Repeats of an already
-// recorded (building, alert type) pair update the existing entry in place.
+// recorded (planet, building, alert type) pair update the existing entry in place.
 // 重新出现的告警会把条目恢复成 active（旧条目保留 first tick / repeat 计数，
 // 只刷新 active / last_tick）。
 func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
@@ -53,6 +55,7 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 		key := alertAggregationKey(alert)
 		if pos, ok := ah.keys[key]; ok {
 			existing := ah.alerts[pos]
+			existing.PlanetID = alert.PlanetID
 			existing.RepeatCount++
 			existing.LastTick = alert.Tick
 			existing.Severity = alert.Severity
@@ -78,13 +81,18 @@ func (ah *AlertHistory) Record(alerts []*model.ProductionAlert) {
 // Resolve 把「已解除」的告警条目标记为 inactive：问题第一次解除时写
 // ResolvedTick（重复调用不改写），之后快照里的 active=false，客户端据此
 // 撤掉告警条与地图红标（试玩 1016 报告问题 2）。没有对应条目时什么都不做。
-func (ah *AlertHistory) Resolve(playerID, buildingID string, alertType model.ProductionAlertType, tick int64) {
+// 旧存档里的条目没有 planet_id（PlanetID 为空）：带 planetID 查不到时退回
+// 按「空行星」再查一次，避免读档后历史条目永远解除不了。
+func (ah *AlertHistory) Resolve(playerID, planetID, buildingID string, alertType model.ProductionAlertType, tick int64) {
 	if ah == nil || buildingID == "" {
 		return
 	}
 	ah.mu.Lock()
 	defer ah.mu.Unlock()
-	pos, ok := ah.keys[alertAggregationKey(&model.ProductionAlert{BuildingID: buildingID, AlertType: alertType})]
+	pos, ok := ah.keys[alertAggregationKey(&model.ProductionAlert{PlanetID: planetID, BuildingID: buildingID, AlertType: alertType})]
+	if !ok && planetID != "" {
+		pos, ok = ah.keys[alertAggregationKey(&model.ProductionAlert{BuildingID: buildingID, AlertType: alertType})]
+	}
 	if !ok {
 		return
 	}
@@ -113,6 +121,8 @@ func (ah *AlertHistory) ReplaceAll(alerts []*model.ProductionAlert) {
 }
 
 // Snapshot returns alerts after a given alert ID or since a tick.
+// 返回的是条目副本：序列化在 RUnlock 之后进行，直接交出内部指针会与
+// Resolve/Record 的原地修改形成数据竞争。
 func (ah *AlertHistory) Snapshot(afterAlertID string, sinceTick int64, limit int) ([]*model.ProductionAlert, string, bool, int64) {
 	ah.mu.RLock()
 	defer ah.mu.RUnlock()
@@ -152,7 +162,7 @@ func (ah *AlertHistory) Snapshot(afterAlertID string, sinceTick int64, limit int
 	if end > len(ah.alerts) {
 		end = len(ah.alerts)
 	}
-	result := append([]*model.ProductionAlert(nil), ah.alerts[start:end]...)
+	result := cloneAlerts(ah.alerts[start:end])
 	nextID := ""
 	if len(result) > 0 {
 		nextID = result[len(result)-1].AlertID
@@ -205,6 +215,12 @@ func cloneAlerts(alerts []*model.ProductionAlert) []*model.ProductionAlert {
 			continue
 		}
 		cp := *alert
+		if len(alert.Details) > 0 {
+			cp.Details = make(map[string]any, len(alert.Details))
+			for key, value := range alert.Details {
+				cp.Details[key] = value
+			}
+		}
 		out = append(out, &cp)
 	}
 	return out

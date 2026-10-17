@@ -72,7 +72,7 @@ func settleUnitProduction(ws *model.WorldState) ([]*model.GameEvent, []alertReso
 		if len(b.UnitQueue) == 0 {
 			// 队列空了：出厂口堵塞的告警条件不再成立，解除（快照里 active=false）。
 			if _, cleared := monitorAlert(b.ProductionMonitor, model.AlertTypeUnitSpawnBlocked, false, ws.Tick, 0); cleared {
-				resolved = append(resolved, alertResolution{playerID: b.OwnerID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
+				resolved = append(resolved, alertResolution{playerID: b.OwnerID, planetID: ws.PlanetID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
 			}
 			continue
 		}
@@ -110,7 +110,7 @@ func settleUnitProduction(ws *model.WorldState) ([]*model.GameEvent, []alertReso
 		b.UnitQueue = b.UnitQueue[1:]
 		// 出生成功：出厂口不再被占，解除 unit_spawn_blocked。
 		if _, cleared := monitorAlert(b.ProductionMonitor, model.AlertTypeUnitSpawnBlocked, false, ws.Tick, 0); cleared {
-			resolved = append(resolved, alertResolution{playerID: b.OwnerID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
+			resolved = append(resolved, alertResolution{playerID: b.OwnerID, planetID: ws.PlanetID, buildingID: b.ID, alertType: model.AlertTypeUnitSpawnBlocked, tick: ws.Tick})
 		}
 		events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: b.OwnerID, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": ws.PlanetID}}, unitProductionEvent(b))
 	}
@@ -135,6 +135,7 @@ func unitSpawnBlockedEvents(ws *model.WorldState, b *model.Building) []*model.Ga
 		Tick:         ws.Tick,
 		Active:       true,
 		PlayerID:     b.OwnerID,
+		PlanetID:     ws.PlanetID,
 		BuildingID:   b.ID,
 		BuildingType: b.Type,
 		AlertType:    model.AlertTypeUnitSpawnBlocked,

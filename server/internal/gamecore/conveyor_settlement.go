@@ -102,7 +102,7 @@ func settleBeltBlockAlerts(ws *model.WorldState) ([]*model.GameEvent, []alertRes
 			conveyor.BlockedTicks = 0
 			if building.ProductionMonitor != nil {
 				if _, cleared := monitorAlert(building.ProductionMonitor, model.AlertTypeBeltBlocked, false, ws.Tick, 0); cleared {
-					resolved = append(resolved, alertResolution{playerID: building.OwnerID, buildingID: building.ID, alertType: model.AlertTypeBeltBlocked, tick: ws.Tick})
+					resolved = append(resolved, alertResolution{playerID: building.OwnerID, planetID: ws.PlanetID, buildingID: building.ID, alertType: model.AlertTypeBeltBlocked, tick: ws.Tick})
 				}
 			}
 			continue
@@ -122,6 +122,7 @@ func settleBeltBlockAlerts(ws *model.WorldState) ([]*model.GameEvent, []alertRes
 			Tick:         ws.Tick,
 			Active:       true,
 			PlayerID:     building.OwnerID,
+			PlanetID:     ws.PlanetID,
 			BuildingID:   building.ID,
 			BuildingType: building.Type,
 			AlertType:    model.AlertTypeBeltBlocked,

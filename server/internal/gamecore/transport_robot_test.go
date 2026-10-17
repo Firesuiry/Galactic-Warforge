@@ -423,7 +423,7 @@ func TestHaulAbortsWhenEndpointDemolished(t *testing.T) {
 	// 直接拆掉终点（等价于被摧毁/拆除：建筑从世界消失）。
 	delete(ws.Buildings, target.ID)
 	ws.UnindexBuilding(target)
-	events := settleTransportRobots(ws)
+	events, _ := settleTransportRobots(ws)
 	if robot.Haul.FromBuildingID != "" || robot.Haul.ToBuildingID != "" {
 		t.Fatalf("端点消失后路线未清空: %+v", robot.Haul)
 	}

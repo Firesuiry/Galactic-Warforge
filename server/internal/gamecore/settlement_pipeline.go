@@ -49,8 +49,8 @@ func newSettlementPipeline() settlementPipeline {
 		}
 		// 行星运行时是最重的一段：按子步骤分段计时（同名跨行星累加），
 		// 剩余未单列的部分落在 "planetary_runtime" 名下。
-		var resolutions []alertResolution
 		for _, ws := range frame.worlds {
+			var resolutions []alertResolution
 			ws.DarkFogCalmTicks = gc.cfg.Battlefield.DarkFogCalmTicks
 			events = append(events, settleMechas(ws)...)
 			ws.ProductionSnapshot = model.NewProductionSettlementSnapshot(ws.Tick)
@@ -83,14 +83,23 @@ func newSettlementPipeline() settlementPipeline {
 			unitEvents, unitResolved := settleUnitProduction(ws)
 			events = append(events, unitEvents...)
 			resolutions = append(resolutions, unitResolved...)
+			// 出厂口堵塞告警与其他产线告警同口径进历史（解除逻辑才有真实条目可写）。
+			if gc.alertHistory != nil {
+				for _, evt := range unitEvents {
+					if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
+						gc.alertHistory.Record([]*model.ProductionAlert{alert})
+					}
+				}
+			}
 			settleAmmunitionSupply(ws)
 			events = append(events, settleTurrets(ws)...)
 			gc.prof.mark("units_turrets")
 			events = append(events, settleUnitMovement(ws)...)
 			// 运输机器人（§2）的装卸与路线循环：必须在移动之后，才能看到本 tick
 			// 是否走到了建筑外圈。
-			haulEvents := settleTransportRobots(ws)
+			haulEvents, haulResolved := settleTransportRobots(ws)
 			events = append(events, haulEvents...)
+			resolutions = append(resolutions, haulResolved...)
 			// haul_unreachable（自动模式到不了目标）与其它产线告警同口径进告警历史。
 			if gc.alertHistory != nil {
 				for _, evt := range haulEvents {
@@ -133,7 +142,7 @@ func newSettlementPipeline() settlementPipeline {
 			// 必须在新告警 Record 之后执行，避免同一 tick 先解除再重现时把新条目误标。
 			if gc.alertHistory != nil {
 				for _, res := range resolutions {
-					gc.alertHistory.Resolve(res.playerID, res.buildingID, res.alertType, res.tick)
+					gc.alertHistory.Resolve(res.playerID, res.planetID, res.buildingID, res.alertType, res.tick)
 				}
 			}
 

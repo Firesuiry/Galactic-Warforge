@@ -224,9 +224,9 @@ func refillBuildingOutputBuffer(building *model.Building) {
 		// 物料留在主库存（inventory），UI「本地存储」立刻可见、玩家可从详情「取出」。
 		// 旧实现无条件 RefillOutput，把装入的料整包搬进输出缓存，玩家在「本地存储」
 		// 只看到 0 /「-」，以为装料失败，要展开「输出缓存」才看得到
-		// （试玩 1014 层 06/09/10/11/12）。皮带 / 分拣器 / 管道取货走
-		// ExportableItemQuantity（= 输出缓冲 + 主库存）与 Provide，研究结算走
-		// OutputQuantity，都不受这里影响。
+		// （试玩 1014 层 06/09/10/11/12）。皮带 / 分拣器 / 管道 / 运输机器人取货
+		// 走 ExportableItemQuantity（生产建筑只出输出缓冲；这些无配方建筑属于
+		// 仓储类，主库存可导出）与 Provide，研究结算走 OutputQuantity，都不受这里影响。
 		if building.Runtime.Functions.Collect != nil {
 			building.Storage.RefillOutput()
 		}

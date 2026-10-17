@@ -11,7 +11,8 @@ import (
 // 告警，而不是永远在 to_target ↔ waiting_target 之间空转。
 
 // advanceAutoTicksEvents 与 advanceAutoTicks 相同的确定性子集，但把每 tick
-// 运输机器人结算产生的事件收集起来（用于断言放弃/告警事件）。
+// 运输机器人结算产生的事件收集起来（用于断言放弃/告警事件），并按结算管线
+// 的口径把 haul_unreachable 告警写进告警历史、把解除写回（快照条目 active）。
 func advanceAutoTicksEvents(core *GameCore, ws *model.WorldState, ticks int) []*model.GameEvent {
 	var events []*model.GameEvent
 	for i := 0; i < ticks; i++ {
@@ -23,7 +24,16 @@ func advanceAutoTicksEvents(core *GameCore, ws *model.WorldState, ticks int) []*
 		settleStorage(ws)
 		settleUnitProduction(ws)
 		settleUnitMovement(ws)
-		events = append(events, settleTransportRobots(ws)...)
+		robotEvents, robotResolved := settleTransportRobots(ws)
+		events = append(events, robotEvents...)
+		for _, evt := range robotEvents {
+			if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
+				core.alertHistory.Record([]*model.ProductionAlert{alert})
+			}
+		}
+		for _, res := range robotResolved {
+			core.alertHistory.Resolve(res.playerID, res.planetID, res.buildingID, res.alertType, res.tick)
+		}
 	}
 	return events
 }

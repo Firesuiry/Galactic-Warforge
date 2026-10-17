@@ -134,9 +134,10 @@ func pruneHaulCooldowns(ws *model.WorldState, haul *model.UnitHaulState) {
 }
 
 // haulRecordArrival 机器人到达建筑外圈：清掉失败计数、该建筑的冷却与告警。
-func haulRecordArrival(robot *model.Unit, building *model.Building) {
+// 告警解除返回一条 resolution，由结算管线写回告警历史（快照条目 active=false）。
+func haulRecordArrival(ws *model.WorldState, robot *model.Unit, building *model.Building) []alertResolution {
 	if robot == nil || robot.Haul == nil {
-		return
+		return nil
 	}
 	haul := robot.Haul
 	haul.UnreachableAttempts = 0
@@ -144,7 +145,10 @@ func haulRecordArrival(robot *model.Unit, building *model.Building) {
 	if building != nil && haul.UnreachableCooldowns != nil {
 		delete(haul.UnreachableCooldowns, building.ID)
 	}
-	clearHaulUnreachableAlert(building)
+	if resolution, ok := clearHaulUnreachableAlert(ws, building); ok {
+		return []alertResolution{resolution}
+	}
+	return nil
 }
 
 // haulRecordRoutePlanned 成功规划出一条路径：连续失败计数清零（长时间赶路
@@ -182,7 +186,9 @@ func raiseHaulUnreachableAlert(ws *model.WorldState, robot *model.Unit, building
 	alert := &model.ProductionAlert{
 		AlertID:      fmt.Sprintf("alert-%d-%s-%s", ws.Tick, building.ID, model.AlertTypeHaulUnreachable),
 		Tick:         ws.Tick,
+		Active:       true,
 		PlayerID:     building.OwnerID,
+		PlanetID:     ws.PlanetID,
 		BuildingID:   building.ID,
 		BuildingType: building.Type,
 		AlertType:    model.AlertTypeHaulUnreachable,
@@ -202,13 +208,21 @@ func raiseHaulUnreachableAlert(ws *model.WorldState, robot *model.Unit, building
 	}
 }
 
-// clearHaulUnreachableAlert 机器人重新到达该建筑：解除告警的持续状态。
-func clearHaulUnreachableAlert(building *model.Building) {
-	if building == nil || building.ProductionMonitor == nil {
-		return
+// clearHaulUnreachableAlert 机器人重新到达该建筑：解除告警的持续状态，
+// 并返回写回告警历史的 resolution（与其他告警同一路径，快照条目带 resolved_tick）。
+func clearHaulUnreachableAlert(ws *model.WorldState, building *model.Building) (alertResolution, bool) {
+	if ws == nil || building == nil || building.ProductionMonitor == nil {
+		return alertResolution{}, false
 	}
 	if !building.ProductionMonitor.ActiveAlerts[model.AlertTypeHaulUnreachable] {
-		return
+		return alertResolution{}, false
 	}
 	building.ProductionMonitor.Alert(model.AlertTypeHaulUnreachable, false, 0, 0)
+	return alertResolution{
+		playerID:   building.OwnerID,
+		planetID:   ws.PlanetID,
+		buildingID: building.ID,
+		alertType:  model.AlertTypeHaulUnreachable,
+		tick:       ws.Tick,
+	}, true
 }

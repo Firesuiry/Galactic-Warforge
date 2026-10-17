@@ -42,6 +42,7 @@ func (pm *productionMonitor) cooldownTicks() int64 {
 // 历史（AlertHistory.Resolve），让快照里的条目 active=false。
 type alertResolution struct {
 	playerID   string
+	planetID   string
 	buildingID string
 	alertType  model.ProductionAlertType
 	tick       int64
@@ -157,7 +158,7 @@ func (pm *productionMonitor) settleProductionMonitoring(ws *model.WorldState, cu
 			}
 		}
 
-		newAlerts, newResolutions := pm.evaluateAlerts(building, currentTick, backlog, throughput, inputShortage, outputBlocked)
+		newAlerts, newResolutions := pm.evaluateAlerts(ws.PlanetID, building, currentTick, backlog, throughput, inputShortage, outputBlocked)
 		resolved = append(resolved, newResolutions...)
 		if len(newAlerts) == 0 {
 			continue
@@ -198,7 +199,7 @@ func storageOutputBlocked(storage *model.StorageState, collector bool) bool {
 
 // evaluateAlerts 评估本建筑的全部告警类型：返回新告警与本次解除的告警。
 // 每类告警都要走一遍 Alert（即便条件为 false），解除状态才会被看到并写回历史。
-func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) ([]*model.ProductionAlert, []alertResolution) {
+func (pm *productionMonitor) evaluateAlerts(planetID string, building *model.Building, tick int64, backlog, throughput int, inputShortage, outputBlocked bool) ([]*model.ProductionAlert, []alertResolution) {
 	if pm == nil || building == nil || building.ProductionMonitor == nil {
 		return nil, nil
 	}
@@ -211,7 +212,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 	track := func(alertType model.ProductionAlertType, condition bool, build func() *model.ProductionAlert) {
 		fired, cleared := monitorAlert(state, alertType, condition, tick, cooldown)
 		if cleared {
-			resolved = append(resolved, alertResolution{playerID: building.OwnerID, buildingID: building.ID, alertType: alertType, tick: tick})
+			resolved = append(resolved, alertResolution{playerID: building.OwnerID, planetID: planetID, buildingID: building.ID, alertType: alertType, tick: tick})
 		}
 		if fired {
 			alerts = append(alerts, build())
@@ -226,7 +227,7 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 
 	track(model.AlertTypePowerShortage, building.Runtime.State == model.BuildingWorkNoPower, func() *model.ProductionAlert {
 		details := map[string]any{"power_priority": building.Runtime.Params.PowerPriority}
-		return pm.buildAlert(building, tick, model.AlertTypePowerShortage, model.AlertSeverityWarning, state.LastStats, details)
+		return pm.buildAlert(planetID, building, tick, model.AlertTypePowerShortage, model.AlertSeverityWarning, state.LastStats, details)
 	})
 
 	backlogRatio := 0.0
@@ -239,26 +240,27 @@ func (pm *productionMonitor) evaluateAlerts(building *model.Building, tick int64
 		if backlogRatio >= pm.cfg.BacklogCriticalRatio {
 			severity = model.AlertSeverityCritical
 		}
-		return pm.buildAlert(building, tick, model.AlertTypeBacklog, severity, state.LastStats, map[string]any{"backlog_ratio": backlogRatio})
+		return pm.buildAlert(planetID, building, tick, model.AlertTypeBacklog, severity, state.LastStats, map[string]any{"backlog_ratio": backlogRatio})
 	})
 
 	track(model.AlertTypeInputShortage, lineAlerts && inputShortage, func() *model.ProductionAlert {
-		return pm.buildAlert(building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil)
+		return pm.buildAlert(planetID, building, tick, model.AlertTypeInputShortage, model.AlertSeverityWarning, state.LastStats, nil)
 	})
 
 	track(model.AlertTypeOutputBlocked, outputBlocked, func() *model.ProductionAlert {
-		return pm.buildAlert(building, tick, model.AlertTypeOutputBlocked, model.AlertSeverityWarning, state.LastStats, nil)
+		return pm.buildAlert(planetID, building, tick, model.AlertTypeOutputBlocked, model.AlertSeverityWarning, state.LastStats, nil)
 	})
 
 	eff := state.LastStats.Efficiency
 	track(model.AlertTypeThroughputDrop, lineAlerts && throughput > 0 && eff < pm.cfg.EfficiencyWarnRatio, func() *model.ProductionAlert {
-		return pm.buildAlert(building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, map[string]any{"efficiency": eff})
+		return pm.buildAlert(planetID, building, tick, model.AlertTypeThroughputDrop, model.AlertSeverityWarning, state.LastStats, map[string]any{"efficiency": eff})
 	})
 
 	return alerts, resolved
 }
 
 func (pm *productionMonitor) buildAlert(
+	planetID string,
 	building *model.Building,
 	tick int64,
 	alertType model.ProductionAlertType,
@@ -272,6 +274,7 @@ func (pm *productionMonitor) buildAlert(
 		Tick:         tick,
 		Active:       true,
 		PlayerID:     building.OwnerID,
+		PlanetID:     planetID,
 		BuildingID:   building.ID,
 		BuildingType: building.Type,
 		AlertType:    alertType,

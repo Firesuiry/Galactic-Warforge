@@ -161,8 +161,8 @@ func TestAlertHistoryReplaceAllRebuildsAggregationKeys(t *testing.T) {
 func TestBuildAlertIDsAreUniquePerAlertType(t *testing.T) {
 	pm := newProductionMonitor(newTestMonitorConfig())
 	building := &model.Building{ID: "b-1", Type: model.BuildingTypeArcSmelter, OwnerID: "p1"}
-	a := pm.buildAlert(building, 100, model.AlertTypeBacklog, model.AlertSeverityWarning, model.MonitorStats{}, nil)
-	b := pm.buildAlert(building, 100, model.AlertTypeInputShortage, model.AlertSeverityWarning, model.MonitorStats{}, nil)
+	a := pm.buildAlert("planet-1", building, 100, model.AlertTypeBacklog, model.AlertSeverityWarning, model.MonitorStats{}, nil)
+	b := pm.buildAlert("planet-1", building, 100, model.AlertTypeInputShortage, model.AlertSeverityWarning, model.MonitorStats{}, nil)
 	if a.AlertID == b.AlertID {
 		t.Fatalf("alert ids must differ per alert type, both were %q", a.AlertID)
 	}

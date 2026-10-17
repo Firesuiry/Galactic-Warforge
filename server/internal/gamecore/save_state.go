@@ -251,6 +251,7 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	core.cmdLog.ReplaceAll(importCommandLog(save.DebugState.CommandLog))
 	core.eventHistory.ReplaceAll(save.DebugState.EventHistory)
 	core.alertHistory.ReplaceAll(save.DebugState.AlertHistory)
+	core.reconcileAlertActiveState()
 
 	if store != nil {
 		store.ReplaceAudit(cloneAuditEntries(save.DebugState.AuditLog))
@@ -258,6 +259,48 @@ func NewFromSave(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQu
 	}
 
 	return core, nil
+}
+
+// reconcileAlertActiveState 用告警历史里「仍成立」的条目重建每座建筑的
+// ProductionMonitor.ActiveAlerts。监控的滚动统计随快照恢复（BuildingSnapshot.
+// production_monitor），但「哪些告警仍成立」以告警历史为准：旧存档/回滚快照
+// 可能没有这份状态，缺了它 settleProductionMonitoring 的 wasActive 永远是
+// false，存档前就成立的告警永远不会被 Resolve（快照条目一直 active）。
+func (gc *GameCore) reconcileAlertActiveState() {
+	if gc == nil || gc.alertHistory == nil {
+		return
+	}
+	for _, alert := range gc.alertHistory.All() {
+		if alert == nil || !alert.Active {
+			continue
+		}
+		world := gc.worldByPlanet(alert.PlanetID)
+		if world == nil {
+			continue
+		}
+		building := world.Buildings[alert.BuildingID]
+		if building == nil {
+			continue
+		}
+		if building.ProductionMonitor == nil {
+			building.ProductionMonitor = model.NewProductionMonitorState()
+		}
+		if building.ProductionMonitor.ActiveAlerts == nil {
+			building.ProductionMonitor.ActiveAlerts = make(map[model.ProductionAlertType]bool)
+		}
+		building.ProductionMonitor.ActiveAlerts[alert.AlertType] = true
+	}
+}
+
+// worldByPlanet 按行星 ID 找世界（空 ID 取当前活动行星）。
+func (gc *GameCore) worldByPlanet(planetID string) *model.WorldState {
+	if gc == nil {
+		return nil
+	}
+	if planetID == "" {
+		return gc.world
+	}
+	return gc.worlds[planetID]
 }
 
 // attachSnapshotResourceBaseline 用地图模型重建每个行星快照的资源基线。

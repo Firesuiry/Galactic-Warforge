@@ -213,6 +213,7 @@ func cloneBuilding(b *model.Building) *BuildingSnapshot {
 		SprayCoater:       b.SprayCoater.Clone(),
 		LogisticsStation:  cloneLogisticsStation(b.LogisticsStation),
 		Production:        b.Production.Clone(),
+		ProductionMonitor: b.ProductionMonitor.Clone(),
 		FoundationTerrain: append([]string(nil), b.FoundationTerrain...),
 	}
 	if b.Job != nil {
@@ -337,6 +338,9 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		if err := mb.Production.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid production %s: %w", buildingID, err)
 		}
+	}
+	if snap.ProductionMonitor != nil {
+		mb.ProductionMonitor = snap.ProductionMonitor.Clone()
 	}
 	model.SyncBuildingProduction(mb)
 	model.SyncBuildingConveyor(mb)

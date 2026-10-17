@@ -58,21 +58,25 @@ type BuildingSnapshot struct {
 	// MiningItem 是采集建筑建成时定下的唯一开采矿种（见 model.MiningItemAt）：
 	// 覆盖框里数量最多的那种矿，平票取物品 ID 较小者。漏掉它会让读档后的矿机
 	// 按「覆盖框里第一个矿脉」重算，混矿簇上采到别的矿种。
-	MiningItem        string                       `json:"mining_item,omitempty"`
-	Runtime           model.BuildingRuntime        `json:"runtime"`
-	Storage           *model.StorageState          `json:"storage,omitempty"`
-	Distributor       *model.DistributorState      `json:"distributor,omitempty"`
-	EnergyStorage     *model.EnergyStorageState    `json:"energy_storage,omitempty"`
-	Conveyor          *model.ConveyorState         `json:"conveyor,omitempty"`
-	Splitter          *model.SplitterState         `json:"splitter,omitempty"`
-	TrafficMonitor    *model.TrafficMonitorState   `json:"traffic_monitor,omitempty"`
-	Fractionation     *model.FractionationState    `json:"fractionation,omitempty"`
-	SprayCoater       *model.SprayCoaterState      `json:"spray_coater,omitempty"`
-	Sorter            *model.SorterState           `json:"sorter,omitempty"`
-	LogisticsStation  *model.LogisticsStationState `json:"logistics_station,omitempty"`
-	Production        *model.ProductionState       `json:"production,omitempty"`
-	Job               *BuildingJobSnapshot         `json:"job,omitempty"`
-	FoundationTerrain []string                     `json:"foundation_terrain,omitempty"`
+	MiningItem       string                       `json:"mining_item,omitempty"`
+	Runtime          model.BuildingRuntime        `json:"runtime"`
+	Storage          *model.StorageState          `json:"storage,omitempty"`
+	Distributor      *model.DistributorState      `json:"distributor,omitempty"`
+	EnergyStorage    *model.EnergyStorageState    `json:"energy_storage,omitempty"`
+	Conveyor         *model.ConveyorState         `json:"conveyor,omitempty"`
+	Splitter         *model.SplitterState         `json:"splitter,omitempty"`
+	TrafficMonitor   *model.TrafficMonitorState   `json:"traffic_monitor,omitempty"`
+	Fractionation    *model.FractionationState    `json:"fractionation,omitempty"`
+	SprayCoater      *model.SprayCoaterState      `json:"spray_coater,omitempty"`
+	Sorter           *model.SorterState           `json:"sorter,omitempty"`
+	LogisticsStation *model.LogisticsStationState `json:"logistics_station,omitempty"`
+	Production       *model.ProductionState       `json:"production,omitempty"`
+	// ProductionMonitor 保存产线监控的滚动统计与「当前仍成立的告警」。
+	// 不存它的话读档/回滚后 ActiveAlerts 为空：settleProductionMonitoring 看不到
+	// wasActive，存档前就成立的告警永远不会被 Resolve（快照条目一直 active）。
+	ProductionMonitor *model.ProductionMonitorState `json:"production_monitor,omitempty"`
+	Job               *BuildingJobSnapshot          `json:"job,omitempty"`
+	FoundationTerrain []string                      `json:"foundation_terrain,omitempty"`
 }
 
 // BuildingJobSnapshot preserves in-flight job state for snapshots.

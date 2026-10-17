@@ -119,6 +119,58 @@ func TestBeltBlockedAlertResolvesInSnapshotWhenBeltFlowsAgain(t *testing.T) {
 	_ = ws
 }
 
+// 到不了的运输目标解除：机器人重新到达后快照条目 active=false（与其他告警同路径）。
+func TestHaulUnreachableAlertActiveThenResolved(t *testing.T) {
+	f := newUnreachableHaulFixture(t)
+	events := advanceAutoTicksEvents(f.core, f.ws, 200)
+	if countHaulAlertEvents(events, model.AlertTypeHaulUnreachable) != 1 {
+		t.Fatalf("应产生一条 haul_unreachable 事件")
+	}
+	// advanceAutoTicksEvents 是精简结算子集（不含告警历史管线）：手工按管线口径 Record。
+	alert := alertByType(f.core, "p1", model.AlertTypeHaulUnreachable)
+	if alert == nil {
+		t.Fatal("到不了的建筑应产生 haul_unreachable 告警")
+	}
+	if !alert.Active {
+		t.Fatalf("产生时快照条目必须 active=true，got %+v", alert)
+	}
+	if alert.PlanetID != f.ws.PlanetID {
+		t.Fatalf("planet_id = %q, want %q", alert.PlanetID, f.ws.PlanetID)
+	}
+
+	// 拆掉一圈里的第一台带子，留出一个落点；清冷却让派单重新选中它。
+	for _, cell := range f.ws.SurfaceDisc(f.blocked.Position, buildingRingSearchRadius(f.ws, f.blocked)) {
+		if !ringHasBuilding(f.ws, f.blocked, cell) {
+			continue
+		}
+		if id := f.ws.Grid[cell.Y][cell.X].BuildingID; id != "" && f.ws.Buildings[id] != nil {
+			demolishAutoBuilding(f.ws, id)
+			break
+		}
+	}
+	delete(f.robot.Haul.UnreachableCooldowns, f.blocked.ID)
+	haulFill(f.open, model.ItemIronOre, 8)
+	for i := 0; i < 800; i++ {
+		advanceAutoTicksEvents(f.core, f.ws, 1)
+		if !f.blocked.ProductionMonitor.ActiveAlerts[model.AlertTypeHaulUnreachable] {
+			break
+		}
+	}
+	if f.blocked.ProductionMonitor.ActiveAlerts[model.AlertTypeHaulUnreachable] {
+		t.Fatalf("机器人没有重新到达被围死的建筑: robot=%+v", f.robot.Haul)
+	}
+	resolved := alertByType(f.core, "p1", model.AlertTypeHaulUnreachable)
+	if resolved == nil {
+		t.Fatal("历史条目应保留")
+	}
+	if resolved.Active {
+		t.Fatalf("机器人到达后快照条目必须 active=false，got %+v", resolved)
+	}
+	if resolved.ResolvedTick == 0 {
+		t.Fatalf("解除的条目必须带 resolved_tick，got %+v", resolved)
+	}
+}
+
 // 缺电解除：power_shortage 也要在快照里变成 inactive。
 func TestPowerShortageAlertResolvesWhenPowerReturns(t *testing.T) {
 	core, ws, _ := beltAlertCore(t)
@@ -188,22 +240,50 @@ func TestOutputBlockedAlertResolvesWhenOutputDrains(t *testing.T) {
 }
 
 // 出厂口堵塞解除：兵营队列清空后 unit_spawn_blocked 变成 inactive。
+// 告警条目由结算管线自己 Record（不再手工塞历史），解除走真实路径。
 func TestUnitSpawnBlockedAlertResolvesWhenQueueClears(t *testing.T) {
 	core, ws, _ := beltAlertCore(t)
 	barracks := newBuilding("barracks", "barracks", "p1", model.Position{X: 5, Y: 5})
 	barracks.Runtime.State = model.BuildingWorkRunning
+	// 兵营耗电：把耗电清零，免得没有电网时掉进 no_power 而永远不出厂。
+	barracks.Runtime.Params.EnergyConsume = 0
+	if barracks.Runtime.Functions.Energy != nil {
+		barracks.Runtime.Functions.Energy.ConsumePerTick = 0
+	}
 	attachBuilding(ws, barracks)
-	barracks.ProductionMonitor = model.NewProductionMonitorState()
-	barracks.ProductionMonitor.ActiveAlerts = map[model.ProductionAlertType]bool{model.AlertTypeUnitSpawnBlocked: true}
-	core.AlertHistory().Record([]*model.ProductionAlert{{
-		AlertID: "alert-spawn-1", Tick: ws.Tick + 1, Active: true, PlayerID: "p1",
-		BuildingID: barracks.ID, BuildingType: barracks.Type, AlertType: model.AlertTypeUnitSpawnBlocked,
-	}})
-	barracks.UnitQueue = nil
-
-	core.processTick()
+	barracks.UnitQueue = []model.UnitProductionOrder{{UnitType: model.UnitTypeSoldier}}
+	// 把出生半径内的每一格都用传送带封死：单位只能留在队列里等。
+	blocked := 0
+	for _, tile := range ws.SurfaceDisc(barracks.Position, unitSpawnRadius+1) {
+		if !ws.InBounds(tile.X, tile.Y) || !tileWalkableForUnit(ws, tile, "") || ws.BuildingOccupies(barracks, tile) {
+			continue
+		}
+		belt := newBuilding("wall-"+model.TileKey(tile.X, tile.Y), model.BuildingTypeConveyorBeltMk1, "p1", tile)
+		belt.Runtime.State = model.BuildingWorkRunning
+		placeBuilding(ws, belt)
+		blocked++
+	}
+	if blocked == 0 {
+		t.Fatal("夹具没有封住出生圈")
+	}
+	for i := 0; i < 60; i++ {
+		core.processTick()
+	}
 	alert := alertByType(core, "p1", model.AlertTypeUnitSpawnBlocked)
+	if alert == nil || !alert.Active {
+		t.Fatalf("出生点被占满时应记录 active 的 unit_spawn_blocked，got %+v", alert)
+	}
+	if len(barracks.UnitQueue) != 1 {
+		t.Fatalf("单位应留在队列里等待，queue=%d", len(barracks.UnitQueue))
+	}
+
+	barracks.UnitQueue = nil
+	core.processTick()
+	alert = alertByType(core, "p1", model.AlertTypeUnitSpawnBlocked)
 	if alert == nil || alert.Active {
 		t.Fatalf("队列清空后 unit_spawn_blocked 必须解除，got %+v", alert)
+	}
+	if alert.ResolvedTick == 0 {
+		t.Fatalf("解除的条目必须带 resolved_tick，got %+v", alert)
 	}
 }

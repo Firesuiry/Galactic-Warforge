@@ -933,7 +933,7 @@ func TestProductionAlertSnapshotExposesActiveField(t *testing.T) {
 		BuildingID: "miner-1", BuildingType: model.BuildingTypeMiningMachine,
 		AlertType: model.AlertTypeOutputBlocked, Severity: model.AlertSeverityWarning,
 	}})
-	core.AlertHistory().Resolve("p1", "miner-1", model.AlertTypeOutputBlocked, 200)
+	core.AlertHistory().Resolve("p1", "", "miner-1", model.AlertTypeOutputBlocked, 200)
 
 	req := httptest.NewRequest("GET", "/alerts/production/snapshot?since_tick=0", nil)
 	req.Header.Set("Authorization", "Bearer key1")

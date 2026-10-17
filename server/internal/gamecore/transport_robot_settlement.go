@@ -15,7 +15,8 @@ import (
 // 规则（设计文档 §2 固定路线 / §2.1 全局自动）：
 //   - 起点/终点都是己方同行星建筑；起点要能取货，终点要能收货；
 //   - 走到建筑**占地外圈的相邻空 cell** 才能装卸（细分网格后建筑是多格占地）；
-//   - 装货走 ExportableItemQuantity（输出缓存 + 主库存，反馈料除外）；
+//   - 装货走 ExportableItemQuantity（生产建筑只出输出缓冲；仓储类主库存可导出；
+//     反馈料只算输出缓冲）；
 //   - 卸货走与 transfer_item to_building 完全相同的接收规则（产出预留、
 //     研究站只收矩阵、物流站需先配槽位）——本文件不复制那套判定，只复用；
 //   - 起点无货在起点等（waiting_source），终点收不下在终点等（waiting_target）；
@@ -77,9 +78,10 @@ func countTransportRobots(ws *model.WorldState, playerID string) (alive, queued 
 }
 
 // settleTransportRobots 推进所有运输机器人的装卸与路线循环（含自动模式派单）。
-func settleTransportRobots(ws *model.WorldState) []*model.GameEvent {
+// 第二个返回值是本 tick 解除的 haul_unreachable 告警（写回告警历史）。
+func settleTransportRobots(ws *model.WorldState) ([]*model.GameEvent, []alertResolution) {
 	if ws == nil || len(ws.Units) == 0 {
-		return nil
+		return nil, nil
 	}
 	var events []*model.GameEvent
 	robots := make([]*model.Unit, 0, len(ws.Units))
@@ -92,27 +94,30 @@ func settleTransportRobots(ws *model.WorldState) []*model.GameEvent {
 	}
 	// 自动模式：先按当前认领给空闲机器人派单，再逐台推进行程。
 	events = append(events, settleAutoHaul(ws, robots)...)
+	var resolved []alertResolution
 	for _, robot := range robots {
-		events = append(events, settleTransportRobot(ws, robot)...)
+		robotEvents, robotResolved := settleTransportRobot(ws, robot)
+		events = append(events, robotEvents...)
+		resolved = append(resolved, robotResolved...)
 	}
-	return events
+	return events, resolved
 }
 
 // settleTransportRobot 结算一台运输机器人的一 tick。
-func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.GameEvent {
+func settleTransportRobot(ws *model.WorldState, robot *model.Unit) ([]*model.GameEvent, []alertResolution) {
 	haul := robot.Haul
 	// 待命（stop / 自动模式暂无需求）：没有任务，不移动、不装卸。
 	if haul.Mode == model.HaulModeIdle || haul.FromBuildingID == "" && haul.ToBuildingID == "" {
-		return nil
+		return nil, nil
 	}
 	// 终点是任务成立的必要条件；取货端可以为空（自动模式下货已在车上改派）。
 	if haul.ToBuildingID == "" {
-		return nil
+		return nil, nil
 	}
 	source := ws.Buildings[haul.FromBuildingID]
 	target := ws.Buildings[haul.ToBuildingID]
 	if reason := haulEndpointLost(source, haul.FromBuildingID, target, haul.ToBuildingID, robot.OwnerID); reason != "" {
-		return abortHaul(ws, robot, reason)
+		return abortHaul(ws, robot, reason), nil
 	}
 
 	switch haul.Phase {
@@ -122,24 +127,24 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		return haulTravelTo(ws, robot, target, model.HaulPhaseToTarget, model.HaulPhaseUnloading)
 	case model.HaulPhaseLoading:
 		if !ringHasBuilding(ws, source, robot.Position) {
-			haulRecordArrival(robot, nil)
+			resolved := haulRecordArrival(ws, robot, nil)
 			haul.Phase = model.HaulPhaseToSource
-			return nil
+			return nil, resolved
 		}
 		if ws.Tick%haulRetryTicks != 0 {
-			return nil
+			return nil, nil
 		}
-		return haulLoadAtSource(ws, robot)
+		return haulLoadAtSource(ws, robot), nil
 	case model.HaulPhaseUnloading:
 		if !ringHasBuilding(ws, target, robot.Position) {
-			haulRecordArrival(robot, nil)
+			resolved := haulRecordArrival(ws, robot, nil)
 			haul.Phase = model.HaulPhaseToTarget
-			return nil
+			return nil, resolved
 		}
 		if ws.Tick%haulRetryTicks != 0 {
-			return nil
+			return nil, nil
 		}
-		return haulUnloadAtTarget(ws, robot)
+		return haulUnloadAtTarget(ws, robot), nil
 	case model.HaulPhaseWaitingSource:
 		return haulResumeFromWait(ws, robot, source, model.HaulPhaseToSource, model.HaulPhaseLoading)
 	case model.HaulPhaseWaitingTarget:
@@ -149,14 +154,14 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		// route 模式不该出现在这里（路线刚下达时下面的 default 分支会补阶段）。
 		if haul.Mode == model.HaulModeAuto {
 			haul.Phase = model.HaulPhaseIdle
-			return nil
+			return nil, nil
 		}
 		if haul.CargoQuantity() > 0 {
 			haul.Phase = model.HaulPhaseToTarget
 		} else {
 			haul.Phase = model.HaulPhaseToSource
 		}
-		return nil
+		return nil, nil
 	default:
 		// 路线刚下达（或阶段丢失）：车上还有货就先去终点，否则从起点开始。
 		if haul.CargoQuantity() > 0 {
@@ -164,7 +169,7 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		} else {
 			haul.Phase = model.HaulPhaseToSource
 		}
-		return nil
+		return nil, nil
 	}
 }
 
@@ -245,21 +250,20 @@ func abortHaul(ws *model.WorldState, robot *model.Unit, reason string) []*model.
 
 // haulTravelTo 行进阶段：到达建筑占地外圈即切到装卸阶段，否则按需重规划路径。
 // 路径推进由 settleUnitMovement 完成，这里只在「没路可走」时重新规划。
-func haulTravelTo(ws *model.WorldState, robot *model.Unit, building *model.Building, travelPhase, arrivalPhase model.HaulPhase) []*model.GameEvent {
+func haulTravelTo(ws *model.WorldState, robot *model.Unit, building *model.Building, travelPhase, arrivalPhase model.HaulPhase) ([]*model.GameEvent, []alertResolution) {
 	if ringHasBuilding(ws, building, robot.Position) {
 		robot.ClearMovement()
 		robot.Stance = model.UnitStanceIdle
 		robot.Haul.Phase = arrivalPhase
-		haulRecordArrival(robot, building)
-		return nil
+		return nil, haulRecordArrival(ws, robot, building)
 	}
 	if robot.HasPath() {
-		return nil
+		return nil, nil
 	}
 	if ws.Tick%haulRetryTicks != 0 {
-		return nil
+		return nil, nil
 	}
-	return haulRouteTo(ws, robot, building, travelPhase)
+	return haulRouteTo(ws, robot, building, travelPhase), nil
 }
 
 // haulRouteTo 让机器人前往建筑占地外圈的相邻空 cell。
@@ -308,23 +312,23 @@ func haulWaitingPhaseFor(phase model.HaulPhase) model.HaulPhase {
 }
 
 // haulResumeFromWait 等待状态的轮询：还在外圈就直接重试装卸，被挤开就重新走过去。
-func haulResumeFromWait(ws *model.WorldState, robot *model.Unit, building *model.Building, travelPhase, workPhase model.HaulPhase) []*model.GameEvent {
+func haulResumeFromWait(ws *model.WorldState, robot *model.Unit, building *model.Building, travelPhase, workPhase model.HaulPhase) ([]*model.GameEvent, []alertResolution) {
 	if ws.Tick%haulWaitPollTicks != 0 {
-		return nil
+		return nil, nil
 	}
 	if !ringHasBuilding(ws, building, robot.Position) {
 		robot.Haul.Phase = travelPhase
-		return nil
+		return nil, nil
 	}
-	haulRecordArrival(robot, building)
+	resolved := haulRecordArrival(ws, robot, building)
 	robot.Haul.Phase = workPhase
 	switch workPhase {
 	case model.HaulPhaseLoading:
-		return haulLoadAtSource(ws, robot)
+		return haulLoadAtSource(ws, robot), resolved
 	case model.HaulPhaseUnloading:
-		return haulUnloadAtTarget(ws, robot)
+		return haulUnloadAtTarget(ws, robot), resolved
 	}
-	return nil
+	return nil, resolved
 }
 
 // haulLoadAtSource 在起点装货：未指定物品时选「起点当前可取且终点当前能接收」的第一种。
@@ -489,7 +493,8 @@ func selectHaulPickupItem(ws *model.WorldState, robot *model.Unit) string {
 	return ""
 }
 
-// haulPickupQuantity 起点当前可取出量（输出缓存 + 主库存，反馈料只算输出缓存）。
+// haulPickupQuantity 起点当前可取出量（生产建筑只算输出缓冲，仓储类算主库存；
+// 反馈料只算输出缓冲，见 model.Building.ExportableItemQuantity）。
 func haulPickupQuantity(source *model.Building, itemID string) int {
 	if source == nil || source.Storage == nil || itemID == "" {
 		return 0

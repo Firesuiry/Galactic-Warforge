@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // ProductionAlertSeverity indicates alert importance.
 type ProductionAlertSeverity string
@@ -47,6 +50,7 @@ type ProductionAlert struct {
 	Active       bool                    `json:"active"`
 	ResolvedTick int64                   `json:"resolved_tick,omitempty"`
 	PlayerID     string                  `json:"player_id"`
+	PlanetID     string                  `json:"planet_id,omitempty"`
 	BuildingID   string                  `json:"building_id"`
 	BuildingType BuildingType            `json:"building_type"`
 	AlertType    ProductionAlertType     `json:"alert_type"`
@@ -54,6 +58,26 @@ type ProductionAlert struct {
 	Message      string                  `json:"message"`
 	Metrics      MonitorStats            `json:"metrics"`
 	Details      map[string]any          `json:"details,omitempty"`
+}
+
+// UnmarshalJSON 兼容旧存档：active 字段是第 16 轮后加的，旧存档点里的历史
+// 条目没有这个键——直接解码会得到 false，读档后全部历史告警看起来都「已解除」。
+// 缺省按 true 处理（当时能进历史的都是成立中的告警）；显式 false 仍然是已解除。
+func (a *ProductionAlert) UnmarshalJSON(data []byte) error {
+	type alertAlias ProductionAlert
+	aux := struct {
+		*alertAlias
+		Active *bool `json:"active"`
+	}{alertAlias: (*alertAlias)(a)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.Active == nil {
+		a.Active = true
+	} else {
+		a.Active = *aux.Active
+	}
+	return nil
 }
 
 // MonitorStats captures per-tick production monitoring data.
