@@ -18,11 +18,12 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	ws.Grid[0][1].Terrain = terrain.TileWater
 
 	player := &model.PlayerState{
-		PlayerID:  "player-1",
-		TeamID:    "team-1",
-		Role:      "commander",
-		Resources: model.Resources{Energy: 55},
-		IsAlive:   true,
+		PlayerID:       "player-1",
+		TeamID:         "team-1",
+		Role:           "commander",
+		Resources:      model.Resources{Energy: 55},
+		InventorySlots: 40,
+		IsAlive:        true,
 	}
 	player.SetPermissions([]string{"build", "move"})
 	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("unit-1", 1.2, 3, 2, 1.1))
@@ -190,6 +191,9 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 	if !restored.Players[player.PlayerID].HasPermission(model.CmdBuild) {
 		t.Fatalf("player permissions not restored")
+	}
+	if got := restored.Players[player.PlayerID].InventorySlots; got != 40 {
+		t.Fatalf("player inventory slots not restored: %d", got)
 	}
 	if restored.Pipelines == nil || restored.Pipelines.Nodes == nil || restored.Pipelines.Segments == nil {
 		t.Fatalf("pipeline snapshot missing")
