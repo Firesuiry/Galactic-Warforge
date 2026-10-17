@@ -1,7 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
+import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
+
+// 需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。');
 
 type Auth = {
   playerId: string;

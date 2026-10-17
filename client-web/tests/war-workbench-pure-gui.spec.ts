@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
+
+// 需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。');
+
 /**
  * P0 验收：全程只用 client-web GUI 打完一场 T122 官方战争局。
  *
@@ -9,8 +15,6 @@ import { expect, test, type Page } from '@playwright/test';
  * 唯一验收问题：一个不碰 CLI/API 的玩家能不能打完一仗。
  */
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 
 const BLUEPRINT_ID = 'corvette_pure_gui';
 const TASK_FORCE_ID = 'tf_pure_gui';

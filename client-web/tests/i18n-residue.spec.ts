@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { WEB_ENTRY } from './support/scenario';
+
 /**
  * 中英混杂防回流扫描（对应试玩报告「字段名/内部 id 裸露」类问题）：
  * 在真实战争服上遍历主要页面与抽屉页签，扫描渲染文本（含 <option>、title、aria-label）
@@ -8,7 +10,6 @@ import { expect, test, type Page } from '@playwright/test';
  * 与之互补的单测：src/i18n/event-payload.test.ts（payload → 中文描述的纯函数）。
  */
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
 const PLANET_ID = 'planet-1-1';
 
 /** 允许出现的 snake_case（当前为空：界面上不应有任何裸字段名/内部 id）。 */

@@ -3,8 +3,12 @@ import { surfaceFace, type SurfacePoint } from '../../shared-client/src/surface'
 
 import { enterBuildMode, revealBuildCard } from './support/build-bar';
 import { footprintFits } from './support/footprint';
+import { BACKEND_ENTRY as backend } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
 
-const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
+// 需要官方战争场景（固定出生点 132,132 与预置建筑），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（固定出生点 132,132 与预置建筑），默认遭遇战场景跳过。');
+
 const planet = 'planet-1-1';
 type Entity = { id: string; type: string; owner_id: string; position: SurfacePoint; move_range?: number };
 type Patch = { bounds: { x: number; y: number; width: number; height: number }; terrain: string[][]; visible: boolean[][] };

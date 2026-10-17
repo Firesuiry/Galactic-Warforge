@@ -3,8 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { buildingCells, catalogFootprint, footprintFits, occupiedCells, type CatalogLike } from './support/footprint';
 
 import { enterBuildMode, revealBuildCard } from './support/build-bar';
+import { BACKEND_ENTRY as backend } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
 
-const backend = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
+// 需要官方战争场景（预置 p1 执行体与基地建筑），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置 p1 执行体与基地建筑），默认遭遇战场景跳过。');
+
 const planetId = 'planet-1-1';
 /**
  * 机甲作业半径（cell）。config-war.yaml 的 executor.operate_range = 18（细分网格后按 cell 记，

@@ -1,5 +1,11 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
+import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
+
+// 需要官方战争场景（预置 battlefield_analysis_base），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置 battlefield_analysis_base），默认遭遇战场景跳过。');
+
 /**
  * 临时验收（2026-07-18 批次2 修复：web-08/12/13/14）：
  * - web-08（第 16 轮契约改写）：顶栏资金位已删，只剩「电网结余」（只读），背包库存走 title；
@@ -8,8 +14,6 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
  * - web-13：toast 文案本地化（单测覆盖，浏览器端抽查顶栏告警文案）。
  */
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 
 async function installSession(page: Page) {
   await page.addInitScript((serverUrl) => {

@@ -1,5 +1,11 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
+import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
+
+// 需要官方战争场景（预置重组制造台），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置重组制造台），默认遭遇战场景跳过。');
+
 /**
  * web-09 回归（真实 Go 战争服）：
  * 行星工作台「战斗与制造」页签 → 选生产建筑 → 单位类型下拉列出可量产单位
@@ -12,8 +18,6 @@ import { expect, test, type Page, type APIRequestContext } from '@playwright/tes
  * - 没有匹配建筑时：断言服务端回执给出明确的中文配对错误（配对契约本身也要守住）。
  */
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const PLANET_ID = 'planet-1-1';
 
 interface CatalogUnit {

@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 import { surfaceNormal, surfaceStep } from '../../shared-client/src/surface';
 
 import { revealBuildCard } from './support/build-bar';
+import { BACKEND_ENTRY as backend } from './support/scenario';
 
 // Run with SW_TEST_MAP=<repo>/server/testdata/map-cube-poles.yaml SW_CUBE_POLES=1.
 test.skip(process.env.SW_CUBE_POLES !== '1', 'Requires the isolated north/south pole backend fixture.');
-const backend=process.env.SW_BACKEND_ENTRY??`http://127.0.0.1:${process.env.SW_BACKEND_PORT??'19481'}`;
 for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_player_2','south']] as const) {
   test(`${hemisphere} pole: real construction and unit movement`,async({page})=>{
     test.setTimeout(150_000);

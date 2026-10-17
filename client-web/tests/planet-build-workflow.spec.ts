@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
+
+// 需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。
+requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。');
+
 import { enterBuildMode, openBuildShortageNotice, revealBuildCard } from './support/build-bar';
 import { buildingCells, footprintFits, occupiedCells } from './support/footprint';
 
@@ -13,8 +19,6 @@ import { buildingCells, footprintFits, occupiedCells } from './support/footprint
  * data-camera-offset-x/y 与 data-tile-size 换算成屏幕坐标点击。
  */
 
-const WEB_ENTRY = process.env.SW_WEB_ENTRY ?? 'http://127.0.0.1:4173';
-const BACKEND_ENTRY = process.env.SW_BACKEND_ENTRY ?? 'http://127.0.0.1:19481';
 const PLANET_ID = 'planet-1-1';
 /**
  * 机甲作业半径（cell）：config-war.yaml 的 executor.operate_range = 18（细分网格后按 cell 记，
