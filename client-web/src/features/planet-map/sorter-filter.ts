@@ -12,7 +12,7 @@
 import type { Building, CatalogView } from '@shared/types';
 
 import { getBuildingFootprint, type TilePoint } from './model';
-import { DIRECTION_NAMES, OPPOSITE_DIRECTION, logisticsArrows, stepTile, type CardinalDirection } from './logistics-direction';
+import { DIRECTION_NAMES, OPPOSITE_DIRECTION, isCardinalDirection, logisticsArrows, stepTile, type CardinalDirection } from './logistics-direction';
 
 export interface SorterFilterOption {
   id: string;
@@ -93,8 +93,11 @@ export interface SorterEndpointStatus {
  * 口径（`server/internal/gamecore/sorter_settlement.go` 的 `sorterFindEndpoint`）：
  * - 沿朝向轴从分拣器所在格**逐格**向外扫，**第一个非空格**就是端点（中间的格
  *   `TileBuilding` 为空时 continue，继续往前）；所以本函数也只扫到第一个占格为止。
- * - 端点必须己方；传送带端点取货要求 `output == 朝向的反向`、放货要求该侧允许输入
- *   （`conveyorAllowedInputs`：输出侧不收、input 受限时只收那一侧）。
+ * - 端点必须己方；传送带端点必须运行中且**不是分流器**（服务端直接拒掉分流器）。
+ * - 取货端：运行中的带格**任何位置都能取**（`sorterCanTakeFromConveyor`，DSP 口径：
+ *   带子上路过的物品都能被取走，**不要求带尾朝向分拣器**——第 16 轮契约 §2）。
+ * - 放货端：按 `conveyorAllowedInputs` 判该侧能不能插入（输出侧不收；`input` 被限制成
+ *   某一侧时只收那一侧）。
  * - 端点是「建筑」（不占 TileBuilding 的多格建筑按占地判定）时，取货要有输出端口、
  *   放货要有输入端口。
  *
@@ -150,21 +153,29 @@ export function sorterEndpointStatuses(
       if (state && state !== 'running') {
         return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok: false, problem: '端点的传送带没有运行（未接入电网 / 停机）' };
       }
-      // 取货：带子必须朝分拣器这一侧输出（服务端 sorterCanTakeFromConveyor：output == 朝向的反向）；
-      // 放货：该侧必须允许输入，而带子的输出侧不收（服务端 conveyorAllowedInputs 排掉 output 侧）。
-      const output = beltState.output;
-      const opposite = OPPOSITE_DIRECTION[direction];
-      if (side === 'take') {
-        const ok = output === opposite;
-        return {
-          ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok,
-          ...(ok ? {} : { problem: `取货端的传送带流向不对：带子朝${DIRECTION_NAMES[output as CardinalDirection] ?? '未知'}输出，而分拣器在${DIRECTION_NAMES[direction]}侧（要从带子上取货，带子得朝${DIRECTION_NAMES[opposite]}流）` }),
-        };
+      // 服务端 sorterFindEndpoint 对分流器一律不接（取/放都拒）。
+      if (endpoint.splitter) {
+        return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok: false, problem: '端点的传送带是分流器（分拣器不能直接接分流器）' };
       }
-      const ok = output !== opposite;
+      const opposite = OPPOSITE_DIRECTION[direction];
+      // 取货：运行中的带格任何位置都能取（服务端 sorterCanTakeFromConveyor：不要求带尾朝向分拣器）。
+      if (side === 'take') {
+        return { ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok: true };
+      }
+      // 放货：该侧必须允许输入（服务端 conveyorAllowedInputs：输出侧不收、input 受限时只收那一侧）。
+      const allowed = conveyorAllowedInputs(beltState);
+      const ok = allowed.has(opposite);
+      const output = isCardinalDirection(beltState.output) ? beltState.output : null;
+      const inputRestricted = isCardinalDirection(beltState.input)
+        && beltState.input !== output
+        && beltState.input !== (output ? OPPOSITE_DIRECTION[output] : null);
       return {
         ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok,
-        ...(ok ? {} : { problem: `放货端的传送带不接收这个方向：带子朝${DIRECTION_NAMES[opposite]}输出（输出侧不收）` }),
+        ...(ok ? {} : {
+          problem: inputRestricted
+            ? `放货端的传送带不接收这个方向：它被限制为只从${DIRECTION_NAMES[beltState.input as CardinalDirection]}侧进货（分拣器在${DIRECTION_NAMES[direction]}侧）`
+            : `放货端的传送带不接收这个方向：带子朝${output ? DIRECTION_NAMES[output] : '未知'}输出（输出侧不收）`,
+        }),
       };
     }
     const ports = endpoint.runtime?.params?.io_ports ?? [];
@@ -178,6 +189,35 @@ export function sorterEndpointStatuses(
       problem: side === 'take' ? '取货端没有可取的物品（该建筑没有输出口）' : '放货端不接收（该建筑没有输入口）',
     };
   });
+}
+
+/**
+ * 传送带可接受的进货侧（镜像服务端 `conveyorAllowedInputs`，`conveyor_settlement.go`）：
+ * - 分流器：只收 `splitter.input_directions`；
+ * - `input` 是实方向、且不等于 output / output 的反向（说明是「受限输入」）：只收那一侧；
+ * - 否则四向都收，但**输出侧不收**。
+ */
+export function conveyorAllowedInputs(
+  conveyor: { input?: string; output?: string },
+  splitter?: { input_directions?: readonly string[] },
+): Set<CardinalDirection> {
+  const allowed = new Set<CardinalDirection>();
+  if (splitter) {
+    for (const direction of splitter.input_directions ?? []) {
+      if (isCardinalDirection(direction)) allowed.add(direction);
+    }
+    return allowed;
+  }
+  const output: CardinalDirection | null = isCardinalDirection(conveyor.output) ? conveyor.output : null;
+  const input: CardinalDirection | null = isCardinalDirection(conveyor.input) ? conveyor.input : null;
+  if (input && input !== output && input !== (output ? OPPOSITE_DIRECTION[output] : null)) {
+    allowed.add(input);
+    return allowed;
+  }
+  for (const direction of ['north', 'east', 'south', 'west'] as CardinalDirection[]) {
+    if (direction !== output) allowed.add(direction);
+  }
+  return allowed;
 }
 
 /** 该格是否落在本机场景窗口里。 */

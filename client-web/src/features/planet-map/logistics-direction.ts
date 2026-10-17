@@ -42,7 +42,7 @@ const TILE_OFFSETS: Record<CardinalDirection, { x: number; y: number }> = {
   north: { x: 0, y: -1 }, east: { x: 1, y: 0 }, south: { x: 0, y: 1 }, west: { x: -1, y: 0 },
 };
 
-export function isCardinalDirection(direction: ConveyorDirection | undefined): direction is CardinalDirection {
+export function isCardinalDirection(direction: ConveyorDirection | string | undefined): direction is CardinalDirection {
   return direction === 'north' || direction === 'east' || direction === 'south' || direction === 'west';
 }
 

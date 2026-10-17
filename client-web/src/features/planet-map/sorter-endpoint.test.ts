@@ -63,13 +63,52 @@ describe('分拣器端点连通性提示（试玩 1016 U8）', () => {
     expect(statuses[1].problem).toContain('不接收');
   });
 
-  it('取货端带子流向不对：明确写出「带子朝南输出、分拣器在西侧，要朝东流」', () => {
+  it('取货端可以从任意路过的带格取货（服务端 sorterCanTakeFromConveyor：不要求带尾朝向分拣器）', () => {
     const unit = sorter();
+    // 带子朝南输出、分拣器在带子北侧：服务端照样能取（第 16 轮契约 §2 的 DSP 口径）。
     const statuses = sorterEndpointStatuses(unit, [unit, belt('b-west', 4, 5, 'south')], 16);
-    expect(statuses[0].ok).toBe(false);
-    expect(statuses[0].problem).toContain('流向不对');
-    expect(statuses[0].problem).toContain('带子朝南输出');
-    expect(statuses[0].problem).toContain('带子得朝东流');
+    expect(statuses[0]).toMatchObject({ side: 'take', ok: true, buildingId: 'b-west' });
+    expect(statuses[0].problem).toBeUndefined();
+  });
+
+  it('取货端带子朝分拣器流也接得上（旧口径的「正确朝向」仍然有效）', () => {
+    const unit = sorter();
+    const statuses = sorterEndpointStatuses(unit, [unit, belt('b-west', 4, 5, 'east')], 16);
+    expect(statuses[0]).toMatchObject({ side: 'take', ok: true });
+  });
+
+  it('取货端带子没运行：报「没有运行」而不是「流向不对」', () => {
+    const unit = sorter();
+    const stopped = { ...belt('b-west', 4, 5, 'south'), runtime: { ...belt('b-west', 4, 5, 'south').runtime, state: 'no_power' } } as Building;
+    const statuses = sorterEndpointStatuses(unit, [unit, stopped], 16);
+    expect(statuses[0]).toMatchObject({ side: 'take', ok: false });
+    expect(statuses[0].problem).toContain('没有运行');
+    expect(statuses[0].problem).not.toContain('流向');
+  });
+
+  it('取货端是分流器：服务端直接不接，客户端同样判不接', () => {
+    const unit = sorter();
+    const splitter = {
+      ...belt('b-west', 4, 5, 'east'),
+      splitter: { input_directions: ['east'], output_directions: ['north'], input_cursor: 0, output_cursor: 0, transferred_items: 0, last_transfer_tick: 0 },
+    } as unknown as Building;
+    const statuses = sorterEndpointStatuses(unit, [unit, splitter], 16);
+    expect(statuses[0]).toMatchObject({ side: 'take', ok: false });
+    expect(statuses[0].problem).toContain('分流器');
+  });
+
+  it('放货端 input 受限成某一侧时，只收那一侧（镜像 conveyorAllowedInputs）', () => {
+    const unit = sorter();
+    // 带子 output=east、input=south（不是 output 的反向）→ 只收 south 侧插入。
+    const restricted = { ...belt('b-west', 4, 5, 'east'), conveyor: { input: 'south', output: 'east' } } as unknown as Building;
+    // 分拣器 rot 270：正面朝西放货 → 从带子的东侧插入，被拒。
+    const denied = sorterEndpointStatuses(sorter({ rotation: '270' }), [unit, restricted], 16);
+    expect(denied[1]).toMatchObject({ side: 'drop', ok: false });
+    expect(denied[1].problem).toContain('只从南侧进货');
+    // 带子 input=east、output=north（侧向进货）时，东侧插入允许。
+    const open = { ...belt('b-west', 4, 5, 'north'), conveyor: { input: 'east', output: 'north' } } as unknown as Building;
+    const allowed = sorterEndpointStatuses(sorter({ rotation: '270' }), [unit, open], 16);
+    expect(allowed[1]).toMatchObject({ side: 'drop', ok: true });
   });
 
   it('端点是别人的建筑：点名「不属于你」', () => {
