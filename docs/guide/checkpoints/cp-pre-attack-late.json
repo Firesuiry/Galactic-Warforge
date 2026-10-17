@@ -1,12 +1,16 @@
 {
   "parent": "cp-pre-attack",
-  "note": "从 cp-pre-attack（tick 45773）读档后不下任何命令，服务端临时 tick_rate_override 50 空等到首攻前，tick 59276 存档。局面只有自然推进（产线、bot 发育），用于让打首攻的层不必空等一小时。",
-  "build": ["读档 cp-pre-attack", "不下命令，50 tick/s 空跑到 tick 59276", "存档 cp-pre-attack-late，契约通过"],
+  "note": "第 19 轮改写（可执行）：从 cp-pre-attack（tick 14350）读档，不下任何命令，快进到首攻前（bot easy 首攻门槛 tick 60000，本层停在 59000）。局面只有自然推进：产线继续跑、bot 发育、6 个步兵在补给站覆盖范围内待命。用来让打首攻的层不必空等一小时（旧口径是 50 tick/s 实时跑 13500 tick）。契约：对局未结束、p1 存活、步兵 ≥6、未见敌方攻击、黑雾中立。",
+  "steps": [
+    {"advance_to_tick": 59000}
+  ],
+  "end_tick": 59000,
   "contract": {"checks": [
     {"kind": "game_not_finished"},
     {"kind": "player_alive", "player": "p1"},
-    {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"},
     {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
-    {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
+    {"kind": "enemy_attack_seen", "player": "p1", "bool": false},
+    {"kind": "dark_fog_hostile", "player": "p1", "bool": false},
+    {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"}
   ]}
 }
