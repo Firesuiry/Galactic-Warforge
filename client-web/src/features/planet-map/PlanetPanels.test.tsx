@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CatalogView, Unit } from "@shared/types";
@@ -642,7 +642,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect(onOpenWorkflow).toHaveBeenCalledWith("research");
   });
 
-  it("试玩 1016 U4：取出表单里也有对称的「装入建筑」入口（不必翻到工作台）", () => {
+  it("试玩 1016 U4：取出表单旁有对称的「装入」表单（同一条 transfer_item，方向 to_building）", async () => {
     const planet = createPlanet();
     // 带库存的生产建筑：只有它会渲染「取出」表单。
     (planet.buildings as Record<string, unknown>)["b-smelt"] = {
@@ -673,14 +673,83 @@ describe("PlanetEntityPanel 建筑库存", () => {
         catalog={{ items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView}
         onOpenWorkflow={onOpenWorkflow}
         planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25 } } } } as never}
       />,
     );
 
     expect(screen.getByRole("form", { name: "取出物品表单" })).toBeInTheDocument();
-    const buttons = screen.getAllByRole("button", { name: "装入建筑" });
-    // 取出表单里那一个（列表最后一个）：点它就打开同一个「研究与装料」落地页。
-    fireEvent.click(buttons[buttons.length - 1]);
+    // 工作台的快捷入口仍在（落地页仍是同一个「研究与装料」表单）。
+    fireEvent.click(screen.getAllByRole("button", { name: "装入建筑" })[0]);
     expect(onOpenWorkflow).toHaveBeenCalledWith("research");
+
+    // 就地装入表单：候选物品 = 背包有 ∩ 建筑会收；默认数量 = min(10, 背包持有量)。
+    const form = screen.getByRole("form", { name: "装入物品表单" });
+    expect(form).toBeInTheDocument();
+    expect(within(form).getByRole("combobox", { name: "装入物品" })).toHaveValue("iron_ingot");
+    expect(within(form).getByRole("spinbutton", { name: "装入数量" })).toHaveValue(10);
+    expect(within(form).getByText(/背包 铁块 25 个/)).toBeInTheDocument();
+
+    fireEvent.change(within(form).getByRole("spinbutton", { name: "装入数量" }), { target: { value: "6" } });
+    fireEvent.submit(form);
+    await act(async () => {});
+
+    expect(mockClient.cmdTransferItem).toHaveBeenCalledWith(
+      "b-smelt",
+      "iron_ingot",
+      6,
+      "planet-1-1",
+      "to_building",
+    );
+  });
+
+  it("试玩 1016 U4：装入数量超过背包时按钮禁用；背包没有可收物品时说明原因", async () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["b-smelt"] = {
+      id: "b-smelt",
+      type: "smelter",
+      owner_id: "p1",
+      position: { x: 3, y: 3, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 4,
+      runtime: {
+        params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 2, height: 2 } },
+        functions: { storage: { capacity: 50 } },
+        state: "running",
+      },
+      storage: { inventory: { iron_ingot: 12 } },
+    };
+    usePlanetViewStore.getState().setSelected({
+      kind: "building",
+      id: "b-smelt",
+      position: { x: 3, y: 3, z: 0 },
+    });
+    const catalog = { items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView;
+
+    const { rerender } = render(
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 3 } } } } as never}
+      />,
+    );
+    const form = screen.getByRole("form", { name: "装入物品表单" });
+    const quantity = within(form).getByRole("spinbutton", { name: "装入数量" });
+    expect(quantity).toHaveValue(3);
+    fireEvent.change(quantity, { target: { value: "9" } });
+    expect(within(form).getByRole("button", { name: "装入" })).toBeDisabled();
+
+    // 背包清空：表单保留但给出「没有可装入的物品」的原因，按钮禁用。
+    rerender(
+      <PlanetEntityPanel
+        catalog={catalog}
+        planet={planet as never}
+        summary={{ players: { p1: { player_id: "p1", inventory: {} } } } as never}
+      />,
+    );
+    expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByText(/背包里没有这座建筑能接收的物品/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "装入" })).toBeDisabled();
   });
 
   it("回归（试玩 1013 bug-1013-2）：手搓缺料时保持玩家选中的配方并说明缺什么", () => {

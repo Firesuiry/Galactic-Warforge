@@ -2378,3 +2378,18 @@ body:has([data-planet-minimap]) {
 .sorter-endpoints__where { color:#8fb0bd; }
 .sorter-endpoints__state { flex:1; }
 .sorter-endpoints__warn { margin:4px 0; color:#ffb4b4; font-size:11px; }
+
+/* 建筑抽屉「装入」表单（试玩 1016 U4）：与取出表单同构，正下方一条；
+   提示/回执独占整行（flex-wrap 下用 flex-basis:100%）。 */
+.planet-load-form {
+  border-top: 1px dashed var(--line-2, #26344a);
+  padding-top: 8px;
+}
+.planet-load-form__hint,
+.planet-load-form__result {
+  flex-basis: 100%;
+  margin: 0;
+}
+.planet-load-form__result--error {
+  color: var(--danger, #ff6b6b);
+}
