@@ -319,6 +319,21 @@ describe('PlanetBuildBar', () => {
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('齿轮 0/1（不足）'));
   });
 
+  it('试玩 1017：分类页签展开时，悬停浮层仍挂在栏上（由 CSS 抬到页签行上方，不盖页签）', () => {
+    const { container } = renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    // 页签默认展开（store 初始值）：浮层与页签行同属 .planet-build-bar，
+    // 浮层位置由 .planet-build-bar--categories-open .planet-build-bar__detail 的
+    // bottom（栏顶 + 页签行高度 + 间距）决定，因此浮层底边在页签行之上。
+    const bar = container.querySelector('.planet-build-bar')!;
+    expect(bar.className).toContain('planet-build-bar--categories-open');
+    expect(bar.querySelector('.planet-build-bar__categories')).not.toBeNull();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /风力发电机/ }));
+    const detail = screen.getByTestId('planet-build-detail');
+    // 浮层是栏的直接子元素（absolute 相对栏定位），不是页签行的子元素。
+    expect(detail.parentElement).toBe(bar);
+    expect(bar.querySelector('.planet-build-bar__categories')?.contains(detail)).toBe(false);
+  });
+
   it('卡片与悬停详情显示物品造价（背包有/需要，不足标红并列缺什么）', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }

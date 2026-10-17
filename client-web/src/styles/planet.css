@@ -2233,7 +2233,11 @@
 .war-guide-panel li.is-current { color: #ffe08a; font-weight: 700; opacity: 1; }
 .war-guide-panel li.is-done { color: #7ee0a8; }
 
+/* 悬停造价浮层（试玩 1017 K4-01 后复核）：分类页签行浮在栏上方同一位置，
+   浮层默认 bottom:100%+6px 会整个盖住页签（截图里「1 电力」被压住）。
+   页签展开时把浮层再抬高一整条页签行高度，落在页签**上方**。 */
 .planet-build-bar__detail { position:absolute; left:0; bottom:calc(100% + 6px); z-index:5; display:flex; flex-direction:column; gap:3px; min-width:180px; max-width:min(260px,calc(100vw - 32px)); padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111dee; color:var(--text); font-size:.75rem; pointer-events:none; box-shadow:0 6px 20px #0008; }
+.planet-build-bar--categories-open .planet-build-bar__detail { bottom:calc(100% + var(--planet-build-categories-height) + 12px); }
 .planet-build-bar__detail strong { font-size:.82rem; }
 .planet-build-bar__detail span { display:inline-flex; align-items:center; gap:4px; font-variant-numeric:tabular-nums; }
 .planet-build-bar__detail-head { color:var(--text-muted); font-size:.68rem; }
