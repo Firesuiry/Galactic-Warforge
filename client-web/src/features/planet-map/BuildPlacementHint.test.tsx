@@ -135,7 +135,7 @@ describe('BuildPlacementHint 未探索区不本地拦截（试玩 1009 F）', ()
 describe('BuildPlacementHint 采集建筑「将开采哪一种矿」（第 16 轮契约 §5.1）', () => {
   const catalog = {
     buildings: [
-      { id: 'mining_machine', name: '采矿机', buildable: true, requires_resource_node: true, coverage_radius: 1, footprint: { width: 3, height: 3 } },
+      { id: 'mining_machine', name: '采矿机', buildable: true, requires_resource_node: true, coverage_radius: 1, footprint: { width: 3, height: 3 }, build_cost: { items: [{ item_id: 'iron_ore', quantity: 2 }] } },
     ],
     items: [
       { id: 'iron_ore', name: '铁矿' },
@@ -206,5 +206,43 @@ describe('BuildPlacementHint 采集建筑「将开采哪一种矿」（第 16 �
 
     expect(screen.queryByTestId('build-mining-hint')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('无法建造：需要建在资源点上');
+  });
+
+  it('缺料时两行都给：「无法建造：缺少…」与「将开采：铁矿」不互相顶掉（试玩 1016 摩擦 2）', () => {
+    render(
+      <BuildPlacementHint
+        catalog={catalog}
+        inventory={{}}
+        planet={planetWith([{ kind: 'iron_ore', x: 6, y: 7 }])}
+        playerId="p1"
+      />,
+    );
+    pointAt({ x: 5, y: 6 });
+
+    const hint = screen.getByRole('status');
+    // 缺料仍是第一行（主原因）
+    expect(hint).toHaveTextContent('无法建造：缺少');
+    // 开采预览同时在场，玩家能先看落点会采什么矿再决定补料/换位
+    const mining = screen.getByTestId('build-mining-hint');
+    expect(mining).toHaveTextContent('将开采：铁矿');
+    expect(hint).toContainElement(mining);
+  });
+
+  it('缺料 + 混矿：开采行带混矿警示（不会开采的矿种仍列出）', () => {
+    render(
+      <BuildPlacementHint
+        catalog={catalog}
+        inventory={{}}
+        planet={planetWith([
+          { kind: 'iron_ore', x: 5, y: 6 },
+          { kind: 'copper_ore', x: 6, y: 6 }, { kind: 'copper_ore', x: 7, y: 6 },
+        ])}
+        playerId="p1"
+      />,
+    );
+    pointAt({ x: 5, y: 6 });
+    const mining = screen.getByTestId('build-mining-hint');
+    expect(mining).toHaveTextContent('不会开采');
+    expect(mining.className).toContain('build-placement-hint--mining-mixed');
   });
 });

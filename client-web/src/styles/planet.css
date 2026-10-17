@@ -2241,6 +2241,10 @@
 .build-placement-hint--mining { border-color:#7ee08a55; background:#0a1c12e6; color:#b6f0c2; }
 /* 覆盖框里混了别的矿种：那些矿脉一格都不采，换警示色并列出矿种与格数。 */
 .build-placement-hint--mining-mixed { border-color:#ffc46b66; background:#231a06e6; color:#ffd79a; }
+/* 缺料 + 开采预览同时给（试玩 1016 摩擦 2）：两行，缺料红、开采绿，谁都不顶掉谁。 */
+.build-placement-hint { display:flex; flex-direction:column; gap:2px; white-space:normal; }
+.build-placement-hint__mining { color:#b6f0c2; font-size:.7rem; }
+.build-placement-hint__mining.is-mixed { color:#ffd79a; }
 
 /* 底部选择条/建造栏永远在抽屉之上；抽屉打开时让出抽屉宽度 + 小地图走廊。 */
 .planet-map-shell__overlay { z-index:8; }

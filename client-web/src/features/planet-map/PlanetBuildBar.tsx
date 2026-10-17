@@ -111,6 +111,11 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   const [activeCategory, setActiveCategory] = useState<string | 'auto'>('auto');
   // 新建筑尚无预渲染缩略图：加载失败则退回图标
   const [missingModels, setMissingModels] = useState<ReadonlySet<string>>(new Set());
+  /**
+   * 点了缺料的建造卡时记下它（试玩 1016 摩擦 1）：卡片真禁用、不进建造模式，
+   * 底部状态行改为列出这件建筑缺什么。切到别的卡/退出建造模式即清空。
+   */
+  const [shortageNotice, setShortageNotice] = useState<string | null>(null);
 
   const workflow = useMemo(() => deriveBuildWorkflowView({
     catalog,
@@ -145,6 +150,19 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     else setInteractionMode({ ...mode, rotation: ((mode.rotation ?? 0) + 90) % 360 as 0 | 90 | 180 | 270 });
   };
 
+  /**
+   * 朝向复位（试玩 1016 U-1）：R 在 5 档（传送带）/ 4 档（分拣器等）里循环，
+   * 误点一次就得再点 3–4 次才能回到默认。Shift+R / 「重置朝向」按钮直接回到默认朝向。
+   */
+  const resetDirection = () => {
+    const mode = usePlanetViewStore.getState().interactionMode;
+    if (mode.kind !== 'build') {
+      return;
+    }
+    if (isConveyorBeltBuilding(mode.buildingType)) setInteractionMode({ ...mode, direction: initialBuildDirection(mode.buildingType) });
+    else setInteractionMode({ ...mode, rotation: 0 });
+  };
+
   const selectBuildRecipe = (recipeId: string) => {
     const mode = usePlanetViewStore.getState().interactionMode;
     if (mode.kind !== 'build') {
@@ -167,6 +185,12 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
         return;
       }
       if (event.key === 'r' || event.key === 'R') {
+        // Shift+R = 朝向复位（试玩 1016 U-1）：不参与 5 档循环，直接回默认朝向。
+        if (event.shiftKey) {
+          event.preventDefault();
+          resetDirection();
+          return;
+        }
         cycleBeltDirection();
       }
     };
@@ -324,6 +348,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 data-building-id={entry.id}
                 type="button"
                 disabled={locked}
+                // 缺料卡**真禁用**（试玩 1016 摩擦 1）：以前只是视觉置灰，点下去照样进入建造模式、
+                // 照样能在地图上落子，服务端才回一条失败。现在点它只弹出缺料清单（见 onClick）。
+                aria-disabled={unaffordable || undefined}
                 aria-label={title}
                 onMouseEnter={() => setHoveredId(entry.id)}
                 onMouseLeave={() => setHoveredId((id) => (id === entry.id ? null : id))}
@@ -331,6 +358,19 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 onBlur={() => setHoveredId((id) => (id === entry.id ? null : id))}
                 onClick={() => {
                   sfx.uiClick();
+                  if (locked) {
+                    return;
+                  }
+                  if (unaffordable) {
+                    // 不进建造模式：把「还缺什么」直接显示在建造栏底部，并清掉上一次的建造模式，
+                    // 避免玩家以为已经进入放置状态。
+                    setShortageNotice(entry.id);
+                    if (active) {
+                      exitInteractionMode();
+                    }
+                    return;
+                  }
+                  setShortageNotice(null);
                   if (active) {
                     exitInteractionMode();
                   } else {
@@ -413,7 +453,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             <button
               className="planet-build-bar__control"
               type="button"
-              title="旋转建筑或传送带方向（快捷键 R）"
+              title="旋转建筑或传送带方向（快捷键 R；Shift+R 复位朝向）"
               onClick={cycleBeltDirection}
             >
               {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写「方位：东」，分拣器另标
@@ -426,6 +466,16 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                       ? `${DIRECTION_NAMES[facing]}（取货端 ${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]} → 放货端 ${DIRECTION_NAMES[facing]}）`
                       : DIRECTION_NAMES[facing];
                   })()} · R 旋转
+            </button>
+            {/* 误点 R 把带子铺反后不必再循环 3–4 次（试玩 1016 U-1）：一键回到默认朝向。 */}
+            <button
+              className="planet-build-bar__control"
+              type="button"
+              title="把朝向复位到默认（传送带朝东、分拣器朝北；快捷键 Shift+R）"
+              onClick={resetDirection}
+              data-testid="planet-build-direction-reset"
+            >
+              重置朝向
             </button>
             {availableRecipes.length > 0 ? (
               <select
@@ -443,6 +493,31 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           </div>
         </div>
       ) : null}
+      {/* 缺料卡被点：不进建造模式，只把「还缺什么」摊开（试玩 1016 摩擦 1）。 */}
+      {shortageNotice ? (() => {
+        const entry = visibleEntries.find((candidate) => candidate.id === shortageNotice);
+        const missing = entry
+          ? compareBuildItems(entry, inventory)
+            .filter((item) => item.short)
+            .map((item) => `${getItemDisplayName(catalog, item.item_id)} 还差 ${item.quantity - item.owned}（背包 ${item.owned}/${item.quantity}）`)
+          : [];
+        return (
+          <div className="planet-build-bar__footer" data-testid="planet-build-card-shortage">
+            <div className="planet-build-bar__status">
+              <span className="planet-build-bar__shortage" role="alert">
+                建造 {entry ? translateBuildingType(entry.id, entry.name) : ''} 还缺：{missing.join('、')}。补齐背包物品后再点这张卡。
+              </span>
+              <button
+                className="planet-build-bar__control"
+                type="button"
+                onClick={() => setShortageNotice(null)}
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }

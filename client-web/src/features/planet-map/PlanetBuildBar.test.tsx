@@ -149,22 +149,25 @@ describe('PlanetBuildBar', () => {
     render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    // 买不起的卡片仍可选中（玩家可能想先看预览）
-    expect(card).not.toBeDisabled();
+    // 买不起的卡片：真禁用（aria-disabled），点了不进建造模式，只列出缺料清单（试玩 1016 摩擦 1）。
+    expect(card).toHaveAttribute('aria-disabled', 'true');
     expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
 
     await user.click(card);
 
-    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ kind: 'build', buildingType: 'wind_turbine' });
-    const shortage = screen.getByTestId('planet-build-shortage');
-    // 第 16 轮契约：只有物品造价，不再有矿石/资金项
-    expect(shortage).toHaveTextContent('无法建造：缺少 齿轮 1、铁块 6');
-    // 缺料时不再显示「移动鼠标预览」的常规提示
-    expect(screen.queryByText(/移动鼠标预览/)).not.toBeInTheDocument();
-
-    // 再次点击退出建造模式后提示消失
-    await user.click(card);
+    // 不进建造模式
+    expect(usePlanetViewStore.getState().interactionMode.kind).not.toBe('build');
+    // 缺料清单直接摊开：逐项写「还差多少 / 背包有需要」
+    const notice = screen.getByTestId('planet-build-card-shortage');
+    expect(notice).toHaveTextContent('建造 风力发电机 还缺');
+    expect(notice).toHaveTextContent('齿轮 还差 1（背包 0/1）');
+    expect(notice).toHaveTextContent('铁块 还差 6（背包 0/6）');
+    // 底部建造模式状态行（「无法建造：缺少…」）不出现
     expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
+
+    // 「知道了」收起清单
+    await user.click(screen.getByRole('button', { name: '知道了' }));
+    expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
   });
 
   it('点击建筑卡片进入建造模式，再次点击退出', async () => {
@@ -216,7 +219,7 @@ describe('PlanetBuildBar', () => {
 
     // wind_turbine 要 铁块 6 / 齿轮 1，背包只有 4 / 0 → 整格置灰，逐项写出「背包有/需要」
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    expect(card).not.toBeDisabled();
+    expect(card).toHaveAttribute('aria-disabled', 'true');
     expect(card.className).toContain('planet-build-card--unaffordable');
     const cost = card.querySelector('.planet-build-card__cost');
     expect(cost?.textContent).toContain('4/6');
@@ -332,6 +335,37 @@ describe('PlanetBuildBar', () => {
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'auto' });
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+  });
+
+  it('朝向复位：Shift+R 或「重置朝向」按钮一键回到默认（试玩 1016 U-1）', async () => {
+    const user = userEvent.setup();
+    render(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+
+    await openCategory(user, '运输');
+    await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+    // 误点三次：东 → 北 → 南 → 西
+    await user.keyboard('r');
+    await user.keyboard('r');
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'west' });
+    // Shift+R 直接回默认（朝东），不需要再循环 2 次
+    await user.keyboard('{Shift>}r{/Shift}');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+
+    // 按钮同样可用
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
+    await user.click(screen.getByTestId('planet-build-direction-reset'));
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'east' });
+
+    // 分拣器：rotation 回到 0（正面北）
+    await user.click(screen.getByRole('button', { name: /分拣器 Mk\.I/ }));
+    await user.keyboard('r');
+    await user.keyboard('r');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 180 });
+    await user.keyboard('{Shift>}r{/Shift}');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 0 });
   });
 
   it('分拣器建造模式：R 旋转写 rotation、提示行说明取货/放货端（第 16 轮契约 §4）', async () => {
