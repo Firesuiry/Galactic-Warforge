@@ -273,13 +273,39 @@ function BuildingStorageSection({
     }
   }, [loadContext, loadItemId, loadItemOptions, catalog, building, playerInventory]);
   const loadItemOwned = loadItemId ? (playerInventory?.[loadItemId] ?? 0) : 0;
-  const loadQuantityValue = Number.parseInt(loadQuantity, 10);
-  const loadQuantityValid = Number.isInteger(loadQuantityValue) && loadQuantityValue > 0;
+  // 数量输入只认纯数字（试玩 1017 K4b）：`type="number"` 允许 "1.5" / "1e3"，
+  // 过去 parseInt 会把它们悄悄截成 1，玩家以为装了 1000 个其实只装了 1 个。
+  const loadQuantityValid = /^\d+$/.test(loadQuantity) && Number.parseInt(loadQuantity, 10) > 0;
+  const loadQuantityValue = /^\d+$/.test(loadQuantity) ? Number.parseInt(loadQuantity, 10) : Number.NaN;
+  const loadQuantityOverOwned =
+    loadQuantity !== "" && loadQuantityValid && loadQuantityValue > loadItemOwned;
   // 数量为空 = 服务端按「背包全部」装入（与工作台一致），但背包里必须有这件物品。
   const loadDisabled =
     loadPending || !canControl || !planetId || !loadItemId || !canReceiveLoad
-    || (loadQuantity !== "" && (!loadQuantityValid || loadQuantityValue > loadItemOwned))
+    || (loadQuantity !== "" && (!loadQuantityValid || loadQuantityOverOwned))
     || (loadQuantity === "" && loadItemOwned <= 0);
+  // 切换物品时数量按新物品的持有量重算（试玩 1017 K4b）：旧数量原样留着的话，
+  // 换到一件只有 2 个的物品会静默禁用按钮，玩家看不出为什么。
+  const changeLoadItem = (nextItemId: string) => {
+    setLoadItemId(nextItemId);
+    const owned = nextItemId ? (playerInventory?.[nextItemId] ?? 0) : 0;
+    setLoadQuantity(owned > 0 ? String(Math.min(10, owned)) : "");
+    setLoadResult(null);
+  };
+  // 装入后背包刷新（部分装入 / 外部消耗）：持有量下降时把超出的数量夹回持有量。
+  // 只在持有量**变化**时夹，不覆盖玩家手输的超量（超量仍禁用按钮并给出原因）。
+  const previousLoadOwnedRef = useRef(loadItemOwned);
+  useEffect(() => {
+    const previous = previousLoadOwnedRef.current;
+    previousLoadOwnedRef.current = loadItemOwned;
+    if (previous === loadItemOwned || !/^\d+$/.test(loadQuantity)) {
+      return;
+    }
+    if (Number.parseInt(loadQuantity, 10) > loadItemOwned) {
+      // 夹回剩余持有量；背包清空时留空（按钮禁用并提示没有可装入的物品）。
+      setLoadQuantity(loadItemOwned > 0 ? String(loadItemOwned) : "");
+    }
+  }, [loadItemOwned, loadQuantity]);
   const loadAcceptance = useMemo(
     () => (canReceiveLoad && loadItemId
       ? estimateTransferAcceptance(building, loadItemId, loadQuantityValue || loadItemOwned, loadItemOwned)
@@ -644,7 +670,7 @@ function BuildingStorageSection({
             <select
               aria-label="装入物品"
               disabled={loadItemOptions.length === 0}
-              onChange={(event) => setLoadItemId(event.target.value)}
+              onChange={(event) => changeLoadItem(event.target.value)}
               value={loadItemId}
             >
               <option value="">{loadItemOptions.length === 0 ? "背包里没有可装入的物品" : "选择物品"}</option>
@@ -661,9 +687,10 @@ function BuildingStorageSection({
               aria-label="装入数量"
               disabled={loadItemOptions.length === 0}
               min={1}
+              inputMode="numeric"
               onChange={(event) => setLoadQuantity(event.target.value)}
               placeholder="留空 = 全部"
-              type="number"
+              type="text"
               value={loadQuantity}
             />
           </label>
@@ -674,6 +701,14 @@ function BuildingStorageSection({
           >
             {loadPending ? "装入中…" : "装入"}
           </button>
+          {/* 数量被拒的原因写清楚（试玩 1017 K4b）：过去只是静默禁用，玩家不知道是数字格式还是数量超了。 */}
+          {loadItemId && (loadQuantityOverOwned || (loadQuantity !== "" && !loadQuantityValid)) ? (
+            <p className="subtle-text planet-load-form__hint is-short" role="status">
+              {loadQuantityOverOwned
+                ? `数量超过背包里的 ${loadItemOwned} 个`
+                : "数量要填正整数（留空 = 全部装入）"}
+            </p>
+          ) : null}
           {loadItemId ? (
             <p className="subtle-text planet-load-form__hint">
               背包 {getItemDisplayName(catalog, loadItemId)} {loadItemOwned} 个

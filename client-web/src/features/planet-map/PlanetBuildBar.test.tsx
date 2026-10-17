@@ -247,6 +247,28 @@ describe('PlanetBuildBar', () => {
     expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
   });
 
+  it('试玩 1017 K4b：未解锁提示行随切分类/进入建造模式收起', async () => {
+    const user = userEvent.setup();
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    await openCategory(user, '研究');
+    await user.click(screen.getByRole('button', { name: /矩阵研究站/ }));
+    expect(screen.getByTestId('planet-build-locked')).toBeInTheDocument();
+
+    // 切到别的分类 → 提示收起；切回研究分类也不复活（旧实现切回来还挂着）。
+    await openCategory(user, '运输');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+    await openCategory(user, '研究');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+
+    // 再次点未解锁卡出提示，然后点一张买得起的卡进入建造模式 → 提示收起。
+    await user.click(screen.getByRole('button', { name: /矩阵研究站/ }));
+    expect(screen.getByTestId('planet-build-locked')).toBeInTheDocument();
+    await openCategory(user, '运输');
+    await user.click(screen.getByRole('button', { name: /传送带/ }));
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('build');
+    expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
+  });
+
   it('试玩 1017 K4-01：未解锁卡保留建筑图（只压暗）、小锁角标、科技名带完整 title', async () => {
     const user = userEvent.setup();
     renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);

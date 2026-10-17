@@ -17,7 +17,7 @@
  */
 
 import { ChevronDown, Eye, EyeOff, Lock, Minimize2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { CatalogView, StateSummary } from '@shared/types';
@@ -237,7 +237,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
    * 分类页签里列出的建筑（试玩 1016 U6）：未解锁建筑**按分类**默认可见，
    * 以灰化卡 + 「需研究：科技名」出现，排在本分类已解锁建筑之后。
    * 旧实现整类隐藏，`1 电力` 只有风机一张卡，玩家看不出这一类还有哪些可研究解锁。
-   * 「显示未解锁」开关只再放出 debugOnly（无科技声明、正常玩法拿不到的建筑）。
+   * 「显示调试建筑」开关只再放出 debugOnly（无科技声明、正常玩法拿不到的建筑）。
    */
   const visibleEntries = useMemo(() => [
     ...workflow.catalog.recommended,
@@ -264,6 +264,27 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       setShortageNotice(null);
     }
   }, [shortageNotice, buildMode, shortageEntry, shortageMissing.length]);
+
+  // 未解锁提示行（试玩 1017 K4b）：切分类或进入建造模式就收起。旧实现只在
+  // lockedNoticeEntry 失效时才隐藏，切走再切回来提示还挂在底部，像一条常驻状态。
+  // 用 ref 记住上一次的分类（'auto' 也算一次切换）：首次挂载不算切换。
+  const previousCategoryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (previousCategoryRef.current === null) {
+      previousCategoryRef.current = activeCategory;
+      return;
+    }
+    if (previousCategoryRef.current === activeCategory) {
+      return;
+    }
+    previousCategoryRef.current = activeCategory;
+    setLockedNotice(null);
+  }, [activeCategory]);
+  useEffect(() => {
+    if (buildMode) {
+      setLockedNotice(null);
+    }
+  }, [buildMode]);
 
   // 数字键 1–9 切分类（输入控件聚焦时不抢按键）。
   //
@@ -305,7 +326,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     return null;
   }
 
-  // 选中建筑所在分类优先展示：点「显示未解锁」或点选卡片后总能看见它。
+  // 选中建筑所在分类优先展示：点「显示调试建筑」或点选卡片后总能看见它。
   const activeGroup = activeBuildingType
     ? groups.find((group) => group.entries.some((entry) => entry.id === activeBuildingType))
     : undefined;
@@ -313,6 +334,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     ? (activeGroup?.id ?? groups[0].id)
     : (groups.some((group) => group.id === activeCategory) ? activeCategory : groups[0].id);
   const currentGroup = groups.find((group) => group.id === currentGroupId) ?? groups[0];
+
   // 收起态：只留一行把手。
   if (docked) {
     return (

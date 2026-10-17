@@ -1795,7 +1795,7 @@
   padding:0 2px;
 }
 
-/* 栏右侧工具（分类页签 / 显示未解锁 / 收起）：小图标按钮（过去是三个文字按钮）。 */
+/* 栏右侧工具（分类页签 / 显示调试建筑 / 收起）：小图标按钮（过去是三个文字按钮）。 */
 .planet-build-bar__tools {
   display:flex;
   align-items:center;
@@ -1913,8 +1913,11 @@
 .planet-three__nav-status { display:flex; flex-direction:column; gap:6px; align-items:flex-start; font-size:11px; color:#a6c4d1; }
 .planet-three__nav-status small { max-width:280px; padding:3px 8px; border-radius:999px; background:#06131ece; }
 .planet-three__nav-status:empty { display:none; }
-/* 取消当前交互模式的按钮：单独一行贴在状态行上方（它可点，不能放进 pointer-events:none 的容器里）。 */
-.planet-three__nav-cancel { font-size:11px; }
+/* 取消当前交互模式的按钮：单独一行贴在状态行上方（它可点，不能放进 pointer-events:none 的容器里）。
+   试玩 1017 K4b：栈锚在 46px 宽的图标列里，绝对定位按图标列宽度收缩，按钮文字被挤成一字一行。
+   栈和按钮都按内容取宽（nowrap），让它横着长出去，而不是竖着堆。 */
+.planet-three__nav-stack { width:max-content; }
+.planet-three__nav-cancel { font-size:11px; white-space:nowrap; width:max-content; }
 /* 调试面板展开时（浮在同一位置、层级更高）让位：与 2D 状态行同一口径。 */
 .planet-map-shell:has(.debug-panel--open) .planet-three__nav-status { visibility:hidden; }
 .planet-three__eyebrow { color:#68dece; letter-spacing:3px; font-size:10px; }
@@ -2403,6 +2406,10 @@ body:has([data-planet-minimap]) {
   flex-basis: 100%;
   margin: 0;
 }
+/* 数量被拒的原因（试玩 1017 K4b）：和回执错误同色，玩家一眼看出是这一栏卡住了。 */
+.planet-load-form__hint.is-short {
+  color: var(--danger, #ff6b6b);
+}
 .planet-load-form__result--error {
   color: var(--danger, #ff6b6b);
 }
@@ -2411,10 +2418,6 @@ body:has([data-planet-minimap]) {
    造价条位置改写「需研究：<科技名>」，可点（点开底部状态行的解锁说明）。
    试玩 1017 K4-01：科技名在 52px 卡里一行放不下，旧版 nowrap+ellipsis 直接截断。
    现在允许换行、最多两行小字，完整名称另写在 title / aria-label 里。 */
-.planet-build-card--locked {
-  cursor:pointer;
-}
-
 .planet-build-card__unlock {
   display:-webkit-box;
   -webkit-box-orient:vertical;

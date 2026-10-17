@@ -54,8 +54,8 @@ test('行星页/总览/大厅渲染文本无 snake_case 裸字段名', async ({ 
   await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
   expect(await snakeCaseHits(page), '行星页初始').toEqual([]);
 
-  // 建造栏展开 + 显示未解锁（锁定卡的 aria-label 里会带解锁科技名）
-  await page.getByRole('button', { name: '显示未解锁' }).click();
+  // 建造栏展开 + 显示调试建筑（锁定卡的 aria-label 里会带解锁科技名）
+  await page.getByRole('button', { name: '显示调试建筑' }).click();
   expect(await snakeCaseHits(page), '建造栏（含未解锁）').toEqual([]);
 
   // 抽屉四个页签
