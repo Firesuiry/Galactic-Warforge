@@ -12,7 +12,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
-import { ghostArrowGeometry, ghostArrowTransform } from './three/ghost-arrow';
+import { ghostArrowGeometry, ghostArrowTransform, ghostLabelOffset, GHOST_LABEL_SCALE } from './three/ghost-arrow';
 import { ghostArrowTexture, ghostRoleLabelMaterial, disposeGhostArrowTextures, type GhostArrowRole } from './three/ghost-arrow-texture';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
@@ -1183,10 +1183,18 @@ export class PlanetThreeScene {
     mesh.renderOrder = 20;
     this.ghostMarks.add(mesh);
     if (!labeled) return;
-    // 标签浮在箭头正上方一点点（沿格法线抬 0.3 格），始终正对相机。
+    // 标签放在**箭头尖端之外**（试玩 1017 K4-04）：旧版贴箭头中心、0.3 格大圆盘
+    // 把虚线取货箭头整个盖住，两支箭头都读成色块。现在缩到 0.17 格并沿箭头方向
+    // 越过尖端半个箭头 + 半个标签，箭头本体（虚线/实心）完整露出。
     const sprite = new THREE.Sprite(this.ghostRoleLabelMaterial(role, color));
-    sprite.position.copy(position).multiplyScalar((position.length() + size * .3) / Math.max(position.length(), 1e-6));
-    sprite.scale.set(size * .3, size * .3, 1);
+    const outward = directionVector(direction);
+    const offset = ghostLabelOffset(size, scale, along);
+    const frame = tileFrame(tile, this.data!.planet.surface.face_size);
+    sprite.position.copy(position)
+      .multiplyScalar((position.length() + size * .3) / Math.max(position.length(), 1e-6))
+      .addScaledVector(frame.east, outward.x * offset)
+      .addScaledVector(frame.south, outward.y * offset);
+    sprite.scale.set(size * GHOST_LABEL_SCALE, size * GHOST_LABEL_SCALE, 1);
     sprite.renderOrder = 21;
     this.ghostMarks.add(sprite);
   }

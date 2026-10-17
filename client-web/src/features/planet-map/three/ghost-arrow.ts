@@ -32,6 +32,25 @@ export interface GhostArrowOptions {
   along?: number;
 }
 
+/**
+ * 「取」/「放」标签的 sprite 尺寸（格宽倍数）。
+ * 试玩 1017 K4-04：标签原来 0.3 格，几乎和 0.62 格的箭头一样大，圆盘把虚线取货箭头整个盖住。
+ * 缩到 0.17 格后仍能读字，又不遮箭头本体。
+ */
+export const GHOST_LABEL_SCALE = .17;
+
+/**
+ * 标签沿箭头方向、越过**箭头尖端**的落点偏移（世界单位）。
+ *
+ * 标签必须摆在箭头外侧（取货端在取货箭头尖外、放货端在放货箭头尖外），
+ * 否则圆盘压住箭头，虚线/实心两支都只剩一团色块。
+ */
+export function ghostLabelOffset(size: number, scale = 1, along = 0) {
+  // 箭头四边形边长 = size * .82 * scale，尖端离箭头中心半个边长；
+  // 标签中心再外移「半个标签 + 一点间隙」，保证标签内缘也不压到箭头尖。
+  return size * (along + .82 * scale * .5 + GHOST_LABEL_SCALE * .5 + .02);
+}
+
 /** 贴格平面的箭头四边形（局部 +X = 箭头指向、+Y = 格法线）。 */
 export function ghostArrowGeometry(size: number, scale = 1) {
   const geometry = new THREE.PlaneGeometry(size * .82 * scale, size * .82 * scale);

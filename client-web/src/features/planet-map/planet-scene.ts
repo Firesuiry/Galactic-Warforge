@@ -453,6 +453,16 @@ export function resolveSorterGhostArrows(
 }
 
 /**
+ * 2D 分拣器 ghost 标签的排版参数（试玩 1017 K4-05）：字号缩到约 2/3，
+ * 标签中心放在箭头尖端外侧「半个字宽 + 2px」，箭头本体不再被压住。
+ * 返回的 `gap` 是标签中心离尖端的距离，必须大于 `fontSize / 2`（内缘不压尖端）。
+ */
+export function sorterGhostLabelPlacement(tileSize: number): { fontSize: number; gap: number } {
+  const fontSize = Math.max(8, Math.min(11, tileSize * 0.36));
+  return { fontSize, gap: fontSize * 0.5 + 2 };
+}
+
+/**
  * 把线段按 dash / gap 切成若干子段（纯几何，便于单测）。
  * 2D 幽灵箭头用它画取货端的虚线（Pixi Graphics 没有原生 dash 描边）。
  * 最后一段不足一个 dash 时保留余量，保证尖端/尾端不会因为缺口而「断头」。
@@ -3118,14 +3128,17 @@ export class PlanetScene {
     this.haulLabelLayer.addChild(text);
   }
 
-  /** 分拣器 ghost 的「取」/「放」单字标签：贴在各自箭头尖端外侧（字比颜色好认）。 */
+  /** 分拣器 ghost 的「取」/「放」单字标签：贴在各自箭头**尖端外侧**（试玩 1017 K4-05）。
+   * 旧版标签压在箭头尖端上、字号也大，两支箭头糊成一团；现在字号缩到约 2/3，
+   * 并沿箭头方向越过尖端「半个字宽 + 2px」，箭头本体完整露出。 */
   private sorterGhostLabel(arrow: GhostArrowStroke, color: number, ts: number) {
     if (ts < 10) return;
     const { x: tx, y: ty } = directionVector(arrow.direction);
+    const { fontSize, gap } = sorterGhostLabelPlacement(ts);
     const text = new Text({
       text: sorterGhostArrowStyle(arrow.role).label,
       style: {
-        fontSize: Math.max(9, Math.min(14, ts * 0.5)),
+        fontSize,
         fill: color,
         fontFamily: 'system-ui, sans-serif',
         fontWeight: '700',
@@ -3133,7 +3146,7 @@ export class PlanetScene {
       },
     });
     text.anchor.set(0.5);
-    text.position.set(arrow.tip.x + tx * ts * 0.2, arrow.tip.y + ty * ts * 0.2);
+    text.position.set(arrow.tip.x + tx * gap, arrow.tip.y + ty * gap);
     this.haulLabelLayer.addChild(text);
   }
 
