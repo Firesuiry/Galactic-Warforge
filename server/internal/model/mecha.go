@@ -37,20 +37,20 @@ type MechaLogisticsRequest struct {
 }
 
 type MechaState struct {
-	LogisticsRequests   map[string]MechaLogisticsRequest `json:"logistics_requests,omitempty"`
-	Job                 *MechaJob                        `json:"job,omitempty"`
-	Energy              int                              `json:"energy"`
-	MaxEnergy           int                              `json:"max_energy"`
-	FuelEnergy          int                              `json:"fuel_energy"`
-	Shield              int                              `json:"shield"`
-	MaxShield           int                              `json:"max_shield"`
+	LogisticsRequests map[string]MechaLogisticsRequest `json:"logistics_requests,omitempty"`
+	Job               *MechaJob                        `json:"job,omitempty"`
+	Energy            int                              `json:"energy"`
+	MaxEnergy         int                              `json:"max_energy"`
+	FuelEnergy        int                              `json:"fuel_energy"`
+	Shield            int                              `json:"shield"`
+	MaxShield         int                              `json:"max_shield"`
 	// InventorySlots 是背包格数上限（DSP 机甲背包口径）：每格可堆叠该物品的
 	// stack_limit 件，容量按「占用格数」判定（不再有按件数的旧上限）。
-	InventorySlots      int                              `json:"inventory_slots"`
-	AttackEnergyCost    int                              `json:"attack_energy_cost"`
-	MoveEnergyCost      int                              `json:"move_energy_cost"`
-	ShieldRechargeDelay int64                            `json:"shield_recharge_delay"`
-	LastHitTick         int64                            `json:"last_hit_tick"`
+	InventorySlots      int   `json:"inventory_slots"`
+	AttackEnergyCost    int   `json:"attack_energy_cost"`
+	MoveEnergyCost      int   `json:"move_energy_cost"`
+	ShieldRechargeDelay int64 `json:"shield_recharge_delay"`
+	LastHitTick         int64 `json:"last_hit_tick"`
 }
 
 func (m *MechaState) Clone() *MechaState {
