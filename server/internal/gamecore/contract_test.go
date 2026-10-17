@@ -296,7 +296,7 @@ func TestBuildingPositionPredicates(t *testing.T) {
 	// building_no_alert_since：只看该建筑、该类型、且 tick >= 起点 的告警。
 	record := func(buildingID string, atTick int64, alertType model.ProductionAlertType) {
 		core.AlertHistory().Record([]*model.ProductionAlert{{
-			AlertID: fmt.Sprintf("a-%s-%d", buildingID, atTick), Tick: atTick, PlayerID: "p1",
+			AlertID: fmt.Sprintf("a-%s-%d", buildingID, atTick), Tick: atTick, Active: true, PlayerID: "p1",
 			BuildingID: buildingID, BuildingType: model.BuildingTypeConveyorBeltMk1,
 			AlertType: alertType, Severity: model.AlertSeverityWarning,
 		}})
@@ -322,6 +322,23 @@ func TestBuildingPositionPredicates(t *testing.T) {
 	}
 	if r := noAlert(30, 30, "power_shortage", 0); !r.Passed {
 		t.Fatalf("别的告警类型不影响，got %+v", r)
+	}
+
+	// 已解除的老告警不算「现在还堵着」：告警条目按 (行星,建筑,类型) 复用，
+	// 首次出现 tick 不会被改写；如果按首次 tick 判，产线配齐前堵过一次就会让
+	// 契约永远失败（试玩 1016 报告问题 1 的 cp-logistics：belt_blocked 首次
+	// 14588、15079 解除，之后一直通畅）。
+	core.AlertHistory().Resolve("p1", "", "depot-1", model.AlertTypeBeltBlocked, 500)
+	if r := noAlert(30, 30, "belt_blocked", 0); !r.Passed || r.Actual != "0" {
+		t.Fatalf("已解除的 belt_blocked 不该再让契约失败，got %+v", r)
+	}
+	// 同一建筑再次出现同类告警（Record 复用条目、恢复 active）后仍要能抓到。
+	record("depot-1", 600, model.AlertTypeBeltBlocked)
+	if r := noAlert(30, 30, "belt_blocked", 0); r.Passed || r.Actual != "1" {
+		t.Fatalf("重新出现的告警必须重新判失败，got %+v", r)
+	}
+	if r := noAlert(30, 30, "belt_blocked", 550); !r.Passed {
+		t.Fatalf("重新出现的告警首次 tick 是 600（条目复用不改 Tick），自 550 起应通过，got %+v", r)
 	}
 	_ = player
 }

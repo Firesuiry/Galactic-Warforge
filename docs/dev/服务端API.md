@@ -650,6 +650,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `building_running_gte` | `type`, `n` | 存活且 `runtime.state=running` 的建筑数 >= n（断电 `no_power`、停工 `paused`/`idle`、出错 `error` 都不算；试玩报告 1013 第 5 节：`building_count_gte` 放过了一座整局没电的研究站） |
 | `unit_count_gte` | `type`, `n` | 存活单位数 >= n（含机甲 `executor`） |
 | `item_gte` | `item_id`, `n` | 玩家可用物资 >= n |
+| `building_item_at_gte` / `building_item_at_lt` | `position`, `item_id`, `n` | 该落点（锚点格）上玩家建筑的该物品 >= n / < n（按落点而不是建筑 ID 定位，重建后 ID 会变） |
+| `building_item_gte` | `type`, `item_id`, `n` | 玩家该类存活建筑库存里该物品总数 >= n |
+| `building_no_alert_since` | `position`, `alert_type?`, `tick` | 该落点建筑自 tick 起没有**仍成立**的该类生产告警（已解除的历史条目不计数；同一条目复用时按首次出现 tick 判） |
+| `no_alert_since` | `alert_type`, `tick`, `type?` | 自 tick 起没有该类型的生产告警（`type` 非空时只看该建筑类型；全局口径，不做「或」展开） |
+| `research_progress_gte` | `tech_id?`, `n` | 进行中的研究进度 >= n（证明研究在推进，不是卡在 `waiting_matrix`） |
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
 | `enemy_attack_seen` | `bool` | 该玩家是否已被**敌方玩家**造成过伤害/损失（黑雾偷袭不算） |
 

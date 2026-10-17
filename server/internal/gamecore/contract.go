@@ -247,7 +247,8 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 		return fail(actual, fmt.Sprintf("要求 (%d,%d) 上 %s 里的 %s %s %d",
 			check.Position.X, check.Position.Y, building.Type, check.ItemID, op, check.N))
 	case "building_no_alert_since":
-		// 某台建筑自 tick 起没有该类生产告警：断言「这条产线没被堵住」时，
+		// 某台建筑自 tick 起没有「仍成立」的该类生产告警（已解除的老条目不算）：
+		// 断言「这条产线没被堵住」时，
 		// 既不能只看世界状态里有没有存量告警（告警是历史记录），也不能只看
 		// 全服告警（别的产线堵了不该让这一层挂）。所以按落点定位建筑再按
 		// building_id + alert_type 过滤历史告警。
@@ -313,15 +314,22 @@ func (gc *GameCore) contractBuildingAt(player *model.PlayerState, pos *model.Pos
 	return fail(fmt.Sprintf("(%d,%d) 上没有该玩家的建筑", pos.X, pos.Y))
 }
 
-// buildingAlertCountSince 数自 tick 起（含）记录在案的、属于某台建筑的生产告警。
-// alertType 为空时数全部类型。
+// buildingAlertCountSince 数「自 tick 起出现过、且此刻仍成立」的、属于某台建筑的
+// 生产告警。alertType 为空时数全部类型。
+//
+// 为什么只看仍成立（Active）：告警历史按 (行星, 建筑, 类型) 聚合，同一条目复用
+// alert_id，重复出现只刷新 last_tick。如果按「首次出现 tick」判，一条在产线配齐
+// 之前就出现、随后被解除的老告警会永远让契约失败——它证明的是「历史上堵过」，
+// 不是「现在堵着」。契约要断言的是「自本层开始，产线没有处于堵塞状态」。
+// 仍成立的条目 Tick 不会被改写（Record 只刷新 LastTick），所以「自 tick 起」的
+// 口径对 active 条目依然准确。
 func (gc *GameCore) buildingAlertCountSince(buildingID, alertType string, tick int64) int {
 	if gc == nil || gc.alertHistory == nil {
 		return 0
 	}
 	count := 0
 	for _, alert := range gc.alertHistory.All() {
-		if alert == nil || alert.Tick < tick || alert.BuildingID != buildingID {
+		if alert == nil || !alert.Active || alert.Tick < tick || alert.BuildingID != buildingID {
 			continue
 		}
 		if alertType != "" && string(alert.AlertType) != alertType {
