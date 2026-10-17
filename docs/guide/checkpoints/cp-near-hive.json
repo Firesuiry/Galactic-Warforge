@@ -1,6 +1,6 @@
 {
   "parent": "cp-army",
-  "note": "第 19 轮改写（可执行）：从 cp-army（tick 63200）读档，只用玩家命令把 10 个步兵（u-145..u-170）整队开到最近的黑雾巢穴 enemy-161@(303,435) 外 5 格（(308,435) 附近），停在守卫射程外、进入视野但不交火。距离约 318 格（cube-sphere 图距），按 move_speed 0.75 约 425 tick 行军。先 unit_order hold 让全队坚守（避免路过时自动接战），再整队 move；到达后再下一次 hold。全程黑雾中立（未对黑雾造成任何伤害）。契约：对局未结束、p1 存活、黑雾中立、步兵 ≥6、兵营仍在。下一层 tc07-hostile 从这里激怒黑雾。",
+  "note": "第 19 轮改写（可执行）：从 cp-army（tick 63200）读档，只用玩家命令把 10 个步兵（u-145..u-170）整队开到最近的黑雾巢穴 enemy-161@(303,435) 外 5 格（(308,435) 附近），停在守卫射程外、进入视野但不交火。距离约 318 格（cube-sphere 图距），按 move_speed 0.75 约 425 tick 行军。先 unit_order hold 让全队坚守（避免路过时自动接战），再整队 move；到达后再下一次 hold。全程黑雾中立（未对黑雾造成任何伤害）。契约：对局未结束、p1 存活、黑雾中立、步兵 ≥6、兵营仍在，并用 unit_near 断言 10 个步兵确实落在巢穴外 8 格内（只数总数的话，move 被拒、军团还蹲在基地也能通过）。下一层 tc07-hostile 从这里激怒黑雾。",
   "steps": [
     {"advance_to_tick": 63210},
     {"cmd": {"type": "unit_order", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_ids": ["u-145", "u-146", "u-147", "u-148", "u-149", "u-150", "u-167", "u-168", "u-169", "u-170"]}, "payload": {"order": "hold"}}},
@@ -15,6 +15,7 @@
     {"kind": "player_alive", "player": "p1"},
     {"kind": "dark_fog_hostile", "player": "p1", "bool": false},
     {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
-    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1}
+    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1},
+    {"kind": "unit_near", "player": "p1", "position": {"x": 308, "y": 435, "z": 0}, "radius": 8, "type": "soldier", "n": 10}
   ]}
 }

@@ -1,6 +1,6 @@
 {
   "parent": "cp-near-hive",
-  "note": "第 19 轮改写（可执行）：从 cp-near-hive（tick 64200）读档，只用玩家命令让 10 个步兵（u-145..u-170）整队攻击最近的黑雾巢穴 enemy-161@(303,435)（士兵在 (307..310,434..436)，射程 6 内）。首帧伤害触发 dark_fog_provoked，dark_fog.hostile 翻 true；随后立刻 unit_order stop + 撤到 (335,435) 停火。黑雾守卫会扑上来还手，我方可能损失部分步兵；契约只要求仍存活 ≥3 个步兵（实测停火后剩 3 个）、黑雾敌对。这个存档点冻结在「已停火、hostile=true」，供主代理用高 tick 速率空跑到 hostile_until_tick 之后验证 dark_fog_calmed 与恢复中立。",
+  "note": "第 19 轮改写（可执行）：从 cp-near-hive（tick 64200）读档，只用玩家命令让 10 个步兵（u-145..u-170）整队攻击最近的黑雾巢穴 enemy-161@(303,435)（士兵在 (307..310,434..436)，射程 6 内）。首帧伤害触发 dark_fog_provoked，dark_fog.hostile 翻 true；随后立刻 unit_order stop + 撤到 (335,435) 停火。黑雾守卫会扑上来还手，我方可能损失部分步兵；契约只要求仍存活 ≥3 个步兵（实测停火后剩 3 个）、这 3 个确实在撤退休整点附近（unit_near 12 格）、黑雾敌对。这个存档点冻结在「已停火、hostile=true」，供主代理用高 tick 速率空跑到 hostile_until_tick 之后验证 dark_fog_calmed 与恢复中立。",
   "steps": [
     {"advance_to_tick": 64210},
     {"cmd": {"type": "attack", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_ids": ["u-145", "u-146", "u-147", "u-148", "u-149", "u-150", "u-167", "u-168", "u-169", "u-170"]}, "payload": {"target_entity_id": "enemy-161"}}},
@@ -15,6 +15,7 @@
     {"kind": "player_alive", "player": "p1"},
     {"kind": "dark_fog_hostile", "player": "p1", "bool": true},
     {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 3},
-    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1}
+    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1},
+    {"kind": "unit_near", "player": "p1", "position": {"x": 335, "y": 435, "z": 0}, "radius": 12, "type": "soldier", "n": 3}
   ]}
 }
