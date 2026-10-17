@@ -99,3 +99,6 @@
 .planet-hover-tip__owner--enemy { color: #ffa245; }
 .planet-hover-tip__owner--fog_neutral { color: #b9a6e6; }
 .planet-hover-tip__owner--fog_hostile { color: #ff5a5a; }
+/* 未解锁卡（试玩 1017 K4-01）：3D 卡是 86×78，两行科技名更宽裕；小锁仍贴右上角。 */
+.planet-map-shell--3d .planet-build-card__unlock { font-size:9px; line-height:1.25; padding:2px 3px; }
+.planet-map-shell--3d .planet-build-card__lock { right:2px; top:2px; }

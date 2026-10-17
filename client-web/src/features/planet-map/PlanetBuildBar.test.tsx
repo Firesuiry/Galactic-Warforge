@@ -247,6 +247,25 @@ describe('PlanetBuildBar', () => {
     expect(screen.queryByTestId('planet-build-locked')).not.toBeInTheDocument();
   });
 
+  it('试玩 1017 K4-01：未解锁卡保留建筑图（只压暗）、小锁角标、科技名带完整 title', async () => {
+    const user = userEvent.setup();
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    // 已解锁卡不受影响：没有锁角标、没有解锁条。
+    const unlockedCard = screen.getByRole('button', { name: /风力发电机/ });
+    expect(unlockedCard.querySelector('.planet-build-card__lock')).toBeNull();
+    expect(unlockedCard.querySelector('.planet-build-card__unlock')).toBeNull();
+    await openCategory(user, '研究');
+    const lockedCard = screen.getByRole('button', { name: /矩阵研究站/ });
+    // 建筑图仍在（不再被大锁覆盖）；锁是独立的装饰角标。
+    expect(lockedCard.querySelector('.planet-build-card__icon')).not.toBeNull();
+    expect(lockedCard.querySelector('.planet-build-card__lock')).not.toBeNull();
+    // 科技名写在解锁条里，并把完整名称放进 title（两行截断时仍可悬停读全名）。
+    const unlock = lockedCard.querySelector('.planet-build-card__unlock');
+    expect(unlock).not.toBeNull();
+    expect(unlock?.textContent).toBe('需研究：tech-electromagnetism');
+    expect(unlock?.getAttribute('title')).toBe('需研究：tech-electromagnetism');
+  });
+
   it('同一分类里已解锁建筑排在未解锁之前（试玩 1016 U6）', async () => {
     const user = userEvent.setup();
     // 研究分类里放一台已解锁的研究站 + 一台未解锁的矩阵研究站：已解锁的必须在前。

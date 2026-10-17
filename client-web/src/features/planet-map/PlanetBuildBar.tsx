@@ -441,15 +441,22 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 <span className="planet-build-card__icon">
                   {dimensional && !missingModels.has(entry.id) ? <img className="planet-build-card__model" src={`/assets/buildings/${entry.id}.png`} alt="" loading="lazy" onError={() => setMissingModels((prev) => new Set(prev).add(entry.id))} /> : <Icon iconKey={entry.icon_key || entry.id} color={entry.color} size={26} />}
                   {locked ? (
-                    <Lock aria-hidden="true" className="planet-build-card__lock" size={11} strokeWidth={2.5} />
+                    // 小锁角标贴在卡右上角（试玩 1017 K4-01）：旧版 11px 锁压在图中央，把建筑图整个盖住。
+                    <Lock aria-hidden="true" className="planet-build-card__lock" size={9} strokeWidth={2.5} />
                   ) : null}
                   {unaffordable ? <span aria-hidden="true" className="planet-build-card__shortage-dot" /> : null}
                   {/* 数字键角标贴在图标左上角（DSP 口径）：只有已解锁建筑参与数字键选卡。 */}
                   {!locked && index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
                 </span>
-                {/* 未解锁：造价条位置改写成解锁条件（试玩 1016 U6），卡内直接可读，不必悬停。 */}
+                {/* 未解锁：造价条位置改写成解锁条件（试玩 1016 U6），卡内直接可读，不必悬停。
+                    试玩 1017 K4-01：52px 卡里科技名一行放不下，改为最多两行小字，
+                    完整名称同时写进 title（原生 tooltip）——截断时仍能读到全名。 */}
                 {locked ? (
-                  <span className="planet-build-card__unlock" aria-hidden="true">
+                  <span
+                    className="planet-build-card__unlock"
+                    title={unlockCondition ? `需研究：${unlockCondition}` : '需研究'}
+                    aria-hidden="true"
+                  >
                     {unlockCondition ? `需研究：${unlockCondition}` : '需研究'}
                   </span>
                 ) : items.length > 0 ? (

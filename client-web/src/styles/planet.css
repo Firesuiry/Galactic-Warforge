@@ -1691,10 +1691,15 @@
   box-shadow:0 0 12px #39e6d04d;
 }
 
-/* 锁定：灰化 + 锁角标（解锁条件在 title/aria-label） */
+/* 锁定：只把**建筑图**灰化压暗（试玩 1017 K4-01：整卡 grayscale/opacity 会把
+   建筑图与文字一起糊掉，且大锁压在图中央）。卡本身保持可读，锁是右上角小角标。 */
 .planet-build-card--locked {
-  filter:grayscale(.75);
   cursor:pointer;
+}
+
+.planet-build-card--locked .planet-build-card__icon {
+  opacity:.55;
+  filter:grayscale(.85) brightness(.85);
 }
 
 /* 负担不起：格变暗 + 右上角红点（细节在悬停浮层）。 */
@@ -1753,14 +1758,14 @@
   font-weight:600;
 }
 
+/* 小锁角标：贴卡右上角（试玩 1017 K4-01），不压建筑图。 */
 .planet-build-card__lock {
   position:absolute;
-  right:-7px;
-  bottom:-5px;
-  padding:1px;
-  border-radius:50%;
-  border:1px solid var(--line-3);
-  background:#0a1222;
+  right:1px;
+  top:1px;
+  padding:0;
+  border-radius:3px;
+  background:#0a1222cc;
   color:var(--text-muted);
   box-sizing:content-box;
 }
@@ -2393,26 +2398,26 @@ body:has([data-planet-minimap]) {
   color: var(--danger, #ff6b6b);
 }
 
-/* 未解锁建造卡（试玩 1016 U6）：按分类常驻、灰化、排在本分类已解锁卡之后；
-   造价条位置改写「需研究：<科技名>」，可点（点开底部状态行的解锁说明）。 */
+/* 未解锁建造卡（试玩 1016 U6）：按分类常驻、排在本分类已解锁卡之后；
+   造价条位置改写「需研究：<科技名>」，可点（点开底部状态行的解锁说明）。
+   试玩 1017 K4-01：科技名在 52px 卡里一行放不下，旧版 nowrap+ellipsis 直接截断。
+   现在允许换行、最多两行小字，完整名称另写在 title / aria-label 里。 */
 .planet-build-card--locked {
   cursor:pointer;
-  opacity:.5;
 }
 
 .planet-build-card__unlock {
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
   padding:1px 2px 2px;
-  font-size:9px;
-  line-height:1.15;
-  color:#ffd48a;
+  font-size:8px;
+  line-height:1.2;
+  color:#e8c27f;
   background:#04070fcc;
   text-align:center;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  overflow-wrap:anywhere;
 }
 
 /* 底部状态行里的「尚未解锁：需研究 X」（与缺料条同一行内联，颜色区分）。 */
