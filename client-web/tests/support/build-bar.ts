@@ -73,3 +73,21 @@ export async function enterBuildMode(
   }
   await expect(hint.first()).toContainText(hintText, { timeout: 5_000 });
 }
+
+/**
+ * 缺料卡点击后应该摊开缺料清单（`[data-testid="planet-build-card-shortage"]`），
+ * 而不是进入建造模式。卡片本身**保持原生可点**（缺料走 `data-shortage`，不用
+ * aria-disabled——后者会让 Playwright 的 click 一直等 enabled）。
+ *
+ * 战争服长跑后背包可能已耗尽：点开清单说明确实走了缺料分支，直接返回；
+ * 若背包其实够料，会进入建造模式（提示行出现），此时按场景状态返回 false。
+ */
+export async function openBuildShortageNotice(page: Page, buildingId: string) {
+  const card = await revealBuildCard(page, buildingId);
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  await card.click();
+  const notice = page.getByTestId('planet-build-card-shortage');
+  const hint = page.locator('.planet-build-bar__hint');
+  await expect.poll(async () => (await notice.count()) > 0 || (await hint.count()) > 0, { timeout: 5_000 }).toBe(true);
+  return (await notice.count()) > 0;
+}
