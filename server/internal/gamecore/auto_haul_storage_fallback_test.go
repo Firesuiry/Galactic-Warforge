@@ -52,8 +52,8 @@ func TestAutoHaulCargoReturnsToSupplyStation(t *testing.T) {
 	}
 }
 
-// 2) 落货点判定按功能而不是 category 字符串：补给站 / 战场分析基站是落货点，
-//    熔炉、装配机、采矿机、研究站不是（它们有自己的产出）。
+//  2. 落货点判定按功能而不是 category 字符串：补给站 / 战场分析基站是落货点，
+//     熔炉、装配机、采矿机、研究站不是（它们有自己的产出）。
 func TestHaulStorageSinkUsesFunctionsNotCategory(t *testing.T) {
 	_, ws := haulTestCoreWithFace(t, 48)
 	sinkTypes := []model.BuildingType{
@@ -83,8 +83,8 @@ func TestHaulStorageSinkUsesFunctionsNotCategory(t *testing.T) {
 	}
 }
 
-// 3) 所有落货点都满 / 没有落货点时：货留在车上、不丢、不每 tick 全图扫描；
-//    腾出空间后下一次派单自动送达。
+//  3. 所有落货点都满 / 没有落货点时：货留在车上、不丢、不每 tick 全图扫描；
+//     腾出空间后下一次派单自动送达。
 func TestAutoHaulCargoRetriesWhenNoStorageAccepts(t *testing.T) {
 	f := newAutoHaulFixture(t)
 	// 拆掉夹具里的储物仓与开局 HQ（否则它们才是最近落货点），只留补给站并把它填满。

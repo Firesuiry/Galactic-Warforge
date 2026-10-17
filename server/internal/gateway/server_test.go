@@ -1067,7 +1067,8 @@ func TestProductionAlertSnapshotRejectsInvalidActiveOnly(t *testing.T) {
 	}
 }
 
-func TestSaveEndpoint(t *testing.T) {	srv, core := newTestServer(t)
+func TestSaveEndpoint(t *testing.T) {
+	srv, core := newTestServer(t)
 	core.AttachGameDir(gamedir.Open(t.TempDir()), minimalSaveMetaFile(), snapshot.Capture(core.World(), core.Discovery()))
 
 	body := bytes.NewBufferString(`{"reason":"manual"}`)

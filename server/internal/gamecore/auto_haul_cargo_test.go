@@ -10,9 +10,9 @@ import (
 // 普通单会去起点装另一种物品：旧实现先 Storage.Provide 扣源、再 Load，
 // 货种不符时 Load 返回 0，扣掉的货凭空消失（实测 40 铜矿几趟后剩 36）。
 
-// 1) 车上有铜矿、全场只有熔炉缺铁矿：机器人不得接普通单（那会去装铁矿，
-//    货种不符时旧实现会先扣源、货凭空消失）；按第 16 轮「回仓」规则，
-//    铜矿送回最近的落货建筑（这里是储物仓），铁矿不动。
+//  1. 车上有铜矿、全场只有熔炉缺铁矿：机器人不得接普通单（那会去装铁矿，
+//     货种不符时旧实现会先扣源、货凭空消失）；按第 16 轮「回仓」规则，
+//     铜矿送回最近的落货建筑（这里是储物仓），铁矿不动。
 func TestAutoHaulWithUndeliverableCargoDoesNotTakeNormalTask(t *testing.T) {
 	f := newAutoHaulFixture(t)
 	demolishAutoBuildingsOfType(f.ws, model.BuildingTypeBattlefieldAnalysisBase)

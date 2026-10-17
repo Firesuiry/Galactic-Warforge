@@ -119,8 +119,8 @@ func TestCombatDestroyResolvesBuildingAlerts(t *testing.T) {
 	}
 }
 
-// 4) 拆除事件（entity_destroyed）带上被拆除建筑当前仍成立的告警类型，
-//    供结算管线 / 客户端知道该建筑的问题已随建筑消失。
+//  4. 拆除事件（entity_destroyed）带上被拆除建筑当前仍成立的告警类型，
+//     供结算管线 / 客户端知道该建筑的问题已随建筑消失。
 func TestDemolishEventListsResolvedAlertTypes(t *testing.T) {
 	core, ws := alertResolveCore(t)
 	belt := placeAutoBuilding(t, ws, "b-55", model.BuildingTypeConveyorBeltMk1, model.Position{X: 10, Y: 10})
