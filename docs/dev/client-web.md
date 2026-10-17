@@ -86,10 +86,10 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev  # 改 agent-gatew
 cd client-web
 npx tsc --noEmit && npx vitest run      # 类型 + 单测
 npx playwright test                      # 浏览器用例（tests/*.spec.ts）
-# webServer 自动起一个全新局的遭遇战服务端（与 scripts/playtest-up.sh 同口径，端口动态申请）。
-# 依赖官方战争场景的用例默认 skip，要跑就覆盖场景：
-SW_SERVER_CONFIG=server/config-war.yaml SW_SERVER_MAP_CONFIG=server/map-war.yaml \
-  npx playwright test tests/war-workbench-authoritative.spec.ts
+# 默认起两组 webServer，skirmish / war 两个 project 各连一组（与 scripts/playtest-up.sh 同口径，
+# 端口动态申请）；默认全跑，覆盖不丢。
+npx playwright test --project=war        # 只跑官方战争场景的用例
+npx playwright test --project=skirmish   # 只跑默认遭遇战场景的用例
 npm run storybook
 ```
 

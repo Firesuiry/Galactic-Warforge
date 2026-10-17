@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { footprintFits } from './support/footprint';
-import { BACKEND_ENTRY as backend } from './support/scenario';
+import { backendEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。');
 
 const planetId = 'planet-1-1';
@@ -18,7 +17,7 @@ type Scene = { buildings: Record<string, Building>; units: Record<string, Buildi
 type DebugScene = { getQuality(): string; focus(tile: Tile, close?: boolean): void; project(tile: Tile): { x: number; y: number; visible: boolean } };
 
 async function scene(): Promise<Scene> {
-  const response = await fetch(`${backend}/world/planets/${planetId}/scene?x=0&y=0&width=48&height=48`, {
+  const response = await fetch(`${backendEntry()}/world/planets/${planetId}/scene?x=0&y=0&width=48&height=48`, {
     headers: { authorization: 'Bearer key_player_1' },
   });
   expect(response.ok).toBeTruthy();

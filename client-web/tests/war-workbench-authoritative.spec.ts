@@ -1,9 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。');
 
 type Auth = {
@@ -12,7 +11,7 @@ type Auth = {
 };
 
 async function apiCommand(auth: Auth, type: string, payload: Record<string, unknown>) {
-  const response = await fetch(`${BACKEND_ENTRY}/commands`, {
+  const response = await fetch(`${backendEntry()}/commands`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${auth.playerKey}`,
@@ -40,7 +39,7 @@ async function waitForCondition(fn: () => Promise<boolean>) {
 }
 
 async function fetchAuthorized<T>(auth: Auth, path: string): Promise<T> {
-  const response = await fetch(`${BACKEND_ENTRY}${path}`, {
+  const response = await fetch(`${backendEntry()}${path}`, {
     headers: {
       authorization: `Bearer ${auth.playerKey}`,
     },
@@ -77,7 +76,7 @@ async function installSession(page: Page) {
         version: 0,
       }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 test('战争工作台可直接连接 authoritative 战争场景并操作核心流程', async ({ page }) => {

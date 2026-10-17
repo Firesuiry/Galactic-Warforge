@@ -3,10 +3,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { buildingCells, catalogFootprint, footprintFits, occupiedCells, type CatalogLike } from './support/footprint';
 
 import { enterBuildMode, revealBuildCard } from './support/build-bar';
-import { BACKEND_ENTRY as backend } from './support/scenario';
+import { backendEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置 p1 执行体与基地建筑），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置 p1 执行体与基地建筑），默认遭遇战场景跳过。');
 
 const planetId = 'planet-1-1';
@@ -30,7 +29,7 @@ type ThreeDebug = {
 };
 
 async function scene(): Promise<Scene> {
-  const response = await fetch(`${backend}/world/planets/${planetId}/scene?x=0&y=0&width=48&height=48`, {
+  const response = await fetch(`${backendEntry()}/world/planets/${planetId}/scene?x=0&y=0&width=48&height=48`, {
     headers: { authorization: 'Bearer key_player_1' },
   });
   expect(response.ok).toBeTruthy();
@@ -39,7 +38,7 @@ async function scene(): Promise<Scene> {
 
 /** 服务端目录（建筑占地按 cell 记，细分网格后 1×1 的老假设不再成立）。 */
 async function fetchCatalog(): Promise<CatalogLike> {
-  const response = await fetch(`${backend}/catalog`, {
+  const response = await fetch(`${backendEntry()}/catalog`, {
     headers: { authorization: 'Bearer key_player_1' },
   });
   expect(response.ok).toBeTruthy();
@@ -128,7 +127,7 @@ function isLocalPreflightBlock(text: string): boolean {
 /** 服务端权威寻路：目标格是否可达（前端只负责点选，可达性以服务端为准）。 */
 async function pathReachable(unitId: string, tile: Tile): Promise<boolean> {
   const response = await fetch(
-    `${backend}/world/planets/${planetId}/path?unit_id=${unitId}&target_x=${tile.x}&target_y=${tile.y}`,
+    `${backendEntry()}/world/planets/${planetId}/path?unit_id=${unitId}&target_x=${tile.x}&target_y=${tile.y}`,
     { headers: { authorization: 'Bearer key_player_1' } },
   );
   if (!response.ok) return false;
@@ -403,7 +402,7 @@ test('镜头聚焦未探索区：地表是测绘网格而不是一片空白，�
   // 找一格对 p1 确实未探索的格子（场景窗口里 explored=false）。
   let target: Tile | null = null;
   for (const candidate of [{ x: 120, y: 80 }, { x: 100, y: 20 }, { x: 70, y: 90 }, { x: 140, y: 10 }]) {
-    const response = await fetch(`${backend}/world/planets/${planetId}/scene?x=${candidate.x}&y=${candidate.y}&width=1&height=1`, {
+    const response = await fetch(`${backendEntry()}/world/planets/${planetId}/scene?x=${candidate.x}&y=${candidate.y}&width=1&height=1`, {
       headers: { authorization: 'Bearer key_player_1' },
     });
     const data = await response.json() as { explored?: boolean[][] };

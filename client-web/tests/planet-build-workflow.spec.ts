@@ -1,13 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
-
-// 需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。
-requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。');
 
 import { enterBuildMode, openBuildShortageNotice, revealBuildCard } from './support/build-bar';
 import { buildingCells, footprintFits, occupiedCells } from './support/footprint';
+
+requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。');
 
 /**
  * 群星式建造闭环验收（真实 Go 战争服）：
@@ -75,7 +74,7 @@ interface ScenePayload {
 }
 
 async function fetchAuthorized<T>(path: string): Promise<T> {
-  const response = await fetch(`${BACKEND_ENTRY}${path}`, {
+  const response = await fetch(`${backendEntry()}${path}`, {
     headers: { authorization: 'Bearer key_player_1' },
   });
   expect(response.ok).toBeTruthy();
@@ -83,7 +82,7 @@ async function fetchAuthorized<T>(path: string): Promise<T> {
 }
 
 async function installSession(page: Page) {
-  // serverUrl 用页面自己的 origin（同源走 vite 代理）：写死 WEB_ENTRY 时换端口会打到旧实例。
+  // serverUrl 用页面自己的 origin（同源走 vite 代理）：写死入口时换端口会打到旧实例。
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'siliconworld-client-web-session',

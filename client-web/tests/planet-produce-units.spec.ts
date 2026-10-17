@@ -1,9 +1,8 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
-import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置重组制造台），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置重组制造台），默认遭遇战场景跳过。');
 
 /**
@@ -65,11 +64,11 @@ async function installSession(page: Page) {
       'siliconworld-client-web-session',
       JSON.stringify({ state: { serverUrl, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 async function ownBuildings(request: APIRequestContext): Promise<SceneBuilding[]> {
-  const response = await request.get(`${BACKEND_ENTRY}/world/planets/${PLANET_ID}/scene`, {
+  const response = await request.get(`${backendEntry()}/world/planets/${PLANET_ID}/scene`, {
     headers: { Authorization: 'Bearer key_player_1' },
   });
   expect(response.ok()).toBe(true);
@@ -87,7 +86,7 @@ async function findOwnedBuildingId(request: APIRequestContext, buildingType: str
 
 /** 目录里 production_mode = world_produce 的单位（与前端下拉同源）。 */
 async function worldProduceUnits(request: APIRequestContext): Promise<CatalogUnit[]> {
-  const response = await request.get(`${BACKEND_ENTRY}/catalog`, {
+  const response = await request.get(`${backendEntry()}/catalog`, {
     headers: { Authorization: 'Bearer key_player_1' },
   });
   expect(response.ok()).toBe(true);

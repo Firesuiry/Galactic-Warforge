@@ -1,9 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台/补给站），默认遭遇战场景跳过。');
 
 /**
@@ -14,7 +13,6 @@ requireScenario('war', '需要官方战争场景（预置战场分析基站/重�
  * 创建/目标、封锁全部通过 GUI 表单下达。这是 P0「人类可玩性闭环」的
  * 唯一验收问题：一个不碰 CLI/API 的玩家能不能打完一仗。
  */
-
 
 const BLUEPRINT_ID = 'corvette_pure_gui';
 const TASK_FORCE_ID = 'tf_pure_gui';
@@ -30,7 +28,7 @@ const SLOT_COMPONENTS: Array<{ slot: string; component: string }> = [
 ];
 
 async function fetchAuthorized<T>(path: string): Promise<T> {
-  const response = await fetch(`${BACKEND_ENTRY}${path}`, {
+  const response = await fetch(`${backendEntry()}${path}`, {
     headers: { authorization: 'Bearer key_player_1' },
   });
   expect(response.ok).toBeTruthy();
@@ -54,7 +52,7 @@ async function installSession(page: Page) {
       'siliconworld-client-web-session',
       JSON.stringify({ state: { serverUrl, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 async function readBlueprintState(blueprintId: string) {

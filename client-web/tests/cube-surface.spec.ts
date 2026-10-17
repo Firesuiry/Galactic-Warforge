@@ -3,10 +3,9 @@ import { surfaceFace, type SurfacePoint } from '../../shared-client/src/surface'
 
 import { enterBuildMode, revealBuildCard } from './support/build-bar';
 import { footprintFits } from './support/footprint';
-import { BACKEND_ENTRY as backend } from './support/scenario';
+import { backendEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（固定出生点 132,132 与预置建筑），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（固定出生点 132,132 与预置建筑），默认遭遇战场景跳过。');
 
 const planet = 'planet-1-1';
@@ -27,7 +26,7 @@ const headers = { authorization: 'Bearer key_player_2' };
  * 先把 p2 执行体找出来，再用它的位置取 48×48 的流式窗口。
  */
 async function wideScene(): Promise<Scene> {
-  const response = await fetch(`${backend}/world/planets/${planet}/scene?x=0&y=0&width=200&height=200`, { headers });
+  const response = await fetch(`${backendEntry()}/world/planets/${planet}/scene?x=0&y=0&width=200&height=200`, { headers });
   expect(response.ok).toBe(true);
   return response.json();
 }
@@ -38,7 +37,7 @@ let p2ExecutorId = '';
 function executorUnitId() { return p2ExecutorId; }
 
 async function scene(center: SurfacePoint = sceneCenter ?? { x: 0, y: 0 }): Promise<Scene> {
-  const response = await fetch(`${backend}/world/planets/${planet}/scene?x=0&y=0&width=48&height=48&near_x=${center.x}&near_y=${center.y}&radius=12`, { headers });
+  const response = await fetch(`${backendEntry()}/world/planets/${planet}/scene?x=0&y=0&width=48&height=48&near_x=${center.x}&near_y=${center.y}&radius=12`, { headers });
   expect(response.ok).toBe(true);
   return response.json();
 }
@@ -241,7 +240,7 @@ test('cube face seam: real GUI construction, movement, neighbor streaming and fi
   const liveExecutor = async () => (await scene()).units?.[executor.id] ?? executor;
   const executorNow = await liveExecutor();
   const target=seamTileNear(await scene(executorNow.position),executorNow.position,OPERATE_RANGE_CELLS,buildTile);
-  const route=await fetch(`${backend}/world/planets/${planet}/path?unit_id=${executor.id}&target_x=${target.x}&target_y=${target.y}`,{headers});
+  const route=await fetch(`${backendEntry()}/world/planets/${planet}/path?unit_id=${executor.id}&target_x=${target.x}&target_y=${target.y}`,{headers});
   expect(route.ok).toBe(true);
   expect(await route.json()).toMatchObject({reachable:true});
   // 3D 拾取会命中屏幕上叠在格子前的实体（刚落成的 2×2 风机就可能盖住机甲所在格）：

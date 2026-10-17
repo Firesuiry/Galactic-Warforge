@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { surfaceNormal, surfaceStep } from '../../shared-client/src/surface';
 
 import { revealBuildCard } from './support/build-bar';
-import { BACKEND_ENTRY as backend } from './support/scenario';
+import { backendEntry } from './support/scenario';
 
 // Run with SW_TEST_MAP=<repo>/server/testdata/map-cube-poles.yaml SW_CUBE_POLES=1.
 test.skip(process.env.SW_CUBE_POLES !== '1', 'Requires the isolated north/south pole backend fixture.');
@@ -10,11 +10,11 @@ for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_p
   test(`${hemisphere} pole: real construction and unit movement`,async({page})=>{
     test.setTimeout(150_000);
     const headers={authorization:`Bearer ${key}`};
-    const metadata=await(await fetch(`${backend}/world/planets/planet-1-1/scene?x=0&y=0&width=1&height=1`,{headers})).json();
+    const metadata=await(await fetch(`${backendEntry()}/world/planets/planet-1-1/scene?x=0&y=0&width=1&height=1`,{headers})).json();
     const n=metadata.surface.face_size;
     const center={x:(player==='p1'?1.5:2.5)*n,y:1.5*n};
     const scene=async()=>{
-      const response=await fetch(`${backend}/world/planets/planet-1-1/scene?x=${center.x-24}&y=${center.y-24}&width=48&height=48`,{headers});
+      const response=await fetch(`${backendEntry()}/world/planets/planet-1-1/scene?x=${center.x-24}&y=${center.y-24}&width=48&height=48`,{headers});
       expect(response.ok).toBe(true);return response.json();
     };
     const initial=await scene();

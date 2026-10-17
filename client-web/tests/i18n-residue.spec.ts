@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { WEB_ENTRY } from './support/scenario';
+import { webEntry } from './support/scenario';
 
 /**
  * 中英混杂防回流扫描（对应试玩报告「字段名/内部 id 裸露」类问题）：
@@ -21,7 +21,7 @@ async function installSession(page: Page) {
       'siliconworld-client-web-session',
       JSON.stringify({ state: { serverUrl, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 async function snakeCaseHits(page: Page): Promise<string[]> {
@@ -51,7 +51,7 @@ async function snakeCaseHits(page: Page): Promise<string[]> {
 test('行星页/总览/大厅渲染文本无 snake_case 裸字段名', async ({ page }) => {
   test.setTimeout(120_000);
   await installSession(page);
-  await page.goto(`${WEB_ENTRY}/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`${webEntry()}/planet/${PLANET_ID}?view=2d`);
   await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
   expect(await snakeCaseHits(page), '行星页初始').toEqual([]);
 
@@ -66,7 +66,7 @@ test('行星页/总览/大厅渲染文本无 snake_case 裸字段名', async ({ 
     expect(await snakeCaseHits(page), `抽屉/${tab}`).toEqual([]);
   }
 
-  await page.goto(`${WEB_ENTRY}/overview`);
+  await page.goto(`${webEntry()}/overview`);
   await expect(page.getByRole('heading', { name: '全局总览' })).toBeVisible({ timeout: 20_000 });
   // 情报时间线的正文（事件 payload 的中文化）要等快照到齐再扫：
   // 这里覆盖 building_state_changed 的 reason 枚举（如 power_no_provider）这类值，
@@ -78,11 +78,11 @@ test('行星页/总览/大厅渲染文本无 snake_case 裸字段名', async ({ 
   const timelineText = await page.locator('.command-timeline').innerText();
   expect(timelineText).not.toMatch(/[a-z]{2,}_[a-z]{2,}/);
 
-  await page.goto(`${WEB_ENTRY}/lobby`);
+  await page.goto(`${webEntry()}/lobby`);
   await expect(page.getByRole('heading', { name: '对局大厅' })).toBeVisible({ timeout: 20_000 });
   expect(await snakeCaseHits(page), '大厅页').toEqual([]);
 
-  await page.goto(`${WEB_ENTRY}/tech`);
+  await page.goto(`${webEntry()}/tech`);
   await expect(page.getByRole('heading', { name: /科技/ }).first()).toBeVisible({ timeout: 20_000 });
   expect(await snakeCaseHits(page), '科技页').toEqual([]);
 });

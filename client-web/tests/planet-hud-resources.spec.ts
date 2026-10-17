@@ -1,9 +1,8 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
-import { BACKEND_ENTRY, WEB_ENTRY } from './support/scenario';
+import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
-// 需要官方战争场景（预置 battlefield_analysis_base），默认遭遇战场景跳过。
 requireScenario('war', '需要官方战争场景（预置 battlefield_analysis_base），默认遭遇战场景跳过。');
 
 /**
@@ -14,19 +13,18 @@ requireScenario('war', '需要官方战争场景（预置 battlefield_analysis_b
  * - web-13：toast 文案本地化（单测覆盖，浏览器端抽查顶栏告警文案）。
  */
 
-
 async function installSession(page: Page) {
   await page.addInitScript((serverUrl) => {
     window.localStorage.setItem(
       'siliconworld-client-web-session',
       JSON.stringify({ state: { serverUrl, playerId: 'p1', playerKey: 'key_player_1' }, version: 0 }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 /** 战争服预置建筑 ID 随场景播种顺序变化，按类型动态解析 p1 的建筑 ID。 */
 async function findOwnedBuildingId(request: APIRequestContext, buildingType: string): Promise<string> {
-  const response = await request.get(`${BACKEND_ENTRY}/world/planets/planet-1-1/scene`, {
+  const response = await request.get(`${backendEntry()}/world/planets/planet-1-1/scene`, {
     headers: { Authorization: 'Bearer key_player_1' },
   });
   expect(response.ok()).toBe(true);
@@ -41,7 +39,7 @@ async function findOwnedBuildingId(request: APIRequestContext, buildingType: str
 
 test('顶栏只展示电网结余（无资金位），建造卡片名全部本地化', async ({ page }) => {
   await installSession(page);
-  await page.goto(`${WEB_ENTRY}/planet/planet-1-1`);
+  await page.goto(`${webEntry()}/planet/planet-1-1`);
 
   // web-08（第 16 轮契约）：资金位已删，顶栏那一格是「电网结余」只读展示，背包库存收进 title。
   // 断言的是 title 属性本身（chip 的可见文本是电网结余数字，toContainText 只看文本节点）。
@@ -76,7 +74,7 @@ test('选中建筑：迷你条显示库存摘要，自动切到选中对象页�
   await installSession(page);
   // 战争服 p1 的 battlefield_analysis_base（战场分析基站），带 60 格本地存储
   const baseId = await findOwnedBuildingId(request, 'battlefield_analysis_base');
-  await page.goto(`${WEB_ENTRY}/planet/planet-1-1?view=2d&select=building:${baseId}`);
+  await page.goto(`${webEntry()}/planet/planet-1-1?view=2d&select=building:${baseId}`);
 
   // web-14：深链选中建筑 → 迷你条 + 侧栏"选中对象"页签
   const bar = page.locator('[data-testid="planet-selection-bar"]');

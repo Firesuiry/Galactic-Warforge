@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { WEB_ENTRY } from './support/scenario';
+import { webEntry } from './support/scenario';
 
 async function installSession(page: Page) {
   await page.addInitScript((serverUrl) => {
@@ -15,7 +15,7 @@ async function installSession(page: Page) {
         version: 0,
       }),
     );
-  }, WEB_ENTRY);
+  }, webEntry());
 }
 
 test('开局无自有蓝图时可从公开预置蓝图派生变体', async ({ page }) => {
