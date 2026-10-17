@@ -364,3 +364,51 @@ func TestAutoHaulIdleReasonSurvivesSaveLoad(t *testing.T) {
 		t.Fatalf("读档丢失中止冷却: %d, want %d", got, beforeUntil)
 	}
 }
+
+//  9. 分拣器喂料集合按 (tick, owner) 缓存：同一 tick 内多台机器人派单只解析一次
+//     分拣器端点，且缓存结果与逐次重算一致（确定性不变）。
+func TestAutoHaulSorterFedCacheMatchesRecompute(t *testing.T) {
+	core, ws := haulTestCoreWithFace(t, 48)
+	depot := placeAutoBuilding(t, ws, "b-depot", model.BuildingTypeDepotMk1, model.Position{X: 20, Y: 30})
+	smelter := placeAutoSmelter(t, ws, "b-smelter", model.Position{X: 40, Y: 30})
+	sorter := placeAutoBuilding(t, ws, "b-feeder", model.BuildingTypeSorterMk1, model.Position{X: 39, Y: 31})
+	sorter.Rotation = model.PlanRotation90
+	model.InitBuildingSorter(sorter)
+	sorter.Sorter.Range = 1
+	sorter.Sorter.CycleTicks = 1
+	haulFill(depot, model.ItemIronOre, 60)
+	for i := 0; i < 3; i++ {
+		autoRobot(t, ws, model.Position{X: 30, Y: 20})
+	}
+
+	cache := &haulSorterFedCache{}
+	want := haulSorterFedBuildings(ws, "p1")
+	if !want[smelter.ID] {
+		t.Fatalf("夹具不对：分拣器放货端没有连到熔炉")
+	}
+	for i := 0; i < 3; i++ {
+		got := cache.forOwner(ws, "p1")
+		if len(got) != len(want) || !got[smelter.ID] {
+			t.Fatalf("缓存结果与重算不一致：got %v want %v", got, want)
+		}
+	}
+	// 同一 tick 内：缓存与逐次重算得到的需求清单一致。
+	toDispatchTick(core, ws)
+	cachedDemands := haulDemandsCached(ws, haulClaims(ws), "p1", cache)
+	directDemands := haulDemands(ws, haulClaims(ws), "p1")
+	if len(cachedDemands) != len(directDemands) {
+		t.Fatalf("缓存与重算的需求清单长度不同：%v vs %v", cachedDemands, directDemands)
+	}
+	for i := range cachedDemands {
+		if cachedDemands[i] != directDemands[i] {
+			t.Fatalf("需求清单第 %d 条不一致：%+v vs %+v", i, cachedDemands[i], directDemands[i])
+		}
+	}
+
+	// 换 tick 后缓存失效（建筑/分拣器状态可能已变）。
+	ws.Tick++
+	demolishAutoBuilding(ws, sorter.ID)
+	if got := cache.forOwner(ws, "p1"); got[smelter.ID] {
+		t.Fatalf("换 tick 后应重新计算（分拣器已拆，熔炉不该仍在喂料集合里）")
+	}
+}

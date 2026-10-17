@@ -42,6 +42,36 @@ const (
 	haulDeliverReturnCap = 8
 )
 
+// haulSorterFedCache 同一 tick 内按拥有者缓存「已有分拣器喂料」的建筑集合。
+//
+// 派单 tick 上每台空闲机器人都会查一次需求清单，而集合的构建要遍历全图分拣器
+// 并逐台解析取/放端点（sorterFindEndpoint 沿朝向扫格 + 查端口）。几十台机器人 ×
+// 上百座建筑时这是纯重复劳动：派单期间世界结构不变（派单只改各机器人自己的
+// Claim，不建/拆建筑、不改分拣器状态），因此按 (tick, owner) 缓存是安全的。
+// 缓存只活在 settleAutoHaul 的一次调用里（局部变量），不跨 tick 复用，也不
+// 影响其它调用点——确定性不变。
+type haulSorterFedCache struct {
+	tick    int64
+	byOwner map[string]map[string]bool
+}
+
+// forOwner 取该玩家本 tick 的分拣器喂料集合（ownerID 为空时返回空集）。
+func (c *haulSorterFedCache) forOwner(ws *model.WorldState, ownerID string) map[string]bool {
+	if c == nil {
+		return haulSorterFedBuildings(ws, ownerID)
+	}
+	if c.tick != ws.Tick || c.byOwner == nil {
+		c.tick = ws.Tick
+		c.byOwner = make(map[string]map[string]bool, 2)
+	}
+	if fed, ok := c.byOwner[ownerID]; ok {
+		return fed
+	}
+	fed := haulSorterFedBuildings(ws, ownerID)
+	c.byOwner[ownerID] = fed
+	return fed
+}
+
 // haulDemand 一条「缺料」需求：某建筑缺某原料。
 type haulDemand struct {
 	buildingID string
@@ -68,14 +98,17 @@ func settleAutoHaul(ws *model.WorldState, robots []*model.Unit) []*model.GameEve
 	// 不依赖其它机器人本轮的选择——派单对世界的唯一影响是各机器人的 Claim，
 	// 而同一台机器人一轮只派一次，因此逐台处理与「同时决策」等价。
 	var events []*model.GameEvent
+	// 分拣器喂料集合每 tick 每玩家只算一次（见 haulSorterFedCache）。
+	cache := &haulSorterFedCache{}
 	for _, robot := range robots {
-		events = append(events, autoHaulAssign(ws, robot)...)
+		events = append(events, autoHaulAssign(ws, robot, cache)...)
 	}
 	return events
 }
 
 // autoHaulAssign 给一台空闲的自动模式机器人派一单（无单可派时原地待命）。
-func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent {
+// cache 是本 tick 的分拣器喂料集合缓存（可为 nil，退化为每次重算）。
+func autoHaulAssign(ws *model.WorldState, robot *model.Unit, cache *haulSorterFedCache) []*model.GameEvent {
 	haul := robot.Haul
 	if haul == nil || haul.Mode != model.HaulModeAuto {
 		return nil
@@ -90,7 +123,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 
 	claims := haulClaims(ws)
 	pruneHaulCooldowns(ws, haul)
-	if claim := assignHaulFromCargo(ws, robot, claims); claim != nil {
+	if claim := assignHaulFromCargo(ws, robot, claims, cache); claim != nil {
 		haul.Claim = claim
 		haul.FromBuildingID = ""
 		haul.ToBuildingID = claim.DemandBuildingID
@@ -109,14 +142,14 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 		return nil
 	}
 
-	demands := haulDemands(ws, claims, robot.OwnerID)
+	demands := haulDemandsCached(ws, claims, robot.OwnerID, cache)
 	if len(demands) == 0 {
 		haulClearTask(robot)
 		// 没有可派的需求：如果缺料的建筑全由分拣器喂料（被有意排除在派单外），
 		// 机器人不是「到不了」，而是本来就没有需要它送的活——写进 idle_detail，
 		// 客户端显示「自动待命：没有需要机器人送的（缺料机器都由分拣器喂料）」
 		// （试玩 1016 U16S 一般 1）。
-		haul.SetIdleReason(model.HaulIdleNoDemand, haulNoDemandDetail(ws, robot.OwnerID))
+		haul.SetIdleReason(model.HaulIdleNoDemand, haulNoDemandDetailCached(ws, robot.OwnerID, cache))
 		return nil
 	}
 	supplies := haulSupplies(ws, claims, robot.OwnerID)
@@ -176,7 +209,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 // 这是「上一条任务结束时货没送出去」的优先去向（§2.1 收尾规则）：
 // 先服务需求，其次回仓；都找不到才带着货待命（下一次派单 tick 再试）。
 // 本机器人到不了的建筑（冷却期内）跳过，避免刚放弃又送回去。
-func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulClaimBook) *model.HaulClaim {
+func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulClaimBook, cache *haulSorterFedCache) *model.HaulClaim {
 	haul := robot.Haul
 	quantity := haul.CargoQuantity()
 	if quantity <= 0 || haul.Cargo.ItemID == "" {
@@ -186,7 +219,7 @@ func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulCl
 	if _, ok := model.Item(itemID); !ok {
 		return nil
 	}
-	demands := haulDemands(ws, claims, robot.OwnerID)
+	demands := haulDemandsCached(ws, claims, robot.OwnerID, cache)
 	for _, demand := range demands {
 		if demand.itemID != itemID || demand.buildingID == haul.ToBuildingID {
 			continue
@@ -314,6 +347,11 @@ func haulServedCounts(ws *model.WorldState) map[string]int {
 // 遍历全图建筑，p1 机器人被派去给 p2 的熔炉送矿，每 tick abort → fallback 又选回
 // 同一座，永久空转）。
 func haulDemands(ws *model.WorldState, claims *haulClaimBook, ownerID string) []haulDemand {
+	return haulDemandsCached(ws, claims, ownerID, nil)
+}
+
+// haulDemandsCached 与 haulDemands 相同，但复用本 tick 的分拣器喂料集合缓存。
+func haulDemandsCached(ws *model.WorldState, claims *haulClaimBook, ownerID string, cache *haulSorterFedCache) []haulDemand {
 	if ws == nil || ownerID == "" {
 		return nil
 	}
@@ -322,7 +360,7 @@ func haulDemands(ws *model.WorldState, claims *haulClaimBook, ownerID string) []
 	power := model.CurrentPowerSettlementSnapshot(ws)
 	// 已有分拣器喂料的机器不需要机器人（DSP 式布局里熔炉本来就被分拣器/带子
 	// 围死，机器人挤不进去；试玩 1016 一般 3 的 haul_unreachable 噪音）。
-	sorterFed := haulSorterFedBuildings(ws, ownerID)
+	sorterFed := cache.forOwner(ws, ownerID)
 	ids := make([]string, 0, len(ws.Buildings))
 	for id, building := range ws.Buildings {
 		if building == nil || building.HP <= 0 || building.Storage == nil {
@@ -451,10 +489,15 @@ func haulStarvedBuildings(ws *model.WorldState, demands []haulDemand) map[string
 // 否则为空（客户端回落到「没有缺料的建筑」）。只要还有一座缺料建筑不归分拣器管，
 // 就不能说「都由分拣器喂料」。
 func haulNoDemandDetail(ws *model.WorldState, ownerID string) string {
+	return haulNoDemandDetailCached(ws, ownerID, nil)
+}
+
+// haulNoDemandDetailCached 与 haulNoDemandDetail 相同，但复用本 tick 的缓存。
+func haulNoDemandDetailCached(ws *model.WorldState, ownerID string, cache *haulSorterFedCache) string {
 	if ws == nil || ownerID == "" {
 		return ""
 	}
-	sorterFed := haulSorterFedBuildings(ws, ownerID)
+	sorterFed := cache.forOwner(ws, ownerID)
 	sorterFedStarved := false
 	for id, building := range ws.Buildings {
 		if building == nil || building.OwnerID != ownerID || building.HP <= 0 {
