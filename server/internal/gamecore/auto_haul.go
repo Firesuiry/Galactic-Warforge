@@ -378,6 +378,7 @@ func haulDemands(ws *model.WorldState, claims *haulClaimBook, ownerID string) []
 	}
 	return demands
 }
+
 // haulSorterFedBuildings 己方「已有分拣器喂料」的建筑集合：某台运行中的分拣器
 // 的**放货端**落在这座建筑上（sorterFindEndpoint 对建筑要求 Storage 非空且
 // 目标与分拣器同属主）。DSP 式布局里熔炉/制造台本来就被分拣器与带子围死，

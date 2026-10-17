@@ -94,8 +94,8 @@ func TestAutoHaulCargoNeverReroutesToEnemyDemand(t *testing.T) {
 	}
 }
 
-// 3) abort 冷却：端点不属于自己时记冷却，同一座建筑不会被立刻重新选中；
-//    abort 后机器人空闲原因写明「上一单中止」。
+//  3. abort 冷却：端点不属于自己时记冷却，同一座建筑不会被立刻重新选中；
+//     abort 后机器人空闲原因写明「上一单中止」。
 func TestAutoHaulAbortCooldownPreventsImmediateReassign(t *testing.T) {
 	f := newAutoHaulFixture(t)
 	enemy := placeEnemySmelter(t, f.ws, "b-enemy", model.Position{X: 40, Y: 40})
