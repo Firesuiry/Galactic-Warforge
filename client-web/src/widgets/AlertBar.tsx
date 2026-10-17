@@ -126,11 +126,13 @@ function rowBuildingTag(row: AlertRow): string {
  * （服务端 message 只写「建筑 b-9：传送带被堵，物品运不出去」，定位不到格子），
  * 运输机器人到不了目标给出机器人/目标建筑/坐标；其余类型只给中文标签。
  */
-function alertRowDetail(row: AlertRow, tickRate: number): string {
+function alertRowDetail(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
   if (row.alertType === 'haul_unreachable') {
     return haulUnreachableText({ alert_type: row.alertType, details: row.details }, (buildingId) => {
-      const type = typeof row.details.building_type === 'string' ? row.details.building_type : '';
-      return getBuildingDisplayName(undefined, type) || undefined;
+      // 服务端 details 目前不带 building_type；告警自身的 building_type 就是目标建筑类型
+      // （服务端把告警挂到到不了的建筑上，details.building_id 也是它）。
+      const type = typeof row.details.building_type === 'string' ? row.details.building_type : row.buildingType;
+      return type ? getBuildingDisplayName(catalog, type) : undefined;
     });
   }
   return formatAlertText(
@@ -140,9 +142,9 @@ function alertRowDetail(row: AlertRow, tickRate: number): string {
 }
 
 /** 条目 title：中文标签 + 细节（belt_blocked 用位置/件数/时长，其余用服务端 message）。 */
-function alertRowTitle(row: AlertRow, tickRate: number): string {
+function alertRowTitle(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
   if (row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable') {
-    return alertRowDetail(row, tickRate);
+    return alertRowDetail(row, tickRate, catalog);
   }
   return `${translateAlertType(row.alertType, row.message)}：${row.message}`;
 }
@@ -255,7 +257,7 @@ export function AlertBar() {
           sfx.uiClick();
           setOpen((value) => !value);
         }}
-        title={alertRowTitle(latest, tickRate)}
+        title={alertRowTitle(latest, tickRate, catalogQuery.data)}
         type="button"
       >
         <TriangleAlert aria-hidden="true" size={14} strokeWidth={2} />
@@ -278,7 +280,7 @@ export function AlertBar() {
               <button
                 className={`alert-bar__row alert-bar__row--${severityClass(row.severity)}`}
                 onClick={() => focusAlert(row)}
-                title={alertRowTitle(row, tickRate)}
+                title={alertRowTitle(row, tickRate, catalogQuery.data)}
                 type="button"
               >
                 <TriangleAlert aria-hidden="true" size={13} strokeWidth={2} />
@@ -295,7 +297,7 @@ export function AlertBar() {
                     把位置/件数/时长（或机器人/建筑）写在条目上，
                     玩家不用点开地图就知道堵在哪、堵了多少。 */}
                 {row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable' ? (
-                  <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate)}</span>
+                  <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate, catalogQuery.data)}</span>
                 ) : null}
                 {row.count > 1 ? <span className="alert-bar__row-count">×{row.count}</span> : null}
                 <span className="alert-bar__row-tick">t{row.tick}</span>
