@@ -544,9 +544,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /alerts/production/snapshot`**：产线告警补拉。
 - 参数：`after_alert_id`（推荐）、`since_tick`、`limit`（默认 `alert_history_limit`）。
-- 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、**`active`**、`resolved_tick`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
+- 响应：`available_from_tick` / `next_alert_id` / `has_more` / `alerts[]`（`alert_id = alert-<tick>-<building_id>-<alert_type>`、`tick`、`last_tick`、`repeat_count`、**`active`**、`resolved_tick`、`planet_id`、`building_id`、`building_type`、`alert_type`、`severity`、`message`、`metrics`、`details`）。
 - **`active`（bool，始终出现）**：该告警当前是否仍成立。出现时 `true`；问题解除后变为 `false` 并写入 `resolved_tick`（解除的 tick，之后不再改写）。客户端应只显示/画标记 `active=true` 的条目——历史条目保留在快照里供复盘（试玩 1016 报告问题 2：旧实现只清内部状态，快照条目一直挂着冻结的 `last_tick`，带子恢复流动后红标也不消失）。同一建筑同类问题再次出现时复用原条目（`alert_id` 不变），`active` 恢复为 `true`、`resolved_tick` 清零。所有告警类型（`belt_blocked` / `power_shortage` / `input_shortage` / `output_blocked` / `backlog` / `throughput_drop` / `unit_spawn_blocked`）统一走这条规则。
-- 同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。
+- 同一行星同一建筑同类告警只保留一条，重复发生时刷新 `severity` / `metrics` / `details` 并累加 `repeat_count`。聚合键是 `planet_id + building_id + alert_type`：建筑 ID 只在行星内唯一，不同行星上的同 ID 建筑各自独立成立/解除。
+- **`planet_id`（string，可选）**：告警所在行星。旧存档里的历史条目没有这个字段，缺省不出现。
 - `GET /state/agent-briefing` 的 `recent_alerts` 只收 `active=true` 的条目（完整历史走本接口）。
 - `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked` / `belt_blocked` / `haul_unreachable`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。`belt_blocked` 指向**传送带格本身**：带上有货却连续 300 tick（`beltBlockedWarnTicks`）一件都没动出去（带尾对着空地、下游分拣器/建筑不收这个物品），message 写「传送带被堵，物品运不出去」，`details` 带 `position` / `queued_items` / `blocked_ticks`；货被取走或开始流动后解除——避免玩家把上游矿机的「产物阻塞」误当成根因（试玩 1016 报告 B1/U7）。`haul_unreachable` 指向**运输机器人到不了的建筑**：自动模式机器人连续多次找不到落点/路径后放弃该目标时发出，message 写「建筑 <id>：运输机器人到不了」，`details` 带 `unit_id` / `building_id` / `position`；同一建筑持续成立期间只发一次，机器人重新到达该建筑（或建筑被拆除）后解除。见 §5.6 运输机器人自动模式。
 
