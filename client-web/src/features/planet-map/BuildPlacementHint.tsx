@@ -75,7 +75,11 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
     ? describeMiningCoverage(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, mode.rotation)
     : null;
   return (
-    <div className="build-placement-hint" role="status" style={{ left: pointer.x + 16, top: pointer.y + 14 }}>
+    <div
+      className={`build-placement-hint${mining ? ' build-placement-hint--stacked' : ''}`}
+      role="status"
+      style={{ left: pointer.x + 16, top: pointer.y + 14 }}
+    >
       <span>无法建造：{describe(assessment)}</span>
       {mining ? (
         <span
@@ -83,7 +87,8 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
           data-testid="build-mining-hint"
         >
           {mining.text}
-        </span>      ) : null}
+        </span>
+      ) : null}
     </div>
   );
 }

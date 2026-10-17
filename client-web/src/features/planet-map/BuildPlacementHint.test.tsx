@@ -226,6 +226,8 @@ describe('BuildPlacementHint 采集建筑「将开采哪一种矿」（第 16 �
     const mining = screen.getByTestId('build-mining-hint');
     expect(mining).toHaveTextContent('将开采：铁矿');
     expect(hint).toContainElement(mining);
+    // 两行布局走 modifier：单行提示仍保持 nowrap 的旧行为
+    expect(hint.className).toContain('build-placement-hint--stacked');
   });
 
   it('缺料 + 混矿：开采行带混矿警示（不会开采的矿种仍列出）', () => {

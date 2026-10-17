@@ -104,8 +104,8 @@ describe('分拣器端点连通性提示（试玩 1016 U8）', () => {
     // 分拣器 rot 270：正面朝西放货 → 从带子的东侧插入，被拒。
     const denied = sorterEndpointStatuses(sorter({ rotation: '270' }), [unit, restricted], 16);
     expect(denied[1]).toMatchObject({ side: 'drop', ok: false });
-    expect(denied[1].problem).toContain('只从南侧进货');
-    // 带子 input=east、output=north（侧向进货）时，东侧插入允许。
+    expect(denied[1].problem).toContain('只从南侧输入');
+    // 带子 input=east、output=north（侧向输入）时，东侧插入允许。
     const open = { ...belt('b-west', 4, 5, 'north'), conveyor: { input: 'east', output: 'north' } } as unknown as Building;
     const allowed = sorterEndpointStatuses(sorter({ rotation: '270' }), [unit, open], 16);
     expect(allowed[1]).toMatchObject({ side: 'drop', ok: true });

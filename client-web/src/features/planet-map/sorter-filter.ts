@@ -173,7 +173,7 @@ export function sorterEndpointStatuses(
         ...base, buildingId: endpoint.id, buildingType: endpoint.type, kind, ok,
         ...(ok ? {} : {
           problem: inputRestricted
-            ? `放货端的传送带不接收这个方向：它被限制为只从${DIRECTION_NAMES[beltState.input as CardinalDirection]}侧进货（分拣器在${DIRECTION_NAMES[direction]}侧）`
+            ? `放货端的传送带不接收这个方向：它被限制为只从${DIRECTION_NAMES[beltState.input as CardinalDirection]}侧输入（分拣器在${DIRECTION_NAMES[direction]}侧）`
             : `放货端的传送带不接收这个方向：带子朝${output ? DIRECTION_NAMES[output] : '未知'}输出（输出侧不收）`,
         }),
       };
@@ -192,7 +192,7 @@ export function sorterEndpointStatuses(
 }
 
 /**
- * 传送带可接受的进货侧（镜像服务端 `conveyorAllowedInputs`，`conveyor_settlement.go`）：
+ * 传送带可接受的输入侧（镜像服务端 `conveyorAllowedInputs`，`conveyor_settlement.go`）：
  * - 分流器：只收 `splitter.input_directions`；
  * - `input` 是实方向、且不等于 output / output 的反向（说明是「受限输入」）：只收那一侧；
  * - 否则四向都收，但**输出侧不收**。
