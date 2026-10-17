@@ -52,8 +52,9 @@ func TestAutoHaulCargoReturnsToSupplyStation(t *testing.T) {
 	}
 }
 
-//  2. 落货点判定按功能而不是 category 字符串：补给站 / 战场分析基站是落货点，
-//     熔炉、装配机、采矿机、研究站不是（它们有自己的产出）。
+//  2. 落货点判定按「纯仓储」而不是 category 字符串：补给站 / 战场分析基站（HQ）/
+//     储物仓 / 储液罐 / 物流站是落货点；熔炉、装配机、采矿机、研究站、炮塔（弹药槽）、
+//     燃料电厂（燃料槽）、单位生产建筑不是——机器人不能把矿石倒进弹药/燃料槽。
 func TestHaulStorageSinkUsesFunctionsNotCategory(t *testing.T) {
 	_, ws := haulTestCoreWithFace(t, 48)
 	sinkTypes := []model.BuildingType{
@@ -66,7 +67,7 @@ func TestHaulStorageSinkUsesFunctionsNotCategory(t *testing.T) {
 	for i, btype := range sinkTypes {
 		b := placeAutoBuilding(t, ws, "sink-"+itoa(i), btype, model.Position{X: 4 + i*6, Y: 4})
 		if !haulIsStorageSink(b) {
-			t.Fatalf("%s 应可作为落货点（有 storage、无生产/采集功能）", btype)
+			t.Fatalf("%s 应可作为落货点（纯仓储）", btype)
 		}
 	}
 	notSinks := []model.BuildingType{
@@ -74,11 +75,18 @@ func TestHaulStorageSinkUsesFunctionsNotCategory(t *testing.T) {
 		model.BuildingTypeAssemblingMachineMk1,
 		model.BuildingTypeMiningMachine,
 		model.BuildingTypeMatrixLab,
+		model.BuildingTypeGaussTurret,
+		model.BuildingTypeMissileTurret,
+		model.BuildingTypeThermalPowerPlant,
+		model.BuildingTypeMiniFusionPowerPlant,
+		model.BuildingTypeEMRailEjector,
+		model.BuildingTypeRayReceiver,
+		model.BuildingType("barracks"),
 	}
 	for i, btype := range notSinks {
 		b := placeAutoBuilding(t, ws, "producer-"+itoa(i), btype, model.Position{X: 4 + i*6, Y: 24})
 		if haulIsStorageSink(b) {
-			t.Fatalf("%s 有生产/采集功能，不应作为落货点", btype)
+			t.Fatalf("%s 不是纯仓储，不应作为落货点", btype)
 		}
 	}
 }

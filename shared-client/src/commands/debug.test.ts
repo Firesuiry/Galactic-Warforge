@@ -59,6 +59,7 @@ describe('alert_snapshot 中文文案', () => {
       },
     } as never);
     assert.deepEqual(calls[0], { after_alert_id: undefined, since_tick: undefined, active_only: true, limit: 5 });
+    assert.match(out, /Earliest recorded alert tick 1/);
     assert.match(out, /产物阻塞/);
     assert.match(out, /（已解除）/);
   });

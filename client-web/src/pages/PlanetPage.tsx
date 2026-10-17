@@ -528,11 +528,11 @@ export function PlanetPage() {
 
   /**
    * 地图标记用的「当前仍成立的告警」：与顶栏/警报条同一份快照
-   * （`useShellAlerts`，limit 50，已滤研究站噪音）。
+   * （`useShellAlerts`，active_only + limit 50，已滤研究站噪音）。
    *
-   * 不用上面那份 limit=20 的补拉：它按告警**首现顺序**取最早 20 条，
-   * 老对局里早被常态告警占满，新出现的 `belt_blocked` 根本不在里面，
-   * 地图上于是没有红杠（试玩 1016 复现）。20 条那份继续负责活动流的首次回填。
+   * 不用上面那份 limit=20 的补拉：那份不带 active_only，且只负责活动流的首次
+   * 回填（服务端快照现在是「仍成立在前、最新在前」，但它只有 20 条，仍成立的
+   * 告警多时会被历史条目挤掉），地图红标需要的是与顶栏完全一致的那批。
    */
   const { alerts: liveAlerts } = useShellAlerts();
 

@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"siliconworld/internal/model"
+	modelpower "siliconworld/internal/model/power"
 )
 
 // 运输机器人（§2.1）全局自动模式：机器人自己找「缺料的建筑」和「有货的建筑」，
@@ -474,14 +475,17 @@ func haulIsStorageBuilding(building *model.Building) bool {
 
 // haulIsStorageSink 该建筑能否作为「带载机器人无处可送时」的落货点（§2.1 收尾规则）。
 //
-// 判据是**功能**而不是目录里的 category 字符串：有 storage 功能、且没有任何
-// 生产/采集/加工/研究/喷涂功能。这样储物仓、储液罐、物流站、补给站（目录里
-// 是 category: production，但它不生产任何东西）、战场分析基站都算落货点；
-// 熔炉/装配机/采矿机/研究站/喷涂机这些「有自己的产出」的建筑不算——把原料
-// 塞回它们的主库存会与产线结算互相干扰。
+// 判据是**纯仓储**：有 storage 功能，且没有任何会「吃掉或产出物品」的功能——
+// 生产 / 采集 / 轨道采集 / 研究 / 喷涂 / 战斗（炮塔的 storage 是弹药槽）/
+// 发射（弹射器、发射井）/ 能量源（火力、聚变、人造恒星烧燃料）/ 能量枢纽 /
+// 能量存储 / 射线接收站 / 单位生产（兵营、战车工厂、机场）。
+// 这样只有储物仓、储液罐、物流站、补给站（目录里是 category: production，
+// 但它不生产任何东西）和 HQ 算落货点。
 //
 // 试玩 1016 严重 2：旧实现只认 IsGroundLogisticsBuilding 或 category == storage，
 // 补给站因此被漏掉；机器人带着 4 铜矿、全场无需求时永久待命，货送不出去。
+// 试玩 1016 复审：旧判据只看生产/采集，炮塔和燃料电厂也满足「有 storage」，
+// 机器人会把矿石倒进弹药槽/燃料槽，货被当成弹药或燃料烧掉。
 func haulIsStorageSink(building *model.Building) bool {
 	if building == nil {
 		return false
@@ -490,16 +494,29 @@ func haulIsStorageSink(building *model.Building) bool {
 	if model.IsGroundLogisticsBuilding(building.Type) {
 		return building.LogisticsStation != nil
 	}
-	// 其它建筑按功能判定：必须有 storage 功能、且没有生产/采集/研究/喷涂功能。
-	// 储物仓 / 储液罐 / 补给站 / 战场分析基站都满足；熔炉、装配机、采矿机、
-	// 研究站不满足。直接看 Functions（而不是 building.Storage）——落位/测试夹具
-	// 可能还没初始化运行时 Storage，但功能表来自建筑定义，始终可用。
+	// 其它建筑按功能判定。直接看 Functions（而不是 building.Storage）——落位/
+	// 测试夹具可能还没初始化运行时 Storage，但功能表来自建筑定义，始终可用。
 	fns := building.Runtime.Functions
 	if fns.Storage == nil {
 		return false
 	}
-	return fns.Production == nil && fns.Collect == nil && fns.Orbital == nil &&
-		fns.Research == nil && fns.Spray == nil
+	if fns.Production != nil || fns.Collect != nil || fns.Orbital != nil ||
+		fns.Research != nil || fns.Spray != nil || fns.Combat != nil ||
+		fns.Launch != nil || fns.EnergyExchanger != nil || fns.EnergyStorage != nil ||
+		fns.RayReceiver != nil {
+		return false
+	}
+	// 燃料发电机（火力/聚变/人造恒星）的 storage 是燃料槽，不是仓库。
+	if modelpower.IsPowerGeneratorModule(fns.Energy) {
+		return false
+	}
+	// HQ 带 deployment 功能，但它是本规则要保留的落货点；其它部署建筑不算。
+	if fns.Deployment != nil && building.Type != model.BuildingTypeBattlefieldAnalysisBase {
+		return false
+	}
+	// 单位生产建筑（兵营/战车工厂/机场）的 storage 是生产料仓。
+	def, ok := model.BuildingDefinitionByID(building.Type)
+	return ok && !def.CanProduceUnits
 }
 
 // nearestHaulSupply 该需求最近的可用供给（按供给建筑到需求建筑的距离，稳定顺序）。
@@ -572,7 +589,7 @@ func haulDeliveryFallback(ws *model.WorldState, robot *model.Unit, itemID string
 }
 
 // haulNearestStorage 离机器人最近、能收下该物品的己方落货建筑
-// （判据见 haulIsStorageSink：有 storage 功能、没有生产/采集功能）。
+// （判据见 haulIsStorageSink：纯仓储——有 storage、没有生产/采集/战斗/发电等功能）。
 func haulNearestStorage(ws *model.WorldState, robot *model.Unit, itemID string, quantity int) string {
 	if ws == nil || robot == nil {
 		return ""

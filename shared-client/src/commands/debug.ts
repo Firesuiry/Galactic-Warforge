@@ -160,7 +160,9 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
 
     const lines: string[] = [
       `Alerts ${formatCursor(result.after_alert_id, result.since_tick, 'from latest cursor')} (${result.alerts.length} alerts)`,
-      `Available from tick ${chalk.cyan(result.available_from_tick.toString())}`,
+      // available_from_tick 是历史里最老的首次出现 tick（含已解除条目），
+      // 不是「本页第一条」的 tick；快照顺序是最新在前。
+      `Earliest recorded alert tick ${chalk.cyan(result.available_from_tick.toString())} (history start)`,
       result.has_more ? chalk.dim('(more alerts available)') : '',
       '',
     ];

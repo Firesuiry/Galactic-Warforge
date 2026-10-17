@@ -161,6 +161,11 @@ func (ah *AlertHistory) ReplaceAll(alerts []*model.ProductionAlert) {
 //   - since_tick 过滤「最近一次发生 tick >= since_tick」的条目；
 //   - active_only 只返回仍成立的条目（顶栏/警报条/地图红标用）。
 //
+// 分页是尽力而为（best-effort），不保证跨请求的快照一致：顺序取决于条目的
+// active 状态与 last_tick，告警在两次请求之间激活/解除、或 last_tick 被重复
+// 告警刷新，都会让同一条目移动位置——翻页时可能重复或漏掉个别条目。客户端
+// 因此把每页当成「当前最紧要的 N 条」展示，而不是严格的偏移分页。
+//
 // 返回的 available_from_tick 是历史里最老的首次出现 tick（含已解除条目）。
 // 返回的是条目副本：序列化在 RUnlock 之后进行，直接交出内部指针会与
 // Resolve/Record 的原地修改形成数据竞争。
