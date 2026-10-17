@@ -92,4 +92,30 @@ describe('传送带堵塞标记（试玩 1016 B1）', () => {
   it('blockedBeltHref：深链直接带 x/y（行星页据此移镜头到该格）', () => {
     expect(blockedBeltHref('planet-1-1', { x: 12, y: 7 })).toBe('/planet/planet-1-1?x=12&y=7');
   });
+
+  it('已解除的告警（active=false）不再画红杠（第 16 轮契约）', () => {
+    const marks = blockedBeltMarks(
+      [beltAlert(12, 7, { active: false })],
+      [belt('b-9', 12, 7, 'east', 9300)],
+    );
+    expect(marks).toEqual([]);
+  });
+
+  it('带子现场 blocked_ticks 已归零 = 已恢复流动，旧告警不画红杠', () => {
+    const marks = blockedBeltMarks(
+      [beltAlert(12, 7)],
+      [belt('b-9', 12, 7, 'east', 0)],
+    );
+    expect(marks).toEqual([]);
+  });
+
+  it('带子仍在堵（blocked_ticks > 0）或字段缺失时照常画', () => {
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', undefined)])).toHaveLength(1);
+  });
+
+  it('active=true / 缺省（旧服务端）都按成立处理', () => {
+    expect(blockedBeltMarks([beltAlert(12, 7, { active: true })], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+  });
 });

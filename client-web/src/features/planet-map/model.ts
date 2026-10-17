@@ -1122,6 +1122,10 @@ function buildAlertRecommendation(alert: AlertEntry) {
       return "优先补发电设施，并确认电网覆盖是否接通";
     case "backlog":
       return "优先疏通输出链路，并检查是否有堆积节点";
+    case "belt_blocked":
+      return "优先疏通这条传送带：看带尾接没接东西、下游分拣器/建筑收不收这件货";
+    case "haul_unreachable":
+      return "优先疏通通往目标建筑的路：清掉围死它的建筑/带子，或改派别的终点";
     default:
       return "优先定位建筑状态，再检查供电、原料与输出链路";
   }

@@ -295,8 +295,39 @@ describe('toastFromGameEvent 事件映射', () => {
     expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
   });
 
-  it('rocket_launched → info（不配音）', () => {
-    const mapped = toastFromGameEvent(gameEvent('rocket_launched', { count: 2 }));
+  it('production_alert：active=false（已解除）不弹 toast', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a-resolved',
+        building_id: 'b-9',
+        building_type: 'conveyor_belt_mk1',
+        alert_type: 'belt_blocked',
+        active: false,
+        details: { position: { x: 12, y: 7, z: 0 }, queued_items: 5, blocked_ticks: 300 },
+      },
+    }));
+    expect(mapped).toBeNull();
+  });
+
+  it('production_alert：haul_unreachable 写清机器人/目标建筑/坐标，按机器人+目标合并', () => {
+    const mapped = toastFromGameEvent(gameEvent('production_alert', {
+      alert: {
+        alert_id: 'a-haul',
+        building_id: 'u-184',
+        building_type: 'transport_robot',
+        alert_type: 'haul_unreachable',
+        message: 'unit u-184 cannot reach b-164',
+        details: { unit_id: 'u-184', building_id: 'b-164', building_type: 'arc_smelter', position: { x: 61, y: 135, z: 0 } },
+      },
+    }));
+    expect(mapped?.toast.kind).toBe('warning');
+    expect(mapped?.toast.title).toBe('运输机器人到不了目标');
+    expect(mapped?.toast.body).toBe('机器人 u-184 → 电弧熔炉 (61, 135) · (61, 135)');
+    expect(mapped?.toast.mergeKey).toBe('production_alert:u-184:b-164:haul_unreachable');
+    expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
+  });
+
+  it('rocket_launched → info（不配音）', () => {    const mapped = toastFromGameEvent(gameEvent('rocket_launched', { count: 2 }));
     expect(mapped?.toast.kind).toBe('info');
     expect(mapped?.toast.body).toBe('×2');
     expect(mapped?.sfx).toBeUndefined();

@@ -3,11 +3,16 @@ import { describe, expect, it } from 'vitest';
 import {
   ALERT_TYPE_LABELS,
   PRODUCTION_ALERT_TYPES,
+  activeAlerts,
   alertDetailsPosition,
+  alertLastTick,
   alertTypeLabel,
   beltBlockedDetail,
   beltBlockedText,
   formatAlertText,
+  haulUnreachableDetail,
+  haulUnreachableText,
+  isAlertActive,
   ticksToSeconds,
 } from './alerts.js';
 
@@ -86,5 +91,48 @@ describe('产线告警中文文案（shared-client）', () => {
 
   it('标签表与类型清单一一对应（没有漏键的死枚举）', () => {
     expect(Object.keys(ALERT_TYPE_LABELS).sort()).toEqual([...PRODUCTION_ALERT_TYPES].sort());
+  });
+});
+
+describe('告警 active 口径与 haul_unreachable（第 16 轮契约）', () => {
+  it('isAlertActive：active=false 已解除；缺省视为仍然成立（兼容旧服务端）', () => {
+    expect(isAlertActive({ active: false })).toBe(false);
+    expect(isAlertActive({ active: true })).toBe(true);
+    expect(isAlertActive({})).toBe(true);
+  });
+
+  it('activeAlerts：只留仍然成立的告警', () => {
+    const list = [{ alert_id: 'a', active: false }, { alert_id: 'b' }, { alert_id: 'c', active: true }];
+    expect(activeAlerts(list).map((entry) => entry.alert_id)).toEqual(['b', 'c']);
+    expect(activeAlerts(undefined)).toEqual([]);
+  });
+
+  it('alertLastTick：聚合告警取 last_tick（缺省回退 tick）', () => {
+    expect(alertLastTick({ tick: 100, last_tick: 900 })).toBe(900);
+    expect(alertLastTick({ tick: 100 })).toBe(100);
+  });
+
+  it('haul_unreachable：中文标签「运输机器人到不了目标」+ 机器人/建筑/坐标细节', () => {
+    const entry = alert({
+      alert_type: 'haul_unreachable',
+      details: { unit_id: 'u-184', building_id: 'b-164', position: { x: 61, y: 135, z: 0 } },
+    });
+    expect(alertTypeLabel('haul_unreachable')).toBe('运输机器人到不了目标');
+    expect(haulUnreachableDetail(entry)).toBe('机器人 u-184 → b-164 (61, 135)');
+    expect(haulUnreachableDetail(entry, (id) => (id === 'b-164' ? '电弧熔炉' : undefined)))
+      .toBe('机器人 u-184 → 电弧熔炉 (61, 135)');
+    expect(haulUnreachableText(entry)).toBe('运输机器人到不了目标 机器人 u-184 → b-164 (61, 135)');
+    expect(formatAlertText(entry)).toBe('运输机器人到不了目标 机器人 u-184 → b-164 (61, 135)');
+    // 不裸显枚举 id
+    expect(formatAlertText(entry)).not.toContain('haul_unreachable');
+  });
+
+  it('haul_unreachable：details 缺项时少写那段，不写占位符', () => {
+    expect(haulUnreachableText(alert({ alert_type: 'haul_unreachable', details: {} })))
+      .toBe('运输机器人到不了目标');
+    expect(haulUnreachableText(alert({ alert_type: 'haul_unreachable', details: { unit_id: 'u-9' } })))
+      .toBe('运输机器人到不了目标 机器人 u-9');
+    expect(haulUnreachableText(alert({ alert_type: 'haul_unreachable', details: { building_id: 'b-1', position: { x: 2, y: 3 } } })))
+      .toBe('运输机器人到不了目标 → b-1 (2, 3)');
   });
 });

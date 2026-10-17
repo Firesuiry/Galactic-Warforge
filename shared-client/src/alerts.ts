@@ -22,7 +22,8 @@ export type ProductionAlertType =
   | 'power_shortage'
   | 'power_low'
   | 'unit_spawn_blocked'
-  | 'belt_blocked';
+  | 'belt_blocked'
+  | 'haul_unreachable';
 
 export const PRODUCTION_ALERT_TYPES: readonly ProductionAlertType[] = [
   'throughput_drop',
@@ -33,6 +34,7 @@ export const PRODUCTION_ALERT_TYPES: readonly ProductionAlertType[] = [
   'power_low',
   'unit_spawn_blocked',
   'belt_blocked',
+  'haul_unreachable',
 ];
 
 /** 服务端遭遇战预设的 tick 速率（config-skirmish.yaml max_tick_rate）。 */
@@ -48,6 +50,7 @@ export const ALERT_TYPE_LABELS: Record<ProductionAlertType, string> = {
   power_low: '电力不足',
   unit_spawn_blocked: '出厂口被占满',
   belt_blocked: '传送带堵塞',
+  haul_unreachable: '运输机器人到不了目标',
 };
 
 /** 未知类型的兜底文案：绝不把 snake_case 枚举写进界面。 */
@@ -68,6 +71,29 @@ export function alertTypeLabel(alertType: string | undefined | null): string {
 export interface AlertTilePosition {
   x: number;
   y: number;
+}
+
+/**
+ * 告警现在是否仍然成立。服务端快照里已解除的告警会留在历史中并标 `active: false`
+ * （第 16 轮契约）；缺省视为成立（兼容旧服务端 / 旧存档）。
+ */
+export function isAlertActive(alert: Pick<AlertEntry, 'active'>): boolean {
+  return alert.active !== false;
+}
+
+/** 只保留仍然成立的告警（警报条 / 地图红标 / toast 的统一口径）。 */
+export function activeAlerts<T extends Pick<AlertEntry, 'active'>>(alerts: readonly T[] | undefined): T[] {
+  return (alerts ?? []).filter(isAlertActive);
+}
+
+/**
+ * 告警的「最近一次发生」tick：聚合告警用 `last_tick`（缺省回退 `tick`）。
+ * 排序用它，避免一条老告警被反复提醒时仍排在旧位置。
+ */
+export function alertLastTick(alert: Pick<AlertEntry, 'tick' | 'last_tick'>): number {
+  return typeof alert.last_tick === 'number' && Number.isFinite(alert.last_tick)
+    ? Math.max(alert.tick, alert.last_tick)
+    : alert.tick;
 }
 
 function asFiniteNumber(value: unknown): number | undefined {
@@ -159,8 +185,42 @@ export function beltBlockedText(
 }
 
 /**
+ * 运输机器人到不了目标（`haul_unreachable`，第 16 轮契约）的细节段：
+ * `机器人 u-184 → 电弧熔炉 (61, 135)`。details 带 `unit_id` / `building_id` / `position`；
+ * 缺哪项就少写哪段，不写占位符也不编数字。
+ */
+export function haulUnreachableDetail(
+  alert: Pick<AlertEntry, 'details'>,
+  buildingName?: (buildingId: string) => string | undefined,
+): string {
+  const details = alert.details ?? {};
+  const unitId = typeof details.unit_id === 'string' ? details.unit_id : '';
+  const buildingId = typeof details.building_id === 'string' ? details.building_id : '';
+  const position = alertDetailsPosition(details);
+  const target = buildingId
+    ? `${buildingName?.(buildingId) ?? buildingId}${position ? ` (${position.x}, ${position.y})` : ''}`
+    : position ? `(${position.x}, ${position.y})` : '';
+  const parts: string[] = [];
+  if (unitId) parts.push(`机器人 ${unitId}`);
+  if (target) parts.push(`→ ${target}`);
+  return parts.join(' ');
+}
+
+/**
+ * 运输机器人到不了目标的整句文案：`运输机器人到不了目标 机器人 u-184 → 电弧熔炉 (61, 135)`。
+ */
+export function haulUnreachableText(
+  alert: Pick<AlertEntry, 'alert_type' | 'details'>,
+  buildingName?: (buildingId: string) => string | undefined,
+): string {
+  const detail = haulUnreachableDetail(alert, buildingName);
+  const label = alertTypeLabel(alert.alert_type);
+  return detail ? `${label} ${detail}` : label;
+}
+
+/**
  * 一条告警的单行中文文案（CLI 与 toast 共用）。
- * 传送带堵塞带位置/件数/时长；其余类型只给中文标签，细节看 `message`/`details`。
+ * 传送带堵塞带位置/件数/时长；运输机器人到不了目标带机器人/建筑/坐标；其余类型只给中文标签。
  */
 export function formatAlertText(
   alert: Pick<AlertEntry, 'alert_type' | 'details' | 'message'>,
@@ -168,6 +228,9 @@ export function formatAlertText(
 ): string {
   if (alert.alert_type === 'belt_blocked') {
     return beltBlockedText(alert, tickRate);
+  }
+  if (alert.alert_type === 'haul_unreachable') {
+    return haulUnreachableText(alert);
   }
   return alertTypeLabel(alert.alert_type);
 }

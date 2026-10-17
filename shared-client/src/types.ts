@@ -2345,6 +2345,12 @@ export interface AlertMetric {
 export interface AlertEntry {
   alert_id: string;
   tick: number;
+  /**
+   * 服务端 `LastTick`：同一条（建筑 + 类型）告警聚合后的最近一次重复 tick。
+   * 缺省 = 没有重复（等于 `tick`）。
+   */
+  last_tick?: number;
+  repeat_count?: number;
   player_id: string;
   building_id: string;
   building_type: string;
@@ -2353,6 +2359,12 @@ export interface AlertEntry {
   message: string;
   metrics: AlertMetric;
   details: Record<string, unknown>;
+  /**
+   * 这条告警现在是否仍然成立（服务端第 16 轮追加）。
+   * `false` = 已解除但留在历史里（例如恢复流动的 `belt_blocked`）；
+   * 缺省（旧服务端 / 旧存档）= 视为仍然成立（兼容）。
+   */
+  active?: boolean;
 }
 
 export interface AlertSnapshotResponse {

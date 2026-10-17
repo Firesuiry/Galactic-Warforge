@@ -226,4 +226,71 @@ describe('AlertBar', () => {
     expect(rows[0]).toMatchObject({ buildingId: 'b-1', count: 2, tick: 30, message: '新' });
     expect(rows[1]).toMatchObject({ buildingId: 'b-2', count: 1 });
   });
+
+  it('已解除的告警（active=false）不进警报条；只剩历史告警时整条不渲染', async () => {
+    stubFetch([
+      alertEntry({ alert_id: 'a-old', tick: 900, building_id: 'b-9', active: false }),
+    ]);
+    renderAlertBar();
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(document.querySelector('.alert-bar')).not.toBeInTheDocument();
+  });
+
+  it('活跃 + 历史混合时只显示活跃条目，且总数徽标按活跃条数算', async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      alertEntry({ alert_id: 'a-live', tick: 100, building_id: 'b-1' }),
+      alertEntry({ alert_id: 'a-old', tick: 900, building_id: 'b-9', active: false }),
+    ]);
+    renderAlertBar();
+    await user.click(await screen.findByRole('button', { name: '产线警报' }));
+    const list = screen.getByTestId('alert-bar-list');
+    expect(list.querySelectorAll('.alert-bar__row')).toHaveLength(1);
+    expect(list.textContent).not.toContain('b-9');
+    expect(document.querySelector('.alert-bar__count')).toHaveTextContent('1');
+  });
+
+  it('按 last_tick 排序：被持续提醒的老告警不会压住新告警', () => {
+    const rows = mergeAlertRows([
+      // 老告警 tick 很小，但最近一次重复在 950
+      alertEntry({ alert_id: 'a-repeat', tick: 10, last_tick: 950, building_id: 'b-1' }) as never,
+      // 新告警首现在 900
+      alertEntry({ alert_id: 'a-new', tick: 900, building_id: 'b-2' }) as never,
+    ]);
+    expect(rows.map((row) => row.buildingId)).toEqual(['b-1', 'b-2']);
+    expect(rows[0].tick).toBe(950);
+  });
+
+  it('haul_unreachable：中文标签 + 机器人/目标建筑/坐标；点条目聚焦目标建筑', async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      alertEntry({
+        alert_id: 'a-haul',
+        tick: 700,
+        building_id: 'u-184',
+        building_type: 'transport_robot',
+        alert_type: 'haul_unreachable',
+        message: 'unit u-184 cannot reach b-164',
+        details: { unit_id: 'u-184', building_id: 'b-164', building_type: 'arc_smelter', position: { x: 61, y: 135, z: 0 } },
+      }),
+    ]);
+    renderAlertBar('/planet/planet-1-1');
+    const summary = await screen.findByRole('button', { name: '产线警报' });
+    expect(summary.textContent).toContain('运输机器人到不了目标');
+    expect(summary.textContent).not.toContain('haul_unreachable');
+
+    await user.click(summary);
+    const row = screen.getByTestId('alert-bar-list').querySelector('.alert-bar__row') as HTMLElement;
+    // 建筑列写的是「到不了的目标建筑」，不是服务端告警里的机器人 id。
+    expect(row.textContent).toContain('电弧熔炉');
+    expect(row.textContent).toContain('b-164');
+    expect(row.textContent).toContain('机器人 u-184 → 电弧熔炉 (61, 135)');
+    expect(row.textContent).not.toMatch(/[a-z]+_[a-z]+/);
+
+    await user.click(row);
+    const state = usePlanetViewStore.getState();
+    // 聚焦的是「到不了的目标建筑」，不是机器人自己
+    expect(state.selected).toMatchObject({ kind: 'building', id: 'b-164' });
+    expect(state.focusRequest?.position).toMatchObject({ x: 61, y: 135 });
+  });
 });
