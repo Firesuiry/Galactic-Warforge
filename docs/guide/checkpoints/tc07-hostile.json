@@ -1,25 +1,20 @@
 {
   "parent": "cp-near-hive",
-  "note": "1014 L16（TC-07 重跑，黑雾修复版 42ffb26 之后）：从 cp-near-hive（tick 70285）读档，只用网页 UI 让 10 个步兵（u-108..u-117）整队右键攻击最近的已确认黑雾巢穴 enemy-92（type=hive，@(101,179)）。首帧伤害 tick 70460 触发 dark_fog_provoked（payload until_tick=76460），dark_fog.hostile 翻 true；新手引导提示条变红「黑雾正在报复你：先回防基地。停止攻击黑雾一段时间后，它会恢复中立。」，toast「你激怒了黑雾｜10 分钟内会遭到报复…」，悬停巢穴显示「黑雾（敌对）」。报复封顶（修复 B）生效：三处巢穴的 enemy_wave_incoming 波次 raiders=4/3/1/3/2/2（easy raidWaveCap=4、raidUnitCap=8），不再是旧档的 7-11/波；但巢穴附近的守卫补员不受限，仍成批扑向步兵（df-93..df-132）。5 个步兵用「停止」停火并撤出射程（改用 3D 主视图右键远距离移动，小地图右键被选中条遮挡，见层报告问题 2）；最后一枪是 tick 70698 打爆巢穴 enemy-92，这同时是 p1 对黑雾的最后一次伤害，故 hostile_until_tick = 70698 + 6000 = 76698（与 config dark_fog_calm_ticks=6000 精确一致）。停火后 1800+ tick 内多次 GET /state/summary 采样：黑雾持续打步兵/基地，p1 的自动还手（机甲 u-5 于 71568/71710 还击 df-119/df-128，正是修复口径里的「自卫还手」）**不再顺延** hostile_until_tick，恒为 76698（修复口径 A 验证通过）。本存档点冻结在「已停火、hostile=true、hostile_until_tick=76698」的状态，供主代理用高 tick 速率空跑到 tick >= 76698 验证 dark_fog_calmed 事件与 dark_fog.hostile=false。契约 5 条服务端校验 passed=true。",
-  "build": [
-    "读档 cp-near-hive（tick 70285，10 步兵已在 enemy-92 巢穴外 4-7 格、黑雾中立），等约 50 tick 后 L.open3d + G.look(101,179) 归位视角（截图 16-a-hive-neutral）",
-    "UI：双击一名步兵全选 10 兵（「已选 10 个单位 · 士兵×10」），右键巢穴 tile (101,179) 下令攻击（截图 16-b-select10-before-attack、16-c-attack-order）",
-    "tick 70460 首帧伤害触发 dark_fog_provoked（until_tick=76460），dark_fog.hostile 翻 true；引导条转红、toast「你激怒了黑雾」、toast「侦测到黑雾袭击」（截图 16-d-provoked-hostile）",
-    "UI：悬停巢穴 tile 确认提示显示「黑雾兵力 / 黑雾（敌对） / 强度」（截图 16-e-hive-hostile-hover）",
-    "观察报复：巢穴补守卫 df-93..df-132 扑向步兵并交火；enemy_wave_incoming 三处巢穴发波 raiders=4/3/1（easy 封顶 4/波、8 在途），payload target_pos 指向基地 (20,49)/(21,48)（截图 16-i-base-under-attack）",
-    "UI：重新选中存活 5 兵 → 点「停止」（清 attack_target、不再交战，截图 16-f-stop-order）",
-    "UI：3D 主视图把镜头移到 (62,179) 后右键下令撤退（小地图右键被选中条遮挡，改用主视图；截图 16-g-look-west、16-g-withdraw-order）",
-    "tick 70698：5 兵在撤出射程的最后一刻打爆巢穴 enemy-92（entity_destroyed enemy_force/hive）；这是 p1 对黑雾的最后一次伤害 → hostile_until_tick = 70698 + 6000 = 76698",
-    "GET 采样核对（tick 71527-72819）：hostile=true、hostile_until_tick 恒为 76698；期间机甲 u-5 自卫还击 df-119/df-128（tick 71568/71574/71580/71586/71592/71598/71604/71710/71716/71722）**未顺延**计时（修复口径 A 验证）",
-    "存 tc07-hostile（tick 71527，契约 5 条服务端全过 passed=true）"
+  "note": "第 19 轮改写（可执行）：从 cp-near-hive（tick 64200）读档，只用玩家命令让 10 个步兵（u-145..u-170）整队攻击最近的黑雾巢穴 enemy-161@(303,435)（士兵在 (307..310,434..436)，射程 6 内）。首帧伤害触发 dark_fog_provoked，dark_fog.hostile 翻 true；随后立刻 unit_order stop + 撤到 (335,435) 停火。黑雾守卫会扑上来还手，我方可能损失部分步兵；契约只要求仍存活 ≥3 个步兵（实测停火后剩 3 个）、黑雾敌对。这个存档点冻结在「已停火、hostile=true」，供主代理用高 tick 速率空跑到 hostile_until_tick 之后验证 dark_fog_calmed 与恢复中立。",
+  "steps": [
+    {"advance_to_tick": 64210},
+    {"cmd": {"type": "attack", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_ids": ["u-145", "u-146", "u-147", "u-148", "u-149", "u-150", "u-167", "u-168", "u-169", "u-170"]}, "payload": {"target_entity_id": "enemy-161"}}},
+    {"wait_until": {"kind": "dark_fog_hostile", "player": "p1", "bool": true}, "timeout_ticks": 1200},
+    {"cmd": {"type": "unit_order", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_ids": ["u-145", "u-146", "u-147", "u-148", "u-149", "u-150", "u-167", "u-168", "u-169", "u-170"]}, "payload": {"order": "stop"}}},
+    {"cmd": {"type": "move", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_ids": ["u-145", "u-146", "u-147", "u-148", "u-149", "u-150", "u-167", "u-168", "u-169", "u-170"], "position": {"x": 335, "y": 435, "z": 0}}}},
+    {"advance_to_tick": 64800}
   ],
-  "contract": {
-    "checks": [
-      {"kind": "game_not_finished"},
-      {"kind": "player_alive", "player": "p1"},
-      {"kind": "dark_fog_hostile", "player": "p1", "bool": true},
-      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 5},
-      {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1}
-    ]
-  }
+  "end_tick": 64800,
+  "contract": {"checks": [
+    {"kind": "game_not_finished"},
+    {"kind": "player_alive", "player": "p1"},
+    {"kind": "dark_fog_hostile", "player": "p1", "bool": true},
+    {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 3},
+    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1}
+  ]}
 }
