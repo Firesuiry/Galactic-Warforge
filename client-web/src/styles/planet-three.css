@@ -21,6 +21,9 @@
 .planet-map-shell--3d .planet-build-card--active { border-color:#e9bd74; background:#67513955; box-shadow:inset 0 -2px #e9bd74; }
 .planet-map-shell--3d .planet-build-card__icon { width:74px; height:62px; background:none; box-shadow:none; border:0; }
 .planet-map-shell--3d .planet-build-card .planet-build-card__icon svg { width:46px; height:46px; }
+/* 小锁角标不能被上面那条「图标放大到 46px」的规则波及（试玩 1017 K4-01 后复核）：
+   它是 icon 容器里的第二个 svg，旧选择器会把它也放到 46px，重新盖住建筑图。 */
+.planet-map-shell--3d .planet-build-card .planet-build-card__icon .planet-build-card__lock { width:10px; height:10px; }
 .planet-map-shell--3d .planet-build-card__hotkey { left:4px; top:3px; font-size:11px; color:#cfdcd8; opacity:.9; }
 .planet-build-card__model { width:82px; height:72px; display:block; object-fit:contain; pointer-events:none; filter:drop-shadow(0 3px 3px #0004); }
 .planet-map-shell--3d .planet-build-group__label { color:#b8b9aa; }
