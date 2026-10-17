@@ -143,10 +143,13 @@ setsid --fork nohup bash -c "echo \$\$ > '$RUN_DIR/server.pid'; cd '$WORKTREE/se
   >"$RUN_DIR/server.log" 2>&1 </dev/null
 
 # ---- client-web：生产构建 + vite preview ----
-log "构建 client-web（vite build → $RUN_DIR/web-dist）"
+# VITE_E2E=1 是**构建期**开关：生产构建默认把浏览器测试钩子（window.__planetThree /
+# __systemThree）连同 `?e2e=1` 判断一起编译掉，正式产物里 grep 不到 `e2e`。
+# 试玩驱动要读这两个句柄，所以这里显式打开；不要把它加进 npm run build。
+log "构建 client-web（vite build → $RUN_DIR/web-dist，VITE_E2E=1 暴露测试钩子）"
 (
   cd "$WORKTREE/client-web"
-  npx vite build --outDir "$RUN_DIR/web-dist" --emptyOutDir >"$RUN_DIR/vite-build.log" 2>&1
+  VITE_E2E=1 npx vite build --outDir "$RUN_DIR/web-dist" --emptyOutDir >"$RUN_DIR/vite-build.log" 2>&1
 )
 
 log "启动 vite preview (:$WEB_PORT)"

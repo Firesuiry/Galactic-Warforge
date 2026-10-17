@@ -6,6 +6,7 @@ import { useSessionSnapshot } from '@/hooks/use-session';
 import { translatePlanetKind } from '@/i18n/translate';
 import { starTypeLabel } from '@/features/starmap/model';
 import { SystemThreeScene } from './system-three-scene';
+import { exposeTestHook } from '@/test-hooks';
 
 export function SystemOrbitView({ systemId }: { systemId: string }) {
   const client = useApiClient(), session = useSessionSnapshot();
@@ -28,11 +29,10 @@ export function SystemOrbitView({ systemId }: { systemId: string }) {
       });
     } catch { setError('无法启动 3D 星系画面，请切换平面战术视图。'); return; }
     scene.current = renderer; setReady(true);
-    // Projection helper for browser tests (dev, or production build opened with ?e2e)——与
-    // PlanetMapThree 的 __planetThree 同口径：生产构建下测试靠 ?e2e=1 拿到调试句柄。
-    const exposeTestHook = import.meta.env.DEV || new URLSearchParams(window.location.search).has('e2e');
-    if (exposeTestHook) (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree = renderer;
-    return () => { renderer.destroy(); scene.current=null; if (exposeTestHook) delete (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree; };
+    // Projection helper for browser tests——与 PlanetMapThree 的 __planetThree 同口径（见 @/test-hooks）。
+    const exposeHook = exposeTestHook();
+    if (exposeHook) (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree = renderer;
+    return () => { renderer.destroy(); scene.current=null; if (exposeHook) delete (window as unknown as {__systemThree?:SystemThreeScene}).__systemThree; };
   }, [Boolean(query.data?.discovered)]);
   useEffect(() => {
     if (ready && query.data) scene.current?.setData({system:query.data,runtime:runtime.data});

@@ -21,6 +21,7 @@ import type { PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { exposeTestHook } from '@/test-hooks';
 
 const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
 /** 点选落空提示的停留时长（ms）：一次点击的回执，不是常驻状态。 */
@@ -233,9 +234,9 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
-    // Projection helper for browser tests (dev, or production build opened with ?e2e): tests still click the rendered canvas.
-    const exposeTestHook = import.meta.env.DEV || new URLSearchParams(window.location.search).has('e2e');
-    if (exposeTestHook) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
+    // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
+    const exposeHook = exposeTestHook();
+    if (exposeHook) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
     // 战斗事件总线 → 3D 战斗演出（弹道/命中/爆炸/残骸）；卸载退订防重复演出
     const unsubscribeBattle = subscribeBattleEvents((event) => renderer.handleBattleEvent(event));
     const timer = window.setInterval(() => {
@@ -260,7 +261,7 @@ export function PlanetMapThree(props: Props) {
       renderer.destroy();
       scene.current = null;
       latest.current.onCanvasReady?.(null);
-      if (exposeTestHook) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
+      if (exposeHook) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
     };
   }, []);
 
