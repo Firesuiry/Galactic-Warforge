@@ -30,6 +30,12 @@ const (
 	// AlertTypeHaulUnreachable：运输机器人连续多次都到不了某座建筑（外圈没有
 	// 落点或没有路径），已放弃该目标。指向**到不了的建筑**，机器人重新到达后解除。
 	AlertTypeHaulUnreachable ProductionAlertType = "haul_unreachable"
+	// AlertTypeSorterStalled：分拣器持续没能把物品送进放货端的机器（断电、暂停、
+	// 取不到货、放货端收不下）。指向**分拣器本身**，`details.building_id` 是它的
+	// 目标建筑、`details.reason` 是停工原因；恢复搬运后解除。自动运输机器人会
+	// 跳过「已有分拣器喂料」的机器，所以分拣器停工时那台机器会静默断料——这条
+	// 告警就是为了把这种静默断料暴露出来（见 §6.7）。
+	AlertTypeSorterStalled ProductionAlertType = "sorter_stalled"
 )
 
 // ProductionAlert is a monitoring alert raised for a single building.
@@ -219,6 +225,8 @@ func AlertMessage(alertType ProductionAlertType, buildingID string) string {
 		return fmt.Sprintf("建筑 %s：传送带被堵，物品运不出去", buildingID)
 	case AlertTypeHaulUnreachable:
 		return fmt.Sprintf("建筑 %s：运输机器人到不了", buildingID)
+	case AlertTypeSorterStalled:
+		return fmt.Sprintf("分拣器 %s：停工，物品送不到目标", buildingID)
 	default:
 		return fmt.Sprintf("建筑 %s：产线告警", buildingID)
 	}
