@@ -149,8 +149,10 @@ describe('PlanetBuildBar', () => {
     render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    // 买不起的卡片：真禁用（aria-disabled），点了不进建造模式，只列出缺料清单（试玩 1016 摩擦 1）。
-    expect(card).toHaveAttribute('aria-disabled', 'true');
+    // 买不起的卡片：仍然原生可点（缺料走 data-shortage），点了不进建造模式，只列出缺料清单
+    // （试玩 1016 摩擦 1；用 aria-disabled 会让 Playwright 的 click 一直等 enabled）。
+    expect(card).toBeEnabled();
+    expect(card).toHaveAttribute('data-shortage', 'true');
     expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
 
     await user.click(card);
@@ -219,7 +221,8 @@ describe('PlanetBuildBar', () => {
 
     // wind_turbine 要 铁块 6 / 齿轮 1，背包只有 4 / 0 → 整格置灰，逐项写出「背包有/需要」
     const card = screen.getByRole('button', { name: /风力发电机/ });
-    expect(card).toHaveAttribute('aria-disabled', 'true');
+    expect(card).toBeEnabled();
+    expect(card).toHaveAttribute('data-shortage', 'true');
     expect(card.className).toContain('planet-build-card--unaffordable');
     const cost = card.querySelector('.planet-build-card__cost');
     expect(cost?.textContent).toContain('4/6');

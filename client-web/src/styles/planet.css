@@ -1702,7 +1702,8 @@
 .planet-build-card--unaffordable {
   opacity:.55;
   border-color:#ff575766;
-  cursor:not-allowed;
+  /* 仍然可点（点它列出缺料清单），所以不用 not-allowed。 */
+  cursor:pointer;
 }
 
 /* 缺料红角标：一格 52px 没有位置写数字，用红点表示「有东西缺」。 */

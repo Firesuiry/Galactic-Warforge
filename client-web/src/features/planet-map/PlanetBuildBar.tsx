@@ -348,9 +348,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 data-building-id={entry.id}
                 type="button"
                 disabled={locked}
-                // 缺料卡**真禁用**（试玩 1016 摩擦 1）：以前只是视觉置灰，点下去照样进入建造模式、
-                // 照样能在地图上落子，服务端才回一条失败。现在点它只弹出缺料清单（见 onClick）。
-                aria-disabled={unaffordable || undefined}
+                // 缺料卡**仍然可点**（试玩 1016 摩擦 1）：点它不进建造模式，只弹出缺料清单
+                // （见 onClick）。不用 aria-disabled——原生可点才能让 Playwright/读屏器正常触发，
+                // 缺料状态走 data-shortage + 红点/置灰样式。
+                data-shortage={unaffordable || undefined}
                 aria-label={title}
                 onMouseEnter={() => setHoveredId(entry.id)}
                 onMouseLeave={() => setHoveredId((id) => (id === entry.id ? null : id))}
