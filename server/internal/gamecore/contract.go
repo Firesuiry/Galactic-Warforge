@@ -28,9 +28,11 @@ import (
 //	building_no_alert_since {position, alert_type?, tick}  该落点建筑自 tick 起无该类告警
 //	building_alert_since {position, alert_type, tick}     该落点建筑自 tick 起出现过且仍成立的该类告警 >= 1
 //	unit_count_gte      {type, n}
+//	unit_near           {position, radius, type?, n}  该玩家在 position 半径内的存活单位数 >= n
 //	item_gte            {item_id, n}
 //	no_alert_since      {alert_type, tick, type?}  自 tick 起没有该类生产告警（type 非空时只看该建筑类型）
 //	dark_fog_hostile    {bool}
+//	dark_fog_calmed     {tick}   自 tick 起该玩家出现过 dark_fog_calmed 事件
 //	enemy_attack_seen   {bool}
 //
 // 「玩家可用物资」口径：PlayerState.Inventory（就是机甲背包，采矿/手搓/战利品都落这里，
@@ -223,6 +225,37 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", count))
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求 %s >= %d", check.Type, check.N))
+	case "unit_near":
+		// 「军团开到了巢穴外」这类契约不能只数 total：unit_count_gte 在单位还蹲在
+		// 基地时也通过（cp-near-hive 的 move 被拒也能满足 ≥6）。这里按 cube-sphere
+		// 图距数落点半径内的存活单位；type 为空时数所有单位（含机甲）。
+		if check.Position == nil {
+			return fail("(none)", "unit_near 需要 position")
+		}
+		if check.Radius < 0 {
+			return fail("(none)", "unit_near 的 radius 不能为负")
+		}
+		count := 0
+		for _, world := range gc.sortedWorlds() {
+			world.RLock()
+			for _, unit := range world.Units {
+				if unit == nil || unit.OwnerID != player.PlayerID || unit.HP <= 0 {
+					continue
+				}
+				if check.Type != "" && string(unit.Type) != check.Type {
+					continue
+				}
+				if world.SurfaceWithin(unit.Position, *check.Position, check.Radius) {
+					count++
+				}
+			}
+			world.RUnlock()
+		}
+		if count >= check.N {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求 (%d,%d) 半径 %d 内的单位 >= %d",
+			check.Position.X, check.Position.Y, check.Radius, check.N))
 	case "building_item_at_gte", "building_item_at_lt":
 		// 按落点定位一台建筑（而不是建筑 ID）：契约要能断言「这一格上的机器里
 		// 有多少货」——分拣器送到的仓储非空、紧贴传送带但没有分拣器的仓储必须
@@ -293,6 +326,15 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%t", hostile))
 		}
 		return fail(fmt.Sprintf("%t", hostile), fmt.Sprintf("要求黑雾敌对 = %t", check.Boolean))
+	case "dark_fog_calmed":
+		// 「冷静期到期、恢复中立」的可执行断言：只看该玩家的 dark_fog_calmed 事件
+		// （settleDarkFogCalm 发，payload.player_id），不把别家玩家的事件算进来。
+		// 事件按类型各留一个环（默认 2000 条），本局黑雾只被激怒一次，足够覆盖。
+		count := gc.darkFogCalmedCountSince(player.PlayerID, check.Tick)
+		if count >= 1 {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail("0", fmt.Sprintf("自 tick %d 起没有该玩家的 dark_fog_calmed 事件", check.Tick))
 	case "enemy_attack_seen":
 		seen := enemyAttackSeen(player, gc.opponentKills(player.PlayerID))
 		if seen == check.Boolean {
@@ -410,6 +452,25 @@ func enemyAttackSeen(player *model.PlayerState, opponentKills int) bool {
 		return false
 	}
 	return player.Stats.CombatStats.UnitsLost > 0 || player.Stats.CombatStats.BuildingsLost > 0
+}
+
+// darkFogCalmedCountSince 数自 tick 起该玩家收到过几条 dark_fog_calmed 事件。
+// 事件历史按类型各留一个环（默认 2000 条），黑雾每局被激怒的次数远小于这个量级。
+func (gc *GameCore) darkFogCalmedCountSince(playerID string, tick int64) int {
+	if gc == nil || gc.eventHistory == nil || playerID == "" {
+		return 0
+	}
+	events, _, _, _ := gc.eventHistory.Snapshot([]model.EventType{model.EvtDarkFogCalmed}, "", tick, 0)
+	count := 0
+	for _, evt := range events {
+		if evt == nil || evt.Tick < tick {
+			continue
+		}
+		if owner, _ := evt.Payload["player_id"].(string); owner == playerID {
+			count++
+		}
+	}
+	return count
 }
 
 // contractPlayers 取待评估的玩家：指定 player 时只评估该玩家，否则按 ID 稳定排序评估全部。
