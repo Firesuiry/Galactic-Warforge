@@ -73,12 +73,14 @@ describe('2D 分拣器幽灵箭头', () => {
       const { fontSize, gap } = sorterGhostLabelPlacement(ts);
       // 字号比旧版（ts * .5，上限 14）小至少三成，且不低于可读下限。
       expect(fontSize).toBeLessThanOrEqual(ts * 0.5 * 0.75 + 1e-9);
-      expect(fontSize).toBeGreaterThanOrEqual(8);
+      expect(fontSize).toBeGreaterThanOrEqual(7);
       // 标签内缘（中心 - 半字宽）必须在尖端之外：不压箭头本体。
       expect(gap - fontSize * 0.5).toBeGreaterThan(0);
     }
     // 小格宽也不放大字号（旧版下限 9px 会把整格盖住）。
-    expect(sorterGhostLabelPlacement(10).fontSize).toBe(8);
+    expect(sorterGhostLabelPlacement(10).fontSize).toBe(7);
+    // 大格宽也不超过 10px：标签始终小于箭头本体。
+    expect(sorterGhostLabelPlacement(64).fontSize).toBe(10);
   });
 
   it('虚线切段：沿线段方向等距切分，首尾都落在线上，缺口不会被误算进实线', () => {

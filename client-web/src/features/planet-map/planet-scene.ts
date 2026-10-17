@@ -458,8 +458,10 @@ export function resolveSorterGhostArrows(
  * 返回的 `gap` 是标签中心离尖端的距离，必须大于 `fontSize / 2`（内缘不压尖端）。
  */
 export function sorterGhostLabelPlacement(tileSize: number): { fontSize: number; gap: number } {
-  const fontSize = Math.max(8, Math.min(11, tileSize * 0.36));
-  return { fontSize, gap: fontSize * 0.5 + 2 };
+  // 字号约为旧版（tileSize * .5，上限 14）的一半：箭头在 2D 里也只有 0.26 格长，
+  // 标签必须明显小于箭头才不喧宾夺主。
+  const fontSize = Math.max(7, Math.min(10, tileSize * 0.26));
+  return { fontSize, gap: fontSize * 0.5 + 1.5 };
 }
 
 /**
