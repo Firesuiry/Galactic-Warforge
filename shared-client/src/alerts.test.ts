@@ -13,6 +13,8 @@ import {
   haulUnreachableDetail,
   haulUnreachableText,
   isAlertActive,
+  sorterStalledDetail,
+  sorterStalledText,
   ticksToSeconds,
 } from './alerts.js';
 
@@ -134,5 +136,32 @@ describe('告警 active 口径与 haul_unreachable（第 16 轮契约）', () =>
       .toBe('运输机器人到不了目标 机器人 u-9');
     expect(haulUnreachableText(alert({ alert_type: 'haul_unreachable', details: { building_id: 'b-1', position: { x: 2, y: 3 } } })))
       .toBe('运输机器人到不了目标 → b-1 (2, 3)');
+  });
+});
+
+describe('sorter_stalled（分拣器停工）', () => {
+  it('中文标签「分拣器停工」+ reason 中文说明，不裸显枚举', () => {
+    expect(alertTypeLabel('sorter_stalled')).toBe('分拣器停工');
+    const entry = alert({
+      alert_type: 'sorter_stalled',
+      details: { reason: 'no_power', building_id: 'b-77', position: { x: 61, y: 135, z: 0 } },
+    });
+    expect(sorterStalledDetail(entry)).toBe('分拣器断电 → b-77 (61, 135)');
+    expect(sorterStalledDetail(entry, (id) => (id === 'b-77' ? '电弧熔炉' : undefined)))
+      .toBe('分拣器断电 → 电弧熔炉 (61, 135)');
+    expect(sorterStalledText(entry)).toBe('分拣器停工 分拣器断电 → b-77 (61, 135)');
+    expect(formatAlertText(entry)).toBe('分拣器停工 分拣器断电 → b-77 (61, 135)');
+    expect(formatAlertText(entry)).not.toContain('sorter_stalled');
+    expect(formatAlertText(entry)).not.toContain('no_power');
+  });
+
+  it('四种 reason 都有中文；未知 reason 不裸显，details 缺项不写占位符', () => {
+    const detail = (reason: string) => sorterStalledDetail(alert({ alert_type: 'sorter_stalled', details: { reason } }));
+    expect(detail('no_power')).toBe('分拣器断电');
+    expect(detail('paused')).toBe('分拣器已暂停');
+    expect(detail('pick_empty')).toBe('取货端没有它认的货');
+    expect(detail('drop_blocked')).toBe('放货端收不下');
+    expect(detail('mystery_reason')).toBe('');
+    expect(sorterStalledText(alert({ alert_type: 'sorter_stalled', details: {} }))).toBe('分拣器停工');
   });
 });

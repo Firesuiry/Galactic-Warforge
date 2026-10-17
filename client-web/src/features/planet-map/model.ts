@@ -1126,6 +1126,8 @@ function buildAlertRecommendation(alert: AlertEntry) {
       return "优先疏通这条传送带：看带尾接没接东西、下游分拣器/建筑收不收这件货";
     case "haul_unreachable":
       return "优先疏通通往目标建筑的路：清掉围死它的建筑/带子，或改派别的终点";
+    case "sorter_stalled":
+      return "优先检查这台分拣器：供电/是否暂停、取货端有没有它认的货、放货端收不收得下";
     default:
       return "优先定位建筑状态，再检查供电、原料与输出链路";
   }

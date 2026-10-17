@@ -23,7 +23,8 @@ export type ProductionAlertType =
   | 'power_low'
   | 'unit_spawn_blocked'
   | 'belt_blocked'
-  | 'haul_unreachable';
+  | 'haul_unreachable'
+  | 'sorter_stalled';
 
 export const PRODUCTION_ALERT_TYPES: readonly ProductionAlertType[] = [
   'throughput_drop',
@@ -35,6 +36,7 @@ export const PRODUCTION_ALERT_TYPES: readonly ProductionAlertType[] = [
   'unit_spawn_blocked',
   'belt_blocked',
   'haul_unreachable',
+  'sorter_stalled',
 ];
 
 /** 服务端遭遇战预设的 tick 速率（config-skirmish.yaml max_tick_rate）。 */
@@ -51,6 +53,7 @@ export const ALERT_TYPE_LABELS: Record<ProductionAlertType, string> = {
   unit_spawn_blocked: '出厂口被占满',
   belt_blocked: '传送带堵塞',
   haul_unreachable: '运输机器人到不了目标',
+  sorter_stalled: '分拣器停工',
 };
 
 /** 未知类型的兜底文案：绝不把 snake_case 枚举写进界面。 */
@@ -218,6 +221,50 @@ export function haulUnreachableText(
   return detail ? `${label} ${detail}` : label;
 }
 
+/** `sorter_stalled` 的 reason 枚举 → 中文说明（服务端 `sorter_stall_alert.go`）。 */
+export const SORTER_STALL_REASON_LABELS: Record<string, string> = {
+  no_power: '分拣器断电',
+  paused: '分拣器已暂停',
+  pick_empty: '取货端没有它认的货',
+  drop_blocked: '放货端收不下',
+};
+
+/** `sorter_stalled` 的 reason → 中文（未知 reason 返回空串，不裸显枚举）。 */
+export function sorterStallReasonLabel(reason: unknown): string {
+  return typeof reason === 'string' ? SORTER_STALL_REASON_LABELS[reason] ?? '' : '';
+}
+
+/**
+ * 分拣器停工的细节段：`分拣器断电 → 电弧熔炉 (61, 135)`。
+ * details 带 `reason` / `building_id` / `position`；缺哪项就少写哪段。
+ */
+export function sorterStalledDetail(
+  alert: Pick<AlertEntry, 'details'>,
+  buildingName?: (buildingId: string) => string | undefined,
+): string {
+  const details = alert.details ?? {};
+  const reason = sorterStallReasonLabel(details.reason);
+  const buildingId = typeof details.building_id === 'string' ? details.building_id : '';
+  const position = alertDetailsPosition(details);
+  const target = buildingId
+    ? `${buildingName?.(buildingId) ?? buildingId}${position ? ` (${position.x}, ${position.y})` : ''}`
+    : position ? `(${position.x}, ${position.y})` : '';
+  const parts: string[] = [];
+  if (reason) parts.push(reason);
+  if (target) parts.push(`→ ${target}`);
+  return parts.join(' ');
+}
+
+/** 分拣器停工的整句文案：`分拣器停工 分拣器断电 → 电弧熔炉 (61, 135)`。 */
+export function sorterStalledText(
+  alert: Pick<AlertEntry, 'alert_type' | 'details'>,
+  buildingName?: (buildingId: string) => string | undefined,
+): string {
+  const detail = sorterStalledDetail(alert, buildingName);
+  const label = alertTypeLabel(alert.alert_type);
+  return detail ? `${label} ${detail}` : label;
+}
+
 /**
  * 一条告警的单行中文文案（CLI 与 toast 共用）。
  * 传送带堵塞带位置/件数/时长；运输机器人到不了目标带机器人/建筑/坐标；其余类型只给中文标签。
@@ -231,6 +278,9 @@ export function formatAlertText(
   }
   if (alert.alert_type === 'haul_unreachable') {
     return haulUnreachableText(alert);
+  }
+  if (alert.alert_type === 'sorter_stalled') {
+    return sorterStalledText(alert);
   }
   return alertTypeLabel(alert.alert_type);
 }

@@ -295,4 +295,36 @@ describe('AlertBar', () => {
     expect(state.selected).toMatchObject({ kind: 'building', id: 'b-164' });
     expect(state.focusRequest?.position).toMatchObject({ x: 61, y: 135 });
   });
+
+  it('sorter_stalled：中文标签「分拣器停工」+ reason 中文 + 目标建筑；不裸显枚举', async () => {
+    const user = userEvent.setup();
+    stubFetch([
+      alertEntry({
+        alert_id: 'a-sorter',
+        tick: 900,
+        // 服务端契约：告警挂在分拣器上，details.building_id 是放货端的目标机器，
+        // details.target_type 是目标建筑类型。
+        building_id: 'b-42',
+        building_type: 'sorter_mk1',
+        alert_type: 'sorter_stalled',
+        message: 'sorter b-42 stalled',
+        details: {
+          reason: 'no_power',
+          building_id: 'b-164',
+          target_type: 'arc_smelter',
+          position: { x: 61, y: 135, z: 0 },
+        },
+      }),
+    ]);
+    renderAlertBar('/planet/planet-1-1');
+    const summary = await screen.findByRole('button', { name: '产线警报' });
+    expect(summary.textContent).toContain('分拣器停工');
+    expect(summary.textContent).not.toContain('sorter_stalled');
+
+    await user.click(summary);
+    const row = screen.getByTestId('alert-bar-list').querySelector('.alert-bar__row') as HTMLElement;
+    expect(row.textContent).toContain('分拣器断电');
+    expect(row.textContent).toContain('电弧熔炉');
+    expect(row.textContent).not.toMatch(/[a-z]+_[a-z]+/);
+  });
 });

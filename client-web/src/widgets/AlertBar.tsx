@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, TriangleAlert } from 'lucide-react';
 
-import { alertDetailsPosition, alertLastTick, DEFAULT_TICKS_PER_SECOND, formatAlertText, haulUnreachableText, isAlertActive } from '@shared/alerts';
+import { alertDetailsPosition, alertLastTick, DEFAULT_TICKS_PER_SECOND, formatAlertText, haulUnreachableText, isAlertActive, sorterStalledText } from '@shared/alerts';
 import type { AlertEntry, CatalogView } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
@@ -125,7 +125,8 @@ function rowBuildingTag(row: AlertRow): string {
 /**
  * 告警条目的说明文案：传送带堵塞给出中文的位置/件数/时长
  * （服务端 message 只写「建筑 b-9：传送带被堵，物品运不出去」，定位不到格子），
- * 运输机器人到不了目标给出机器人/目标建筑/坐标；其余类型只给中文标签。
+ * 运输机器人到不了目标给出机器人/目标建筑/坐标，分拣器停工给出原因/目标建筑/坐标；
+ * 其余类型只给中文标签。
  */
 function alertRowDetail(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
   if (row.alertType === 'haul_unreachable') {
@@ -136,15 +137,24 @@ function alertRowDetail(row: AlertRow, tickRate: number, catalog?: CatalogView):
       () => (row.buildingType ? getBuildingDisplayName(catalog, row.buildingType) : undefined),
     );
   }
+  if (row.alertType === 'sorter_stalled') {
+    // 告警挂在分拣器上，details.building_id 才是被喂料的目标机器；
+    // 目标建筑类型在 details.target_type（服务端 sorter_stall_alert.go）。
+    const targetType = typeof row.details.target_type === 'string' ? row.details.target_type : '';
+    return sorterStalledText(
+      { alert_type: row.alertType, details: row.details },
+      () => (targetType ? getBuildingDisplayName(catalog, targetType) : undefined),
+    );
+  }
   return formatAlertText(
     { alert_type: row.alertType, details: row.details, message: row.message },
     tickRate,
   );
 }
 
-/** 条目 title：中文标签 + 细节（belt_blocked 用位置/件数/时长，其余用服务端 message）。 */
+/** 条目 title：中文标签 + 细节（belt_blocked / haul_unreachable / sorter_stalled 用 details，其余用服务端 message）。 */
 function alertRowTitle(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
-  if (row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable') {
+  if (row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable' || row.alertType === 'sorter_stalled') {
     return alertRowDetail(row, tickRate, catalog);
   }
   return `${translateAlertType(row.alertType, row.message)}：${row.message}`;
@@ -297,7 +307,7 @@ export function AlertBar() {
                 {/* 传送带堵塞指向带格本身、运输机器人到不了目标指向目标建筑：
                     把位置/件数/时长（或机器人/建筑）写在条目上，
                     玩家不用点开地图就知道堵在哪、堵了多少。 */}
-                {row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable' ? (
+                {row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable' || row.alertType === 'sorter_stalled' ? (
                   <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate, catalogQuery.data)}</span>
                 ) : null}
                 {row.count > 1 ? <span className="alert-bar__row-count">×{row.count}</span> : null}
