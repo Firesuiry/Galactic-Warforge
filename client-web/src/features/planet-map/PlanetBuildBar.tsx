@@ -466,7 +466,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             ) : (
               <span className="planet-build-bar__hint">
                 {sorterMode
-                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上虚线空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
                   : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
@@ -475,16 +475,17 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               type="button"
               title="旋转建筑或传送带方向（快捷键 R；Shift+R 复位朝向）"
               onClick={cycleBeltDirection}
+              data-testid="planet-build-direction"
             >
-              {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写「方位：东」，分拣器另标
-                  「（取货端 西 → 放货端 东）」，不再一套显角度一套显方位。 */}
-              方位：{beltMode
-                ? DIRECTION_LABELS[buildDirection]
+              {/* 方位口径统一（试玩 1016 U3）：传送带与分拣器都写中文方位，不再一套显角度一套显方位。
+                  分拣器写「朝向 东（从西取 → 往东放）」：朝向 = 放货端（正面），与机械臂/箭头一致。 */}
+              {beltMode
+                ? `方向：${DIRECTION_LABELS[buildDirection]}`
                 : (() => {
                     const facing = ROTATION_FACING[rotationTurns(interactionMode.kind === 'build' ? interactionMode.rotation : 0)];
                     return sorterMode
-                      ? `${DIRECTION_NAMES[facing]}（取货端 ${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]} → 放货端 ${DIRECTION_NAMES[facing]}）`
-                      : DIRECTION_NAMES[facing];
+                      ? `朝向 ${DIRECTION_NAMES[facing]}（从${DIRECTION_NAMES[OPPOSITE_DIRECTION[facing]]}取 → 往${DIRECTION_NAMES[facing]}放）`
+                      : `朝向：${DIRECTION_NAMES[facing]}`;
                   })()} · R 旋转
             </button>
             {/* 误点 R 把带子铺反后不必再循环 3–4 次（试玩 1016 U-1）：一键回到默认朝向。 */}

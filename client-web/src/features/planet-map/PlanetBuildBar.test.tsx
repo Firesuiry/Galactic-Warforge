@@ -337,9 +337,9 @@ describe('PlanetBuildBar', () => {
 
     // 普通建筑也支持 R 键旋转（试玩 1016 U3：统一显示方位，不再显示角度）
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：北');
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向：北');
     await user.keyboard('r');
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：东');
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向：东');
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
 
     await openCategory(user, '运输');
@@ -352,10 +352,11 @@ describe('PlanetBuildBar', () => {
     });
 
     // 按钮循环：east → north → south
-    const directionButton = screen.getByRole('button', { name: /^方位：东/ });
-    await user.click(directionButton);
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('方向：东');
+    await user.click(screen.getByTestId('planet-build-direction'));
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'north' });
-    await user.click(screen.getByRole('button', { name: /^方位：北/ }));
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('方向：北');
+    await user.click(screen.getByTestId('planet-build-direction'));
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ direction: 'south' });
 
     // R 键循环：south → west → auto（auto 是显式选项，排在最后）
@@ -414,14 +415,16 @@ describe('PlanetBuildBar', () => {
       buildingType: 'sorter_mk1',
       direction: 'auto',
     });
-    // 提示行给出朝向语义（空心 = 取货端，实心 = 放货端，试玩 1016 U1），而不是传送带的「箭头 = 物流方向」。
-    expect(screen.getByText(/空心箭头 = 取货端/)).toBeInTheDocument();
+    // 提示行给出朝向语义（虚线空心 = 取货端，实心 = 放货端，试玩 1016 U1），而不是传送带的「箭头 = 物流方向」。
+    expect(screen.getByText(/虚线空心箭头 = 取货端/)).toBeInTheDocument();
 
+    // 默认朝向（rotation=0 → 北）就写中文方位 + 取/放端，不显示角度（试玩 1016 U3）。
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向 北（从南取 → 往北放）');
     // 分拣器不是传送带：R 旋转走 rotation 档位（0 → 90 → 180 → 270 → 0）。
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 90 });
-    // 试玩 1016 U3：分拣器与传送带同一「方位」口径，并标出取/放端。
-    expect(screen.getByRole('button', { name: /^方位：/ })).toHaveTextContent('方位：东（取货端 西 → 放货端 东）');
+    // 试玩 1016 U3：分拣器与传送带同一中文方位口径（不再显角度），并标出从哪取、往哪放。
+    expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向 东（从西取 → 往东放）');
     await user.keyboard('r');
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ rotation: 180 });
     await user.keyboard('r');
