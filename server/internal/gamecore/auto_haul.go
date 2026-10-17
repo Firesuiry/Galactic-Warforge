@@ -130,7 +130,10 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 			continue
 		}
 		supply := nearestHaulSupply(ws, supplies, demand, func(id string) bool {
-			return haulCooldownActive(haul, id, ws.Tick)
+			// 需求建筑自己不能当供给：反馈配方（如 X射线裂解吃氢又产氢）的
+			// 输出缓冲会被当成同种原料的供给，派成「从自己取 → 送自己」，
+			// 绕圈走完一趟却什么都没变。
+			return id == demand.buildingID || haulCooldownActive(haul, id, ws.Tick)
 		})
 		if supply < 0 {
 			continue
@@ -181,7 +184,7 @@ func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulCl
 	}
 	demands := haulDemands(ws, claims, robot.OwnerID)
 	for _, demand := range demands {
-		if demand.itemID != itemID {
+		if demand.itemID != itemID || demand.buildingID == haul.ToBuildingID {
 			continue
 		}
 		if haulCooldownActive(haul, demand.buildingID, ws.Tick) {
@@ -621,7 +624,8 @@ func haulDeliveryFallback(ws *model.WorldState, robot *model.Unit, itemID string
 	}
 	book := haulClaims(ws)
 	for _, demand := range haulDemands(ws, book, robot.OwnerID) {
-		if demand.itemID != itemID {
+		// 货就是从这座建筑来的（中止的这单），别又原样送回去。
+		if demand.itemID != itemID || demand.buildingID == robot.Haul.ToBuildingID {
 			continue
 		}
 		if haulCooldownActive(robot.Haul, demand.buildingID, ws.Tick) {

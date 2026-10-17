@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"siliconworld/internal/model"
+	"siliconworld/internal/persistence"
+	"siliconworld/internal/queue"
 )
 
 // 试玩 1016 严重 1：自动派单必须只看机器人**自己**的建筑。
@@ -228,5 +230,76 @@ func TestAutoHaulSorterFedUnreachableStaysSilent(t *testing.T) {
 	events = haulGiveUpUnreachable(ws, robot, plain)
 	if got := countHaulAlertEvents(events, model.AlertTypeHaulUnreachable); got != 1 {
 		t.Fatalf("普通不可达建筑 haul_unreachable 告警 = %d, want 1", got)
+	}
+}
+
+//  7. 反馈配方（X射线裂解吃氢又产氢）：建筑自己的输出缓冲不能当同种原料的
+//     供给，否则自动派单会派成「从自己取 → 送自己」。
+func TestAutoHaulNeverFeedsBuildingFromItself(t *testing.T) {
+	core, ws := haulTestCoreWithFace(t, 48)
+	refinery := placeAutoBuilding(t, ws, "b-refinery", model.BuildingTypeOilRefinery, model.Position{X: 40, Y: 20})
+	refinery.Production.RecipeID = "xray_cracking"
+	refinery.SyncStorageReserve()
+	// 输出缓冲里已有 2 氢（上一轮的产物），主库存/输入缓冲为空 → 氢的需求与供给都成立。
+	refinery.Storage.EnsureOutputBuffer()[model.ItemHydrogen] = 2
+	robot := autoRobot(t, ws, model.Position{X: 30, Y: 20})
+
+	demands := haulDemands(ws, haulClaims(ws), "p1")
+	supplies := haulSupplies(ws, haulClaims(ws), "p1")
+	selfDemand := false
+	for _, demand := range demands {
+		if demand.buildingID != refinery.ID || demand.itemID != model.ItemHydrogen {
+			continue
+		}
+		selfDemand = true
+		if idx := nearestHaulSupply(ws, supplies, demand, func(id string) bool { return id == demand.buildingID }); idx >= 0 {
+			t.Fatalf("同一座建筑的氢仍被当成可用供给: %+v", supplies[idx])
+		}
+	}
+	if !selfDemand {
+		t.Fatalf("夹具不对：反馈料没有形成需求，demands=%+v", demands)
+	}
+
+	toDispatchTick(core, ws)
+	if robot.Haul.ToBuildingID == refinery.ID && robot.Haul.FromBuildingID == refinery.ID {
+		t.Fatalf("派成了从自己取货送给自己: %+v", robot.Haul)
+	}
+}
+
+//  8. 空闲原因 / 冷却随单位快照往返：存档 → JSON → 读档后仍能解释机器人为什么空转，
+//     且冷却继续生效（不会被立刻派回中止过的建筑）。
+func TestAutoHaulIdleReasonSurvivesSaveLoad(t *testing.T) {
+	f := newAutoHaulFixture(t)
+	enemy := placeEnemySmelter(t, f.ws, "b-enemy", model.Position{X: 40, Y: 40})
+	robot := autoRobot(t, f.ws, model.Position{X: 30, Y: 20})
+	robot.Haul.Claim = &model.HaulClaim{DemandBuildingID: enemy.ID, ItemID: model.ItemIronOre, Quantity: 4}
+	robot.Haul.ToBuildingID = enemy.ID
+	robot.Haul.ItemID = model.ItemIronOre
+	robot.Haul.Phase = model.HaulPhaseToTarget
+	settleTransportRobots(f.ws)
+	if robot.Haul.IdleReason != string(model.HaulIdleLastAborted) || robot.Haul.IdleDetail == "" {
+		t.Fatalf("前置条件：应写入中止原因，got %+v", robot.Haul)
+	}
+	beforeUntil := robot.Haul.UnreachableCooldowns[enemy.ID]
+
+	cfg, maps := f.core.cfg, f.core.maps
+	save, err := f.core.ExportSaveFile("test")
+	if err != nil {
+		t.Fatalf("export save: %v", err)
+	}
+	loaded, err := NewFromSave(cfg, maps, queue.New(), NewEventBus(),
+		persistence.New(persistence.SnapshotPolicy{IntervalTicks: 1, RetentionTicks: 100, RetentionCount: 4}), save)
+	if err != nil {
+		t.Fatalf("restore core: %v", err)
+	}
+	loadedRobot := loaded.World().Units[robot.ID]
+	if loadedRobot == nil || loadedRobot.Haul == nil {
+		t.Fatalf("读档后找不到机器人: %+v", loadedRobot)
+	}
+	if loadedRobot.Haul.IdleReason != string(model.HaulIdleLastAborted) || loadedRobot.Haul.IdleDetail == "" {
+		t.Fatalf("读档丢失空闲原因: %+v", loadedRobot.Haul)
+	}
+	if got := loadedRobot.Haul.UnreachableCooldowns[enemy.ID]; got != beforeUntil {
+		t.Fatalf("读档丢失中止冷却: %d, want %d", got, beforeUntil)
 	}
 }
