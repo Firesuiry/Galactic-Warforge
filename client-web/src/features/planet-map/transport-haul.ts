@@ -91,10 +91,44 @@ export function transportCargo(unit: Unit | undefined | null) {
 }
 
 /**
+ * 自动模式空闲时的一句话状态（服务端 `haul.idle_reason` / `idle_detail`）：
+ * - 车上有货：`带着 4 铁矿 待命：没有可送的地方`
+ * - 上一单中止：`上一单中止：<原因>`
+ * - 有需求但都到不了：`自动待命：缺料建筑都到不了`
+ * - 无需求：`自动待命：没有缺料的建筑`
+ * 没有 idle_reason（旧快照 / 有任务）时返回 null，由调用方回落到「自动待命」。
+ */
+export function describeHaulIdle(
+  unit: Unit | undefined | null,
+  label: (itemId: string) => string,
+): string | null {
+  if (!isTransportRobot(unit)) return null;
+  const haul = unit?.haul;
+  if (!haul || haul.mode !== 'auto' || haul.to_building_id) return null;
+  const reason = haul.idle_reason;
+  if (!reason) return null;
+  const cargo = haul.cargo;
+  if (reason === 'cargo_no_destination') {
+    const item = cargo?.item_id ? label(cargo.item_id) : '货';
+    const quantity = cargo?.quantity ?? 0;
+    return quantity > 0
+      ? `带着 ${quantity} ${item} 待命：没有可送的地方`
+      : `带着${item}待命：没有可送的地方`;
+  }
+  if (reason === 'last_aborted') {
+    const detail = haul.idle_detail?.trim();
+    return detail ? `上一单中止：${detail}` : '上一单中止';
+  }
+  if (reason === 'no_reachable_demand') return '自动待命：缺料建筑都到不了';
+  return '自动待命：没有缺料的建筑';
+}
+
+/**
  * 选中条/详情/悬停的一句话摘要。
  * - route：「运送中 · 已送达 12 · 载 铁块 ×4」
  * - auto 有任务：「自动：送 铁矿 → 电弧熔炉」（缺建筑名时「自动：送 铁矿」）
- * - auto 无任务：「自动待命」；idle：「已停止（点「自动搬运」恢复）」
+ * - auto 无任务：「自动待命」；有 idle_reason 时写明原因（见 describeHaulIdle）
+ * - idle：「已停止（点「自动搬运」恢复）」
  * buildingName 用于把建筑 id 翻成中文名（自动模式的胶囊/摘要共用）。
  */
 export function describeHaul(
@@ -105,7 +139,7 @@ export function describeHaul(
   if (!isTransportRobot(unit)) return null;
   const mode = transportHaulMode(unit);
   if (mode === 'idle') return '已停止（点「自动搬运」恢复）';
-  if (mode === 'auto') return describeAutoHaul(unit, label, buildingName);
+  if (mode === 'auto') return describeHaulIdle(unit, label) ?? describeAutoHaul(unit, label, buildingName);
   const route = transportHaulRoute(unit);
   if (!route) return '未设路线（选中条「设置运输」）';
   const parts = [haulPhaseLabel(route.phase), `已送达 ${route.delivered_total ?? 0}`];

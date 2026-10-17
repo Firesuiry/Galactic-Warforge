@@ -386,7 +386,20 @@ export interface TransportHaul {
   delivered_total: number;
   /** 自动模式的在途认领（route/idle 模式不带）。 */
   claim?: TransportHaulClaim;
+  /**
+   * 自动模式空闲时为什么没活干（仅无任务时有值）：
+   * - no_demand：本行星己方没有缺料建筑；
+   * - cargo_no_destination：车上有货但无需求、也无能收下它的己方仓储；
+   * - no_reachable_demand：有需求但都到不了/没有可用供给；
+   * - last_aborted：上一单被中止（端点消失/不属于本玩家），原因见 idle_detail。
+   */
+  idle_reason?: TransportHaulIdleReason;
+  /** 空闲原因的补充文案（中文，例如上一单的中止原因）。 */
+  idle_detail?: string;
 }
+
+export type TransportHaulIdleReason =
+  | 'no_demand' | 'cargo_no_destination' | 'no_reachable_demand' | 'last_aborted';
 
 export interface Unit {
  squad_id?: string; ammo_class?: string; ammo?: number; ammo_capacity?: number; ammo_item?: string; combat_state?: string; domain?: string; min_attack_range?: number; cargo?: ItemInventory;

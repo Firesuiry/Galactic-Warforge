@@ -9,6 +9,7 @@ import {
   canSetHaul,
   describeAutoHaul,
   describeHaul,
+  describeHaulIdle,
   haulPhaseLabel,
   haulRouteReady,
   hasTransportRobot,
@@ -169,6 +170,47 @@ describe('自动模式（§2.1 出厂默认）', () => {
     const stopped = robot({ haul: { mode: 'idle', from_building_id: '', to_building_id: '', phase: '', delivered_total: 0 } } as never);
     expect(describeHaul(stopped, label)).toBe('已停止（点「自动搬运」恢复）');
     expect(transportHaulMode(stopped)).toBe('idle');
+  });
+
+  it('空闲原因（haul.idle_reason）写明为什么没活干', () => {
+    // 车上有货、无处可送。
+    const carrying = robot({
+      haul: {
+        mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0,
+        cargo: { item_id: 'iron_ore', quantity: 4 }, idle_reason: 'cargo_no_destination',
+      },
+    } as never);
+    expect(describeHaulIdle(carrying, label)).toBe('带着 4 铁矿 待命：没有可送的地方');
+    expect(describeHaul(carrying, label)).toBe('带着 4 铁矿 待命：没有可送的地方');
+
+    // 上一单中止：带原因。
+    const aborted = robot({
+      haul: {
+        mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0,
+        idle_reason: 'last_aborted', idle_detail: '运输终点建筑已不存在（拆除或被摧毁），运输路线已清空',
+      },
+    } as never);
+    expect(describeHaul(aborted, label)).toBe('上一单中止：运输终点建筑已不存在（拆除或被摧毁），运输路线已清空');
+
+    // 有需求但都到不了 / 没有需求。
+    const unreachable = robot({ haul: { mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0, idle_reason: 'no_reachable_demand' } } as never);
+    expect(describeHaul(unreachable, label)).toBe('自动待命：缺料建筑都到不了');
+    const noDemand = robot({ haul: { mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0, idle_reason: 'no_demand' } } as never);
+    expect(describeHaul(noDemand, label)).toBe('自动待命：没有缺料的建筑');
+
+    // 有任务时 idle_reason 不参与（服务端有任务会清空，双保险）。
+    const working = robot({
+      haul: {
+        mode: 'auto', from_building_id: 'b1', to_building_id: 'b2', item_id: 'iron_ore', phase: 'to_target',
+        delivered_total: 0, idle_reason: 'last_aborted', idle_detail: 'x',
+      },
+    } as never);
+    expect(describeHaulIdle(working, label)).toBeNull();
+    expect(describeHaul(working, label, buildingName)).toBe('自动：送 铁矿 → 电弧熔炉');
+
+    // 旧快照没有 idle_reason：回落到「自动待命」。
+    const legacy = robot({ haul: { mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0 } } as never);
+    expect(describeHaulIdle(legacy, label)).toBeNull();
   });
 
   it('多选：至少一台运输机器人 / 全都在自动模式', () => {

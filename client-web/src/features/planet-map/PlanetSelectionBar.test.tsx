@@ -333,6 +333,35 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
     expect(screen.getByRole('button', { name: '自动搬运' }).className).not.toContain('planet-selection-bar__active');
   });
 
+  it('带载待命时选中条写明「带着 4 铁矿 待命：没有可送的地方」', () => {
+    const planet = autoPlanet('auto', false);
+    const robot = planet.units!['robot-1'];
+    robot.haul = {
+      ...robot.haul!,
+      phase: 'idle',
+      cargo: { item_id: 'iron_ore', quantity: 4 },
+      idle_reason: 'cargo_no_destination',
+    };
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('带着 4 铁矿 待命：没有可送的地方');
+    expect(bar).not.toHaveTextContent('自动待命');
+  });
+
+  it('上一单中止时选中条显示「上一单中止：…」', () => {
+    const planet = autoPlanet('auto', false);
+    const robot = planet.units!['robot-1'];
+    robot.haul = {
+      ...robot.haul!,
+      phase: 'idle',
+      idle_reason: 'last_aborted',
+      idle_detail: '运输终点建筑已不存在（拆除或被摧毁），运输路线已清空',
+    };
+    render(<PlanetSelectionBar catalog={catalog} planet={planet} />);
+    expect(screen.getByTestId('planet-selection-bar'))
+      .toHaveTextContent('上一单中止：运输终点建筑已不存在（拆除或被摧毁），运输路线已清空');
+  });
+
   it('多选机器人：自动搬运 / 设置运输 / 停止三个按钮，自动搬运一次带全部 entity_ids', async () => {
     const user = userEvent.setup();
     const planet = autoPlanet('auto', false);
