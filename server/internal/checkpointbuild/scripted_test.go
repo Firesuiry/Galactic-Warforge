@@ -134,3 +134,53 @@ func TestSubtreeFromRoot(t *testing.T) {
 }
 
 func ptrInt64(v int64) *int64 { return &v }
+
+// TestRepoBuildSpecsAreExecutable 把仓库里的构建记录也当成被测数据：docs/guide/checkpoints
+// 下的每一份都要能解析、步骤自洽、parent 指向存在的一层。层表（README / 回归测试
+// 指南）与 -list 对不上时，最容易坏的就是这里——写坏一个 JSON 或把 parent 写成
+// 已退役的层，重建工具要到跑整棵树时才报错。
+func TestRepoBuildSpecsAreExecutable(t *testing.T) {
+	specDir := filepath.Join("..", "..", "..", "docs", "guide", "checkpoints")
+	tree, err := LoadTree(specDir)
+	if err != nil {
+		t.Fatalf("读构建记录目录: %v", err)
+	}
+	if len(tree) == 0 {
+		t.Fatal("构建记录目录里没有 JSON")
+	}
+	for name, spec := range tree {
+		if spec == nil {
+			t.Fatalf("%s 不是可执行的构建记录（旧版文字 build？）", name)
+		}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("%s 不自洽: %v", name, err)
+		}
+		if spec.Parent != "" {
+			if parent, ok := tree[spec.Parent]; !ok || parent == nil {
+				t.Fatalf("%s 的 parent %q 没有可执行构建记录", name, spec.Parent)
+			}
+		}
+		// 契约里不能出现未知谓词：重建跑到落点才发现「未知谓词」等于白跑一趟。
+		for _, check := range spec.Contract.Checks {
+			if !knownContractKind(check.Kind) {
+				t.Fatalf("%s 的契约用了未知谓词 %q", name, check.Kind)
+			}
+		}
+	}
+}
+
+// knownContractKind 是契约谓词词表（与 internal/gamecore/contract.go 的 switch 一致）。
+// 新增谓词时两边都要加：这里漏了会让构建记录在重建时静默失败。
+func knownContractKind(kind string) bool {
+	switch kind {
+	case "tick_gte", "tick_lt", "game_not_finished", "player_alive",
+		"tech_researched", "research_in_progress", "research_progress_gte",
+		"building_count_gte", "building_running_gte", "building_item_gte",
+		"building_item_at_gte", "building_item_at_lt",
+		"building_no_alert_since", "building_alert_since",
+		"unit_count_gte", "unit_near", "item_gte", "no_alert_since",
+		"dark_fog_hostile", "dark_fog_calmed", "enemy_attack_seen":
+		return true
+	}
+	return false
+}
