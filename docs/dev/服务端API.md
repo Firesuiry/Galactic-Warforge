@@ -658,6 +658,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `building_count_gte` | `type`, `n` | 存活建筑数 >= n |
 | `building_running_gte` | `type`, `n` | 存活且 `runtime.state=running` 的建筑数 >= n（断电 `no_power`、停工 `paused`/`idle`、出错 `error` 都不算；试玩报告 1013 第 5 节：`building_count_gte` 放过了一座整局没电的研究站） |
 | `unit_count_gte` | `type`, `n` | 存活单位数 >= n（含机甲 `executor`） |
+| `unit_near` | `position`, `radius`, `type?`, `n` | 该玩家在 `position` 半径 `radius` 内（cube-sphere 图距）的存活单位数 >= n；`type` 为空时数所有单位（含机甲）。用于断言「军团确实开到了巢穴外」这类位置契约 |
 | `item_gte` | `item_id`, `n` | 玩家可用物资 >= n |
 | `building_item_at_gte` / `building_item_at_lt` | `position`, `item_id`, `n` | 该落点（锚点格）上玩家建筑的该物品 >= n / < n（按落点而不是建筑 ID 定位，重建后 ID 会变） |
 | `building_item_gte` | `type`, `item_id`, `n` | 玩家该类存活建筑库存里该物品总数 >= n |
@@ -666,6 +667,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `no_alert_since` | `alert_type`, `tick`, `type?` | 自 tick 起没有该类型的生产告警（`type` 非空时只看该建筑类型；全局口径，不做「或」展开） |
 | `research_progress_gte` | `tech_id?`, `n` | 进行中的研究进度 >= n（证明研究在推进，不是卡在 `waiting_matrix`） |
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
+| `dark_fog_calmed` | `tick` | 自 `tick` 起该玩家出现过 `dark_fog_calmed` 事件（冷静期到期恢复中立）。与 `dark_fog_hostile=false` 配合可证明「是冷静期结算出来的中立」，而不是读档前就没敌对；`actual` 是事件条数 |
 | `enemy_attack_seen` | `bool` | 该玩家是否已被**敌方玩家**造成过伤害/损失（黑雾偷袭不算） |
 
 「玩家可用物资」口径：`PlayerState.Inventory`（就是机甲背包，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）。第 16 轮去掉资金维度后建造/升级只扣背包物品，玩家级资源池只剩 `resources.energy`（电网结余的只读展示）。
