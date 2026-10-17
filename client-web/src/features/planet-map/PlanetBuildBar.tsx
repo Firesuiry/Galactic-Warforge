@@ -112,8 +112,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   // 新建筑尚无预渲染缩略图：加载失败则退回图标
   const [missingModels, setMissingModels] = useState<ReadonlySet<string>>(new Set());
   /**
-   * 点了缺料的建造卡时记下它（试玩 1016 摩擦 1）：卡片真禁用、不进建造模式，
-   * 底部状态行改为列出这件建筑缺什么。切到别的卡/退出建造模式即清空。
+   * 点了缺料的建造卡时记下它（试玩 1016 摩擦 1）：卡片可点但不进建造模式，
+   * 底部状态行改为列出这件建筑缺什么。切到别的卡/进入建造模式即清空；
+   * 背包补齐（不再缺任何物品）或卡片随分类切走后也会自动收起，避免清单过期。
    */
   const [shortageNotice, setShortageNotice] = useState<string | null>(null);
 
@@ -217,6 +218,24 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     ...(showLocked ? [...workflow.catalog.locked, ...workflow.catalog.debugOnly] : []),
   ], [workflow.catalog, showLocked]);
   const groups = useMemo(() => groupByCategory(visibleEntries), [visibleEntries]);
+
+  // 缺料清单只在「仍然缺料」时成立：背包补齐 / 卡片不可见 / 进入建造模式都自动收起，
+  // 否则清单会停在旧数字上（试玩 1016 复核）。
+  const shortageEntry = shortageNotice
+    ? visibleEntries.find((entry) => entry.id === shortageNotice)
+    : undefined;
+  const shortageMissing = useMemo(
+    () => (shortageEntry ? compareBuildItems(shortageEntry, inventory).filter((item) => item.short) : []),
+    [shortageEntry, inventory],
+  );
+  useEffect(() => {
+    if (!shortageNotice) {
+      return;
+    }
+    if (buildMode || !shortageEntry || shortageMissing.length === 0) {
+      setShortageNotice(null);
+    }
+  }, [shortageNotice, buildMode, shortageEntry, shortageMissing.length]);
 
   // 数字键 1–9 切分类（输入控件聚焦时不抢按键）。
   //
@@ -363,10 +382,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                     return;
                   }
                   if (unaffordable) {
-                    // 不进建造模式：把「还缺什么」直接显示在建造栏底部，并清掉上一次的建造模式，
+                    // 不进建造模式：把「还缺什么」直接显示在建造栏底部，并清掉正在进行的建造模式，
                     // 避免玩家以为已经进入放置状态。
                     setShortageNotice(entry.id);
-                    if (active) {
+                    if (buildMode) {
                       exitInteractionMode();
                     }
                     return;
@@ -495,30 +514,24 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
         </div>
       ) : null}
       {/* 缺料卡被点：不进建造模式，只把「还缺什么」摊开（试玩 1016 摩擦 1）。 */}
-      {shortageNotice ? (() => {
-        const entry = visibleEntries.find((candidate) => candidate.id === shortageNotice);
-        const missing = entry
-          ? compareBuildItems(entry, inventory)
-            .filter((item) => item.short)
-            .map((item) => `${getItemDisplayName(catalog, item.item_id)} 还差 ${item.quantity - item.owned}（背包 ${item.owned}/${item.quantity}）`)
-          : [];
-        return (
-          <div className="planet-build-bar__footer" data-testid="planet-build-card-shortage">
-            <div className="planet-build-bar__status">
-              <span className="planet-build-bar__shortage" role="alert">
-                建造 {entry ? translateBuildingType(entry.id, entry.name) : ''} 还缺：{missing.join('、')}。补齐背包物品后再点这张卡。
-              </span>
-              <button
-                className="planet-build-bar__control"
-                type="button"
-                onClick={() => setShortageNotice(null)}
-              >
-                知道了
-              </button>
-            </div>
+      {shortageNotice && shortageEntry && shortageMissing.length > 0 ? (
+        <div className="planet-build-bar__footer" data-testid="planet-build-card-shortage">
+          <div className="planet-build-bar__status">
+            <span className="planet-build-bar__shortage" role="alert">
+              建造 {translateBuildingType(shortageEntry.id, shortageEntry.name)} 还缺：
+              {shortageMissing.map((item) => `${getItemDisplayName(catalog, item.item_id)} ×${item.quantity - item.owned}（背包 ${item.owned}/${item.quantity}）`).join('、')}
+              。补齐背包物品后再点这张卡。
+            </span>
+            <button
+              className="planet-build-bar__control"
+              type="button"
+              onClick={() => setShortageNotice(null)}
+            >
+              知道了
+            </button>
           </div>
-        );
-      })() : null}
+        </div>
+      ) : null}
     </div>
   );
 }

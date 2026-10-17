@@ -162,13 +162,40 @@ describe('PlanetBuildBar', () => {
     // 缺料清单直接摊开：逐项写「还差多少 / 背包有需要」
     const notice = screen.getByTestId('planet-build-card-shortage');
     expect(notice).toHaveTextContent('建造 风力发电机 还缺');
-    expect(notice).toHaveTextContent('齿轮 还差 1（背包 0/1）');
-    expect(notice).toHaveTextContent('铁块 还差 6（背包 0/6）');
+    expect(notice).toHaveTextContent('齿轮 ×1（背包 0/1）');
+    expect(notice).toHaveTextContent('铁块 ×6（背包 0/6）');
     // 底部建造模式状态行（「无法建造：缺少…」）不出现
     expect(screen.queryByTestId('planet-build-shortage')).not.toBeInTheDocument();
 
     // 「知道了」收起清单
     await user.click(screen.getByRole('button', { name: '知道了' }));
+    expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
+  });
+
+  it('缺料清单随背包补齐/进入建造模式自动收起，不再显示过期数字', async () => {
+    const user = userEvent.setup();
+    const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
+      ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
+      : entry) } as CatalogView;
+    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const { rerender } = render(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
+
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+    expect(screen.getByTestId('planet-build-card-shortage')).toHaveTextContent('齿轮 ×1（背包 0/1）');
+
+    // 背包补齐 → 清单自动消失（不能停在「还缺…」的旧数字上）
+    const richSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 5, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    rerender(<PlanetBuildBar catalog={itemCatalog} summary={richSummary} planet={makePlanet()} />);
+    expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
+
+    // 再次缺料并点开 → 进入建造模式（点另一张买得起的卡）时也收起
+    const gearlessSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    rerender(<PlanetBuildBar catalog={itemCatalog} summary={gearlessSummary} planet={makePlanet()} />);
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+    expect(screen.getByTestId('planet-build-card-shortage')).toBeInTheDocument();
+    await openCategory(user, '运输');
+    await user.click(screen.getByRole('button', { name: /传送带/ }));
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('build');
     expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
   });
 
