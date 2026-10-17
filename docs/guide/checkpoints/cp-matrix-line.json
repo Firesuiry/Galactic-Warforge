@@ -1,6 +1,6 @@
 {
   "parent": "cp-lab",
-  "note": "cp-matrix-line（第 17 轮改写）：从 cp-lab（tick 8643）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并让货真的送进研究站。布局：制造台 Mk.I b-126@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-118@(62,146) 的占地）。两只分拣器不再配过滤：取货端分别是制造台输出缓冲与只跑矩阵的带子，本来就只会拿到矩阵。电力：新增电力感应塔 (66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从 cp-base 的出货补给站 b-105@(65,143)（铁）与 b-97@(41,142)（铜）取锭，从铁矿机 b-49 取少量铁矿手搓磁铁/线圈，手搓 电路板×12、磁铁×2、磁线圈×2 批（产出 4）。分四轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥8（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警（`no_alert_since` 的 tick 取 cp-lab 的落点 tick 8100）。",
+  "note": "cp-matrix-line（第 17 轮改写）：从 cp-lab（tick 8643）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并把 20 个矩阵全部送进研究站（正好是「电磁学」的研究成本）。布局：制造台 Mk.I b-126@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-118@(62,146) 的占地）。两只分拣器不再配过滤：取货端分别是制造台输出缓冲与只跑矩阵的带子，本来就只会拿到矩阵。电力：新增电力感应塔 (66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从 cp-base 的出货补给站 b-105@(65,143)（铁）与 b-97@(41,142)（铜）取锭，从铁矿机 b-49 取少量铁矿手搓磁铁/线圈，手搓 齿轮×8、电路板×21、磁铁×14、磁线圈×8 批（产出 16）。分十轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥20（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警（`no_alert_since` 的 tick 取本层读档的起点 tick 8643）。",
   "steps": [
     {
       "advance_to_tick": 8719
@@ -16,7 +16,7 @@
         "payload": {
           "building_id": "b-105",
           "item_id": "iron_ingot",
-          "quantity": 40,
+          "quantity": 45,
           "direction": "to_player"
         }
       }
@@ -32,7 +32,7 @@
         "payload": {
           "building_id": "b-97",
           "item_id": "copper_ingot",
-          "quantity": 20,
+          "quantity": 30,
           "direction": "to_player"
         }
       }
@@ -80,12 +80,12 @@
         },
         "payload": {
           "recipe_id": "circuit_board",
-          "quantity": 12
+          "quantity": 21
         }
       }
     },
     {
-      "advance_to_tick": 9350
+      "advance_to_tick": 9600
     },
     {
       "cmd": {
@@ -97,12 +97,12 @@
         },
         "payload": {
           "recipe_id": "smelt_magnet",
-          "quantity": 2
+          "quantity": 14
         }
       }
     },
     {
-      "advance_to_tick": 9500
+      "advance_to_tick": 10450
     },
     {
       "cmd": {
@@ -114,12 +114,12 @@
         },
         "payload": {
           "recipe_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 8
         }
       }
     },
     {
-      "advance_to_tick": 9600
+      "advance_to_tick": 10700
     },
     {
       "cmd": {
@@ -274,7 +274,7 @@
       }
     },
     {
-      "advance_to_tick": 9750
+      "advance_to_tick": 10800
     },
     {
       "wait_until": {
@@ -461,6 +461,258 @@
         "n": 8
       },
       "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 10
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 12
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 14
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 16
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 18
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "magnetic_coil",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-126"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "circuit_board",
+          "quantity": 2,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_item_gte",
+        "player": "p1",
+        "type": "matrix_lab",
+        "item_id": "electromagnetic_matrix",
+        "n": 20
+      },
+      "timeout_ticks": 1200
     }
   ],
   "contract": {
@@ -483,7 +735,7 @@
         "player": "p1",
         "type": "matrix_lab",
         "item_id": "electromagnetic_matrix",
-        "n": 8
+        "n": 20
       },
       {
         "kind": "building_running_gte",
