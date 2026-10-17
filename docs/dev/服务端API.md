@@ -653,6 +653,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `building_item_at_gte` / `building_item_at_lt` | `position`, `item_id`, `n` | 该落点（锚点格）上玩家建筑的该物品 >= n / < n（按落点而不是建筑 ID 定位，重建后 ID 会变） |
 | `building_item_gte` | `type`, `item_id`, `n` | 玩家该类存活建筑库存里该物品总数 >= n |
 | `building_no_alert_since` | `position`, `alert_type?`, `tick` | 该落点建筑自 tick 起没有**仍成立**的该类生产告警（已解除的历史条目不计数；同一条目复用时按首次出现 tick 判） |
+| `building_alert_since` | `position`, `alert_type`, `tick` | 与上一条相反：该落点建筑自 tick 起确实出现过至少 1 条**此刻仍成立**的该类生产告警（`actual` 是条数）。用于断言「这种告警真的会发出来」，例如 `cp-haul-unreachable` 的 `haul_unreachable` |
 | `no_alert_since` | `alert_type`, `tick`, `type?` | 自 tick 起没有该类型的生产告警（`type` 非空时只看该建筑类型；全局口径，不做「或」展开） |
 | `research_progress_gte` | `tech_id?`, `n` | 进行中的研究进度 >= n（证明研究在推进，不是卡在 `waiting_matrix`） |
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
