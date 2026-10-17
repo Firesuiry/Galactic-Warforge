@@ -1,31 +1,26 @@
 {
-  "parent": "cp-research-start",
-  "note": "1014 L10（cp-pre-attack）：从 cp-research-start（tick 43785，电磁学已完成）读档，只用网页 UI 完成「首攻前备战」。三件事全做到：(1) 新建补给站 b-89(23,47)，state=running、供电 2/2（在电塔 b-17(21,47) 无线范围 4 内）、def supply_radius=10/supply_rate=6；(2) 把 b-66 制造台 Mk.I(22,44) 配方从 electromagnetic_matrix 切回 ammo_bullet（下拉选中「子弹」后必须再点「应用配方」才生效），装入铁块 16 产弹，取出后给 b-89 装入子弹 10（落主库存 inventory——1014 修复后不再搬进 output_buffer；补给逻辑按 Storage.ItemQuantity 合并计算，不影响补弹）；(3) 6 个老步兵原地不动（23–25,43–46，均在 HQ b-4(18,48) 附近且距补给站 ≤10 格覆盖内），额外在兵营 b-72(23,45) 排队造 2 个步兵（耗铁块 4 + 电路板 2），tick ~45658 出厂，共 8 步兵。电力 40/31（+9），p2 无建筑无单位，combat 全 0、enemy_attack_seen=false。契约 6 条服务端全过（actual：running/true/1/1/8/false）。tick 45773 存。",
-  "build": [
-    "读档 cp-research-start（tick 43785），等约 50 tick，L.open3d + G.home（tick 43831）",
-    "UI：机甲手搓 smelt_iron ×8（耗铁矿 8），tick 43948 开始",
-    "UI：取出 b-64 电弧熔炉(21,45) 铁块 10、b-68 电弧熔炉(21,44) 铜块 4（tick 44116）",
-    "UI：取出 b-44 采矿机(19,45) 铁矿 16 → 装入建筑 b-64；取出 b-33 采矿机(20,47) 铜矿 16 → 装入 b-68（tick 44244）",
-    "UI：取出 b-64 铁块 3、b-68 铜块 3（tick 44392）",
-    "UI：选中 b-66(22,44) → 建筑详情「切换配方」下拉选「子弹」→ 点「应用配方」（回执「制造台 Mk.I配方已设为「子弹」」，tick 44516）",
-    "UI：研究与装料 → 装入建筑 b-66：铁块 16（回执「已传输 16 个「铁块」至制造台 Mk.I」，tick 44437）",
-    "UI：机甲手搓 circuit_board ×2 两批（tick 44585 / 45328），耗铁块 4 + 铜块 4",
-    "UI：建造补给站：建造栏选 supply_station → 点地图 (23,46) 附近 → 落成 b-89(23,47) running，扣铁块 6 + 电路板 2（tick 44885）",
-    "UI：取出 b-66 输出缓存 子弹 3（tick 44917）",
-    "UI：研究与装料 → 装入建筑 b-89：子弹 10（回执「已传输 10 个「子弹」至补给站」，落主库存 inventory（1014 修复后不再搬进 output_buffer），tick 44991）",
-    "UI：取出 b-72 兵营(23,45) 铁块 4 → 装入建筑 b-72：铁块 6 + 电路板 2（tick 45460）",
-    "UI：选中 b-72 → 单位生产「生产步兵」×2（回执「步兵已加入生产队列（40 tick）」，tick 45527）",
-    "GET 核对：tick 45658 两个新步兵 u-90(24,46)/u-91(22,46) 出厂，p1 soldier=8；b-89 running、供电 2/2、主库存子弹 10",
-    "tick 45773 存档 cp-pre-attack（契约 6 条全过）"
+  "parent": "cp-squad",
+  "note": "第 19 轮改写（可执行）：从 cp-squad（tick 14140）读档，只用玩家命令建补给站 @(48,143)（在电塔 (52,143) 无线范围 4 格内，落地即 running），并把子弹从 b-79 搬到补给站里（补给站 supply_radius=30，覆盖 HQ、兵营与步兵出厂点，步兵在附近会自动补弹）。料全部来自自家产线：从出货补给站 b-105@(65,143) 取铁块 8、b-97@(41,142) 取铜块 2，手搓电路板 2（补给站造价 铁块 6 + 电路板 2）。这一步是「首攻前备战」的原料：cp-pre-attack-late 从这里空等到首攻，cp-post-attack 观战首攻。契约：补给站 running ≥3、步兵 ≥6、新补给站 (48,143) 里确实压着 ≥10 发子弹（首攻前弹药就位）、未见敌方攻击、黑雾中立。",
+  "steps": [
+    {"advance_to_tick": 14150},
+    {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-79", "item_id": "ammo_bullet", "quantity": 20, "direction": "to_player"}}},
+    {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-105", "item_id": "iron_ingot", "quantity": 8, "direction": "to_player"}}},
+    {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-97", "item_id": "copper_ingot", "quantity": 2, "direction": "to_player"}}},
+    {"cmd": {"type": "craft_item", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "u-40"}, "payload": {"recipe_id": "circuit_board", "quantity": 2}}},
+    {"wait_until": {"kind": "item_gte", "player": "p1", "item_id": "circuit_board", "n": 2}, "timeout_ticks": 900},
+    {"cmd": {"type": "build", "target": {"layer": "planet", "position": {"x": 48, "y": 143, "z": 0}}, "payload": {"building_type": "supply_station", "direction": "auto"}}},
+    {"wait_until": {"kind": "building_running_gte", "player": "p1", "type": "supply_station", "n": 3}, "timeout_ticks": 600},
+    {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-152", "item_id": "ammo_bullet", "quantity": 20, "direction": "to_building"}}},
+    {"advance_to_tick": 14350}
   ],
-  "contract": {
-    "checks": [
-      {"kind": "game_not_finished"},
-      {"kind": "player_alive", "player": "p1"},
-      {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"},
-      {"kind": "building_count_gte", "player": "p1", "type": "supply_station", "n": 1},
-      {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
-      {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
-    ]
-  }
+  "end_tick": 14350,
+  "contract": {"checks": [
+    {"kind": "game_not_finished"},
+    {"kind": "player_alive", "player": "p1"},
+    {"kind": "building_running_gte", "player": "p1", "type": "supply_station", "n": 3},
+    {"kind": "building_item_at_gte", "player": "p1", "position": {"x": 48, "y": 143, "z": 0}, "item_id": "ammo_bullet", "n": 10},
+    {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6},
+    {"kind": "enemy_attack_seen", "player": "p1", "bool": false},
+    {"kind": "dark_fog_hostile", "player": "p1", "bool": false}
+  ]}
 }

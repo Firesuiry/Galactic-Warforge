@@ -22,10 +22,12 @@ import "siliconworld/internal/model"
 //	building_no_alert_since {position, alert_type?, tick} 该落点建筑自 tick 起没有仍成立的该类生产告警
 //	building_alert_since {position, alert_type, tick} 该落点建筑自 tick 起出现过且此刻仍成立的该类生产告警 >= 1
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
+//	unit_near           {position, radius, type?, n}  该玩家在 position 半径内的存活单位数 >= n
 //	item_gte            {item_id, n}    玩家可用物资 >= n
 //	no_alert_since      {alert_type, tick, type?}  从 tick 起没有该类型的生产告警
 //	item_growth         {position, item_id, growth, advance_ticks?}（构建步骤，非契约）
 //	dark_fog_hostile    {bool}          黑雾对该玩家是否敌对
+//	dark_fog_calmed     {tick}          自 tick 起该玩家出现过 dark_fog_calmed（冷静期到期恢复中立）
 //	enemy_attack_seen   {bool}          该玩家是否已被敌方玩家造成过伤害/损失
 //
 // 「玩家可用物资」口径：PlayerState.Inventory（就是机甲背包——采矿、手搓、战利品都落这里，
@@ -49,6 +51,8 @@ type ContractCheck struct {
 	// 会让契约在别的存档点里指到另一台机器。
 	Position *model.Position `json:"position,omitempty"`
 	Boolean  bool            `json:"bool,omitempty"`
+	// Radius 是 unit_near 的搜索半径（格，按 cube-sphere 图距）。
+	Radius int `json:"radius,omitempty"`
 }
 
 // Contract 是一份状态契约。

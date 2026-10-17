@@ -1,25 +1,18 @@
 {
   "parent": "cp-pre-attack-late",
-  "note": "1014 L11（cp-post-attack）：从 cp-pre-attack-late（tick 59276）读档，只用网页 UI 观战 bot easy 首攻。bot 首攻于 tick ~60240 抵达（4 个 soldier u-30/u-31/u-34/u-35，从东侧推进到基地 22-28,42-46），8 个步兵自动接战（未下任何命令），tick 60321 全歼首波（我方损失 1 步兵 u-90）。tick ~60590 第二波 4 个 soldier（u-37/u-38/u-39/u-40）抵达，tick 60737 被歼，我方再损 u-74/u-75/u-76/u-78。存档时（tick 61119）HQ b-4(18,48) 700/700、兵营 b-72(23,45) 300/300、研究站 b-80(19,46) 120/120、补给站 b-89(23,47) 300/300、制造台 b-66(22,44) 280/280 全部存活，buildings_lost=0，p1 剩 3 步兵 + 1 机甲。机甲 u-5 全程未参战（驻 18,43，敌兵停在 aggro_range 6 之外）。警报及时（「敌袭预警」+「单位遭受攻击」toast），敌人进入视野后在地图上可见，步兵自动还手。**注意**：bot 是连续波次（60240 / 60590 / 61326，每波 3-4 兵），存档后约 200 tick 就会出现第三波；不指挥的话基地会被逐波拆掉（见 bug-1014-lost-first-attack）。旧 cp-post-attack（1013 L4，tick 20029，parent=cp-lab）按新预设已失效，本文件为其 replace 版本。",
-  "build": [
-    "读档 cp-pre-attack-late（tick 59276），等约 60 tick，L.open3d + G.home（tick 59337）",
-    "GET 基线核对：19 建筑全 running、8 步兵 + 1 机甲、背包 子弹 8/铜块 13/铜矿 83/齿轮 8/玻璃 2/磁铁 2/石矿 24、p2 无建筑无单位",
-    "G.look(26,46) 盯住基地东侧，轮询 scene/summary 观战（全程不下任何游戏命令）",
-    "tick ~60240 首攻 4 兵进入基地视野，UI 弹「敌袭预警」「单位遭受攻击」，8 步兵自动接战",
-    "tick 60321 首波全歼（损 u-90）；tick 60590 第二波 4 兵抵达，tick 60737 全歼（损 u-74/u-75/u-76/u-78）",
-    "G.home 全景 + 选中 b-89 核对详情；GET /world/warfare/industry 确认 supply_nodes 弹药被消耗",
-    "tick 61119 存档 cp-post-attack（契约 7 条服务端全过）",
-    "（存档后继续观察）tick 61326 第三波 3 兵抵达，8 步兵只剩 3 → 全灭；b-89 被围至 36 HP 后敌兵弹尽僵持；tick 63900 机甲东出反击单杀 8 个敌兵；tick 64356 b-89 被毁、64548/64556 两座风机被毁、65439 兵营被毁；机甲 tick ~65430 阵亡后在 HQ 满血复活。全程记录在 bug-1014-lost-first-attack"
+  "note": "第 19 轮改写（可执行）：从 cp-pre-attack-late（tick 59000）读档，不下任何游戏命令，快进观战 bot easy 首攻（门槛 tick 60000）：步兵在补给站覆盖范围内自动接战、补给站补弹。停在 tick 62000（首攻后约 2000 tick，波次已结算）。契约：对局未结束、p1 存活、确实遭到敌方攻击（enemy_attack_seen=true）、兵营与研究站仍在、电磁学已完成。注意：bot 是连续波次，停在 62000 时后续波次可能已在路上——这是首攻后局面的真实状态，下游 cp-army 从这里扩军。",
+  "steps": [
+    {"wait_until": {"kind": "enemy_attack_seen", "player": "p1", "bool": true}, "timeout_ticks": 40000},
+    {"wait_until": {"kind": "tick_gte", "tick": 62000}, "timeout_ticks": 40000}
   ],
-  "contract": {
-    "checks": [
-      {"kind": "game_not_finished"},
-      {"kind": "player_alive", "player": "p1"},
-      {"kind": "enemy_attack_seen", "player": "p1", "bool": true},
-      {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1},
-      {"kind": "building_count_gte", "player": "p1", "type": "matrix_lab", "n": 1},
-      {"kind": "building_count_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
-      {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"}
-    ]
-  }
+  "end_tick": 62000,
+  "contract": {"checks": [
+    {"kind": "game_not_finished"},
+    {"kind": "player_alive", "player": "p1"},
+    {"kind": "enemy_attack_seen", "player": "p1", "bool": true},
+    {"kind": "building_count_gte", "player": "p1", "type": "barracks", "n": 1},
+    {"kind": "building_count_gte", "player": "p1", "type": "matrix_lab", "n": 1},
+    {"kind": "building_count_gte", "player": "p1", "type": "battlefield_analysis_base", "n": 1},
+    {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"}
+  ]}
 }

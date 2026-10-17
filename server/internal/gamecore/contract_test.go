@@ -150,6 +150,107 @@ func TestEnemyAttackSeenIgnoresDarkFogAttacks(t *testing.T) {
 	}
 }
 
+// dark_fog_calmed：自 tick 起该玩家出现过 dark_fog_calmed 事件才通过。
+// 「恢复中立」本身用 dark_fog_hostile=false 只能证明此刻不敌对，证明不了冷静期
+// 真的到期结算过（读档前就没敌对也满足），所以 tc07-calmed 同时断言这条。
+func TestDarkFogCalmedPredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+	calmed := checkpoint.ContractCheck{Kind: "dark_fog_calmed", Player: "p1", Tick: 700}
+
+	if result := eval(calmed); result.Passed || result.Actual != "0" {
+		t.Fatalf("没有事件时必须失败，got %+v", result)
+	}
+
+	// 别家玩家的冷静事件不算：p2 恢复中立不能让 p1 的契约通过。
+	core.EventHistory().Record([]*model.GameEvent{{
+		EventID: "evt-699-1", Tick: 699, EventType: model.EvtDarkFogCalmed,
+		Payload: map[string]any{"player_id": "p2"},
+	}})
+	if result := eval(calmed); result.Passed {
+		t.Fatalf("别家玩家的 dark_fog_calmed 不该算，got %+v", result)
+	}
+
+	// 早于起始 tick 的事件不算。
+	core.EventHistory().Record([]*model.GameEvent{{
+		EventID: "evt-690-1", Tick: 690, EventType: model.EvtDarkFogCalmed,
+		Payload: map[string]any{"player_id": "p1"},
+	}})
+	if result := eval(calmed); result.Passed {
+		t.Fatalf("tick 690 < 700 的事件不该算，got %+v", result)
+	}
+
+	core.EventHistory().Record([]*model.GameEvent{{
+		EventID: "evt-70211-1", Tick: 70211, EventType: model.EvtDarkFogCalmed,
+		Payload: map[string]any{"player_id": "p1"},
+	}})
+	if result := eval(calmed); !result.Passed || result.Actual != "1" {
+		t.Fatalf("tick 70211 的 p1 冷静事件应通过，got %+v", result)
+	}
+
+	// 与 dark_fog_hostile 组合：恢复中立 + 事件在 = 整条「冷静到期」断言。
+	player := ws.Players["p1"]
+	player.DarkFog = model.DarkFogRelation{}
+	report := core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{
+		{Kind: "dark_fog_hostile", Player: "p1", Boolean: false},
+		{Kind: "dark_fog_calmed", Player: "p1", Tick: 700},
+	}})
+	if !report.Passed {
+		t.Fatalf("恢复中立且事件在应通过，report=%+v", report)
+	}
+}
+
+// unit_near：按落点 + 半径数存活单位。用来断言「军团真的开到了巢穴外」——
+// unit_count_gte 在单位还蹲在基地时也通过（cp-near-hive 的 move 被拒也满足 ≥6）。
+func TestUnitNearPredicate(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	nest := model.Position{X: 30, Y: 30}
+	for i := 0; i < 3; i++ {
+		spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 30 + i, Y: 30})
+	}
+	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 31, Y: 31})
+	// 远处的兵（基地里）不算进巢穴半径。
+	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 2, Y: 2})
+	// 别的玩家的兵不算。
+	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", IsAlive: true}
+	spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 30, Y: 31})
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]
+	}
+	check := checkpoint.ContractCheck{Kind: "unit_near", Player: "p1", Position: &nest, Radius: 2, Type: string(model.UnitTypeSoldier), N: 4}
+	if result := eval(check); !result.Passed || result.Actual != "4" {
+		t.Fatalf("半径 2 内应有 4 个 p1 步兵，got %+v", result)
+	}
+	check.N = 5
+	if result := eval(check); result.Passed {
+		t.Fatalf("半径 2 内只有 4 个，要求 5 应失败，got %+v", result)
+	}
+	// 半径 1 只覆盖 (30,30)(31,30) 与 (30,31)？——按 cube-sphere 图距逐格判定，
+	// 这里只断言「半径变小不会数到更多」。
+	near := check
+	near.N, near.Radius = 1, 0
+	if result := eval(near); result.Actual == "4" {
+		t.Fatalf("半径 0 不应数到 4 个（只应数落在该格上的），got %+v", result)
+	}
+	// type 为空时数所有单位。
+	spawnWorldTestUnit(ws, model.UnitTypeExecutor, "p1", model.Position{X: 30, Y: 30})
+	all := checkpoint.ContractCheck{Kind: "unit_near", Player: "p1", Position: &nest, Radius: 2, N: 5}
+	if result := eval(all); !result.Passed {
+		t.Fatalf("不限定类型时应数到 5 个（4 步兵 + 1 机甲），got %+v", result)
+	}
+	// 缺 position 时报错，不能静默通过。
+	if result := eval(checkpoint.ContractCheck{Kind: "unit_near", Player: "p1", Radius: 2, N: 1}); result.Passed {
+		t.Fatalf("缺 position 必须失败，got %+v", result)
+	}
+}
+
 // research_progress_gte：只有真在推进（进度 > 0）才通过；卡在 waiting_matrix 时
 // 进度停在 0，这条谓词就是「研究确实在跑」的可执行断言（cp-research-start 用）。
 func TestResearchProgressPredicate(t *testing.T) {
