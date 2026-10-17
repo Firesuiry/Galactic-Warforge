@@ -10,11 +10,13 @@ import { after, before, describe, it } from 'node:test';
 import type { AgentThread } from '@gw/shared/agent-gateway';
 import { createApiClient } from '@gw/shared/api';
 import { dispatchCommand } from '@gw/shared/commands/game-commands';
+import { findFreePort, registerProcessCleanup, stopProcessTree } from '@gw/shared/test-server';
 
 import { createGatewayServer } from './server.js';
 
-const TEST_PORT = 19483;
-const TEST_SERVER_URL = `http://127.0.0.1:${TEST_PORT}`;
+// 端口每次动态申请（SW_TEST_SERVER_PORT 可覆盖），不写死：写死的端口会让上一轮
+// 残留的服务端被误连，测试读到旧存档后假失败（见 shared-client/src/test-server.ts）。
+let TEST_SERVER_URL = '';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDir, '../..');
@@ -85,25 +87,19 @@ async function findBuildingId(authKey: string, ownerID: string, buildingType: st
 
 describe('military agent autonomy', () => {
   before(async () => {
-    warServerProcess = spawn('bash', [warServerScript, String(TEST_PORT)], {
+    const port = Number(process.env.SW_TEST_SERVER_PORT) || await findFreePort();
+    TEST_SERVER_URL = `http://127.0.0.1:${port}`;
+    warServerProcess = spawn('bash', [warServerScript, String(port)], {
       cwd: repoRoot,
       stdio: 'ignore',
       detached: true,
     });
-    warServerProcess.unref();
+    registerProcessCleanup(warServerProcess);
     await waitForHealth(TEST_SERVER_URL);
   });
 
   after(async () => {
-    if (!warServerProcess?.pid) {
-      return;
-    }
-    try {
-      process.kill(-warServerProcess.pid, 'SIGTERM');
-    } catch {
-      return;
-    }
-    await delay(1_000);
+    await stopProcessTree(warServerProcess);
   });
 
   it('delegates an assigned theater to a military agent and returns audited war results', async () => {

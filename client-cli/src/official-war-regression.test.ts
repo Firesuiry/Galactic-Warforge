@@ -5,11 +5,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 
+import { findFreePort, registerProcessCleanup, stopProcessTree } from '@gw/shared/test-server';
+
 import { api } from './api.js';
 import { dispatch } from './commands/index.js';
 
-const TEST_PORT = 19482;
-const TEST_SERVER_URL = `http://127.0.0.1:${TEST_PORT}`;
+// 端口每次动态申请（SW_TEST_SERVER_PORT 可覆盖），不写死：写死的端口会让上一轮
+// 残留的服务端被误连，测试读到旧存档后假失败（见 shared-client/src/test-server.ts）。
+let TEST_SERVER_URL = '';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const serverScript = path.resolve(currentDir, '../../server/scripts/start_official_war_test_server.sh');
@@ -80,25 +83,19 @@ async function findBuildingId(authKey: string, ownerID: string, buildingType: st
 
 describe('official war regression via real server', () => {
   before(async () => {
-    serverProcess = spawn('bash', [serverScript, String(TEST_PORT)], {
+    const port = Number(process.env.SW_TEST_SERVER_PORT) || await findFreePort();
+    TEST_SERVER_URL = `http://127.0.0.1:${port}`;
+    serverProcess = spawn('bash', [serverScript, String(port)], {
       cwd: path.resolve(currentDir, '../..'),
       stdio: 'ignore',
       detached: true,
     });
-    serverProcess.unref();
+    registerProcessCleanup(serverProcess);
     await waitForHealth(TEST_SERVER_URL);
   });
 
   after(async () => {
-    if (!serverProcess?.pid) {
-      return;
-    }
-    try {
-      process.kill(-serverProcess.pid, 'SIGTERM');
-    } catch {
-      return;
-    }
-    await delay(1_000);
+    await stopProcessTree(serverProcess);
   });
 
   it('runs the minimal warfare loop against the authoritative war scenario', async () => {
