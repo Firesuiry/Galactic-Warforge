@@ -112,7 +112,11 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	demands := haulDemands(ws, claims, robot.OwnerID)
 	if len(demands) == 0 {
 		haulClearTask(robot)
-		haul.SetIdleReason(model.HaulIdleNoDemand, "")
+		// 没有可派的需求：缺料的建筑若都由分拣器喂料（被有意排除在派单外），
+		// 机器人不是「到不了」，而是本来就没有需要它送的活——写进 idle_detail，
+		// 客户端显示「自动待命：没有需要机器人送的（缺料机器都由分拣器喂料）」
+		// （试玩 1016 U16S 一般 1）。
+		haul.SetIdleReason(model.HaulIdleNoDemand, haulNoDemandDetail(ws, robot.OwnerID))
 		return nil
 	}
 	supplies := haulSupplies(ws, claims, robot.OwnerID)
@@ -436,30 +440,84 @@ func haulStarvedBuildings(ws *model.WorldState, demands []haulDemand) map[string
 		return starved
 	}
 	for _, demand := range demands {
-		building := ws.Buildings[demand.buildingID]
-		if building == nil || building.Storage == nil {
-			continue
+		if haulBuildingStarved(ws.Buildings[demand.buildingID]) {
+			starved[demand.buildingID] = true
 		}
-		state := building.Production
-		if state == nil || state.RecipeID == "" || state.RemainingTicks > 0 {
-			continue
-		}
-		if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
-			continue
-		}
-		if building.Runtime.State != model.BuildingWorkRunning {
-			continue
-		}
-		recipe, ok := model.Recipe(state.RecipeID)
-		if !ok || len(recipe.Inputs) == 0 {
-			continue
-		}
-		if _, ok := collectRecipeInputs(building.Storage, recipe); ok {
-			continue
-		}
-		starved[demand.buildingID] = true
 	}
 	return starved
+}
+
+// haulNoDemandDetail 无需求时的中文说明：**缺料的建筑全部分拣器喂料**时写明，
+// 否则为空（客户端回落到「没有缺料的建筑」）。只要还有一座缺料建筑不归分拣器管，
+// 就不能说「都由分拣器喂料」。
+func haulNoDemandDetail(ws *model.WorldState, ownerID string) string {
+	if ws == nil || ownerID == "" {
+		return ""
+	}
+	sorterFed := haulSorterFedBuildings(ws, ownerID)
+	sorterFedStarved := false
+	for id, building := range ws.Buildings {
+		if building == nil || building.OwnerID != ownerID || building.HP <= 0 {
+			continue
+		}
+		if !haulBuildingStarved(building) {
+			continue
+		}
+		if !sorterFed[id] {
+			return ""
+		}
+		sorterFedStarved = true
+	}
+	if !sorterFedStarved {
+		return ""
+	}
+	return "没有需要机器人送的（缺料机器都由分拣器喂料）"
+}
+
+// haulStarvedSorterFedBuildings 己方「缺料、但已由分拣器喂料」的建筑 id 列表
+// （稳定顺序）。这些建筑被 haulDemands 有意排除在派单外，机器人对它们无事可做：
+// 用来把空闲原因从「到不了」纠正为「没有需要机器人送的活」（试玩 1016 U16S）。
+func haulStarvedSorterFedBuildings(ws *model.WorldState, ownerID string) []string {
+	if ws == nil || ownerID == "" {
+		return nil
+	}
+	sorterFed := haulSorterFedBuildings(ws, ownerID)
+	ids := make([]string, 0, len(sorterFed))
+	for id := range sorterFed {
+		building := ws.Buildings[id]
+		if building == nil || building.OwnerID != ownerID || building.HP <= 0 {
+			continue
+		}
+		if !haulBuildingStarved(building) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// haulBuildingStarved 该建筑是否正因缺料停工（判据见 haulStarvedBuildings）。
+func haulBuildingStarved(building *model.Building) bool {
+	if building == nil || building.Storage == nil {
+		return false
+	}
+	state := building.Production
+	if state == nil || state.RecipeID == "" || state.RemainingTicks > 0 {
+		return false
+	}
+	if len(state.PendingOutputs) > 0 || len(state.PendingByproducts) > 0 {
+		return false
+	}
+	if building.Runtime.State != model.BuildingWorkRunning {
+		return false
+	}
+	recipe, ok := model.Recipe(state.RecipeID)
+	if !ok || len(recipe.Inputs) == 0 {
+		return false
+	}
+	_, enough := collectRecipeInputs(building.Storage, recipe)
+	return !enough
 }
 
 // haulSupplies 本行星己方的未认领供给清单（稳定顺序）：
@@ -518,8 +576,13 @@ func haulSupplies(ws *model.WorldState, claims *haulClaimBook, ownerID string) [
 	return supplies
 }
 
-// haulIsStorageBuilding 仓储类建筑：储物仓 / 储液罐 / 物流站。它们的整仓库存
-// 都是「给别人用的」，取货不受「只取成品」约束。
+// haulIsStorageBuilding 仓储类建筑：储物仓 / 储液罐 / 物流站 / 补给站。它们的
+// 整仓库存都是「给别人用的」，取货不受「只取成品」约束。
+//
+// 补给站目录里是 category: production（它不生产任何东西，只放补给），旧判据只认
+// storage 类，导致 cp-logistics 出货补给站里的铁块/铜块永远当不了供给：制造台
+// b-79 缺齿轮却只能报「到不了」，机器人空转（试玩 1016 U16S 一般 1）。判据与
+// haulIsStorageSink 一致：有 storage、且没有任何会吃掉或产出物品的功能。
 func haulIsStorageBuilding(building *model.Building) bool {
 	if building == nil {
 		return false
@@ -528,7 +591,10 @@ func haulIsStorageBuilding(building *model.Building) bool {
 		return true
 	}
 	def, ok := model.BuildingDefinitionByID(building.Type)
-	return ok && def.Category == model.BuildingCategoryStorage
+	if ok && def.Category == model.BuildingCategoryStorage {
+		return true
+	}
+	return haulIsStorageSink(building)
 }
 
 // haulIsStorageSink 该建筑能否作为「带载机器人无处可送时」的落货点（§2.1 收尾规则）。

@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"strings"
 	"testing"
 
 	"siliconworld/internal/model"
@@ -91,7 +92,8 @@ func TestAutoHaulCargoNeverReroutesToEnemyDemand(t *testing.T) {
 		t.Fatalf("敌方熔炉收到了货: %d", got)
 	}
 	// 货送回己方落货点（储物仓或 HQ 都算，取决于谁更近）：车空了且计入送达。
-	if robot.Haul.CargoQuantity() != 0 || robot.Haul.DeliveredTotal != 4 {
+	// DeliveredTotal 是累计值：机器人来回跑时可能又送了几趟别的货，不能只认 4。
+	if robot.Haul.CargoQuantity() != 0 || robot.Haul.DeliveredTotal < 4 {
 		t.Fatalf("货没有送回己方仓储: depot=%d haul=%+v", haulStored(f.depot, model.ItemIronOre), robot.Haul)
 	}
 }
@@ -199,6 +201,65 @@ func TestAutoHaulSkipsSorterFedBuildings(t *testing.T) {
 	toDispatchTick(core, ws)
 	if robot.Haul.ToBuildingID != smelter.ID {
 		t.Fatalf("分拣器拆除后熔炉应重新被派单: %+v", robot.Haul)
+	}
+}
+
+// 5b) 唯一缺料的建筑由分拣器喂料（需求清单为空）：同样必须是 no_demand
+// 并带中文说明，不能是 no_reachable_demand——否则选中条会说「缺料建筑都到不了」，
+// 让玩家误以为布局不可达（试玩 1016 U16S 一般 1）。
+func TestAutoHaulSorterFedOnlyReportsNoDemand(t *testing.T) {
+	core, ws := haulTestCoreWithFace(t, 48)
+	depot := placeAutoBuilding(t, ws, "b-depot", model.BuildingTypeDepotMk1, model.Position{X: 20, Y: 30})
+	smelter := placeAutoSmelter(t, ws, "b-smelter", model.Position{X: 40, Y: 30})
+	sorter := placeAutoBuilding(t, ws, "b-feeder", model.BuildingTypeSorterMk1, model.Position{X: 39, Y: 31})
+	sorter.Rotation = model.PlanRotation90
+	model.InitBuildingSorter(sorter)
+	sorter.Sorter.Range = 1
+	sorter.Sorter.CycleTicks = 1
+	haulFill(depot, model.ItemIronOre, 60)
+	robot := autoRobot(t, ws, model.Position{X: 30, Y: 20})
+
+	toDispatchTick(core, ws)
+	if robot.Haul.ToBuildingID != "" {
+		t.Fatalf("机器人不应被派单（分拣器喂料）: %+v", robot.Haul)
+	}
+	if robot.Haul.IdleReason != string(model.HaulIdleNoDemand) {
+		t.Fatalf("分拣器喂料时 idle_reason = %q, want %q", robot.Haul.IdleReason, model.HaulIdleNoDemand)
+	}
+	if !strings.Contains(robot.Haul.IdleDetail, "分拣器喂料") {
+		t.Fatalf("idle_detail 应说明缺料机器由分拣器喂料: %q", robot.Haul.IdleDetail)
+	}
+	if len(haulStarvedSorterFedBuildings(ws, "p1")) != 1 {
+		t.Fatalf("缺料分拣器喂料建筑数 = %v, want 1", haulStarvedSorterFedBuildings(ws, "p1"))
+	}
+
+	// 分拣器拆掉后熔炉重新成为机器人可服务的需求：空闲原因清空。
+	demolishAutoBuilding(ws, sorter.ID)
+	toDispatchTick(core, ws)
+	if robot.Haul.ToBuildingID != smelter.ID {
+		t.Fatalf("分拣器拆除后熔炉应被派单: %+v", robot.Haul)
+	}
+	if robot.Haul.IdleReason != "" || robot.Haul.IdleDetail != "" {
+		t.Fatalf("有任务时空闲原因应清空: reason=%q detail=%q", robot.Haul.IdleReason, robot.Haul.IdleDetail)
+	}
+}
+
+// 5c) 补给站算仓储类供给：它在目录里是 production 类（不生产任何东西、只放补给），
+// 旧判据只认 storage 类，出货补给站里的锭永远当不了供给（试玩 1016 U16S 一般 1：
+// cp-logistics 的制造台 b-79 缺齿轮，机器人却只能报「到不了」）。
+func TestAutoHaulSupplyStationIsSupplySource(t *testing.T) {
+	core, ws := haulTestCoreWithFace(t, 48)
+	station := placeAutoBuilding(t, ws, "b-station", model.BuildingTypeSupplyStation, model.Position{X: 20, Y: 20})
+	smelter := placeAutoSmelter(t, ws, "b-smelter", model.Position{X: 40, Y: 20})
+	haulFill(station, model.ItemIronOre, 60)
+	robot := autoRobot(t, ws, model.Position{X: 30, Y: 30})
+
+	if !haulIsStorageBuilding(station) {
+		t.Fatal("补给站应算仓储类供给")
+	}
+	toDispatchTick(core, ws)
+	if robot.Haul.FromBuildingID != station.ID || robot.Haul.ToBuildingID != smelter.ID {
+		t.Fatalf("机器人应从补给站取货送熔炉: %+v", robot.Haul)
 	}
 }
 

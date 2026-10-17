@@ -86,9 +86,11 @@ type UnitHaulState struct {
 	// 立刻重新选中形成 abort → 改派 → abort 的死循环。
 	UnreachableCooldowns map[string]int64 `json:"unreachable_cooldowns,omitempty"`
 	// IdleReason 自动模式空闲时「为什么没活干」（仅 mode=auto 且无任务时有值）：
-	//   - no_demand：本行星己方没有缺料建筑；
+	//   - no_demand：本行星己方没有缺料建筑，或唯一缺料的建筑都由分拣器喂料
+	//     （这类建筑被有意排除在派单外，IdleDetail 会说明「缺料机器都由分拣器喂料」）；
 	//   - cargo_no_destination：车上有货但没有任何需求、也没有能收下它的仓储；
-	//   - no_reachable_demand：有需求但都到不了/没有可用供给（见 unreachable_cooldowns）；
+	//   - no_reachable_demand：有需求（不是分拣器喂料的）但都到不了/没有可用供给
+	//     （见 unreachable_cooldowns）；
 	//   - last_aborted：上一单被中止（端点消失/不属于本玩家），详见 IdleDetail。
 	// 客户端选中条据此说明机器人为什么空转（试玩 1016 一般 2）。
 	IdleReason string `json:"idle_reason,omitempty"`

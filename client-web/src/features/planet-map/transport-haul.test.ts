@@ -197,6 +197,14 @@ describe('自动模式（§2.1 出厂默认）', () => {
     expect(describeHaul(unreachable, label)).toBe('自动待命：缺料建筑都到不了');
     const noDemand = robot({ haul: { mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0, idle_reason: 'no_demand' } } as never);
     expect(describeHaul(noDemand, label)).toBe('自动待命：没有缺料的建筑');
+    // 缺料建筑都由分拣器喂料：服务端给 no_demand + idle_detail，不能显示「都到不了」。
+    const sorterFed = robot({
+      haul: {
+        mode: 'auto', from_building_id: '', to_building_id: '', phase: 'idle', delivered_total: 0,
+        idle_reason: 'no_demand', idle_detail: '没有需要机器人送的（缺料机器都由分拣器喂料）',
+      },
+    } as never);
+    expect(describeHaul(sorterFed, label)).toBe('自动待命：没有需要机器人送的（缺料机器都由分拣器喂料）');
 
     // 有任务时 idle_reason 不参与（服务端有任务会清空，双保险）。
     const working = robot({

@@ -388,9 +388,9 @@ export interface TransportHaul {
   claim?: TransportHaulClaim;
   /**
    * 自动模式空闲时为什么没活干（仅无任务时有值）：
-   * - no_demand：本行星己方没有缺料建筑；
+   * - no_demand：本行星己方没有缺料建筑，或缺料建筑都由分拣器喂料（idle_detail 说明）；
    * - cargo_no_destination：车上有货但无需求、也无能收下它的己方仓储；
-   * - no_reachable_demand：有需求但都到不了/没有可用供给；
+   * - no_reachable_demand：有需求（非分拣器喂料）但都到不了/没有可用供给；
    * - last_aborted：上一单被中止（端点消失/不属于本玩家），原因见 idle_detail。
    */
   idle_reason?: TransportHaulIdleReason;

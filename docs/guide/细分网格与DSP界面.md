@@ -57,7 +57,7 @@
 
 **行为循环**：前往起点建筑占地外圈的相邻空 cell → 装货（从起点产物缓存/仓储取，未指定物品时取"终点当前能接收"的第一种）→ 前往终点相邻 cell → 卸货（遵守与装入建筑相同的接收规则，含给产出留空）→ 回起点。起点无货在起点等，终点满在终点等。任一端建筑消失：路线清空、机器人停下、发一条事件。无能耗。可被敌方攻击；bot 不必使用。
 
-**查询暴露**：单位 JSON 带 `haul: {mode, from_building_id, to_building_id, item_id, phase(to_source|loading|to_target|unloading|waiting_source|waiting_target|idle), cargo, delivered_total, idle_reason?, idle_detail?}`，客户端据此画路线和货物；自动模式空闲时 `idle_reason`（`no_demand` / `cargo_no_destination` / `no_reachable_demand` / `last_aborted`）说明为什么没活干，选中条显示「带着 4 铁矿 待命：没有可送的地方」「上一单中止：…」。
+**查询暴露**：单位 JSON 带 `haul: {mode, from_building_id, to_building_id, item_id, phase(to_source|loading|to_target|unloading|waiting_source|waiting_target|idle), cargo, delivered_total, idle_reason?, idle_detail?}`，客户端据此画路线和货物；自动模式空闲时 `idle_reason`（`no_demand` / `cargo_no_destination` / `no_reachable_demand` / `last_aborted`）说明为什么没活干——缺料建筑都由分拣器喂料时是 `no_demand`（`idle_detail` 写明），`no_reachable_demand` 只留给真正到不了/无供给的需求；选中条显示「带着 4 铁矿 待命：没有可送的地方」「上一单中止：…」「自动待命：没有需要机器人送的（缺料机器都由分拣器喂料）」。
 
 ### 2.1 全局自动模式（2026-10-14 用户新增，出厂默认）
 
@@ -68,7 +68,7 @@
 
 只服务**己方**建筑：需求、供给、回仓落点、带货改派都按机器人的 `owner_id` 过滤（试玩 1016 严重 1：旧实现会派 p1 的机器人给 p2 的熔炉送料，永久空转）。**已有分拣器喂料的机器不派单**——某座己方运行中分拣器的放货端对着该建筑时，它由分拣器负责供料（DSP 式布局里这类机器本来就被分拣器/带子围死，机器人挤不进去）；拆掉分拣器后自动回到派单范围。这类建筑到不了时静默放弃（记冷却、不发 `haul_unreachable` 告警），不刷告警条。
 
-**供给**：仓储类建筑（小/大型储物仓、物流站库存）的主库存，以及生产/采集建筑的**输出缓冲**（只取成品，绝不从生产建筑主库存里拿它自己的原料，避免来回倒腾）。供给同样按"已被认领量"扣减。
+**供给**：仓储类建筑（小/大型储物仓、储液罐、物流站库存、补给站）的主库存，以及生产/采集建筑的**输出缓冲**（只取成品，绝不从生产建筑主库存里拿它自己的原料，避免来回倒腾）。补给站在目录里是 `production` 类（它不生产任何东西，只放补给），按 `haulIsStorageSink` 的纯仓储判据认作仓储。供给同样按"已被认领量"扣减。
 
 **分配（防止扎堆）**：每 10 tick 给空闲机器人派单。对每台空闲机器人，在所有"未认领缺口 > 0"的需求里打分选一个：`分 = 机器人到需求建筑距离 + 已服务该建筑的机器人数 × 惩罚(30 cell)`，缺料停工的需求距离按 0.5 倍计（优先救停工）；同一建筑同时最多 2 台机器人服务。选中后再为该原料挑"离需求建筑最近、未认领余量 > 0"的供给，**认领**数量 = min(4, 缺口, 供给余量)，需求与供给都登记认领，其他机器人看到的缺口随之减少——缺口被认领满的机器不会再吸引机器人，空出来的去管别的缺料机器。
 

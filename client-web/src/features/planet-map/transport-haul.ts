@@ -95,7 +95,8 @@ export function transportCargo(unit: Unit | undefined | null) {
  * - 车上有货：`带着 4 铁矿 待命：没有可送的地方`
  * - 上一单中止：`上一单中止：<原因>`
  * - 有需求但都到不了：`自动待命：缺料建筑都到不了`
- * - 无需求：`自动待命：没有缺料的建筑`
+ * - 无需求：`自动待命：没有缺料的建筑`；服务端带 idle_detail 时
+ *   （缺料建筑都由分拣器喂料）显示 `自动待命：<idle_detail>`
  * 没有 idle_reason（旧快照 / 有任务）时返回 null，由调用方回落到「自动待命」。
  */
 export function describeHaulIdle(
@@ -120,7 +121,8 @@ export function describeHaulIdle(
     return detail ? `上一单中止：${detail}` : '上一单中止';
   }
   if (reason === 'no_reachable_demand') return '自动待命：缺料建筑都到不了';
-  return '自动待命：没有缺料的建筑';
+  const detail = haul.idle_detail?.trim();
+  return detail ? `自动待命：${detail}` : '自动待命：没有缺料的建筑';
 }
 
 /**
