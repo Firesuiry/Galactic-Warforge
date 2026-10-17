@@ -101,17 +101,21 @@ func TestSorterStalledAlertForNoPowerSorter(t *testing.T) {
 	}
 }
 
-func TestSorterStalledAlertForPausedSorter(t *testing.T) {
-	f := newSorterStallFixture(t)
-	f.belt.Conveyor.Insert(model.ItemIronOre, 3)
-	f.sorter.Runtime.State = model.BuildingWorkPaused
+func TestSorterStalledAlertForNotRunningSorter(t *testing.T) {
+	for _, state := range []model.BuildingWorkState{model.BuildingWorkPaused, model.BuildingWorkError} {
+		t.Run(string(state), func(t *testing.T) {
+			f := newSorterStallFixture(t)
+			f.belt.Conveyor.Insert(model.ItemIronOre, 3)
+			f.sorter.Runtime.State = state
 
-	alerts := f.settleStallTicks(sorterStallWarnTicks + 5)
-	if len(alerts) != 1 {
-		t.Fatalf("暂停分拣器应发 1 条 sorter_stalled，got %d", len(alerts))
-	}
-	if got := alerts[0].Details["reason"]; got != sorterStallReasonPaused {
-		t.Fatalf("reason = %v，want %s", got, sorterStallReasonPaused)
+			alerts := f.settleStallTicks(sorterStallWarnTicks + 5)
+			if len(alerts) != 1 {
+				t.Fatalf("未运行（%s）的分拣器应发 1 条 sorter_stalled，got %d", state, len(alerts))
+			}
+			if got := alerts[0].Details["reason"]; got != sorterStallReasonNotRunning {
+				t.Fatalf("reason = %v，want %s", got, sorterStallReasonNotRunning)
+			}
+		})
 	}
 }
 
@@ -158,5 +162,65 @@ func TestSorterStalledAlertForDropBlocked(t *testing.T) {
 	}
 	if got := alerts[0].Details["reason"]; got != sorterStallReasonDropBlocked {
 		t.Fatalf("reason = %v，want %s", got, sorterStallReasonDropBlocked)
+	}
+}
+
+// 多端点选路：settleSorters 一次往返只走「取货端 steps + 放货端 steps」最短的
+// 那一对；停工判定必须用同一对端点，否则 reason/target 会指向另一条路线。
+// sorterEndpoints 当前每个方向只产出一个端点，这里直接对共享选路函数
+// sorterBestRoute 做多端点单测，锁住「最短优先、同距取先枚举」的口径。
+func TestSorterBestRoutePicksShortestPair(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 8)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	for _, id := range []string{"in-far", "in-near", "out-far", "out-near"} {
+		attachBuilding(ws, newConveyorBuilding(id, model.Position{X: 0, Y: 0}, model.ConveyorEast))
+	}
+	inputs := []sorterLink{
+		{id: "in-far", steps: 2},
+		{id: "in-near", steps: 1},
+	}
+	outputs := []sorterLink{
+		{id: "out-far", steps: 2},
+		{id: "out-near", steps: 1},
+	}
+	in, out, ok := sorterBestRoute(ws, inputs, outputs)
+	if !ok {
+		t.Fatal("应选出路线")
+	}
+	if in.id != "in-near" || out.id != "out-near" {
+		t.Fatalf("应选最短的一对端点，got in=%s out=%s", in.id, out.id)
+	}
+
+	// 近端输出缺失（建筑已被拆）时退到次短组合，而不是直接放弃。
+	delete(ws.Buildings, "out-near")
+	in, out, ok = sorterBestRoute(ws, inputs, outputs)
+	if !ok || in.id != "in-near" || out.id != "out-far" {
+		t.Fatalf("应退到次短组合 in-near→out-far，got ok=%v in=%s out=%s", ok, in.id, out.id)
+	}
+
+	// 只剩同一个建筑同时被当成取/放端（自环）时没有可用路线。
+	in, out, ok = sorterBestRoute(ws, []sorterLink{{id: "out-far", steps: 1}}, []sorterLink{{id: "out-far", steps: 1}})
+	if ok {
+		t.Fatalf("自环不该选出路线，got in=%s out=%s", in.id, out.id)
+	}
+}
+
+// 停工计数存在分拣器自己的 Stall 里，不复用 ProductionMonitor 的采样计数。
+func TestSorterStalledUsesDedicatedCounters(t *testing.T) {
+	f := newSorterStallFixture(t)
+	f.sorter.Runtime.State = model.BuildingWorkPaused
+	// 恰好 300 tick：第 300 tick 报警并清零计数。
+	alerts := f.settleStallTicks(sorterStallWarnTicks)
+	if len(alerts) != 1 {
+		t.Fatalf("第 %d tick 应报警 1 次，got %d", sorterStallWarnTicks, len(alerts))
+	}
+
+	monitor := f.sorter.ProductionMonitor
+	if monitor.Samples != 0 || monitor.IdleSamples != 0 {
+		t.Fatalf("停工计数不该写 ProductionMonitor.Samples/IdleSamples，got samples=%d idle=%d",
+			monitor.Samples, monitor.IdleSamples)
+	}
+	if f.sorter.Sorter.Stall.StalledTicks != 0 {
+		t.Fatalf("报警后停工计数应清零，got %d", f.sorter.Sorter.Stall.StalledTicks)
 	}
 }

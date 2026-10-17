@@ -68,31 +68,12 @@ func settleSorters(ws *model.WorldState) {
 		pileGrab := building.Type == model.BuildingTypePileSorter
 
 		// 一次往返只选一条「取货端 → 放货端」路线：近的优先（DSP 里长臂就是慢）。
-		best := -1
-		bestIn, bestOut := -1, -1
-		for oi := range outputs {
-			target := ws.Buildings[outputs[oi].id]
-			if target == nil {
-				continue
-			}
-			for ii := range inputs {
-				if inputs[ii].id == outputs[oi].id {
-					continue
-				}
-				if ws.Buildings[inputs[ii].id] == nil {
-					continue
-				}
-				span := inputs[ii].steps + outputs[oi].steps
-				if best >= 0 && span >= best {
-					continue
-				}
-				best, bestIn, bestOut = span, ii, oi
-			}
-		}
-		if best < 0 {
+		// 停工告警（sorter_stall_alert.go）复用同一选路函数，保证 reason/target
+		// 与实际尝试搬运的那条路线一致。
+		in, out, ok := sorterBestRoute(ws, inputs, outputs)
+		if !ok {
 			continue
 		}
-		in, out := inputs[bestIn], outputs[bestOut]
 		source, target := ws.Buildings[in.id], ws.Buildings[out.id]
 
 		qty, itemID := sorterGrabOnce(ws, source, target, in.port, out.port, sorter, grabStacks, pileGrab)
@@ -111,7 +92,7 @@ func settleSorters(ws *model.WorldState) {
 		}
 		// 往返周期 = cycle_ticks × 端点距离格数（两端点落在不同格子上才计距离，
 		// 两端同格时按 1 格算，避免零周期）。
-		sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*max(1, best))
+		sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*max(1, in.steps+out.steps))
 	}
 }
 
@@ -348,6 +329,44 @@ func allowsItem(items []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// sorterBestRoute 选一次往返的「取货端 → 放货端」路线：两端距离和最小者优先
+// （DSP 里长臂就是慢）。距离相同时取先枚举到的组合——outputs 外层、inputs 内层，
+// 两者都按 sorterEndpoints 的确定性顺序生成，所以结果可复现。
+//
+// settleSorters 与停工告警（sorterStallSampleFor）共用这一函数：告警的
+// reason / target 必须针对实际尝试搬运的那条路线，否则 range>1 的分拣器
+// （mk2/mk3）会报出「另一个端点」的停工原因。
+func sorterBestRoute(ws *model.WorldState, inputs, outputs []sorterLink) (in, out sorterLink, ok bool) {
+	if ws == nil {
+		return sorterLink{}, sorterLink{}, false
+	}
+	best := -1
+	bestIn, bestOut := -1, -1
+	for oi := range outputs {
+		target := ws.Buildings[outputs[oi].id]
+		if target == nil {
+			continue
+		}
+		for ii := range inputs {
+			if inputs[ii].id == outputs[oi].id {
+				continue
+			}
+			if ws.Buildings[inputs[ii].id] == nil {
+				continue
+			}
+			span := inputs[ii].steps + outputs[oi].steps
+			if best >= 0 && span >= best {
+				continue
+			}
+			best, bestIn, bestOut = span, ii, oi
+		}
+	}
+	if best < 0 {
+		return sorterLink{}, sorterLink{}, false
+	}
+	return inputs[bestIn], outputs[bestOut], true
 }
 
 // sorterInputEndpoints 是取货端：背面（朝向的反方向）沿轴扫 Range 格。

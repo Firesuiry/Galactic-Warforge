@@ -560,14 +560,16 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - **建筑消失即解除**：建筑被拆除（命令即时 / 拆除作业完成）或被战斗摧毁时，它名下仍成立的全部产线告警同步变为 `active=false` 并写入 `resolved_tick`（试玩 1016 严重 3：旧实现只在建筑仍存在时结算，拆除后告警条会留下一条「建筑已不存在、地图没有红标、无法修复」的悬挂条目）。对应的 `entity_destroyed` 事件在 `resolved_alert_types` 里列出随之解除的告警类型（无则不出现）。
 - `alert_type`：`throughput_drop` / `backlog` / `input_shortage` / `output_blocked` / `power_shortage` / `unit_spawn_blocked` / `belt_blocked` / `haul_unreachable` / `sorter_stalled`；采集建筑只产生 `output_blocked` 与 `power_shortage`。`unit_spawn_blocked` 由单位生产建筑（兵营/战车工厂）在出生点被占满、单位留在队列里等待时发出，message 写「出厂口被占满，『步兵』暂缓出厂等待空位」。生产建筑的 `output_blocked` 与 `runtime.state_reason` 同口径（输出缓冲 + 产出预留段都放不下），采集建筑则要求输出缓冲与主库存同时满，阻塞解除后告警随之停止。`belt_blocked` 指向**传送带格本身**：带上有货却连续 300 tick（`beltBlockedWarnTicks`）一件都没动出去（带尾对着空地、下游分拣器/建筑不收这个物品），message 写「传送带被堵，物品运不出去」，`details` 带 `position` / `queued_items` / `blocked_ticks`；货被取走或开始流动后解除——避免玩家把上游矿机的「产物阻塞」误当成根因（试玩 1016 报告 B1/U7）。`haul_unreachable` 指向**运输机器人到不了的建筑**：自动模式机器人连续多次找不到落点/路径后放弃该目标时发出，message 写「建筑 <id>：运输机器人到不了」，`details` 带 `unit_id` / `building_id` / `position`；同一建筑持续成立期间只发一次，机器人重新到达该建筑（或建筑被拆除）后解除。**已有分拣器喂料的建筑不报**（DSP 式布局里它们本来就被产线围死，机器人不派单也不报警，见 §5.6）。见 §5.6 运输机器人自动模式。
 
-  `sorter_stalled` 指向**分拣器本身**（`building_id` / `building_type` 都是这台分拣器）：分拣器连续 300 tick（`sorterStallWarnTicks`，与 `belt_blocked` 同节奏）没能完成一次搬运时发出，message 写「分拣器 <id>：停工，物品送不到目标」。`details` 带 `position`（分拣器坐标）、`building_id`（放货端落到的**目标建筑**，可能缺省）、`target_type` / `target_position`（目标建筑的类型与坐标）、`reason`：
+  `sorter_stalled` 指向**分拣器本身**（`building_id` / `building_type` 都是这台分拣器）：分拣器连续 300 tick（`sorterStallWarnTicks`，与 `belt_blocked` 同节奏）没能完成一次搬运时发出，message 写「分拣器 <id>：停工，物品送不到目标」。`details` 带 `position`（**分拣器自己**的坐标）、`building_id`（放货端落到的**目标建筑**，可能缺省）、`target_type` / `target_position`（**目标建筑**的类型与坐标）、`reason`：
 
   | reason | 含义 |
   | --- | --- |
-  | `no_power` | 分拣器断电（含欠压停机） |
-  | `paused` | 分拣器被暂停（拆除作业中也会进入该状态） |
+  | `no_power` | 分拣器断电。分拣器本身不耗电（`buildings.yaml` 没有 energy 模块），正常运行时分拣器不会被置为 `no_power`，这条分支实际很少出现，只为兼容旧存档/未来给分拣器加耗电保留 |
+  | `not_running` | 分拣器未运行（暂停、故障 `error`、拆除作业中）。旧存档里的 `paused` 含义相同，客户端按同一文案显示 |
   | `pick_empty` | 取货端没有本分拣器认的货；**只在目标建筑确实因缺料停工**（`input_shortage` 判据）时才报，目标还够料时不刷噪音 |
   | `drop_blocked` | 放货端收不下（目标输入缓冲/主库存满、带子满）；**只在取货端确实有货时才报** |
+
+  选路与 `settleSorters` 共用 `sorterBestRoute`：一次往返只走「取货端距离 + 放货端距离」最短的那一对端点，`reason` / `target_position` 对应实际尝试搬运的那条路线（range>1 的 mk2/mk3 有多个候选端点）。停工计数存在分拣器自己的 `sorter.stall.stalled_ticks`（随快照落盘，读档后继续累计），不复用产线监控的采样计数。
 
   存在意义：自动运输机器人会跳过「已有分拣器喂料」的建筑（见 §5.6），分拣器一停那台机器就静默断料——机器人不会来救，告警条也不会有任何条目。分拣器**成功转移一件**（`sorter.last_transfer.tick` 前进到当前 tick）即解除；分拣器被拆除/摧毁时与其它告警一样随建筑解除。往返周期内正常的等待（`next_trip_tick` 未到）不累计停工时长；端点缺失（刚放下还没接好）也不累计。
 

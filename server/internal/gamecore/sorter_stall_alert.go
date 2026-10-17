@@ -17,13 +17,16 @@ import (
 //
 // 口径（与 belt_blocked 同节奏）：
 //   - 只统计「本应搬运却连续没搬成」的分拣器，连续 sorterStallWarnTicks 后报警；
-//   - 理由只报根因，按优先级取：no_power > paused > drop_blocked > pick_empty；
+//   - 理由只报根因，按优先级取：no_power > not_running > drop_blocked > pick_empty；
+//   - 选路与 settleSorters 共用 sorterBestRoute（最短的取货端 × 放货端），
+//     保证 reason/target 对应实际尝试搬运的那条路线（range>1 的 mk2/mk3）；
 //   - 防噪音：pick_empty 只在放货端的生产建筑**确实断料**（input_shortage）时才报；
 //     drop_blocked 只在取货端**确实有货**时才报（取货端空着是 pick_empty，不是堵塞）；
 //   - 恢复搬运（成功转移一件）即解除。
 //
-// 计数存在分拣器自己的 ProductionMonitor 里（Samples/IdleSamples 两个现成字段，
-// 随快照落盘，读档后继续累计），不额外加状态字段。
+// 计数存在分拣器自己的 SorterState.Stall 里（SorterStallState.StalledTicks，
+// 随快照落盘，读档后继续累计），不复用 ProductionMonitor 的 Samples/IdleSamples
+// ——那两个字段归产线监控采样，两边各写各的会互相干扰。
 
 const (
 	// sorterStallWarnTicks 分拣器连续多少 tick 没搬成后报警。与 belt_blocked 同为
@@ -31,8 +34,11 @@ const (
 	sorterStallWarnTicks = 300
 
 	// 停工原因（写入 details.reason，客户端据此给中文说明）。
+	//
+	// 分拣器本身不耗电（buildings.yaml 里没有 energy 模块），正常运行时分拣器
+	// 不会被置为 no_power；保留这条分支只为兼容旧存档/未来给分拣器加耗电。
 	sorterStallReasonNoPower     = "no_power"
-	sorterStallReasonPaused      = "paused"
+	sorterStallReasonNotRunning  = "not_running"
 	sorterStallReasonPickEmpty   = "pick_empty"
 	sorterStallReasonDropBlocked = "drop_blocked"
 )
@@ -66,7 +72,7 @@ func sorterStallSampleFor(ws *model.WorldState, sorter *model.Building) sorterSt
 	case model.BuildingWorkNoPower:
 		return sorterStallSample{eligible: true, due: true, reason: sorterStallReasonNoPower, targetID: sorterPrimaryTargetID(ws, sorter)}
 	case model.BuildingWorkPaused, model.BuildingWorkError:
-		return sorterStallSample{eligible: true, due: true, reason: sorterStallReasonPaused, targetID: sorterPrimaryTargetID(ws, sorter)}
+		return sorterStallSample{eligible: true, due: true, reason: sorterStallReasonNotRunning, targetID: sorterPrimaryTargetID(ws, sorter)}
 	}
 	if state.CycleTicks <= 0 || state.Range <= 0 {
 		return sorterStallSample{}
@@ -79,21 +85,26 @@ func sorterStallSampleFor(ws *model.WorldState, sorter *model.Building) sorterSt
 	if len(inputs) == 0 {
 		return sorterStallSample{}
 	}
-	sample := sorterStallSample{eligible: true, targetID: outputs[0].id}
+	// 与 settleSorters 同一选路：一次往返只走「距离和最短」的那一对端点。
+	in, out, ok := sorterBestRoute(ws, inputs, outputs)
+	if !ok {
+		return sorterStallSample{}
+	}
+	sample := sorterStallSample{eligible: true, targetID: out.id}
 	// 还没到下一趟的时间点：不算停工（往返周期本来就是等）。
 	if state.NextTripTick > ws.Tick {
 		return sample
 	}
 	sample.due = true
 
-	target := ws.Buildings[outputs[0].id]
-	source := ws.Buildings[inputs[0].id]
+	target := ws.Buildings[out.id]
+	source := ws.Buildings[in.id]
 	if target == nil || source == nil {
 		return sample
 	}
 	// 放货端收不下：取货端确实有货才算「堵」，否则根因是取不到货。
-	if !sorterTargetCanAccept(ws, sorter, source, target, outputs[0], inputs[0]) {
-		if sorterSourceHasCargo(source, inputs[0].port, state) {
+	if !sorterTargetCanAccept(ws, sorter, source, target, out, in) {
+		if sorterSourceHasCargo(source, in.port, state) {
 			sample.reason = sorterStallReasonDropBlocked
 		} else {
 			sample.reason = sorterStallReasonPickEmpty
@@ -101,7 +112,7 @@ func sorterStallSampleFor(ws *model.WorldState, sorter *model.Building) sorterSt
 		return sample
 	}
 	// 放货端收得下：取货端有没有本分拣器认的货？
-	if !sorterSourceHasCargo(source, inputs[0].port, state) {
+	if !sorterSourceHasCargo(source, in.port, state) {
 		sample.reason = sorterStallReasonPickEmpty
 	}
 	return sample
@@ -201,9 +212,7 @@ func settleSorterStallAlerts(ws *model.WorldState) ([]*model.GameEvent, []alertR
 		// 不该搬 / 只是等下一趟：计数归零；此前成立的告警解除。
 		moved := sorter.Sorter.LastTransfer != nil && sorter.Sorter.LastTransfer.Tick == ws.Tick
 		if !sample.eligible || moved || !sample.due || sample.reason == "" {
-			if monitor.Samples != 0 || monitor.IdleSamples != 0 {
-				monitor.Samples, monitor.IdleSamples = 0, 0
-			}
+			sorter.Sorter.Stall.StalledTicks = 0
 			if _, cleared := monitorAlert(monitor, model.AlertTypeSorterStalled, false, ws.Tick, 0); cleared {
 				resolved = append(resolved, alertResolution{
 					playerID: sorter.OwnerID, planetID: ws.PlanetID,
@@ -215,16 +224,14 @@ func settleSorterStallAlerts(ws *model.WorldState) ([]*model.GameEvent, []alertR
 		if sample.reason == sorterStallReasonPickEmpty && !sorterStallTargetStarved(ws.Buildings[sample.targetID]) {
 			// 目标机器并不缺料（只是暂时等下一批原料）：取不到货是正常节奏，不报警。
 			// 计数仍继续累加——目标一旦断料就按已停工的时长立刻报出来。
-			monitor.IdleSamples++
-			monitor.Samples++
+			sorter.Sorter.Stall.StalledTicks++
 			continue
 		}
-		monitor.IdleSamples++
-		monitor.Samples++
-		if monitor.IdleSamples < sorterStallWarnTicks {
+		sorter.Sorter.Stall.StalledTicks++
+		if sorter.Sorter.Stall.StalledTicks < sorterStallWarnTicks {
 			continue
 		}
-		monitor.Samples, monitor.IdleSamples = 0, 0
+		sorter.Sorter.Stall.StalledTicks = 0
 		if fired, _ := monitorAlert(monitor, model.AlertTypeSorterStalled, true, ws.Tick, sorterStallWarnTicks); !fired {
 			continue
 		}
