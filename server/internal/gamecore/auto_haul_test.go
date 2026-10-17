@@ -355,7 +355,7 @@ func TestAutoHaulNeverTakesRecipeInputFromProductionInventory(t *testing.T) {
 	haulFill(f.smelter, model.ItemIronOre, 6)
 	smelterDemand := haulDemand{buildingID: f.smelter.ID, itemID: model.ItemIronOre, quantity: 2}
 
-	supplies := haulSupplies(f.ws, haulClaims(f.ws))
+	supplies := haulSupplies(f.ws, haulClaims(f.ws), "p1")
 	for _, supply := range supplies {
 		if supply.buildingID == f.smelter.ID {
 			t.Fatalf("熔炉自己的原料被当成供给: %+v", supply)

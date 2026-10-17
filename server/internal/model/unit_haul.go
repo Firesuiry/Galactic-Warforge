@@ -82,7 +82,46 @@ type UnitHaulState struct {
 	UnreachableSinceTick int64 `json:"unreachable_since_tick,omitempty"`
 	// UnreachableCooldowns 本机器人对「到不了的建筑」的冷却（buildingID → 冷却结束
 	// tick）：冷却期内派单跳过这些建筑，让机器人去服务别的需求。到得了之后自动删除。
+	// 「任务中止」（端点不属于本玩家/消失等）也记在这张表里，避免同一座建筑被
+	// 立刻重新选中形成 abort → 改派 → abort 的死循环。
 	UnreachableCooldowns map[string]int64 `json:"unreachable_cooldowns,omitempty"`
+	// IdleReason 自动模式空闲时「为什么没活干」（仅 mode=auto 且无任务时有值）：
+	//   - no_demand：本行星己方没有缺料建筑；
+	//   - cargo_no_destination：车上有货但没有任何需求、也没有能收下它的仓储；
+	//   - no_reachable_demand：有需求但都到不了/没有可用供给（见 unreachable_cooldowns）；
+	//   - last_aborted：上一单被中止（端点消失/不属于本玩家），详见 IdleDetail。
+	// 客户端选中条据此说明机器人为什么空转（试玩 1016 一般 2）。
+	IdleReason string `json:"idle_reason,omitempty"`
+	// IdleDetail 空闲原因的补充文案（中文，例如上一单的中止原因）。
+	IdleDetail string `json:"idle_detail,omitempty"`
+}
+
+// HaulIdleReason 自动模式空闲原因（unit haul.idle_reason）。
+type HaulIdleReason string
+
+const (
+	HaulIdleNoDemand           HaulIdleReason = "no_demand"
+	HaulIdleCargoNoDestination HaulIdleReason = "cargo_no_destination"
+	HaulIdleNoReachableDemand  HaulIdleReason = "no_reachable_demand"
+	HaulIdleLastAborted        HaulIdleReason = "last_aborted"
+)
+
+// SetIdleReason 记录空闲原因（自动模式空转时由派单/收尾路径写入）。
+func (h *UnitHaulState) SetIdleReason(reason HaulIdleReason, detail string) {
+	if h == nil {
+		return
+	}
+	h.IdleReason = string(reason)
+	h.IdleDetail = detail
+}
+
+// ClearIdleReason 有任务或重新派单时清掉空闲原因。
+func (h *UnitHaulState) ClearIdleReason() {
+	if h == nil {
+		return
+	}
+	h.IdleReason = ""
+	h.IdleDetail = ""
 }
 
 // Clone returns a deep copy of the haul state for read-only snapshots.
@@ -146,6 +185,8 @@ func (h *UnitHaulState) ClearRoute() {
 	h.ItemID = ""
 	h.Phase = ""
 	h.Claim = nil
+	h.IdleReason = ""
+	h.IdleDetail = ""
 }
 
 // ClearHaul 停止：清空当前任务并进入待命模式。车上货物保留（玩家重新下令后继续用）。

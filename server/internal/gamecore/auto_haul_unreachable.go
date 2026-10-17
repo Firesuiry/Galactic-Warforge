@@ -63,7 +63,7 @@ func haulWaitForRoute(robot *model.Unit, travelPhase model.HaulPhase) {
 func haulGiveUpUnreachable(ws *model.WorldState, robot *model.Unit, building *model.Building) []*model.GameEvent {
 	haul := robot.Haul
 	cargoItem := haul.Cargo.ItemID
-	haulMarkUnreachable(haul, building.ID, ws.Tick)
+	haulCooldownBuilding(haul, building.ID, ws.Tick)
 	haul.ClearRoute()
 	haul.Phase = model.HaulPhaseIdle
 	haul.UnreachableAttempts = 0
@@ -84,8 +84,13 @@ func haulGiveUpUnreachable(ws *model.WorldState, robot *model.Unit, building *mo
 			"message":     fmt.Sprintf("%s：%s", unitDisplayName(robot), reason),
 		},
 	}}
-	if alertEvent := raiseHaulUnreachableAlert(ws, robot, building); alertEvent != nil {
-		events = append(events, alertEvent)
+	// 分拣器喂料的机器本来就不该派单（haulDemands 已跳过），但冷却期内仍可能
+	// 被别的路径选中：这类建筑放弃时静默（不发 haul_unreachable 告警），
+	// 否则 DSP 式布局会把告警条刷满（试玩 1016 一般 3）。
+	if !haulHasSorterInput(ws, building) {
+		if alertEvent := raiseHaulUnreachableAlert(ws, robot, building); alertEvent != nil {
+			events = append(events, alertEvent)
+		}
 	}
 	// 车上的货不能凭空消失：优先送给另一台缺同种原料的建筑，否则送回最近仓储。
 	// 改派在这里立即生效（派单 tick 时调用方会跳过本 tick 的重新派单）。
@@ -101,8 +106,17 @@ func haulGiveUpUnreachable(ws *model.WorldState, robot *model.Unit, building *mo
 	return events
 }
 
-// haulMarkUnreachable 给建筑记一条本机器人的冷却。
-func haulMarkUnreachable(haul *model.UnitHaulState, buildingID string, tick int64) {
+// haulHasSorterInput 该建筑是否已有己方运行中分拣器的放货端对着它（不需要机器人）。
+func haulHasSorterInput(ws *model.WorldState, building *model.Building) bool {
+	if ws == nil || building == nil {
+		return false
+	}
+	return haulSorterFedBuildings(ws, building.OwnerID)[building.ID]
+}
+
+// haulCooldownBuilding 给建筑记一条本机器人的冷却（「到不了」与「任务中止」
+// 共用同一张表：冷却期内派单/改派都跳过它）。
+func haulCooldownBuilding(haul *model.UnitHaulState, buildingID string, tick int64) {
 	if haul == nil || buildingID == "" {
 		return
 	}

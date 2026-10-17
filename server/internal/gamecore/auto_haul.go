@@ -96,6 +96,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 		haul.ToBuildingID = claim.DemandBuildingID
 		haul.ItemID = claim.ItemID
 		haul.Phase = model.HaulPhaseToTarget
+		haul.ClearIdleReason()
 		return []*model.GameEvent{haulTaskEvent(robot, "auto_haul_deliver")}
 	}
 	// 车上有货但眼下无处可送：只允许「带货改派」，绝不派普通单——普通单会去
@@ -104,15 +105,17 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	// 重试一次，不是每 tick 全图扫描）。
 	if haul.CargoQuantity() > 0 {
 		haulClearTask(robot)
+		haul.SetIdleReason(model.HaulIdleCargoNoDestination, "")
 		return nil
 	}
 
-	demands := haulDemands(ws, claims)
+	demands := haulDemands(ws, claims, robot.OwnerID)
 	if len(demands) == 0 {
 		haulClearTask(robot)
+		haul.SetIdleReason(model.HaulIdleNoDemand, "")
 		return nil
 	}
-	supplies := haulSupplies(ws, claims)
+	supplies := haulSupplies(ws, claims, robot.OwnerID)
 
 	served := haulServedCounts(ws)
 	bestDemand := -1
@@ -139,6 +142,8 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	}
 	if bestDemand < 0 {
 		haulClearTask(robot)
+		// 有需求但都不可达/供给不可用：写明原因，客户端据此解释空转。
+		haul.SetIdleReason(model.HaulIdleNoReachableDemand, "")
 		return nil
 	}
 	demand := demands[bestDemand]
@@ -154,6 +159,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	haul.ToBuildingID = demand.buildingID
 	haul.ItemID = demand.itemID
 	haul.Phase = model.HaulPhaseToSource
+	haul.ClearIdleReason()
 	return []*model.GameEvent{haulTaskEvent(robot, "auto_haul_assigned")}
 }
 
@@ -173,7 +179,7 @@ func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulCl
 	if _, ok := model.Item(itemID); !ok {
 		return nil
 	}
-	demands := haulDemands(ws, claims)
+	demands := haulDemands(ws, claims, robot.OwnerID)
 	for _, demand := range demands {
 		if demand.itemID != itemID {
 			continue
@@ -296,16 +302,29 @@ func haulServedCounts(ws *model.WorldState) map[string]int {
 }
 
 // haulDemands 本行星己方、已通电、设了配方的生产建筑的未认领缺料清单（稳定顺序）。
-func haulDemands(ws *model.WorldState, claims *haulClaimBook) []haulDemand {
-	if ws == nil {
+//
+// ownerID 是派单机器人所属玩家：只服务**自己的**建筑（试玩 1016 严重 1：旧实现
+// 遍历全图建筑，p1 机器人被派去给 p2 的熔炉送矿，每 tick abort → fallback 又选回
+// 同一座，永久空转）。
+func haulDemands(ws *model.WorldState, claims *haulClaimBook, ownerID string) []haulDemand {
+	if ws == nil || ownerID == "" {
 		return nil
 	}
 	// 供电视图取一次（同一 tick 内复用）：逐建筑重复构建快照在 50 座建筑的
 	// 场景里是纯浪费（CurrentPowerSettlementSnapshot 在快照缺失时会整表重建）。
 	power := model.CurrentPowerSettlementSnapshot(ws)
+	// 已有分拣器喂料的机器不需要机器人（DSP 式布局里熔炉本来就被分拣器/带子
+	// 围死，机器人挤不进去；试玩 1016 一般 3 的 haul_unreachable 噪音）。
+	sorterFed := haulSorterFedBuildings(ws, ownerID)
 	ids := make([]string, 0, len(ws.Buildings))
 	for id, building := range ws.Buildings {
 		if building == nil || building.HP <= 0 || building.Storage == nil {
+			continue
+		}
+		if building.OwnerID != ownerID {
+			continue
+		}
+		if sorterFed[id] {
 			continue
 		}
 		if building.Production == nil || building.Production.RecipeID == "" {
@@ -359,6 +378,36 @@ func haulDemands(ws *model.WorldState, claims *haulClaimBook) []haulDemand {
 	}
 	return demands
 }
+// haulSorterFedBuildings 己方「已有分拣器喂料」的建筑集合：某台运行中的分拣器
+// 的**放货端**落在这座建筑上（sorterFindEndpoint 对建筑要求 Storage 非空且
+// 目标与分拣器同属主）。DSP 式布局里熔炉/制造台本来就被分拣器与带子围死，
+// 机器人既挤不进去也不需要进去——这类建筑不派自动运输单（试玩 1016 一般 3）。
+//
+// 只看「有没有分拣器喂」这一个结构事实，不看分拣器当前是否真的有货：
+// 断料的产线由玩家/分拣器自己解决，机器人不抢分拣器的活。
+func haulSorterFedBuildings(ws *model.WorldState, ownerID string) map[string]bool {
+	fed := map[string]bool{}
+	if ws == nil || ownerID == "" {
+		return fed
+	}
+	for _, sorter := range ws.Buildings {
+		if sorter == nil || sorter.Sorter == nil || sorter.OwnerID != ownerID {
+			continue
+		}
+		if sorter.Runtime.State != model.BuildingWorkRunning {
+			continue
+		}
+		for _, link := range sorterOutputEndpoints(ws, sorter, sorter.Sorter) {
+			target := ws.Buildings[link.id]
+			if target == nil || target.Conveyor != nil {
+				continue
+			}
+			fed[link.id] = true
+		}
+	}
+	return fed
+}
+
 // haulDemandGap 单种原料的未认领缺口：目标库存 −（主库存 + 输入缓冲 + 已认领）。
 // 目标库存 = 2 批用量，且不超过「产出预留后的可用容量 + 输入缓冲空位」。
 func haulDemandGap(building *model.Building, input model.ItemAmount, claimed int) int {
@@ -409,16 +458,21 @@ func haulStarvedBuildings(ws *model.WorldState, demands []haulDemand) map[string
 	return starved
 }
 
-// haulSupplies 本行星的未认领供给清单（稳定顺序）：
+// haulSupplies 本行星己方的未认领供给清单（稳定顺序）：
 //   - 仓储类建筑（储物仓/储液罐、物流站库存）的主库存；
 //   - 生产/采集建筑的输出缓冲成品（只取成品，绝不从生产建筑主库存拿原料）。
-func haulSupplies(ws *model.WorldState, claims *haulClaimBook) []haulSupply {
-	if ws == nil {
+//
+// ownerID 是派单机器人所属玩家：绝不从敌方建筑取货（试玩 1016 严重 1）。
+func haulSupplies(ws *model.WorldState, claims *haulClaimBook, ownerID string) []haulSupply {
+	if ws == nil || ownerID == "" {
 		return nil
 	}
 	ids := make([]string, 0, len(ws.Buildings))
 	for id, building := range ws.Buildings {
 		if building == nil || building.HP <= 0 || building.Storage == nil {
+			continue
+		}
+		if building.OwnerID != ownerID {
 			continue
 		}
 		if building.Job != nil && building.Job.Type == model.BuildingJobDemolish {
@@ -565,7 +619,7 @@ func haulDeliveryFallback(ws *model.WorldState, robot *model.Unit, itemID string
 		return nil
 	}
 	book := haulClaims(ws)
-	for _, demand := range haulDemands(ws, book) {
+	for _, demand := range haulDemands(ws, book, robot.OwnerID) {
 		if demand.itemID != itemID {
 			continue
 		}

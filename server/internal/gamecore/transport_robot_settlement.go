@@ -117,7 +117,7 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) ([]*model.Gam
 	source := ws.Buildings[haul.FromBuildingID]
 	target := ws.Buildings[haul.ToBuildingID]
 	if reason := haulEndpointLost(source, haul.FromBuildingID, target, haul.ToBuildingID, robot.OwnerID); reason != "" {
-		return abortHaul(ws, robot, reason), nil
+		return abortHaul(ws, robot, haul.FromBuildingID, haul.ToBuildingID, reason), nil
 	}
 
 	switch haul.Phase {
@@ -173,6 +173,15 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) ([]*model.Gam
 	}
 }
 
+// haulEndpointUsable 该建筑此刻能否作为本机器人的端点：存在、属于自己、未被摧毁。
+func haulEndpointUsable(ws *model.WorldState, buildingID, ownerID string) bool {
+	if ws == nil || buildingID == "" {
+		return false
+	}
+	building := ws.Buildings[buildingID]
+	return building != nil && building.HP > 0 && building.OwnerID == ownerID
+}
+
 // haulEndpointLost 检查任务两端是否仍然可用，返回中文原因（空串表示正常）。
 // sourceID 为空（自动模式下货已在车上、没有取货端）时跳过起点检查。
 func haulEndpointLost(source *model.Building, sourceID string, target *model.Building, targetID, ownerID string) string {
@@ -208,7 +217,7 @@ func haulEndpointLost(source *model.Building, sourceID string, target *model.Bui
 // 车上的货留在车上（不凭空消失）：route 模式下玩家重新指定路线后继续用；
 // auto 模式下立刻按「带在身上的货去哪」重新派单（另一台缺同种原料的建筑，
 // 否则最近的仓储，都没有就带着货待命，见 §2.1）。
-func abortHaul(ws *model.WorldState, robot *model.Unit, reason string) []*model.GameEvent {
+func abortHaul(ws *model.WorldState, robot *model.Unit, sourceID, targetID, reason string) []*model.GameEvent {
 	haul := robot.Haul
 	cargoItem := ""
 	if haul != nil {
@@ -218,6 +227,16 @@ func abortHaul(ws *model.WorldState, robot *model.Unit, reason string) []*model.
 		// 释放认领：本趟的供给/需求都不再算在途量，其它机器人可以接手。
 		haul.ClearRoute()
 		haul.Phase = model.HaulPhaseIdle
+		// 同一座建筑立刻被 fallback 重新选中会形成 abort → 改派 → abort 的
+		// 每 tick 死循环（试玩 1016 严重 1 的表象）：给**失效的那一端**记一条
+		// 本机器人冷却（仍然存在的己方端点不记，避免把好好的仓储也拉黑）。
+		if sourceID != "" && !haulEndpointUsable(ws, sourceID, robot.OwnerID) {
+			haulCooldownBuilding(haul, sourceID, ws.Tick)
+		}
+		if targetID != "" && !haulEndpointUsable(ws, targetID, robot.OwnerID) {
+			haulCooldownBuilding(haul, targetID, ws.Tick)
+		}
+		haul.SetIdleReason(model.HaulIdleLastAborted, reason)
 	} else if haul != nil {
 		haul.ClearHaul()
 	}
@@ -242,6 +261,8 @@ func abortHaul(ws *model.WorldState, robot *model.Unit, reason string) []*model.
 			haul.ToBuildingID = claim.DemandBuildingID
 			haul.ItemID = claim.ItemID
 			haul.Phase = model.HaulPhaseToTarget
+			// 改派成功：空闲原因换成「上一单中止」的文案（仍要告诉玩家发生了什么）。
+			haul.SetIdleReason(model.HaulIdleLastAborted, reason)
 			events = append(events, haulTaskEvent(robot, "auto_haul_deliver"))
 		}
 	}
