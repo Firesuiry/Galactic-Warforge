@@ -36,7 +36,7 @@ cd client-cli && npm run dev
 
 - 游戏命令走 `POST /commands`，同步返回只表示入队（`ACCEPTED request_id`）；最终结果看 SSE `command_result` 或 `event_snapshot --types command_result`。
 - 查询命令：`summary`/`stats`/`planet` 等为格式化摘要；`scene`、`inspect`、`catalog_commands` 输出原始 JSON；`fog` 用 `/scene` 渲染局部 ASCII 迷雾（默认窗口 `0 0 32 16`）。
-- `alert_snapshot` 与 `briefing` 的告警行按 `shared-client/src/alerts.ts` 的中文口径渲染（`formatAlertText`），不再打印 `alert_type` 枚举：`belt_blocked` 写「传送带堵塞 (12, 7)：5 件货 30 秒没动」（位置/件数取自 `details`，秒数按 tick 速率换算），其余类型写中文短标签（产能下降/堆积升高/原料短缺/产物阻塞/电力不足/出厂口被占满）。原始 `alert_type` 与 `message` 仍可从 `--json` 或 `GET /alerts/production/snapshot` 拿到。
+- `alert_snapshot` 与 `briefing` 的告警行按 `shared-client/src/alerts.ts` 的中文口径渲染（`formatAlertText`），不再打印 `alert_type` 枚举：`belt_blocked` 写「传送带堵塞 (12, 7)：5 件货 30 秒没动」（位置/件数取自 `details`，秒数按 tick 速率换算），其余类型写中文短标签（产能下降/堆积升高/原料短缺/产物阻塞/电力不足/出厂口被占满）；已解除的历史条目在行尾标「（已解除）」。服务端快照按「仍成立在前、最近发生 tick 倒序」返回，`--active-only` 只列仍成立的告警。原始 `alert_type` 与 `message` 仍可从 `--json` 或 `GET /alerts/production/snapshot` 拿到。
 - `stats.production_stats` 是所有已加载行星本 tick 的真实落库/落站产出；`by_item["minerals"]` 是直充矿物池的统计标签，不是物品。统计按玩家聚合所有已加载行星，焦点切换不改变总量。
 
 ## 行星路由（`--planet`）
@@ -74,7 +74,7 @@ audit --player <id> --issuer-type <type> --issuer-id <id> --action <action> --re
       --permission <permission> --granted <true|false> --from-tick <n> --to-tick <n> \
       --from-time <rfc3339> --to-time <rfc3339> --limit <n> --order <asc|desc>
 event_snapshot --types <a,b,c> --all --after-id <id> --since-tick <n> --limit <n>
-alert_snapshot --after-id <id> --since-tick <n> --limit <n>
+alert_snapshot --after-id <id> --since-tick <n> --active-only --limit <n>
 save [--reason <text>]                       # 刷新 server.data_dir 下的 save.json，不建多槽位
 checkpoint list                              # 列出命名存档点（任意登录玩家）
 checkpoint save <name> [--note <text>] [--contract <file.json>] [--replace]
@@ -250,7 +250,7 @@ agent_thread agent-war-director
 | `raw` | `raw <json>` | Send raw /commands request JSON |
 | `audit` | `audit [options]` | Query audit log |
 | `event_snapshot` | `event_snapshot [options]` | Query event snapshot |
-| `alert_snapshot` | `alert_snapshot [options]` | Query production alert snapshot |
+| `alert_snapshot` | `alert_snapshot [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | Query production alert snapshot（仍成立在前、最新在前；--active-only 只看仍成立的） |
 | `replay` | `replay [options]` | Replay tick range |
 | `rollback` | `rollback [options]` | Rollback to tick |
 | `advance` | `advance <ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]` | 狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下 |

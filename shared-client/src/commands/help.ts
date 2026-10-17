@@ -101,7 +101,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   status: { desc: 'Current player and connection status' },
   audit: { usage: '[options]', desc: 'Query audit log' },
   event_snapshot: { usage: '[options]', desc: 'Query event snapshot' },
-  alert_snapshot: { usage: '[options]', desc: 'Query production alert snapshot' },
+  alert_snapshot: { usage: '[--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]', desc: 'Query production alert snapshot（仍成立在前、最新在前；--active-only 只看仍成立的）' },
   save: { usage: '[--reason <text>]', desc: 'Trigger manual save' },
   checkpoint: { usage: '<list|save <name>|load <name>> [--note <text>] [--contract <file.json>] [--replace]', desc: '命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin）' },
   advance: { usage: '<ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]', desc: '狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下' },

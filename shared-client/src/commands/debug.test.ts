@@ -32,6 +32,37 @@ describe('save command', () => {
 });
 
 describe('alert_snapshot 中文文案', () => {
+  it('--active-only 透传 active_only，已解除条目标「（已解除）」', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const out = await cmdAlertSnapshot(['--active-only', '--limit', '5'], {
+      api: {
+        fetchAlertSnapshot: async (params: Record<string, unknown>) => {
+          calls.push(params);
+          return {
+            available_from_tick: 1,
+            has_more: false,
+            alerts: [
+              {
+                alert_id: 'a-active', tick: 400, player_id: 'p1', building_id: 'b-9',
+                building_type: 'arc_smelter', alert_type: 'output_blocked',
+                severity: 'warning', message: '建筑 b-9：产物阻塞', metrics: {}, details: {},
+              },
+              {
+                alert_id: 'a-resolved', tick: 100, player_id: 'p1', building_id: 'b-1',
+                building_type: 'arc_smelter', alert_type: 'output_blocked',
+                severity: 'warning', message: '建筑 b-1：产物阻塞', metrics: {}, details: {},
+                active: false, resolved_tick: 200,
+              },
+            ],
+          };
+        },
+      },
+    } as never);
+    assert.deepEqual(calls[0], { after_alert_id: undefined, since_tick: undefined, active_only: true, limit: 5 });
+    assert.match(out, /产物阻塞/);
+    assert.match(out, /（已解除）/);
+  });
+
   it('传送带堵塞带位置/件数/时长，不裸显 belt_blocked', async () => {
     const out = await cmdAlertSnapshot([], {
       api: {

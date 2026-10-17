@@ -143,6 +143,7 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
     return `alert_snapshot [options]
   --after-id <id>    After alert ID
   --since-tick <n>   Since tick
+  --active-only      Only alerts that still hold (active=true)
   --limit <n>        Max alerts (default 200)`;
   }
 
@@ -150,6 +151,7 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
     const result = await api.fetchAlertSnapshot({
       after_alert_id: getStringOption(parsed, 'after-id'),
       since_tick: parseOptionalInteger(getStringOption(parsed, 'since-tick'), 'since-tick'),
+      active_only: hasFlag(parsed, 'active-only') ? true : undefined,
       limit: parseOptionalInteger(getStringOption(parsed, 'limit'), 'limit'),
     });
     if (result.alerts.length === 0) {
@@ -162,7 +164,9 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
       result.has_more ? chalk.dim('(more alerts available)') : '',
       '',
     ];
-    for (const alert of result.alerts.slice(-20)) {
+    // 服务端快照已按「仍成立在前、最新在前」排好；终端只列前 20 条（最紧要的在前），
+    // 不再像旧实现那样取尾部。
+    for (const alert of result.alerts.slice(0, 20)) {
       const severity = alert.severity === 'critical'
         ? chalk.red(alert.severity)
         : alert.severity === 'warning'
@@ -170,7 +174,9 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
           : chalk.dim(alert.severity);
       // 中文口径走 shared alerts：绝不裸显 belt_blocked 这类枚举 id，
       // 传送带堵塞还要带上位置/件数/停顿时长（与 Web 警报条同一份文案）。
-      lines.push(`[t${alert.tick}] ${severity} ${chalk.yellow(formatAlertText(alert))}`);
+      // 服务端快照仍成立的在前、最新在前；已解除的条目留在历史里，标「已解除」。
+      const state = alert.active === false ? chalk.dim('（已解除）') : '';
+      lines.push(`[t${alert.tick}] ${severity} ${chalk.yellow(formatAlertText(alert))}${state}`);
       lines.push(`    building=${alert.building_id} type=${alert.building_type}`);
     }
     if (result.next_alert_id) {
