@@ -1,6 +1,6 @@
 {
   "parent": "cp-post-attack",
-  "note": "第 19 轮改写（可执行）：从 cp-post-attack（tick 62000）读档，只用玩家命令把步兵扩到 10 个并补弹：从补给站 b-105 取铁块、b-97 取铜块，手搓电路板 4，铁块 8 + 电路板 4 装进兵营 b-142，连下 4 条 produce；再从 b-79 取子弹装进补给站 b-152。料全部来自自家产线（补给站存货）。契约：步兵 ≥10、兵营 running ≥1、补给站 ≥3、电磁学已完成、对局未结束。下一层 cp-near-hive 从这里把军团开到黑雾巢穴外。",
+  "note": "第 19 轮改写（可执行）：从 cp-post-attack（tick 62000）读档，只用玩家命令把步兵扩到 10 个并补弹：从补给站 b-105 取铁块、b-97 取铜块，手搓电路板 4，铁块 8 + 电路板 4 装进兵营 b-142，连下 4 条 produce；再从 b-79 取子弹装进补给站 b-152。料全部来自自家产线（补给站存货）。契约：步兵 ≥10、兵营 running ≥1、补给站 ≥3、(48,143) 的补给站里 ≥10 发子弹（补弹真的落到站里，不是只过一手）、电磁学已完成、对局未结束。下一层 cp-near-hive 从这里把军团开到黑雾巢穴外。",
   "steps": [
     {"advance_to_tick": 62010},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-105", "item_id": "iron_ingot", "quantity": 14, "direction": "to_player"}}},
@@ -25,6 +25,7 @@
     {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 10},
     {"kind": "building_running_gte", "player": "p1", "type": "barracks", "n": 1},
     {"kind": "building_running_gte", "player": "p1", "type": "supply_station", "n": 3},
+    {"kind": "building_item_at_gte", "player": "p1", "position": {"x": 48, "y": 143, "z": 0}, "item_id": "ammo_bullet", "n": 10},
     {"kind": "tech_researched", "player": "p1", "tech_id": "electromagnetism"}
   ]}
 }
