@@ -1,9 +1,9 @@
 {
   "parent": "cp-lab",
-  "note": "cp-matrix-line（第 16 轮改写）：从 cp-lab（tick 1824）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并让货真的送进研究站。布局：制造台 Mk.I b-98@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器 b-100@(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器 b-111@(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-92@(62,146) 的占地）。两台分拣器都配 allow 过滤 electromagnetic_matrix。电力：新增电力感应塔 b-112@(66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从铜熔炉 b-67 取铜块 14、铁熔炉 b-55 取铁块 4、铁矿机 b-49 取铁矿 8，手搓 电路板×9、磁铁×8、磁线圈×4 批（产出 8；其中 1 个用于电力感应塔），分四轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥8（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警——每轮投料后顺手取走两台电弧熔炉的成品，因为熔炉输出缓冲满了就停产，上游矿线的带子随后会被堵死并报 belt_blocked（`no_alert_since` 的 tick 取 cp-lab 的落点 tick 1824，本层及之后都不许再出现）。",
+  "note": "cp-matrix-line（第 17 轮改写）：从 cp-lab（tick 8643）读档，只用玩家命令（p1）把电磁矩阵（electromagnetic_matrix）产线接通，并让货真的送进研究站。布局：制造台 Mk.I b-126@(62,151)（配方 电磁矩阵：磁线圈1+电路板1 → 矩阵1）→ 分拣器(65,151) rot90（背面=西，从制造台占地取货；正面=东，投到带子上）→ 传送带 (66,151) 北 → (66,150) 西 → (65,150) 西 → (64,150) 西 → (63,150) 西（带尾）→ 分拣器(63,149) rot0（背面=南，从带尾取货；正面=北，投进矩阵研究站 b-118@(62,146) 的占地）。两只分拣器不再配过滤：取货端分别是制造台输出缓冲与只跑矩阵的带子，本来就只会拿到矩阵。电力：新增电力感应塔 (66,152)，无线覆盖把 (62,151) 的装配台与 (65,146) 的风机/研究站并进同一张网。原料全由玩家自己挣：从 cp-base 的出货补给站 b-105@(65,143)（铁）与 b-97@(41,142)（铜）取锭，从铁矿机 b-49 取少量铁矿手搓磁铁/线圈，手搓 电路板×12、磁铁×2、磁线圈×2 批（产出 4）。分四轮投进装配台（每轮 2 磁线圈 + 2 电路板 → 2 个矩阵）。契约：研究站里真有矩阵 ≥8（building_item_gte 看建筑库存，证明货是经分拣器/带子送进去的，不是手装的），产线上的传送带自本层起没有 belt_blocked 告警（`no_alert_since` 的 tick 取 cp-lab 的落点 tick 8100）。",
   "steps": [
     {
-      "advance_to_tick": 1900
+      "advance_to_tick": 8719
     },
     {
       "cmd": {
@@ -11,13 +11,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-67"
+          "entity_id": "b-105"
         },
         "payload": {
-          "building_id": "b-67",
-          "direction": "to_player",
-          "item_id": "copper_ingot",
-          "quantity": 14
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 40,
+          "direction": "to_player"
         }
       }
     },
@@ -27,13 +27,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-55"
+          "entity_id": "b-97"
         },
         "payload": {
-          "building_id": "b-55",
-          "direction": "to_player",
-          "item_id": "iron_ingot",
-          "quantity": 4
+          "building_id": "b-97",
+          "item_id": "copper_ingot",
+          "quantity": 20,
+          "direction": "to_player"
         }
       }
     },
@@ -47,9 +47,9 @@
         },
         "payload": {
           "building_id": "b-49",
-          "direction": "to_player",
           "item_id": "iron_ore",
-          "quantity": 8
+          "quantity": 4,
+          "direction": "to_player"
         }
       }
     },
@@ -62,19 +62,64 @@
           "entity_id": "u-40"
         },
         "payload": {
-          "recipe_id": "circuit_board",
-          "quantity": 9
+          "recipe_id": "gear",
+          "quantity": 8
         }
       }
     },
     {
-      "wait_until": {
-        "kind": "item_gte",
-        "player": "p1",
-        "item_id": "circuit_board",
-        "n": 14
-      },
-      "timeout_ticks": 1200
+      "advance_to_tick": 8950
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 12
+        }
+      }
+    },
+    {
+      "advance_to_tick": 9350
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_magnet",
+          "quantity": 2
+        }
+      }
+    },
+    {
+      "advance_to_tick": 9500
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "magnetic_coil",
+          "quantity": 2
+        }
+      }
+    },
+    {
+      "advance_to_tick": 9600
     },
     {
       "cmd": {
@@ -83,7 +128,8 @@
           "layer": "planet",
           "position": {
             "x": 62,
-            "y": 151
+            "y": 151,
+            "z": 0
           }
         },
         "payload": {
@@ -99,7 +145,8 @@
           "layer": "planet",
           "position": {
             "x": 65,
-            "y": 151
+            "y": 151,
+            "z": 0
           }
         },
         "payload": {
@@ -115,7 +162,8 @@
           "layer": "planet",
           "position": {
             "x": 66,
-            "y": 151
+            "y": 151,
+            "z": 0
           }
         },
         "payload": {
@@ -131,7 +179,8 @@
           "layer": "planet",
           "position": {
             "x": 66,
-            "y": 150
+            "y": 150,
+            "z": 0
           }
         },
         "payload": {
@@ -147,7 +196,8 @@
           "layer": "planet",
           "position": {
             "x": 65,
-            "y": 150
+            "y": 150,
+            "z": 0
           }
         },
         "payload": {
@@ -163,7 +213,8 @@
           "layer": "planet",
           "position": {
             "x": 64,
-            "y": 150
+            "y": 150,
+            "z": 0
           }
         },
         "payload": {
@@ -179,7 +230,8 @@
           "layer": "planet",
           "position": {
             "x": 63,
-            "y": 150
+            "y": 150,
+            "z": 0
           }
         },
         "payload": {
@@ -195,7 +247,8 @@
           "layer": "planet",
           "position": {
             "x": 63,
-            "y": 149
+            "y": 149,
+            "z": 0
           }
         },
         "payload": {
@@ -211,13 +264,17 @@
           "layer": "planet",
           "position": {
             "x": 66,
-            "y": 152
+            "y": 152,
+            "z": 0
           }
         },
         "payload": {
           "building_type": "tesla_tower"
         }
       }
+    },
+    {
+      "advance_to_tick": 9750
     },
     {
       "wait_until": {
@@ -229,94 +286,27 @@
       "timeout_ticks": 900
     },
     {
-      "cmd": {
-        "type": "configure_sorter",
-        "target": {
-          "layer": "planet",
-          "entity_id": "b-100"
-        },
-        "payload": {
-          "filter_mode": "allow",
-          "filter_items": [
-            "electromagnetic_matrix"
-          ]
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "configure_sorter",
-        "target": {
-          "layer": "planet",
-          "entity_id": "b-111"
-        },
-        "payload": {
-          "filter_mode": "allow",
-          "filter_items": [
-            "electromagnetic_matrix"
-          ]
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "recipe_id": "smelt_magnet",
-          "quantity": 8
-        }
-      }
-    },
-    {
       "wait_until": {
-        "kind": "item_gte",
+        "kind": "building_running_gte",
         "player": "p1",
-        "item_id": "magnet",
-        "n": 8
+        "type": "matrix_lab",
+        "n": 1
       },
       "timeout_ticks": 900
     },
     {
       "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
-          "recipe_id": "magnetic_coil",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "wait_until": {
-        "kind": "item_gte",
-        "player": "p1",
-        "item_id": "magnetic_coil",
-        "n": 8
-      },
-      "timeout_ticks": 600
-    },
-    {
-      "cmd": {
         "type": "transfer_item",
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-98"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -326,13 +316,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-98"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "circuit_board",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -344,7 +334,7 @@
         "item_id": "electromagnetic_matrix",
         "n": 2
       },
-      "timeout_ticks": 900
+      "timeout_ticks": 1200
     },
     {
       "cmd": {
@@ -352,45 +342,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-55"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-55",
-          "direction": "to_player",
-          "item_id": "iron_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-67"
-        },
-        "payload": {
-          "building_id": "b-67",
-          "direction": "to_player",
-          "item_id": "copper_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-98"
-        },
-        "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -400,13 +358,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-98"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "circuit_board",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -418,7 +376,7 @@
         "item_id": "electromagnetic_matrix",
         "n": 4
       },
-      "timeout_ticks": 900
+      "timeout_ticks": 1200
     },
     {
       "cmd": {
@@ -426,45 +384,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-55"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-55",
-          "direction": "to_player",
-          "item_id": "iron_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-67"
-        },
-        "payload": {
-          "building_id": "b-67",
-          "direction": "to_player",
-          "item_id": "copper_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-98"
-        },
-        "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -474,13 +400,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-98"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "circuit_board",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -492,7 +418,7 @@
         "item_id": "electromagnetic_matrix",
         "n": 6
       },
-      "timeout_ticks": 900
+      "timeout_ticks": 1200
     },
     {
       "cmd": {
@@ -500,45 +426,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-55"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-55",
-          "direction": "to_player",
-          "item_id": "iron_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-67"
-        },
-        "payload": {
-          "building_id": "b-67",
-          "direction": "to_player",
-          "item_id": "copper_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-98"
-        },
-        "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "magnetic_coil",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -548,13 +442,13 @@
         "target": {
           "layer": "planet",
           "planet_id": "planet-1-1",
-          "entity_id": "b-98"
+          "entity_id": "b-126"
         },
         "payload": {
-          "building_id": "b-98",
-          "direction": "to_building",
+          "building_id": "b-126",
           "item_id": "circuit_board",
-          "quantity": 2
+          "quantity": 2,
+          "direction": "to_building"
         }
       }
     },
@@ -566,39 +460,7 @@
         "item_id": "electromagnetic_matrix",
         "n": 8
       },
-      "timeout_ticks": 900
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-55"
-        },
-        "payload": {
-          "building_id": "b-55",
-          "direction": "to_player",
-          "item_id": "iron_ingot",
-          "quantity": 4
-        }
-      }
-    },
-    {
-      "cmd": {
-        "type": "transfer_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-67"
-        },
-        "payload": {
-          "building_id": "b-67",
-          "direction": "to_player",
-          "item_id": "copper_ingot",
-          "quantity": 4
-        }
-      }
+      "timeout_ticks": 1200
     }
   ],
   "contract": {
@@ -632,7 +494,7 @@
       {
         "kind": "no_alert_since",
         "alert_type": "belt_blocked",
-        "tick": 1824
+        "tick": 8643
       }
     ]
   }

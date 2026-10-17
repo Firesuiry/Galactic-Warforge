@@ -3,7 +3,7 @@
   "note": "cp-research-start（第 16 轮改写）：从 cp-matrix-line（tick 3790）读档，只用玩家命令（p1）把「电磁学」研究开起来并跑完。读档时矩阵研究站 b-92@(62,146) 里已有 8 个电磁矩阵（cp-matrix-line 经分拣器/带子送进去的），start_research 立刻把研究站库存里的矩阵当作研究耗材吃掉，进度 8/20（blocked_reason 从 waiting_matrix 变空 —— wait_until research_progress_gte 就是「研究确实在推进、不是卡在等矩阵」的可执行断言）。随后补齐剩余 12 个矩阵：从铁矿机 b-49 取铁矿 24、铜矿机 b-59 取铜矿 4，机甲手搓 磁铁×12 → 磁线圈×6 批（产出 12）、铜块×4（补到 21）→ 与背包里的铁块一起手搓 电路板×12，分六轮投进制造台 Mk.I b-98@(62,151)，每轮产 2 个矩阵经「分拣器 b-100 → 传送带 → 分拣器 b-111」自动送进研究站，进度 8→10→…→18，第六轮投料后进度满 20——服务端在那一刻把 CurrentResearch 清空并落 research_completed 事件，所以这一轮的落点用 tech_researched 断言（research_progress_gte(20) 在完成瞬间就再也看不到了），CompletedTechs.electromagnetism=1。每轮投料后顺手取走两台电弧熔炉的成品（熔炉输出缓冲满了就停产、上游矿线带子随后被堵死并报 belt_blocked）。契约：电磁学已完成（tech_researched）、研究站与两台制造台仍在运行、产线自本层起没有 belt_blocked 告警（`no_alert_since` 的 tick 取 cp-matrix-line 的落点 tick 3790）。",
   "steps": [
     {
-      "advance_to_tick": 3800
+      "advance_to_tick": 9635
     },
     {
       "cmd": {
@@ -584,7 +584,7 @@
       {
         "kind": "no_alert_since",
         "alert_type": "belt_blocked",
-        "tick": 3790
+        "tick": 9625
       }
     ]
   }

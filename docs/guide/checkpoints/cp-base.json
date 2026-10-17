@@ -1,6 +1,6 @@
 {
   "parent": "cp-base-a",
-  "note": "L4 cp-base（脚本化重建）：从 cp-base-a 读档，落地制造台 Mk.I（配方 gear），齿轮产线起点，基地成型。契约沿用旧 cp-base 的口径（熔炉与制造台必须 running）。 构建记录为**脚本化兜底**（`checkpointbuild -generate` 产出，第 16 轮分拣器布局）：第 16 轮把矿物货币删掉、生产建筑只能经分拣器进出货，旧存档点全部作废；待第 16 轮纯 UI 从 cp-root 试玩的审计日志导出后，用 `-export -write` 覆盖本文件。",
+  "note": "L4 cp-base（脚本化重建）：从 cp-base-a 读档，落地制造台 Mk.I（配方 gear），齿轮产线起点，基地成型。第 17 轮修好两条矿线（试玩 1016 问题 1 的根因）：铁熔炉 b-55@(62,140) 与铜熔炉 b-67@(45,140) 原来只进不出——成品攒满输出缓冲后熔炉停产（output_blocked），上游矿带随即整段堵死（belt_blocked）。本层在记录末尾追加两条出料链（全部用玩家自己取/采/搓的材料，没有任何管理员发料）：铁线 分拣器(63,143) rot180 从熔炉占地取成品 → 带(63,144) → 分拣器(64,144) rot90 → 补给站(65,143)；铜线 分拣器(45,143) rot180 → 带(45,144) → 分拣器(44,144) rot270 → 补给站(41,142)。东侧补给站离现有电塔 13 格、超出无线供电 12 格，所以补一台风力涡轮机 (68,143) 与它连线（3 格内）供电。材料：从铜矿机 b-59 取铜矿 8 手搓铜块 8；机甲走到石头矿脉 res-3012 旁手采石头 8 手搓石砖 8；再与背包里的铁块一起手搓电路板 8（4 个分拣器 + 2 个补给站）。补给站（而不是储物仓）是因为 depot_mk1 要等电磁学研究解锁，本层还建不了。追加的 9 座建筑排在记录末尾，原有建筑 ID（b-39..b-79）不变；下游层自建建筑 ID 会整体后移，需要同步更新。注意：采矿机 b-49/b-59 的产出速率（8/tick）远高于熔炉消耗（1/120 tick），矿机自身的输出缓冲仍会满、仍会报 output_blocked——这是「矿机产量 ≫ 单台熔炉消耗」的固有结果，不属于本层契约；契约只断言两条产线的带子与熔炉不再出现仍成立的 belt_blocked/output_blocked，并用 item_growth（共 3000 tick）证明锭真的在流进出货仓。末尾再补一段料：从矿机取铜矿 12/铁矿 12，手搓铜块 8、磁铁 8（背包已有 2 个）、磁线圈 3 批（产出 6），让本层落档时背包里有 9 个磁线圈（cp-lab 要拿 4 个建研究站、3 个建风机，旧 cp-base 落档时背包自带 6 个）。契约沿用旧 cp-base 的口径（熔炉与制造台必须 running）。",
   "build": [
     "快进到 tick 135",
     "机甲移动到 (53,138)",
@@ -11,7 +11,14 @@
     "快进到 tick 353",
     "机甲手搓 配方 circuit_board 数量 3",
     "快进到 tick 443",
-    "制造台 Mk.I (59,144) 配方 gear"
+    "制造台 Mk.I (59,144) 配方 gear",
+    "从铜矿机 b-59 取铜矿 8，机甲移动到 (49,134)",
+    "手动采集 矿脉 planet-1-1-res-3012 数量 8，手搓石砖×8",
+    "机甲手搓 铜块×8、电路板×8",
+    "铁熔炉出料链：分拣器(63,143) rot180 → 带(63,144) 向南 → 分拣器(64,144) rot90 → 补给站(65,143)",
+    "铜熔炉出料链：分拣器(45,143) rot180 → 带(45,144) 向南 → 分拣器(44,144) rot270 → 补给站(41,142)",
+    "风力涡轮机 (68,143) 给东侧补给站供电",
+    "推进 1200 + 1200 + 600 tick，断言两座补给站里的铁块/铜块继续增长（共 3000 tick）"
   ],
   "steps": [
     {
@@ -103,6 +110,581 @@
           "recipe_id": "gear"
         }
       }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-59",
+          "item_id": "copper_ore",
+          "quantity": 8,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "move",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40",
+          "position": {
+            "x": 49,
+            "y": 134,
+            "z": 0
+          }
+        },
+        "payload": {}
+      }
+    },
+    {
+      "advance_to_tick": 460
+    },
+    {
+      "cmd": {
+        "type": "mine_resource",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "resource_id": "planet-1-1-res-3012",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "stone_ore",
+        "n": 8
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_stone",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "stone_brick",
+        "n": 8
+      },
+      "timeout_ticks": 1500
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_copper",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 8
+      },
+      "timeout_ticks": 1500
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "circuit_board",
+        "n": 8
+      },
+      "timeout_ticks": 1500
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 143,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 180
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 3
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 144,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 3
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 144,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 270
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 4
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 41,
+            "y": 142,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 1
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 63,
+            "y": 143,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 180
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 5
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 63,
+            "y": 144,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 4
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 64,
+            "y": 144,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 90
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 6
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 65,
+            "y": 143,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 2
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 68,
+            "y": 143,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 3
+      },
+      "timeout_ticks": 600
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-59",
+          "item_id": "copper_ore",
+          "quantity": 12,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-49",
+          "item_id": "iron_ore",
+          "quantity": 12,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_copper",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 8
+      },
+      "timeout_ticks": 1500
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_magnet",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnet",
+        "n": 8
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "magnetic_coil",
+          "quantity": 3
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnetic_coil",
+        "n": 9
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-59",
+          "item_id": "copper_ore",
+          "quantity": 12,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-49",
+          "item_id": "iron_ore",
+          "quantity": 12,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_copper",
+          "quantity": 12
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 14
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_iron",
+          "quantity": 12
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 14
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 65,
+          "y": 143,
+          "z": 0
+        },
+        "item_id": "iron_ingot",
+        "growth": 2,
+        "advance_ticks": 1200
+      }
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 41,
+          "y": 142,
+          "z": 0
+        },
+        "item_id": "copper_ingot",
+        "growth": 2,
+        "advance_ticks": 1200
+      }
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 65,
+          "y": 143,
+          "z": 0
+        },
+        "item_id": "iron_ingot",
+        "growth": 2,
+        "advance_ticks": 600
+      }
     }
   ],
   "end_tick": 447,
@@ -136,6 +718,78 @@
       {
         "kind": "enemy_attack_seen",
         "player": "p1"
+      },
+      {
+        "kind": "building_no_alert_since",
+        "player": "p1",
+        "alert_type": "belt_blocked",
+        "tick": 447,
+        "position": {
+          "x": 60,
+          "y": 141,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_no_alert_since",
+        "player": "p1",
+        "alert_type": "belt_blocked",
+        "tick": 447,
+        "position": {
+          "x": 49,
+          "y": 141,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_no_alert_since",
+        "player": "p1",
+        "alert_type": "output_blocked",
+        "tick": 447,
+        "position": {
+          "x": 62,
+          "y": 140,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_no_alert_since",
+        "player": "p1",
+        "alert_type": "output_blocked",
+        "tick": 447,
+        "position": {
+          "x": 45,
+          "y": 140,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 2,
+        "position": {
+          "x": 65,
+          "y": 143,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_gte",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 2,
+        "position": {
+          "x": 41,
+          "y": 142,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 2
       }
     ]
   }
