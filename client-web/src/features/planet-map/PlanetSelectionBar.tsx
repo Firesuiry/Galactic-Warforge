@@ -327,12 +327,13 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
     }
     const ownUnit = unit.owner_id === session.playerId;
     const underfootResource = ownUnit && unit.mecha ? findNearbyMinableResource(planet, catalog, unit.position) : undefined;
-    // 运输机器人卡死提示（第 16 轮契约 haul_unreachable）：只看仍然成立、且 unit_id
-    // 就是这台机器人的告警——服务端把告警挂在机器人身上（building_id 也是它）。
+    // 运输机器人卡死提示（第 16 轮契约 haul_unreachable）：只看仍然成立、且 details.unit_id
+    // 就是这台机器人的告警——服务端告警的 building_id/building_type 是**目标建筑**，
+    // 只有 details.unit_id 指向机器人。
     const haulBlocked = isTransportRobot(unit)
       ? (alerts ?? []).find((alert) => alert.alert_type === 'haul_unreachable'
         && isAlertActive(alert)
-        && (alert.details?.unit_id === unit.id || alert.building_id === unit.id))
+        && alert.details?.unit_id === unit.id)
       : undefined;
     const haulBlockedDetail = haulBlocked
       ? haulUnreachableDetail(haulBlocked, (buildingId) => {

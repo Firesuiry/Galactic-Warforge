@@ -352,8 +352,9 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
           alert_id: 'a-haul',
           tick: 700,
           player_id: 'p1',
-          building_id: 'robot-1',
-          building_type: 'transport_robot',
+          // 服务端契约：告警挂在**目标建筑**上，details.unit_id 才指向机器人。
+          building_id: 'b-1',
+          building_type: 'tesla_tower',
           alert_type: 'haul_unreachable',
           severity: 'warning',
           message: 'unit robot-1 cannot reach b-1',
@@ -374,7 +375,8 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
     const base = {
       tick: 700,
       player_id: 'p1',
-      building_type: 'transport_robot',
+      building_id: 'b-1',
+      building_type: 'tesla_tower',
       alert_type: 'haul_unreachable',
       severity: 'warning',
       message: 'x',
@@ -383,7 +385,7 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
     };
     const { rerender } = render(
       <PlanetSelectionBar
-        alerts={[{ ...base, alert_id: 'a-1', building_id: 'robot-9', details: { ...base.details, unit_id: 'robot-9' } }]}
+        alerts={[{ ...base, alert_id: 'a-1', details: { ...base.details, unit_id: 'robot-9' } }]}
         catalog={catalog}
         planet={planet}
       />,
@@ -391,7 +393,7 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
     expect(screen.queryByTestId('haul-unreachable')).toBeNull();
     rerender(
       <PlanetSelectionBar
-        alerts={[{ ...base, alert_id: 'a-2', building_id: 'robot-1', active: false, details: { ...base.details, unit_id: 'robot-1' } }]}
+        alerts={[{ ...base, alert_id: 'a-2', active: false, details: { ...base.details, unit_id: 'robot-1' } }]}
         catalog={catalog}
         planet={planet}
       />,

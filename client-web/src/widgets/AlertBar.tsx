@@ -106,12 +106,12 @@ function haulTargetId(row: AlertRow): string {
 
 /**
  * 行首「建筑」列：`haul_unreachable` 讲的是机器人到不了**目标建筑**，
- * 建筑列应显示目标建筑（含 id 短标），而不是告警的 building_id（服务端写的是机器人）。
+ * 建筑列应显示目标建筑（含 id 短标）。服务端契约（auto_haul_unreachable.go）：
+ * 告警的 building_id / building_type 就是目标建筑，details 只带 unit_id/building_id/position。
  */
 function rowBuildingLabel(catalog: CatalogView | undefined, row: AlertRow): string {
-  if (row.alertType === 'haul_unreachable' && haulTargetId(row)) {
-    // 服务端 details 不带 building_type：告警自身的 building_type 就是目标建筑类型。
-    const type = typeof row.details.building_type === 'string' ? row.details.building_type : row.buildingType;
+  if (row.alertType === 'haul_unreachable') {
+    const type = row.buildingType || haulTargetId(row);
     return type ? getBuildingDisplayName(catalog, type) : haulTargetId(row);
   }
   return buildingLabel(catalog, row);
@@ -129,12 +129,12 @@ function rowBuildingTag(row: AlertRow): string {
  */
 function alertRowDetail(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
   if (row.alertType === 'haul_unreachable') {
-    return haulUnreachableText({ alert_type: row.alertType, details: row.details }, (buildingId) => {
-      // 服务端 details 目前不带 building_type；告警自身的 building_type 就是目标建筑类型
-      // （服务端把告警挂到到不了的建筑上，details.building_id 也是它）。
-      const type = typeof row.details.building_type === 'string' ? row.details.building_type : row.buildingType;
-      return type ? getBuildingDisplayName(catalog, type) : undefined;
-    });
+    // 服务端把告警挂到到不了的建筑上（building_id/building_type 都是它），
+    // 告警自身的 building_type 就是目标建筑类型。
+    return haulUnreachableText(
+      { alert_type: row.alertType, details: row.details },
+      () => (row.buildingType ? getBuildingDisplayName(catalog, row.buildingType) : undefined),
+    );
   }
   return formatAlertText(
     { alert_type: row.alertType, details: row.details, message: row.message },

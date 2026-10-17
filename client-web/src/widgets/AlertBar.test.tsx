@@ -267,11 +267,13 @@ describe('AlertBar', () => {
       alertEntry({
         alert_id: 'a-haul',
         tick: 700,
-        building_id: 'u-184',
-        building_type: 'transport_robot',
+        // 服务端契约：告警的 building_id/building_type 是**目标建筑**，
+        // details 只带 unit_id / building_id / position。
+        building_id: 'b-164',
+        building_type: 'arc_smelter',
         alert_type: 'haul_unreachable',
         message: 'unit u-184 cannot reach b-164',
-        details: { unit_id: 'u-184', building_id: 'b-164', building_type: 'arc_smelter', position: { x: 61, y: 135, z: 0 } },
+        details: { unit_id: 'u-184', building_id: 'b-164', position: { x: 61, y: 135, z: 0 } },
       }),
     ]);
     renderAlertBar('/planet/planet-1-1');
