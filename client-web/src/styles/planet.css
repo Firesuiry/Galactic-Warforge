@@ -1677,6 +1677,8 @@
 }
 
 .planet-build-card .planet-build-card__icon svg { width:26px; height:26px; }
+/* 小锁角标不能被上面那条「图标放大」规则波及（试玩 1017 K4-01 后复核）。 */
+.planet-build-card .planet-build-card__icon .planet-build-card__lock { width:10px; height:10px; }
 
 .planet-build-card:hover:not(:disabled) {
   border-color:var(--border-glow);
