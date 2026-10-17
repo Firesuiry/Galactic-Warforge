@@ -449,7 +449,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                   {!locked && index < 9 ? <span aria-hidden="true" className="planet-build-card__hotkey">{index + 1}</span> : null}
                 </span>
                 {/* 未解锁：造价条位置改写成解锁条件（试玩 1016 U6），卡内直接可读，不必悬停。
-                    试玩 1017 K4-01：52px 卡里科技名一行放不下，改为最多两行小字，
+                    试玩 1017 K4-01：52px 卡里科技名一行放不下，改为最多两行小字。
+                    标签「需研究：」重复 4 张卡很占宽，改成只写科技名、前面挂一把小锁；
                     完整名称同时写进 title（原生 tooltip）——截断时仍能读到全名。 */}
                 {locked ? (
                   <span
@@ -457,7 +458,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                     title={unlockCondition ? `需研究：${unlockCondition}` : '需研究'}
                     aria-hidden="true"
                   >
-                    {unlockCondition ? `需研究：${unlockCondition}` : '需研究'}
+                    {unlockCondition ? <Lock className="planet-build-card__unlock-lock" size={8} strokeWidth={2.5} /> : null}
+                    {unlockCondition || '需研究'}
                   </span>
                 ) : items.length > 0 ? (
                   <span aria-hidden="true" className="planet-build-card__cost">

@@ -228,15 +228,15 @@ describe('PlanetBuildBar', () => {
     // 已解锁的风机在前
     expect(screen.getByRole('button', { name: /风力发电机/ })).toBeEnabled();
 
-    // 研究分类：matrix_lab 未解锁但默认可见，卡上直接写「需研究：<科技名>」，灰化且可点
+    // 研究分类：matrix_lab 未解锁但默认可见，卡上直接写科技名（小锁 = 需研究），压暗且可点
     await openCategory(user, '研究');
     const lockedCard = screen.getByRole('button', { name: /矩阵研究站/ });
     expect(lockedCard).toBeInTheDocument();
     expect(lockedCard).toHaveAttribute('data-locked', 'true');
     expect(lockedCard).toBeEnabled();
-    expect(lockedCard.textContent).toContain('需研究：');
-    // 目录里没有这条科技的显示名时回退到 id（getTechDisplayName 的口径），不能是空白。
+    // 卡内只写科技名（「需研究」前缀由小锁图标表达，title/aria-label 里仍有完整文案）。
     expect(lockedCard.textContent).toContain('tech-electromagnetism');
+    expect(lockedCard.getAttribute('aria-label')).toContain('需研究：tech-electromagnetism');
     // 点它不进建造模式，只在状态行给出解锁说明与去科技树入口
     await user.click(lockedCard);
     expect(usePlanetViewStore.getState().interactionMode.kind).not.toBe('build');
@@ -262,7 +262,7 @@ describe('PlanetBuildBar', () => {
     // 科技名写在解锁条里，并把完整名称放进 title（两行截断时仍可悬停读全名）。
     const unlock = lockedCard.querySelector('.planet-build-card__unlock');
     expect(unlock).not.toBeNull();
-    expect(unlock?.textContent).toBe('需研究：tech-electromagnetism');
+    expect(unlock?.textContent).toBe('tech-electromagnetism');
     expect(unlock?.getAttribute('title')).toBe('需研究：tech-electromagnetism');
   });
 

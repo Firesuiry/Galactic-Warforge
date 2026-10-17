@@ -2421,12 +2421,23 @@ body:has([data-planet-minimap]) {
   -webkit-line-clamp:2;
   overflow:hidden;
   padding:1px 2px 2px;
-  font-size:8px;
-  line-height:1.2;
+  font-size:9px;
+  line-height:1.15;
   color:#e8c27f;
   background:#04070fcc;
   text-align:center;
   overflow-wrap:anywhere;
+}
+
+/* 解锁条里的小锁（「需研究」前缀的图标化，试玩 1017 K4-01 后复核：
+   文字前缀在 4 张卡上完全重复，占掉科技名一半宽度）。 */
+.planet-build-card__unlock-lock {
+  display:inline-block;
+  width:8px;
+  height:8px;
+  margin-right:2px;
+  vertical-align:-1px;
+  color:#e8c27f;
 }
 
 /* 底部状态行里的「尚未解锁：需研究 X」（与缺料条同一行内联，颜色区分）。 */
