@@ -1019,6 +1019,7 @@ const alerts = [
     building_id: 'assembler-1',
     building_type: 'assembling_machine_mk1',
     alert_type: 'power_low',
+    active: true,
     severity: 'warning',
     message: '装配线电力不足',
     metrics: {
@@ -1041,6 +1042,7 @@ const alerts = [
     building_id: 'miner-1',
     building_type: 'mining_machine',
     alert_type: 'output_blocked',
+    active: true,
     severity: 'warning',
     message: '采矿机输出堆积',
     metrics: {

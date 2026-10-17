@@ -208,21 +208,41 @@ function sliceEvents(response: EventSnapshotResponse, params: EventSnapshotParam
   };
 }
 
+/**
+ * 镜像服务端快照语义（试玩 1016 严重 1）：仍成立的在前，组内按
+ * `last_tick`（缺省 `tick`）倒序；`active_only=true` 只留仍成立的条目，
+ * limit 作用于过滤后的结果。
+ */
 function sliceAlerts(response: AlertSnapshotResponse, params: AlertSnapshotParams) {
-  let alerts = [...response.alerts];
+  const lastTick = (alert: AlertSnapshotResponse['alerts'][number]) =>
+    Math.max(alert.tick, alert.last_tick ?? 0);
+  const isActive = (alert: AlertSnapshotResponse['alerts'][number]) => alert.active !== false;
+  let alerts = [...response.alerts].sort((left, right) => {
+    const activeDiff = Number(isActive(right)) - Number(isActive(left));
+    if (activeDiff !== 0) {
+      return activeDiff;
+    }
+    const tickDiff = lastTick(right) - lastTick(left);
+    return tickDiff !== 0 ? tickDiff : right.alert_id.localeCompare(left.alert_id);
+  });
   if (params.after_alert_id) {
     const alertIndex = alerts.findIndex((alert) => alert.alert_id === params.after_alert_id);
     if (alertIndex >= 0) {
       alerts = alerts.slice(alertIndex + 1);
     }
   }
+  if (params.active_only) {
+    alerts = alerts.filter(isActive);
+  }
+  const hasMore = params.limit !== undefined && params.limit < alerts.length;
   if (params.limit !== undefined) {
-    alerts = alerts.slice(-params.limit);
+    alerts = alerts.slice(0, params.limit);
   }
 
   return {
     ...response,
     alerts,
+    has_more: hasMore,
     next_alert_id: alerts.at(-1)?.alert_id ?? response.next_alert_id,
   };
 }
@@ -599,6 +619,7 @@ export function createFixtureFetch(serverUrl: string): typeof fetch {
       const limit = url.searchParams.get('limit');
       return createJsonResponse(sliceAlerts(scenario.alertSnapshot, {
         after_alert_id: afterAlertId,
+        active_only: url.searchParams.get('active_only') === 'true',
         limit: limit ? Number(limit) : undefined,
       }));
     }

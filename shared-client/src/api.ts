@@ -108,6 +108,8 @@ export interface EventSnapshotParams {
 export interface AlertSnapshotParams {
   after_alert_id?: string;
   since_tick?: number;
+  /** true 只返回仍成立（active=true）的告警：顶栏/警报条/地图红标用。 */
+  active_only?: boolean;
   limit?: number;
 }
 
