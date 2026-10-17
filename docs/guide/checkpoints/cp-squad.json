@@ -1,10 +1,11 @@
 {
   "parent": "cp-barracks",
-  "note": "第 19 轮改写（可执行）：从 cp-barracks（tick 13600）读档，只用玩家命令让兵营 b-142@(53,139) 产出 6 个步兵。做法：手搓电路板 6（铁块 6 + 铜块 6，背包已有），把铁块 12 + 电路板 6 装进兵营主库存（兵营无配方，装入物留在 inventory，生产时照常扣），再连下 6 条 produce（每个 铁块 2 + 电路板 1 / 40 tick）。步兵出厂时 Ammo 默认满（24 发）。契约：步兵 ≥6、兵营 running ≥1、未见敌方攻击。下一层 cp-lab/cp-matrix-line 用不到步兵，cp-pre-attack 从这里接着补兵。",
+  "note": "第 19 轮改写（可执行）：从 cp-barracks（tick 13700）读档，只用玩家命令让兵营 b-142@(53,139) 产出 6 个步兵。做法：手搓电路板 6（铁块 6 + 铜块 6），先从 b-79 制造台取回 8 个铁块（背包原有 12，手搓后剩 6），把铁块 12 + 电路板 6 装进兵营主库存（兵营无配方，装入物留在 inventory，生产时照常扣），再连下 6 条 produce（每个 铁块 2 + 电路板 1 / 40 tick）。步兵出厂时 Ammo 默认满（24 发）。契约：步兵 ≥6、兵营 running ≥1、未见敌方攻击。下一层 cp-lab/cp-matrix-line 用不到步兵，cp-pre-attack 从这里接着补兵。",
   "steps": [
-    {"advance_to_tick": 13610},
+    {"advance_to_tick": 13710},
     {"cmd": {"type": "craft_item", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "u-40"}, "payload": {"recipe_id": "circuit_board", "quantity": 6}}},
     {"wait_until": {"kind": "item_gte", "player": "p1", "item_id": "circuit_board", "n": 6}, "timeout_ticks": 900},
+    {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-79", "item_id": "iron_ingot", "quantity": 8, "direction": "to_player"}}},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-142", "item_id": "iron_ingot", "quantity": 12, "direction": "to_building"}}},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-142", "item_id": "circuit_board", "quantity": 6, "direction": "to_building"}}},
     {"cmd": {"type": "produce", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "b-142"}, "payload": {"unit_type": "soldier"}}},
@@ -14,9 +15,9 @@
     {"cmd": {"type": "produce", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "b-142"}, "payload": {"unit_type": "soldier"}}},
     {"cmd": {"type": "produce", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "b-142"}, "payload": {"unit_type": "soldier"}}},
     {"wait_until": {"kind": "unit_count_gte", "player": "p1", "type": "soldier", "n": 6}, "timeout_ticks": 1200},
-    {"advance_to_tick": 14040}
+    {"advance_to_tick": 14140}
   ],
-  "end_tick": 14040,
+  "end_tick": 14140,
   "contract": {"checks": [
     {"kind": "game_not_finished"},
     {"kind": "player_alive", "player": "p1"},

@@ -1,6 +1,6 @@
 {
   "parent": "cp-research-start",
-  "note": "第 19 轮改写（可执行）：从 cp-research-start（tick 13320）读档，只用玩家命令（取料 / 手搓 / 建造 / 切配方）建起兵营 b-141@(53,139)（在电塔 (53,142) 无线范围 3 格内，落地即 running），并把制造台 b-79@(59,144) 的配方从齿轮切到子弹、喂入铁块，实际产出子弹。料全部来自自家产线：从出货补给站 b-105@(65,143) 取铁块 46、b-97@(41,142) 取铜块 16，手搓电路板 4（兵营造价 铁块 8 + 电路板 4），余下的铁块 16 装进 b-79 产子弹（1 铁块 → 5 发 / 20 tick）。契约：兵营 running ≥1、两台电弧熔炉与两台制造台 running、背包子弹 ≥1、未见敌方攻击。下一层 cp-squad 从这里给兵营装料出 6 个步兵。",
+  "note": "第 19 轮改写（可执行）：从 cp-research-start（tick 13320）读档，只用玩家命令（取料 / 手搓 / 建造 / 切配方）建起兵营 b-142@(53,139)（在电塔 (53,142) 无线范围 3 格内，落地即 running），补一台风机 @(52,137) 把西侧电网从 20 发/21 用补到 30/23（兵营 +2 用电后铜矿机 b-59 会掉到 no_power，本层补电保证两台矿机都 running），并把制造台 b-79@(59,144) 的配方从齿轮切到子弹、喂入铁块，实际产出子弹。料全部来自自家产线：从出货补给站 b-105@(65,143) 取铁块 46、b-97@(41,142) 取铜块 16，铁矿手搓磁铁 2 → 磁线圈 1 批（得 2，加上背包原有 1 个够风机 3 个），手搓电路板 4（兵营造价 铁块 8 + 电路板 4），余下的铁块 16 装进 b-79 产子弹（1 铁块 → 5 发 / 20 tick）。契约：兵营 running ≥1、两台矿机与两台熔炉、两台制造台 running、风机 ≥5、背包子弹 ≥1、未见敌方攻击。下一层 cp-squad 从这里给兵营装料出 6 个步兵。",
   "steps": [
     {"advance_to_tick": 13330},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-105", "item_id": "iron_ingot", "quantity": 46, "direction": "to_player"}}},
@@ -9,19 +9,28 @@
     {"wait_until": {"kind": "item_gte", "player": "p1", "item_id": "circuit_board", "n": 4}, "timeout_ticks": 900},
     {"cmd": {"type": "build", "target": {"layer": "planet", "position": {"x": 53, "y": 139, "z": 0}}, "payload": {"building_type": "barracks", "direction": "auto"}}},
     {"wait_until": {"kind": "building_running_gte", "player": "p1", "type": "barracks", "n": 1}, "timeout_ticks": 600},
+    {"cmd": {"type": "craft_item", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "u-40"}, "payload": {"recipe_id": "smelt_magnet", "quantity": 2}}},
+    {"wait_until": {"kind": "item_gte", "player": "p1", "item_id": "magnet", "n": 2}, "timeout_ticks": 900},
+    {"cmd": {"type": "craft_item", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "u-40"}, "payload": {"recipe_id": "magnetic_coil", "quantity": 1}}},
+    {"wait_until": {"kind": "item_gte", "player": "p1", "item_id": "magnetic_coil", "n": 3}, "timeout_ticks": 900},
+    {"cmd": {"type": "build", "target": {"layer": "planet", "position": {"x": 52, "y": 137, "z": 0}}, "payload": {"building_type": "wind_turbine", "direction": "auto"}}},
+    {"wait_until": {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 5}, "timeout_ticks": 600},
+    {"wait_until": {"kind": "building_running_gte", "player": "p1", "type": "mining_machine", "n": 2}, "timeout_ticks": 600},
     {"cmd": {"type": "set_recipe", "target": {"layer": "planet", "planet_id": "planet-1-1", "entity_id": "b-79"}, "payload": {"recipe_id": "ammo_bullet"}}},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-79", "item_id": "iron_ingot", "quantity": 16, "direction": "to_building"}}},
     {"wait_until": {"kind": "building_item_at_gte", "player": "p1", "position": {"x": 59, "y": 144, "z": 0}, "item_id": "ammo_bullet", "n": 5}, "timeout_ticks": 1500},
     {"cmd": {"type": "transfer_item", "target": {"layer": "planet", "planet_id": "planet-1-1"}, "payload": {"building_id": "b-79", "item_id": "ammo_bullet", "quantity": 5, "direction": "to_player"}}},
-    {"advance_to_tick": 13600}
+    {"advance_to_tick": 13700}
   ],
-  "end_tick": 13600,
+  "end_tick": 13700,
   "contract": {"checks": [
     {"kind": "game_not_finished"},
     {"kind": "player_alive", "player": "p1"},
     {"kind": "building_running_gte", "player": "p1", "type": "barracks", "n": 1},
+    {"kind": "building_running_gte", "player": "p1", "type": "mining_machine", "n": 2},
     {"kind": "building_running_gte", "player": "p1", "type": "arc_smelter", "n": 2},
     {"kind": "building_running_gte", "player": "p1", "type": "assembling_machine_mk1", "n": 2},
+    {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 5},
     {"kind": "item_gte", "player": "p1", "item_id": "ammo_bullet", "n": 1},
     {"kind": "enemy_attack_seen", "player": "p1", "bool": false}
   ]}
