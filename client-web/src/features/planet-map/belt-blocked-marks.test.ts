@@ -92,4 +92,24 @@ describe('传送带堵塞标记（试玩 1016 B1）', () => {
   it('blockedBeltHref：深链直接带 x/y（行星页据此移镜头到该格）', () => {
     expect(blockedBeltHref('planet-1-1', { x: 12, y: 7 })).toBe('/planet/planet-1-1?x=12&y=7');
   });
+
+  it('已解除的告警（active=false）不再画红杠（第 16 轮契约）', () => {
+    const marks = blockedBeltMarks(
+      [beltAlert(12, 7, { active: false })],
+      [belt('b-9', 12, 7, 'east', 9300)],
+    );
+    expect(marks).toEqual([]);
+  });
+
+  it('恢复与否只看告警 active：现场 blocked_ticks 缺失/为 0 都照常画', () => {
+    // 服务端 blocked_ticks 是 omitempty：0 时字段缺失，不能拿它判「已恢复」。
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 0)])).toHaveLength(1);
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', undefined)])).toHaveLength(1);
+  });
+
+  it('active=true / 缺省（旧服务端）都按成立处理', () => {
+    expect(blockedBeltMarks([beltAlert(12, 7, { active: true })], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
+  });
 });

@@ -16,7 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, TriangleAlert } from 'lucide-react';
 
-import { alertDetailsPosition, DEFAULT_TICKS_PER_SECOND, formatAlertText } from '@shared/alerts';
+import { alertDetailsPosition, alertLastTick, DEFAULT_TICKS_PER_SECOND, formatAlertText, haulUnreachableText, isAlertActive } from '@shared/alerts';
 import type { AlertEntry, CatalogView } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
@@ -46,11 +46,15 @@ interface AlertRow {
 /**
  * 按「建筑 + 类型」合并计数，取每组最新一条的 tick/message；
  * 组序 = 最新 tick 倒序：玩家先看到最近发生的事。
+ * 已解除的告警（`active: false`）不进来；聚合告警用 `last_tick` 排序，
+ * 这样持续被提醒的老告警不会永远压在列表底部、也不会反过来挤掉新告警。
  */
 export function mergeAlertRows(alerts: readonly AlertEntry[]): AlertRow[] {
   const byKey = new Map<string, AlertRow>();
   for (const alert of alerts) {
+    if (!isAlertActive(alert)) continue;
     const key = `${alert.building_id}::${alert.alert_type}`;
+    const tick = alertLastTick(alert);
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, {
@@ -60,15 +64,15 @@ export function mergeAlertRows(alerts: readonly AlertEntry[]): AlertRow[] {
         alertType: alert.alert_type,
         severity: alert.severity,
         count: 1,
-        tick: alert.tick,
+        tick,
         message: alert.message,
         details: alert.details ?? {},
       });
       continue;
     }
     existing.count += 1;
-    if (alert.tick > existing.tick) {
-      existing.tick = alert.tick;
+    if (tick > existing.tick) {
+      existing.tick = tick;
       existing.message = alert.message;
       existing.severity = alert.severity;
       existing.details = alert.details ?? {};
@@ -95,20 +99,43 @@ function buildingLabel(catalog: CatalogView | undefined, row: AlertRow): string 
   return getBuildingDisplayName(catalog, row.buildingType) || row.buildingId;
 }
 
+/** `haul_unreachable` 的目标建筑 id（details.building_id）。 */
+function haulTargetId(row: AlertRow): string {
+  return typeof row.details.building_id === 'string' ? row.details.building_id : '';
+}
+
 /**
- * 建筑短标：完整 id（b-33）能区分同名的多台建筑，比只写「采矿机」有用。
- * 已按 id 命名（目录缺失）时不重复显示。
+ * 行首「建筑」列：`haul_unreachable` 讲的是机器人到不了**目标建筑**，
+ * 建筑列应显示目标建筑（含 id 短标）。服务端契约（auto_haul_unreachable.go）：
+ * 告警的 building_id / building_type 就是目标建筑，details 只带 unit_id/building_id/position。
  */
-function buildingTag(row: AlertRow): string {
-  return row.buildingId;
+function rowBuildingLabel(catalog: CatalogView | undefined, row: AlertRow): string {
+  if (row.alertType === 'haul_unreachable') {
+    const type = row.buildingType || haulTargetId(row);
+    return type ? getBuildingDisplayName(catalog, type) : haulTargetId(row);
+  }
+  return buildingLabel(catalog, row);
+}
+
+/** 行首建筑短标：`haul_unreachable` 用目标建筑 id。 */
+function rowBuildingTag(row: AlertRow): string {
+  return (row.alertType === 'haul_unreachable' && haulTargetId(row)) || row.buildingId;
 }
 
 /**
  * 告警条目的说明文案：传送带堵塞给出中文的位置/件数/时长
  * （服务端 message 只写「建筑 b-9：传送带被堵，物品运不出去」，定位不到格子），
- * 其余类型沿用服务端 message。
+ * 运输机器人到不了目标给出机器人/目标建筑/坐标；其余类型只给中文标签。
  */
-function alertRowDetail(row: AlertRow, tickRate: number): string {
+function alertRowDetail(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
+  if (row.alertType === 'haul_unreachable') {
+    // 服务端把告警挂到到不了的建筑上（building_id/building_type 都是它），
+    // 告警自身的 building_type 就是目标建筑类型。
+    return haulUnreachableText(
+      { alert_type: row.alertType, details: row.details },
+      () => (row.buildingType ? getBuildingDisplayName(catalog, row.buildingType) : undefined),
+    );
+  }
   return formatAlertText(
     { alert_type: row.alertType, details: row.details, message: row.message },
     tickRate,
@@ -116,9 +143,9 @@ function alertRowDetail(row: AlertRow, tickRate: number): string {
 }
 
 /** 条目 title：中文标签 + 细节（belt_blocked 用位置/件数/时长，其余用服务端 message）。 */
-function alertRowTitle(row: AlertRow, tickRate: number): string {
-  if (row.alertType === 'belt_blocked') {
-    return alertRowDetail(row, tickRate);
+function alertRowTitle(row: AlertRow, tickRate: number, catalog?: CatalogView): string {
+  if (row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable') {
+    return alertRowDetail(row, tickRate, catalog);
   }
   return `${translateAlertType(row.alertType, row.message)}：${row.message}`;
 }
@@ -168,7 +195,8 @@ export function AlertBar() {
   }, [session.playerId, session.serverUrl]);
 
   const rows = useMemo(() => mergeAlertRows(alerts), [alerts]);
-  if (alerts.length === 0) {
+  // 只剩已解除的历史告警时整条不渲染（旧告警不该占着顶栏）。
+  if (rows.length === 0) {
     return null;
   }
 
@@ -178,6 +206,8 @@ export function AlertBar() {
    * 聚焦到告警目标：
    * - `belt_blocked` 指向**带格本身**（details.position），行星页内直接移镜头到该格
    *   并选中它（与其他带位置的告警同一口径；带格选中会带出该格的详情）；
+   * - `haul_unreachable` 指向**目标建筑**（details.building_id），并带上坐标：
+   *   运输机器人到不了它，玩家要看的正是这座建筑的位置；
    * - 其余告警指向建筑：行星页内选中它（服务端告警通常不带坐标，这里不编造位置）；
    * - 不在行星页时带深链跳到活跃行星（带位置的告警额外带 x/y 直接聚焦）。
    */
@@ -185,6 +215,10 @@ export function AlertBar() {
     sfx.uiClick();
     setOpen(false);
     const tile = alertDetailsPosition(row.details);
+    const haulTarget = row.alertType === 'haul_unreachable'
+      ? (typeof row.details.building_id === 'string' ? row.details.building_id : '')
+      : '';
+    const targetBuildingId = haulTarget || row.buildingId;
     const onPlanet = location.pathname.startsWith('/planet/');
     if (onPlanet) {
       const planet = usePlanetViewStore.getState();
@@ -195,18 +229,23 @@ export function AlertBar() {
       }
       planet.setSelected({
         kind: 'building',
-        id: row.buildingId,
-        position: planet.homeTile ? { ...planet.homeTile, z: 0 } : { x: 0, y: 0, z: 0 },
+        id: targetBuildingId,
+        position: tile
+          ? { ...tile, z: 0 }
+          : planet.homeTile ? { ...planet.homeTile, z: 0 } : { x: 0, y: 0, z: 0 },
       });
+      if (tile) {
+        planet.requestFocus(tile);
+      }
       return;
     }
     const activePlanetId = summaryQuery.data?.active_planet_id;
     if (!activePlanetId) {
       return;
     }
-    // 带位置的告警（当前只有 belt_blocked）带 x/y 直接聚焦；其余只带 select。
+    // 带位置的告警（belt_blocked / haul_unreachable）带 x/y 直接聚焦；其余只带 select。
     const positionQuery = tile ? `&x=${tile.x}&y=${tile.y}` : '';
-    navigate(`/planet/${activePlanetId}?select=building:${row.buildingId}${positionQuery}`);
+    navigate(`/planet/${activePlanetId}?select=building:${targetBuildingId}${positionQuery}`);
   }
 
   return (
@@ -219,14 +258,14 @@ export function AlertBar() {
           sfx.uiClick();
           setOpen((value) => !value);
         }}
-        title={alertRowTitle(latest, tickRate)}
+        title={alertRowTitle(latest, tickRate, catalogQuery.data)}
         type="button"
       >
         <TriangleAlert aria-hidden="true" size={14} strokeWidth={2} />
         <span className="alert-bar__type">
           {translateAlertType(latest.alertType, translateSeverity(latest.severity))}
         </span>
-        <span className="alert-bar__building">{buildingLabel(catalogQuery.data, latest)}</span>
+        <span className="alert-bar__building">{rowBuildingLabel(catalogQuery.data, latest)}</span>
         <span className="alert-bar__tick">t{latest.tick}</span>
         <span className="alert-bar__count">{alerts.length}</span>
         {open ? (
@@ -242,7 +281,7 @@ export function AlertBar() {
               <button
                 className={`alert-bar__row alert-bar__row--${severityClass(row.severity)}`}
                 onClick={() => focusAlert(row)}
-                title={alertRowTitle(row, tickRate)}
+                title={alertRowTitle(row, tickRate, catalogQuery.data)}
                 type="button"
               >
                 <TriangleAlert aria-hidden="true" size={13} strokeWidth={2} />
@@ -252,13 +291,14 @@ export function AlertBar() {
                 {/* 建筑名 + 短标（id 尾号）：同名建筑（多台风机/制造台）靠短标区分，
                     点条目聚焦的是哪一台必须一眼可辨。 */}
                 <span className="alert-bar__row-building">
-                  {buildingLabel(catalogQuery.data, row)}
-                  <span className="alert-bar__row-tag">{buildingTag(row)}</span>
+                  {rowBuildingLabel(catalogQuery.data, row)}
+                  <span className="alert-bar__row-tag">{rowBuildingTag(row)}</span>
                 </span>
-                {/* 传送带堵塞指向带格本身：把位置/件数/时长写在条目上，
+                {/* 传送带堵塞指向带格本身、运输机器人到不了目标指向目标建筑：
+                    把位置/件数/时长（或机器人/建筑）写在条目上，
                     玩家不用点开地图就知道堵在哪、堵了多少。 */}
-                {row.alertType === 'belt_blocked' ? (
-                  <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate)}</span>
+                {row.alertType === 'belt_blocked' || row.alertType === 'haul_unreachable' ? (
+                  <span className="alert-bar__row-detail">{alertRowDetail(row, tickRate, catalogQuery.data)}</span>
                 ) : null}
                 {row.count > 1 ? <span className="alert-bar__row-count">×{row.count}</span> : null}
                 <span className="alert-bar__row-tick">t{row.tick}</span>

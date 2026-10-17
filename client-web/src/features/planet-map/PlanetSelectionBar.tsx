@@ -6,7 +6,8 @@ import { AmmunitionBar } from "@/features/war/components/AmmunitionBar";
 
 import { useState } from 'react';
 import { surfaceDistanceWithin } from '@shared/surface';
-import type { Building, CatalogView, CombatSquad, CommandResponse, Position } from '@shared/types';
+import type { AlertEntry, Building, CatalogView, CombatSquad, CommandResponse, Position } from '@shared/types';
+import { haulUnreachableDetail, isAlertActive } from '@shared/alerts';
 
 import { Icon } from '@/common/Icon';
 import { sfx } from '@/engine/audio';
@@ -35,6 +36,11 @@ interface PlanetSelectionBarProps {
   planet: PlanetRenderView;
   /** C4：战斗小队列表（planet_runtime.combat_squads），小队选中面板的实体源。 */
   squads?: CombatSquad[];
+  /**
+   * 当前仍成立的产线告警：运输机器人选中条据此显示 `haul_unreachable`
+   * （「这台机器人到不了目标」），玩家才知道它为什么空转。
+   */
+  alerts?: readonly AlertEntry[];
 }
 
 /** 建筑本地存储摘要，如 "硅矿 12 · 容量 12/20"；无存储数据时返回 null。 */
@@ -80,7 +86,7 @@ export function findNearbyMinableResource(planet: PlanetRenderView, catalog: Cat
   return best?.resource;
 }
 
-export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: PlanetSelectionBarProps) {
+export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, alerts }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
@@ -321,6 +327,20 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
     }
     const ownUnit = unit.owner_id === session.playerId;
     const underfootResource = ownUnit && unit.mecha ? findNearbyMinableResource(planet, catalog, unit.position) : undefined;
+    // 运输机器人卡死提示（第 16 轮契约 haul_unreachable）：只看仍然成立、且 details.unit_id
+    // 就是这台机器人的告警——服务端告警的 building_id/building_type 是**目标建筑**，
+    // 只有 details.unit_id 指向机器人。
+    const haulBlocked = isTransportRobot(unit)
+      ? (alerts ?? []).find((alert) => alert.alert_type === 'haul_unreachable'
+        && isAlertActive(alert)
+        && alert.details?.unit_id === unit.id)
+      : undefined;
+    const haulBlockedDetail = haulBlocked
+      ? haulUnreachableDetail(haulBlocked, (buildingId) => {
+        const target = planet.buildings?.[buildingId];
+        return target ? getBuildingDisplayName(catalog, target.type) : undefined;
+      })
+      : '';
     const activeMode = interactionMode.kind !== 'inspect' && interactionMode.kind !== 'build'
       ? interactionMode
       : null;
@@ -342,6 +362,16 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads }: Pl
                   return building ? getBuildingDisplayName(catalog, building.type) : undefined;
                 },
               ) ?? (transportHaulMode(unit) === 'idle' ? '已停止' : '自动待命')}
+            </span>
+          ) : null}
+          {haulBlocked ? (
+            <span
+              className="planet-selection-bar__meta planet-selection-bar__warning"
+              data-testid="haul-unreachable"
+              role="alert"
+              title="运输机器人到不了目标：先清出通往目标建筑的路（别把它围死），或改派别的终点"
+            >
+              运输机器人到不了目标{haulBlockedDetail ? `：${haulBlockedDetail}` : ''}
             </span>
           ) : null}
           {unit.ammo_capacity?<AmmunitionBar current={unit.ammo??0} capacity={unit.ammo_capacity}/>:null}

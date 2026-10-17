@@ -11,7 +11,7 @@
  * - 文案中文、简洁游戏化；名称尽量走 i18n 字典（建筑/科技）。
  */
 
-import { beltBlockedDetail } from '@shared/alerts';
+import { beltBlockedDetail, haulUnreachableDetail } from '@shared/alerts';
 import type { GameEventDetail } from '@shared/types';
 
 import { GAME_FINISHED_MESSAGE, isGameFinishedResult, toPlayerFacingMessage } from '@/common/player-facing-error';
@@ -319,6 +319,11 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
     }
     case 'production_alert': {
       const alert = asRecord(payload.alert);
+      // 已解除的告警（第 16 轮 active=false）不该弹「又有问题」的提醒：
+      // 这类条目只会出现在快照历史里；若事件流里带了 active=false，直接静默。
+      if (alert?.active === false) {
+        return null;
+      }
       const alertType = asString(alert?.alert_type);
       const buildingType = asString(alert?.building_type);
       // 建筑实例 id（合并键用）：同一建筑的同类告警合并计数，不同建筑分开显示
@@ -343,20 +348,45 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       const beltDetail = beltBlocked
         ? beltBlockedDetail({ alert_type: alertType, details: asRecord(alert?.details) ?? {} })
         : '';
+      // 运输机器人到不了目标（第 16 轮契约 haul_unreachable）：写清机器人 + 目标建筑 + 坐标，
+      // 玩家才知道是哪台机器人卡在哪座建筑外圈。
+      const haulUnreachable = alertType === 'haul_unreachable';
+      const haulDetails = asRecord(alert?.details) ?? {};
+      // 服务端契约：告警的 building_id/building_type 是目标建筑，details 只有 unit_id/building_id/position。
+      const haulTargetId = asString(haulDetails.building_id) || buildingId;
+      const haulTargetType = buildingType;
+      // 位置可能来自 details.position 或 payload.position：统一塞进 details，
+      // 让 haulUnreachableDetail 自己拼在目标建筑后面（否则正文会重复一遍坐标）。
+      const haulPosition = haulUnreachable ? (haulDetails.position ?? position) : position;
+      const haulDetailSource = haulUnreachable && haulPosition && haulDetails.position === undefined
+        ? { ...haulDetails, position: haulPosition }
+        : haulDetails;
+      const haulDetail = haulUnreachable
+        ? haulUnreachableDetail(
+          { details: haulDetailSource },
+          (buildingId) => (buildingId === haulTargetId && haulTargetType ? translateBuildingType(haulTargetType) : undefined),
+        )
+        : '';
       return {
         toast: {
           // 断电类：danger + 常驻（sticky）且不套用产线节流——
           // 否则第二次断电提醒会被节流吞掉（试玩报告 F）。
           kind: power ? 'danger' : 'warning',
-          title: power ? '建筑断电' : beltBlocked ? `${buildingLabel}：传送带堵塞` : '产线告警',
+          title: power ? '建筑断电' : beltBlocked ? `${buildingLabel}：传送带堵塞` : haulUnreachable ? '运输机器人到不了目标' : '产线告警',
           body: beltBlocked
             ? [buildingLabel, beltDetail || issue, positionLabel].filter(Boolean).join('：') || undefined
-            : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
+            : haulUnreachable
+              // haulDetail 已经含目标建筑与坐标：不再追加一遍位置。
+              ? haulDetail || issue || undefined
+              : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，
           // 不合并会刷屏）；键含建筑 id，不同建筑的同类告警分开显示。
           // 断电类不节流，且停留 STICKY_TTL_MS。
-          mergeKey: `production_alert:${buildingId || buildingType || 'unknown'}:${alertType || 'unknown'}`,
+          // 运输机器人告警按「机器人 + 目标建筑」合并：同一台机器人对同一目标只提醒一次。
+          mergeKey: haulUnreachable
+            ? `production_alert:${asString(haulDetails.unit_id) || 'unit'}:${haulTargetId || buildingId || 'unknown'}:${alertType}`
+            : `production_alert:${buildingId || buildingType || 'unknown'}:${alertType || 'unknown'}`,
           ...(power ? { sticky: true } : { throttleMs: PRODUCTION_ALERT_THROTTLE_MS }),
         },
       };

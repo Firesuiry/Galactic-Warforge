@@ -343,6 +343,63 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
     await user.click(screen.getByRole('button', { name: '自动搬运 ✓' }));
     expect(mockClient.cmdAutoHaul).toHaveBeenCalledWith(['robot-1', 'robot-2']);
   });
+
+  it('有 haul_unreachable 告警时选中条写明「运输机器人到不了目标」+ 目标建筑', () => {
+    const planet = autoPlanet('auto', true);
+    render(
+      <PlanetSelectionBar
+        alerts={[{
+          alert_id: 'a-haul',
+          tick: 700,
+          player_id: 'p1',
+          // 服务端契约：告警挂在**目标建筑**上，details.unit_id 才指向机器人。
+          building_id: 'b-1',
+          building_type: 'tesla_tower',
+          alert_type: 'haul_unreachable',
+          severity: 'warning',
+          message: 'unit robot-1 cannot reach b-1',
+          metrics: {} as never,
+          details: { unit_id: 'robot-1', building_id: 'b-1', position: { x: 2, y: 2, z: 0 } },
+        }]}
+        catalog={catalog}
+        planet={planet}
+      />,
+    );
+    const warning = screen.getByTestId('haul-unreachable');
+    expect(warning).toHaveTextContent('运输机器人到不了目标');
+    expect(warning).toHaveTextContent('机器人 robot-1 → 特斯拉塔 (2, 2)');
+  });
+
+  it('别的机器人的告警 / 已解除的告警不在选中条上显示', () => {
+    const planet = autoPlanet('auto', true);
+    const base = {
+      tick: 700,
+      player_id: 'p1',
+      building_id: 'b-1',
+      building_type: 'tesla_tower',
+      alert_type: 'haul_unreachable',
+      severity: 'warning',
+      message: 'x',
+      metrics: {} as never,
+      details: { building_id: 'b-1', position: { x: 2, y: 2, z: 0 } },
+    };
+    const { rerender } = render(
+      <PlanetSelectionBar
+        alerts={[{ ...base, alert_id: 'a-1', details: { ...base.details, unit_id: 'robot-9' } }]}
+        catalog={catalog}
+        planet={planet}
+      />,
+    );
+    expect(screen.queryByTestId('haul-unreachable')).toBeNull();
+    rerender(
+      <PlanetSelectionBar
+        alerts={[{ ...base, alert_id: 'a-2', active: false, details: { ...base.details, unit_id: 'robot-1' } }]}
+        catalog={catalog}
+        planet={planet}
+      />,
+    );
+    expect(screen.queryByTestId('haul-unreachable')).toBeNull();
+  });
 });
 
 function miningPlanet(): PlanetRenderView {

@@ -1037,6 +1037,7 @@ export function PlanetPage() {
         </div>
         <div className="planet-map-shell__overlay">
           <PlanetSelectionBar
+            alerts={liveAlerts}
             catalog={catalog}
             onShowDetail={() => {
               setActiveDetailPanel("selection");

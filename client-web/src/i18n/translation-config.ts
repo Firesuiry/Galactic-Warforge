@@ -285,6 +285,7 @@ export const TRANSLATIONS = {
     backlog: "堆积升高",
     unit_spawn_blocked: "出厂口被占满",
     belt_blocked: "传送带堵塞",
+    haul_unreachable: "运输机器人到不了目标",
   },
   severity: {
     info: "提示",

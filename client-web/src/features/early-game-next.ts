@@ -6,6 +6,7 @@
  */
 
 import type { AlertEntry, EnergyStats, PlayerState } from "@shared/types";
+import { isAlertActive } from "@shared/alerts";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
 import {
@@ -99,7 +100,7 @@ export function resolveEarlyGameNextAction(
   const productionOutput = player?.stats?.production_stats?.total_output ?? 0;
   const logisticsThroughput = player?.stats?.logistics_stats?.throughput ?? 0;
 
-  const recommendedAlert = input.alerts?.[0];
+  const recommendedAlert = input.alerts?.find((alert) => isAlertActive(alert));
   if (recommendedAlert) {
     return {
       to: planetPath(planetId),

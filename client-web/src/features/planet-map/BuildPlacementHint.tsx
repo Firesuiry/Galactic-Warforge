@@ -68,9 +68,27 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
       </div>
     );
   }
+  // 缺料时也要把「将开采」一起给出来（试玩 1016 摩擦 2）：玩家恰恰要先看落点会采什么矿，
+  // 再决定去补料还是换位置。缺料提示不再把开采预览顶掉。
+  const shortageOnly = assessment.missingItems.length > 0;
+  const mining = shortageOnly
+    ? describeMiningCoverage(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, mode.rotation)
+    : null;
   return (
-    <div className="build-placement-hint" role="status" style={{ left: pointer.x + 16, top: pointer.y + 14 }}>
-      无法建造：{describe(assessment)}
+    <div
+      className={`build-placement-hint${mining ? ' build-placement-hint--stacked' : ''}`}
+      role="status"
+      style={{ left: pointer.x + 16, top: pointer.y + 14 }}
+    >
+      <span>无法建造：{describe(assessment)}</span>
+      {mining ? (
+        <span
+          className={`build-placement-hint__mining${mining.mixed ? ' is-mixed build-placement-hint--mining-mixed' : ''}`}
+          data-testid="build-mining-hint"
+        >
+          {mining.text}
+        </span>
+      ) : null}
     </div>
   );
 }

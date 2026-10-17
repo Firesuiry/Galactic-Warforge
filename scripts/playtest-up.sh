@@ -50,7 +50,20 @@ SERVER_PORT=$((N * 100))
 WEB_PORT=$((N * 100 + 1))
 DRIVER_PORT=$((N * 100 + 2))
 RUN_DIR="/tmp/sw-play-$N"
-CHECKPOINT_DIR="${SW_CHECKPOINT_DIR:-$MAIN_REPO/.run/checkpoints}"
+# 存档点目录：默认取**当前 worktree** 的 .run/checkpoints（`checkpointbuild` 就写在这里），
+# 没有才退回主仓库那份。试玩 1016 报告 §0：默认指向主仓库时，worktree 里重建的
+# cp-logistics 读不到、cp-base 还是缺 rotation 的旧档，跑出来的现象全是假象。
+# 显式 SW_CHECKPOINT_DIR 永远优先。
+if [[ -n "${SW_CHECKPOINT_DIR:-}" ]]; then
+  CHECKPOINT_DIR="$SW_CHECKPOINT_DIR"
+  CHECKPOINT_SOURCE="SW_CHECKPOINT_DIR"
+elif [[ -d "$WORKTREE/.run/checkpoints" ]]; then
+  CHECKPOINT_DIR="$WORKTREE/.run/checkpoints"
+  CHECKPOINT_SOURCE="当前 worktree"
+else
+  CHECKPOINT_DIR="$MAIN_REPO/.run/checkpoints"
+  CHECKPOINT_SOURCE="主仓库（本 worktree 没有 .run/checkpoints）"
+fi
 SERVER_CONFIG="$RUN_DIR/server-config.yaml"
 PIDS_FILE="$RUN_DIR/pids"
 
@@ -182,7 +195,7 @@ cat <<EOF
   server:  http://127.0.0.1:$SERVER_PORT            tick_rate_override=$TICK_RATE
   driver:  http://127.0.0.1:$DRIVER_PORT            （curl -s localhost:$DRIVER_PORT --data-binary @snippet.js）
   账号:    p1 / key_player_1（admin）  p2 / key_player_2
-  存档点:  $CHECKPOINT_DIR
+  存档点:  $CHECKPOINT_DIR   （来源：$CHECKPOINT_SOURCE）
   日志:    $RUN_DIR/{server,web,driver}.log  驱动输出: $RUN_DIR/pt/
   停止:    scripts/playtest-down.sh $N
 EOF
