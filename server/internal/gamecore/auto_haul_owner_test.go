@@ -246,7 +246,7 @@ func TestAutoHaulSorterFedOnlyReportsNoDemand(t *testing.T) {
 
 // 5c) 补给站算仓储类供给：它在目录里是 production 类（不生产任何东西、只放补给），
 // 旧判据只认 storage 类，出货补给站里的锭永远当不了供给（试玩 1016 U16S 一般 1：
-// cp-logistics 的制造台 b-79 缺齿轮，机器人却只能报「到不了」）。
+// cp-logistics 的制造台 b-79 缺铁块，机器人却只能报「到不了」）。
 func TestAutoHaulSupplyStationIsSupplySource(t *testing.T) {
 	core, ws := haulTestCoreWithFace(t, 48)
 	station := placeAutoBuilding(t, ws, "b-station", model.BuildingTypeSupplyStation, model.Position{X: 20, Y: 20})

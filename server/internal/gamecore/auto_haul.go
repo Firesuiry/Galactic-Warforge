@@ -581,7 +581,7 @@ func haulSupplies(ws *model.WorldState, claims *haulClaimBook, ownerID string) [
 //
 // 补给站目录里是 category: production（它不生产任何东西，只放补给），旧判据只认
 // storage 类，导致 cp-logistics 出货补给站里的铁块/铜块永远当不了供给：制造台
-// b-79 缺齿轮却只能报「到不了」，机器人空转（试玩 1016 U16S 一般 1）。判据与
+// b-79 缺铁块（gear 配方只吃铁块）却只能报「到不了」，机器人空转（试玩 1016 U16S 一般 1）。判据与
 // haulIsStorageSink 一致：有 storage、且没有任何会吃掉或产出物品的功能。
 func haulIsStorageBuilding(building *model.Building) bool {
 	if building == nil {
