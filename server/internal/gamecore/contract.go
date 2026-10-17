@@ -26,6 +26,7 @@ import (
 //	building_item_at_gte {position, item_id, n}  该落点上的玩家建筑里该物品 >= n
 //	building_item_at_lt  {position, item_id, n}  该落点上的玩家建筑里该物品 < n
 //	building_no_alert_since {position, alert_type?, tick}  该落点建筑自 tick 起无该类告警
+//	building_alert_since {position, alert_type, tick}     该落点建筑自 tick 起出现过且仍成立的该类告警 >= 1
 //	unit_count_gte      {type, n}
 //	item_gte            {item_id, n}
 //	no_alert_since      {alert_type, tick, type?}  自 tick 起没有该类生产告警（type 非空时只看该建筑类型）
@@ -266,6 +267,20 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("(%d,%d) 上的 %s 自 tick %d 起有 %d 条 %s 告警",
 			check.Position.X, check.Position.Y, building.Type, check.Tick, count, kind))
+	case "building_alert_since":
+		// 与 building_no_alert_since 相反：要求某台建筑自 tick 起确实出现过
+		// 一条「此刻仍成立」的该类告警（用于断言「这种告警真的会发出来」，
+		// 例如 cp-haul-unreachable 的 haul_unreachable）。
+		building, result := gc.contractBuildingAt(player, check.Position)
+		if building == nil {
+			return result
+		}
+		count := gc.buildingAlertCountSince(building.ID, check.AlertType, check.Tick)
+		if count >= 1 {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail("0", fmt.Sprintf("(%d,%d) 上的 %s 自 tick %d 起没有仍成立的 %s 告警",
+			check.Position.X, check.Position.Y, building.Type, check.Tick, check.AlertType))
 	case "item_gte":
 		count := player.Inventory[check.ItemID]
 		if count >= check.N {

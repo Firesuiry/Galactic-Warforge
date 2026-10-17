@@ -340,5 +340,24 @@ func TestBuildingPositionPredicates(t *testing.T) {
 	if r := noAlert(30, 30, "belt_blocked", 550); !r.Passed {
 		t.Fatalf("重新出现的告警首次 tick 是 600（条目复用不改 Tick），自 550 起应通过，got %+v", r)
 	}
+	// building_alert_since：与 building_no_alert_since 相反，要求「确实出现过
+	// 一条仍成立的该类型告警」。cp-haul-unreachable 用它断言 haul_unreachable
+	// 真的发了出来。
+	hasAlert := func(x, y int, alertType string, sinceTick int64) checkpoint.ContractResult {
+		return eval(checkpoint.ContractCheck{Kind: "building_alert_since", Player: "p1",
+			AlertType: alertType, Tick: sinceTick, Position: &model.Position{X: x, Y: y}})
+	}
+	if r := hasAlert(30, 30, "throughput_drop", 0); !r.Passed || r.Actual != "1" {
+		t.Fatalf("tick 200 的 throughput_drop 仍成立，应通过，got %+v", r)
+	}
+	if r := hasAlert(30, 30, "throughput_drop", 300); r.Passed || r.Actual != "0" {
+		t.Fatalf("自 tick 300 起没有新出现的 throughput_drop，应失败，got %+v", r)
+	}
+	if r := hasAlert(30, 30, "haul_unreachable", 0); r.Passed || r.Actual != "0" {
+		t.Fatalf("没发过的告警类型必须失败，got %+v", r)
+	}
+	if r := hasAlert(40, 40, "belt_blocked", 0); r.Passed || r.Actual != "(none)" {
+		t.Fatalf("别人家的建筑不算，got %+v", r)
+	}
 	_ = player
 }

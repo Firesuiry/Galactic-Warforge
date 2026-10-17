@@ -395,7 +395,7 @@ func ReadAuditFromCheckpoint(checkpointDir, name string) ([]*model.AuditEntry, e
 
 func describeCheck(check checkpoint.ContractCheck) string {
 	switch {
-	case check.Kind == "no_alert_since":
+	case check.Kind == "no_alert_since" || check.Kind == "building_no_alert_since" || check.Kind == "building_alert_since":
 		return fmt.Sprintf("%s(%s@tick%d)", check.Kind, check.AlertType, check.Tick)
 	case check.Type != "" && check.ItemID != "":
 		return fmt.Sprintf("%s(%s/%s≥%d)", check.Kind, check.Type, check.ItemID, check.N)
