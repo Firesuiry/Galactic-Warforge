@@ -110,8 +110,9 @@ function haulTargetId(row: AlertRow): string {
  */
 function rowBuildingLabel(catalog: CatalogView | undefined, row: AlertRow): string {
   if (row.alertType === 'haul_unreachable' && haulTargetId(row)) {
-    const type = typeof row.details.building_type === 'string' ? row.details.building_type : '';
-    return getBuildingDisplayName(catalog, type) || haulTargetId(row);
+    // 服务端 details 不带 building_type：告警自身的 building_type 就是目标建筑类型。
+    const type = typeof row.details.building_type === 'string' ? row.details.building_type : row.buildingType;
+    return type ? getBuildingDisplayName(catalog, type) : haulTargetId(row);
   }
   return buildingLabel(catalog, row);
 }
