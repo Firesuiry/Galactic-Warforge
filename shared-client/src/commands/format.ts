@@ -184,7 +184,11 @@ export function fmtSummary(s: StateSummary): string {
   for (const player of Object.values(s.players)) {
     const preview = fmtInventoryPreview(player.inventory, 8);
     if (preview) {
-      lines.push(`Inventory ${player.player_id}: ${preview}`);
+      // 背包按格计（DSP 口径：每格按物品 stack_limit 堆叠），同时打印占用/上限。
+      const slots = player.inventory_slots_total
+        ? ` [${player.inventory_slots_used ?? 0}/${player.inventory_slots_total} slots]`
+        : '';
+      lines.push(`Inventory ${player.player_id}${slots}: ${preview}`);
     }
   }
   return lines.join('\n');

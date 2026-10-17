@@ -246,8 +246,8 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	player := ws.Players[building.OwnerID]
 	unit := ws.Units["u-1"]
 	model.SyncMechaCapabilities(unit, player)
-	capacity := unit.Mecha.InventoryCapacity
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity}
+	slots := unit.Mecha.InventorySlots
+	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
 
 	cmd := model.Command{
 		Type:   model.CmdDemolish,
@@ -257,8 +257,8 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}
 	settleBuildingJobs(ws, nil)
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("demolish refund pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("demolish refund pushed the bag over capacity: %d/%d", got, slots)
 	}
 	if player.Inventory[model.ItemGear] != 0 {
 		t.Fatalf("full bag should have discarded the refund, got %v", player.Inventory)

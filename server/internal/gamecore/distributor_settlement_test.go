@@ -422,22 +422,22 @@ func TestDistributorMechaDeliveryNeverExceedsInventoryCapacity(t *testing.T) {
 	// 请求 Max 高于背包容量：物流请求 Max 已被钳制，但背包容量本身才是硬上限。
 	unit.Mecha.LogisticsRequests[model.ItemIronOre] = model.MechaLogisticsRequest{Min: 0, Max: 9999}
 	model.SyncMechaCapabilities(unit, ws.Players["p1"])
-	capacity := unit.Mecha.InventoryCapacity
+	slots := unit.Mecha.InventorySlots
 	player := ws.Players["p1"]
 	// 背包离满还差 2 格，且请求里一件铁矿石都没有（0 < Min=0 不成立 -> 不触发配送）。
 	// 先把 Min 抬到 1 让配送条件成立。
 	unit.Mecha.LogisticsRequests[model.ItemIronOre] = model.MechaLogisticsRequest{Min: 1, Max: 9999}
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity - 2}
+	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 2) * model.ItemStackSize(model.ItemCoal)}
 
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 40)
 	for _, id := range []string{"a", "b", "c"} {
 		distributorTestBot(t, ws, home, id)
 	}
 	distributorTestTicks(t, ws, 20)
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("mecha delivery pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("mecha delivery pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemIronOre] != 2 {
+	if player.Inventory[model.ItemIronOre] != 10 {
 		t.Fatalf("delivery should fill only the free slots, got %v", player.Inventory)
 	}
 }

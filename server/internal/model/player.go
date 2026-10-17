@@ -143,37 +143,98 @@ func (ps *PlayerState) InventoryCount() int {
 	return total
 }
 
+// InventorySlotsUsed 返回背包占用的格数：每种物品占 ceil(数量/该物品的单格上限)
+// 格，再把各物品相加（DSP 机甲背包口径：格子数 + 每格按物品的堆叠上限）。
+// 单格上限取 items.yaml 的 stack_limit；目录里查不到的物品按 1 格算（宁可多占）。
+func (ps *PlayerState) InventorySlotsUsed() int {
+	if ps == nil {
+		return 0
+	}
+	slots := 0
+	for id, qty := range ps.Inventory {
+		if qty <= 0 {
+			continue
+		}
+		slots += ItemSlots(id, qty)
+	}
+	return slots
+}
+
+// ItemSlots 返回 qty 件该物品占用的背包格数（向上取整到 stack_limit）。
+func ItemSlots(itemID string, qty int) int {
+	if qty <= 0 {
+		return 0
+	}
+	def, ok := Item(itemID)
+	if !ok || def.StackLimit <= 0 {
+		return qty
+	}
+	return (qty + def.StackLimit - 1) / def.StackLimit
+}
+
 // AddItems adds item amounts to inventory and returns how many were accepted.
-// capacity > 0 是背包上限（本行星执行体的 inventory_capacity）：装不下的部分
-// 直接丢弃，任何调用方都不可能把背包顶到上限之上（试玩 1014：手搓产出无视上限，
-// 背包 200/200 时搓出 1 个磁铁变成 201/200）。capacity <= 0 表示不限。
-func (ps *PlayerState) AddItems(items []ItemAmount, capacity int) int {
+// slots > 0 是背包格数上限（本行星执行体的 inventory_slots）：按每件物品的
+// stack_limit 折算占格，装不下的部分直接丢弃，任何调用方都不可能把背包顶到
+// 上限之上（试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁变成
+// 201/200）。slots <= 0 表示不限。
+func (ps *PlayerState) AddItems(items []ItemAmount, slots int) int {
 	if len(items) == 0 || ps == nil {
 		return 0
 	}
 	inv := ps.EnsureInventory()
-	total := 0
-	if capacity > 0 {
-		total = ps.InventoryCount()
-	}
 	accepted := 0
 	for _, item := range items {
 		if item.Quantity <= 0 {
 			continue
 		}
 		add := item.Quantity
-		if capacity > 0 {
-			add = min(add, capacity-total)
+		if slots > 0 {
+			add = min(add, ps.InventoryFreeSlotsFor(item.ItemID, slots))
 			if add <= 0 {
 				continue
 			}
 		}
 		inv[item.ItemID] += add
-		total += add
 		accepted += add
 	}
 	return accepted
 }
+
+// InventoryFreeSlotsFor 返回在 slots 格上限下还能再装下多少件 itemID：
+// 已有该物品时先用满当前那格剩余的堆叠空间，再按整格上限算剩余格数。
+// slots <= 0 表示不限，返回 maxInt。
+func (ps *PlayerState) InventoryFreeSlotsFor(itemID string, slots int) int {
+	if slots <= 0 {
+		return maxInt
+	}
+	free := slots - ps.InventorySlotsUsed()
+	if free < 0 {
+		free = 0
+	}
+	have := 0
+	if ps != nil {
+		have = ps.Inventory[itemID]
+	}
+	room := 0
+	if def, ok := Item(itemID); ok && def.StackLimit > 0 && have > 0 {
+		room = def.StackLimit - have%def.StackLimit
+		if room == def.StackLimit {
+			room = 0
+		}
+	}
+	return room + free*stackSize(itemID)
+}
+
+// ItemStackSize 返回该物品单格可堆叠的数量（items.yaml 的 stack_limit；
+// 目录缺失时按 1）。
+func ItemStackSize(itemID string) int {
+	if def, ok := Item(itemID); ok && def.StackLimit > 0 {
+		return def.StackLimit
+	}
+	return 1
+}
+
+func stackSize(itemID string) int { return ItemStackSize(itemID) }
 
 // EnsureWarBlueprints returns a writable blueprint map.
 func (ps *PlayerState) EnsureWarBlueprints() map[string]*WarBlueprint {

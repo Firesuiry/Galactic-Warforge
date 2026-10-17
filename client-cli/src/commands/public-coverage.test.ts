@@ -159,4 +159,18 @@ describe('summary inventory rendering', () => {
     assert.match(out, /u-6/);
     assert.doesNotMatch(out, /coal/);
   });
+
+  it('prints backpack slot usage when the server reports it', () => {
+    const out = fmtSummary({
+      tick: 4,
+      active_planet_id: 'planet-1-1',
+      map_width: 8,
+      map_height: 8,
+      surface: { topology: 'cube_sphere', face_size: 4 },
+      players: {
+        p1: { player_id: 'p1', is_alive: true, executor: { unit_id: 'u-6' }, inventory: { steel: 1 }, inventory_slots_used: 3, inventory_slots_total: 40 },
+      },
+    } as never);
+    assert.match(out, /Inventory p1 \[3\/40 slots\]: steel:1/);
+  });
 });

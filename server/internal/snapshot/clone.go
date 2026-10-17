@@ -16,6 +16,7 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		Role:            ps.Role,
 		Resources:       ps.Resources,
 		Inventory:       ps.Inventory.Clone(),
+		InventorySlots:  ps.InventorySlots,
 		IsAlive:         ps.IsAlive,
 		FocusPlanetID:   ps.FocusPlanetID,
 		DarkFog:         ps.DarkFog,

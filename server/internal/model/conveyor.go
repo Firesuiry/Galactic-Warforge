@@ -323,6 +323,9 @@ func (c *ConveyorState) appendStack(stack ItemStack) {
 	c.Buffer = append(c.Buffer, stack)
 }
 
+// canMergeStacks 判断两摞相同物品能否并成一摞。上限取该物品的 stack_limit
+// （items.yaml，DSP 口径：矿石 100、齿轮 200、传送带 300…）——原来只看带子的
+// MaxStack（格容量），一摞会无限长下去。
 func canMergeStacks(a, b ItemStack) bool {
 	if a.ItemID != b.ItemID {
 		return false
@@ -330,10 +333,11 @@ func canMergeStacks(a, b ItemStack) bool {
 	if (a.Spray == nil) != (b.Spray == nil) {
 		return false
 	}
-	if a.Spray == nil && b.Spray == nil {
-		return true
+	if a.Spray != nil && (a.Spray.Level != b.Spray.Level || a.Spray.RemainingUses != b.Spray.RemainingUses) {
+		return false
 	}
-	return a.Spray.Level == b.Spray.Level && a.Spray.RemainingUses == b.Spray.RemainingUses
+	limit := stackSize(a.ItemID)
+	return a.Quantity+b.Quantity <= limit
 }
 
 func cloneSprayState(state *SprayState) *SprayState {

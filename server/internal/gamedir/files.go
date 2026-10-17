@@ -21,8 +21,8 @@ import (
 
 // CurrentFormatVersion 旧存档点/存档一律拒绝加载，不写兼容层。
 // 版本 1 = 旧网格；版本 3 = 快照只存地形游程与资源差异（可由地图配置 + seed
-// 重建的部分不入快照）；版本 4 = 第 16 轮去掉资金维度（Resources.Minerals /
-// BuildCost.minerals 等字段消失，开局物资包改走 bootstrap.items）。
+// 重建的部分不入快照）。之后的状态语义变更（第 16 轮去资金、第 17 轮背包格数制）
+// 由内嵌快照的 snapshot.CurrentVersion 一并拒绝，外层包格式未再变。
 const CurrentFormatVersion = 3
 
 var syncFile = func(file *os.File) error {
@@ -392,7 +392,7 @@ func validateMeta(meta *MetaFile) error {
 		return fmt.Errorf("meta is nil")
 	}
 	if meta.FormatVersion != CurrentFormatVersion {
-		return fmt.Errorf("存档点版本 %d 不受支持（当前为 %d）：细分网格与去资金经济两次改动都改变了状态语义，旧存档点无法加载", meta.FormatVersion, CurrentFormatVersion)
+		return fmt.Errorf("存档点版本 %d 不受支持（当前为 %d）：细分网格、去资金经济与背包格数制都改变了状态语义，旧存档点无法加载", meta.FormatVersion, CurrentFormatVersion)
 	}
 	return nil
 }
@@ -402,7 +402,7 @@ func validateSave(save *SaveFile) error {
 		return fmt.Errorf("save is nil")
 	}
 	if save.FormatVersion != CurrentFormatVersion {
-		return fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格与去资金经济两次改动都改变了状态语义，旧存档无法加载", save.FormatVersion, CurrentFormatVersion)
+		return fmt.Errorf("存档版本 %d 不受支持（当前为 %d）：细分网格、去资金经济与背包格数制都改变了状态语义，旧存档无法加载", save.FormatVersion, CurrentFormatVersion)
 	}
 	if err := validateSnapshotStrict("snapshot", save.Snapshot); err != nil {
 		return err

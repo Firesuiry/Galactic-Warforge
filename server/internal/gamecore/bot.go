@@ -878,10 +878,10 @@ const botSpareCoalCap = 80
 
 // botInventoryHasRoom 机甲背包是否还有余量（留 1/4 空间给其它物料）。
 func botInventoryHasRoom(player *model.PlayerState, exec *model.Unit) bool {
-	if player == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventoryCapacity <= 0 {
+	if player == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventorySlots <= 0 {
 		return true
 	}
-	return player.InventoryCount() < exec.Mecha.InventoryCapacity*3/4
+	return player.InventorySlotsUsed() < exec.Mecha.InventorySlots*3/4
 }
 
 // botMaterialNeeds 当前建设目标的物料缺口（按建设优先级：电力→矿机→制造台）。
@@ -1122,8 +1122,8 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 	}
 	// 一次开采量受背包剩余空间限制：请求量超过空位会让作业停在
 	// inventory_full 等玩家腾位置，而 bot 腾不出空位就整局停摆
-	// （背包上限成为硬约束后暴露：新开局只有 200 格，采 20 个往往放不下）。
-	quantity := min(20, mechaInventoryFree(ws.Players[playerID], mechaInventoryCapacity(ws, exec, ws.Players[playerID]), 20))
+	// （背包按格计：新开局 40 格，一格里能堆 stack_limit 件矿石）。
+	quantity := min(20, mechaInventoryFree(ws.Players[playerID], mechaInventorySlots(ws, exec, ws.Players[playerID]), node.Kind, 20))
 	if quantity <= 0 {
 		return model.Command{}, false
 	}

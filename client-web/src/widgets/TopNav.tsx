@@ -9,7 +9,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { isPowerAlertType } from '@/features/notifications/event-toasts';
-import { formatInventorySummary, pickKeyItems, sortedInventory } from '@/features/inventory-summary';
+import { formatInventorySummary, inventorySlotUsage, inventoryStackRows, pickKeyItems } from '@/features/inventory-summary';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
@@ -207,7 +207,7 @@ export function TopNav() {
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
-        <InventoryChips catalog={catalogQuery.data} inventory={currentPlayer?.inventory} />
+        <InventoryChips catalog={catalogQuery.data} inventory={currentPlayer?.inventory} slots={inventorySlotUsage(currentPlayer)} />
         <button
           className={`top-nav__chip top-nav__chip--button${powerChipClass ? ` ${powerChipClass}` : ''}${powerChipPulse}`}
           type="button"
@@ -329,7 +329,12 @@ function alertPosition(details: Record<string, unknown> | undefined): { x: numbe
 }
 
 /** 顶栏关键库存（弹药/电路板/铁块…前 4 项），点击展开完整背包库存。 */
-function InventoryChips({ catalog, inventory }: { catalog?: CatalogView; inventory?: ItemInventory }) {
+function InventoryChips({ catalog, inventory, slots }: {
+  catalog?: CatalogView;
+  inventory?: ItemInventory;
+  /** 背包格数占用（服务端 inventory_slots_used/total）；缺失时不显示容量。 */
+  slots?: { used: number; total: number } | null;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -341,7 +346,8 @@ function InventoryChips({ catalog, inventory }: { catalog?: CatalogView; invento
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
   const keyItems = pickKeyItems(inventory);
-  const all = sortedInventory(inventory);
+  const rows = inventoryStackRows(inventory, catalog);
+  const slotText = slots ? ` · ${slots.used}/${slots.total} 格` : '';
   return (
     <div className="top-nav__inventory" ref={ref}>
       <button
@@ -349,7 +355,7 @@ function InventoryChips({ catalog, inventory }: { catalog?: CatalogView; invento
         type="button"
         aria-expanded={open}
         aria-label="背包库存"
-        title="背包库存（点击展开全部）"
+        title={`背包库存${slotText}（点击展开全部）`}
         onClick={() => setOpen(!open)}
       >
         {keyItems.length === 0 ? <span className="top-nav__chip">背包空</span> : keyItems.map((item) => (
@@ -362,14 +368,19 @@ function InventoryChips({ catalog, inventory }: { catalog?: CatalogView; invento
       </button>
       {open ? (
         <div className="top-nav__inventory-panel" role="dialog" aria-label="完整库存">
-          <div className="top-nav__inventory-title">背包库存 · {all.length} 种</div>
-          {all.length === 0 ? <div className="top-nav__inventory-empty">背包是空的</div> : (
+          <div className="top-nav__inventory-title">
+            背包库存 · {rows.length} 种{slots ? ` · 已用 ${slots.used}/${slots.total} 格` : ''}
+          </div>
+          {rows.length === 0 ? <div className="top-nav__inventory-empty">背包是空的</div> : (
             <ul>
-              {all.map((item) => (
+              {rows.map((item) => (
                 <li key={item.id}>
                   <Icon iconKey={item.id} size={14} />
                   <span>{getItemDisplayName(catalog, item.id)}</span>
                   <strong>{item.quantity}</strong>
+                  <span className="top-nav__inventory-slots" title={item.stackLimit > 0 ? `每格最多 ${item.stackLimit} 件` : '未知堆叠上限'}>
+                    {item.slots} 格
+                  </span>
                 </li>
               ))}
             </ul>

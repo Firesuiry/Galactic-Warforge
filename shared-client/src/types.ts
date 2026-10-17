@@ -322,7 +322,7 @@ export interface MechaJob {
   energy_per_batch: number;
   /**
    * inventory_full：背包（机甲背包）装不下本批产出，作业停在原地保留进度与
-   * 预留原料，腾出空位后自动继续（试玩 1014：手搓产出曾无视 inventory_capacity
+   * 预留原料，腾出空位后自动继续（试玩 1014：手搓产出曾无视旧按件上限 inventory_capacity
    * 把背包顶到 201/200）。
    */
   state: 'running' | 'no_energy' | 'out_of_range' | 'inventory_full';
@@ -332,6 +332,8 @@ export interface MechaJob {
 export interface MechaState {
   logistics_requests?: Record<string, MechaLogisticsRequest>;
   job?: MechaJob;
+  /** 背包格数上限（每格按物品 stack_limit 堆叠）。 */
+  inventory_slots?: number;
   energy: number;
   max_energy: number;
   fuel_energy: number;
@@ -966,6 +968,12 @@ export interface PlayerState {
   role?: string;
   resources?: Resources;
   inventory?: ItemInventory;
+  /**
+   * 背包格数上限与已用格数（DSP 口径：每格按物品 stack_limit 堆叠）。
+   * 仅自己可见；旧服务端不返回时按 0 处理（UI 隐藏容量提示）。
+   */
+  inventory_slots_used?: number;
+  inventory_slots_total?: number;
   permissions?: string[];
   /** F4：玩家自己的视图焦点/默认落点行星。 */
   focus_planet_id?: string;
@@ -1012,6 +1020,9 @@ export interface AgentBriefingSelf {
   is_alive: boolean;
   resources: Resources;
   inventory?: ItemInventory;
+  /** 背包格数占用/上限（DSP 口径：每格按物品 stack_limit 堆叠）。 */
+  inventory_slots_used?: number;
+  inventory_slots_total?: number;
   tech?: AgentBriefingTech;
   /** F4：玩家自己的视图焦点/默认落点行星。 */
   focus_planet_id?: string;

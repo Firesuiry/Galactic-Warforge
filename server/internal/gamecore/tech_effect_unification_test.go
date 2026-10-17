@@ -15,7 +15,7 @@ type migratedTechEffect struct {
 
 var migratedTechEffects = []migratedTechEffect{
 	{"mechanical_frame", "mecha_max_hp", 20},
-	{"inventory_capacity", "mecha_inventory_capacity", 60},
+	{"inventory_capacity", "mecha_inventory_slots", 5},
 	{"drive_engine", "move_speed", 6},
 	{"energy_circuit", "mecha_charge_rate_pct", 20},
 	{"distribution_range", "distribution_range", 15},
@@ -92,13 +92,13 @@ func TestMigratedDerivationsMatchLegacyStats(t *testing.T) {
 		}
 	}
 
-	// inventory_capacity: capacity = 200 + 60*L
+	// inventory_capacity: slots = 40 + 5*L（DSP 机甲背包按格计）
 	def, _ = model.TechDefinitionByID("inventory_capacity")
 	for level := 0; level <= def.MaxLevel; level++ {
 		unit := executor()
 		model.SyncMechaCapabilities(unit, techPlayer(map[string]int{"inventory_capacity": level}))
-		if want := 200 + 60*level; unit.Mecha.InventoryCapacity != want {
-			t.Fatalf("inventory_capacity L%d capacity=%d, want %d", level, unit.Mecha.InventoryCapacity, want)
+		if want := 40 + 5*level; unit.Mecha.InventorySlots != want {
+			t.Fatalf("inventory_capacity L%d slots=%d, want %d", level, unit.Mecha.InventorySlots, want)
 		}
 	}
 

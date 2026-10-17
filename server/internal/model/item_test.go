@@ -56,7 +56,7 @@ func TestMidLateItemsPresent(t *testing.T) {
 		{itemID: ItemTitaniumCrystal, category: ItemCategoryComponent, stackLimit: 100},
 		{itemID: ItemTitaniumAlloy, category: ItemCategoryMaterial, stackLimit: 100},
 		{itemID: ItemFrameMaterial, category: ItemCategoryComponent, stackLimit: 100},
-		{itemID: ItemQuantumChip, category: ItemCategoryComponent, stackLimit: 50},
+		{itemID: ItemQuantumChip, category: ItemCategoryComponent, stackLimit: 200},
 	}
 
 	for _, tc := range cases {

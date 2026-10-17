@@ -1,4 +1,4 @@
-import type { ItemInventory } from '@shared/types';
+import type { ItemCatalogEntry, ItemInventory } from '@shared/types';
 
 /** 顶栏/总览里单独列出的原矿类物品。 */
 interface OreDefinition {
@@ -55,4 +55,48 @@ export function sortedInventory(inventory: ItemInventory | undefined) {
     .filter(([, quantity]) => quantity > 0)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .map(([id, quantity]) => ({ id, quantity }));
+}
+
+/** 背包容量（DSP 格数口径）：已用格数 / 总格数；总格数缺失时返回 null。 */
+export interface InventorySlotUsage {
+  used: number;
+  total: number;
+}
+
+/**
+ * 读服务端下发的背包格数占用（/state/summary 的 `inventory_slots_used` /
+ * `inventory_slots_total`）。旧服务端不返回时返回 null，UI 不显示容量提示。
+ */
+export function inventorySlotUsage(player?: { inventory_slots_used?: number; inventory_slots_total?: number } | null): InventorySlotUsage | null {
+  const total = player?.inventory_slots_total ?? 0;
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const used = Math.max(0, player?.inventory_slots_used ?? 0);
+  return { used: Math.min(used, total), total };
+}
+
+/**
+ * 单件物品占用的背包格数：ceil(数量 / 该物品的 stack_limit)。
+ * 目录里查不到 stack_limit 时按 1 格算（与服务端 model.ItemSlots 一致）。
+ */
+export function itemSlots(quantity: number, stackLimit?: number) {
+  if (!Number.isFinite(quantity) || quantity <= 0) return 0;
+  const perSlot = stackLimit && stackLimit > 0 ? stackLimit : 1;
+  return Math.ceil(quantity / perSlot);
+}
+
+/** 背包内每件物品的格数占用（数量降序，用于背包面板的「每项堆叠」展示）。 */
+export function inventoryStackRows(inventory: ItemInventory | undefined, catalog?: { items?: ItemCatalogEntry[] }) {
+  const stackLimits = new Map<string, number>();
+  for (const item of catalog?.items ?? []) {
+    if (item.id && item.stack_limit > 0) stackLimits.set(item.id, item.stack_limit);
+  }
+  return sortedInventory(inventory).map(({ id, quantity }) => {
+    const stackLimit = stackLimits.get(id) ?? 0;
+    return {
+      id,
+      quantity,
+      stackLimit,
+      slots: itemSlots(quantity, stackLimit),
+    };
+  });
 }

@@ -639,7 +639,7 @@ func refundConstructionItems(ws *model.WorldState, player *model.PlayerState, it
 	if player == nil || len(items) == 0 {
 		return
 	}
-	player.AddItems(items, mechaInventoryCapacity(ws, nil, player))
+	player.AddItems(items, mechaInventorySlots(ws, nil, player))
 }
 
 func rollbackConstructionDeduction(ws *model.WorldState, task *model.ConstructionTask) {

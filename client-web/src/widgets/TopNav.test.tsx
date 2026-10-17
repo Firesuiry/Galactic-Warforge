@@ -199,6 +199,58 @@ describe('TopNav save', () => {
     await waitFor(() => expect(chip).toHaveTextContent('140'));
   });
 
+  it('背包面板显示格数占用与每项堆叠（U5：DSP 格数制）', async () => {
+    const user = userEvent.setup();
+    const alertsStub = stubAlerts();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const alertResponse = alertsStub(url);
+      if (alertResponse) {
+        return Promise.resolve(alertResponse);
+      }
+      if (url.pathname === '/state/summary') {
+        return Promise.resolve(jsonResponse({
+          tick: 12,
+          active_planet_id: 'planet-1-1',
+          players: {
+            p1: {
+              player_id: 'p1',
+              resources: { energy: 1 },
+              inventory: { iron_ore: 250, gear: 30 },
+              inventory_slots_used: 4,
+              inventory_slots_total: 40,
+              is_alive: true,
+            },
+          },
+        }));
+      }
+      if (url.pathname === '/state/stats') {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 12,
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+        }));
+      }
+      if (url.pathname === '/catalog') {
+        return Promise.resolve(jsonResponse({
+          items: [
+            { id: 'iron_ore', name: '铁矿', category: 'ore', form: 'solid', stack_limit: 100, unit_volume: 1, icon_key: 'iron_ore', color: '#fff' },
+            { id: 'gear', name: '齿轮', category: 'component', form: 'solid', stack_limit: 200, unit_volume: 1, icon_key: 'gear', color: '#fff' },
+          ],
+        }));
+      }
+      throw new Error(`unexpected request ${url.pathname}`);
+    }));
+
+    renderTopNav();
+    const button = await screen.findByRole('button', { name: '背包库存' });
+    await waitFor(() => expect(button).toHaveAttribute('title', '背包库存 · 4/40 格（点击展开全部）'));
+    await user.click(button);
+    expect(await screen.findByText('背包库存 · 2 种 · 已用 4/40 格')).toBeInTheDocument();
+    expect(await screen.findByText('3 格')).toBeInTheDocument();
+    expect(await screen.findByText('1 格')).toBeInTheDocument();
+  });
+
   it('研究站（空 matrix_lab）的吞吐类告警不计入顶栏缺电角标', async () => {
     const researchNoiseAlert = {
       alert_id: 'a-noise',

@@ -1,6 +1,7 @@
 package gamecore
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -18,12 +19,12 @@ func transferWithdrawWorld(t *testing.T, used int) (*GameCore, *model.WorldState
 	unit.Mecha = model.NewMechaState()
 	player := ws.Players["p1"]
 	model.SyncMechaCapabilities(unit, player)
-	capacity := unit.Mecha.InventoryCapacity
+	slots := unit.Mecha.InventorySlots
 	player.Inventory = model.ItemInventory{}
 	if used > 0 {
-		player.Inventory[model.ItemCoal] = used
+		player.Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
-	return gc, ws, depot, player, capacity
+	return gc, ws, depot, player, slots
 }
 
 func withdrawCommand(buildingID, itemID string, quantity int) model.Command {
@@ -39,55 +40,60 @@ func withdrawCommand(buildingID, itemID string, quantity int) model.Command {
 }
 
 // 回归（试玩 1014 问题 1）：取出只能填满背包剩余空间，永远不能把背包顶过上限；
-// 装满后再取出报「背包已满（N/容量）」而不是继续加。
+// 装满后再取出报「背包已满（已用 N/总 M 格）」而不是继续加。
+// 第 17 轮（U5）：容量按格计，每格堆叠该物品的 stack_limit 件。
 func TestTransferItemToPlayerNeverExceedsInventoryCapacity(t *testing.T) {
-	gc, ws, depot, player, capacity := transferWithdrawWorld(t, 0)
-	if _, _, err := depot.Storage.Load(model.ItemIronIngot, 10); err != nil {
+	gc, ws, depot, player, slots := transferWithdrawWorld(t, 0)
+	perSlot := model.ItemStackSize(model.ItemCoal)
+	if _, _, err := depot.Storage.Load(model.ItemIronIngot, 50); err != nil {
 		t.Fatal(err)
 	}
-	// 背包离满还差 3 格：请求 10 个只能取出 3 个，背包正好到上限。
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity - 3}
+	// 背包离满还差 3 格：请求 10 个（铁块 100 件/格，不到 1 格）只能取出 10 个。
+	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 3) * perSlot}
 	res, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", withdrawCommand(depot.ID, model.ItemIronIngot, 10))
 	if res.Code != model.CodeOK {
 		t.Fatalf("partial withdraw: %s (%s)", res.Code, res.Message)
 	}
-	if player.Inventory[model.ItemIronIngot] != 3 || player.InventoryCount() != capacity {
+	if player.Inventory[model.ItemIronIngot] != 10 || player.InventorySlotsUsed() != slots-2 {
 		t.Fatalf("withdraw must fill exactly the free slots: %v", player.Inventory)
 	}
-	if !strings.Contains(res.Message, "已取出 3 个") {
+	if !strings.Contains(res.Message, "已取出 10 个") {
 		t.Fatalf("receipt must report the accepted amount: %q", res.Message)
 	}
-	if got := depot.Storage.OutputQuantity(model.ItemIronIngot); got != 7 {
-		t.Fatalf("building must keep the untaken items, got %d", got)
-	}
 
-	// 背包已满：拒绝并报占用，绝不超上限。
+	// 背包已满格：拒绝并报占用，绝不超上限。
+	player.Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
 	res, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", withdrawCommand(depot.ID, model.ItemIronIngot, 5))
-	if res.Code != model.CodeInsufficientResource || !strings.Contains(res.Message, "背包已满（") {
+	if res.Code != model.CodeInsufficientResource || !strings.Contains(res.Message, "背包已满（已用") {
 		t.Fatalf("full bag must be reported separately: %s (%s)", res.Code, res.Message)
 	}
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("withdraw pushed the bag over capacity: %d/%d", got, capacity)
+	if !strings.Contains(res.Message, fmt.Sprintf("%d/%d 格", slots, slots)) {
+		t.Fatalf("full-bag message must show slot occupancy, got %q", res.Message)
 	}
-	if got := depot.Storage.OutputQuantity(model.ItemIronIngot); got != 7 {
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("withdraw pushed the bag over capacity: %d/%d", got, slots)
+	}
+	if got := depot.Storage.OutputQuantity(model.ItemIronIngot); got != 40 {
 		t.Fatalf("failed withdraw must not drain the building, got %d", got)
 	}
 }
 
-// 回归（试玩 1014 问题 1）：手搓产出把背包顶到 201/200 之后，取出全部报
-// 「背包已满（201/200）」——先修产出侧，这里锁住「取出永远不会让背包超过上限」。
+// 回归（试玩 1014 问题 1）：手搓产出把背包顶满之后，取出全部报
+// 「背包已满」——先修产出侧，这里锁住「取出永远不会让背包超过上限」。
 func TestTransferItemToPlayerClampsAfterCraftFilledTheBag(t *testing.T) {
-	gc, ws, depot, player, capacity := transferWithdrawWorld(t, 0)
+	gc, ws, depot, player, slots := transferWithdrawWorld(t, 0)
 	unit := ws.Units["u-1"]
 	player.Tech = model.NewPlayerTechState("p1")
-	// 背包满格启动 1 批 gear 手搓：预留 1 个铁块腾出 1 格，产出齿轮后正好 200/200。
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity - 1, model.ItemIronIngot: 1}
+	perSlot := model.ItemStackSize(model.ItemCoal)
+	// 背包满格启动 1 批 gear 手搓：预留 1 个铁块占 1 格，腾出的是铁块那格；
+	// 产出齿轮（200 件/格，1 个也占 1 格）后正好回到满格。
+	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 1}
 	craft := model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"recipe_id": "gear", "quantity": 1}}
 	if res, _ := execCommand(gc, model.CmdCraftItem, ws, "p1", craft); res.Code != model.CodeOK {
 		t.Fatalf("craft start: %+v", res)
 	}
 	advancePersonalTicks(ws, 20)
-	if player.InventoryCount() != capacity || player.Inventory[model.ItemGear] != 1 {
+	if player.InventorySlotsUsed() != slots || player.Inventory[model.ItemGear] != 1 {
 		t.Fatalf("craft should fill the bag exactly: %v", player.Inventory)
 	}
 	if unit.Mecha.Job != nil {
@@ -100,7 +106,7 @@ func TestTransferItemToPlayerClampsAfterCraftFilledTheBag(t *testing.T) {
 	if res.Code != model.CodeInsufficientResource {
 		t.Fatalf("full bag withdraw: %s (%s)", res.Code, res.Message)
 	}
-	if player.InventoryCount() != capacity {
-		t.Fatalf("bag must stay exactly at capacity, got %d/%d", player.InventoryCount(), capacity)
+	if player.InventorySlotsUsed() != slots {
+		t.Fatalf("bag must stay exactly at capacity, got %d/%d", player.InventorySlotsUsed(), slots)
 	}
 }

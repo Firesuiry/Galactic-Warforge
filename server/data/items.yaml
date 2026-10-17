@@ -129,49 +129,49 @@ items:
     name: 铁块
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: copper_ingot
     name: 铜块
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: stone_brick
     name: 石材
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: glass
     name: 玻璃
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: silicon_ingot
     name: 高纯硅块
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: titanium_ingot
     name: 钛块
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: graphene
     name: 石墨烯
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: carbon_nanotube
     name: 碳纳米管
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: crystal_silicon
     name: 晶格硅
@@ -183,13 +183,13 @@ items:
     name: 塑料
     category: material
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: magnet
     name: 磁铁
     category: material
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: steel
     name: 钢材
@@ -213,7 +213,7 @@ items:
     name: 发动机
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: electromagnetic_turbine
     name: 电磁涡轮
@@ -237,7 +237,7 @@ items:
     name: 电浆激发器
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: combustible_unit
     name: 燃烧单元
@@ -262,25 +262,25 @@ items:
     name: 齿轮
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: logistics_bot
     name: 配送运输机
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: logistics_drone
     name: 物流运输机
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 200
     unit_volume: 1
   - id: logistics_vessel
     name: 星际物流运输船
     category: component
     form: solid
-    stack_limit: 20
+    stack_limit: 50
     unit_volume: 1
   - id: motor
     name: 电动机
@@ -292,25 +292,25 @@ items:
     name: 磁线圈
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: circuit_board
     name: 电路板
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: microcrystalline_component
     name: 微晶元件
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: processor
     name: 处理器
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: titanium_crystal
     name: 钛晶石
@@ -334,31 +334,31 @@ items:
     name: 量子芯片
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 200
     unit_volume: 1
   - id: photon_combiner
     name: 光子合并器
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 200
     unit_volume: 2
   - id: critical_photon
     name: 临界光子
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 100
     unit_volume: 1
   - id: antimatter
     name: 反物质
     category: material
     form: solid
-    stack_limit: 50
+    stack_limit: 20
     unit_volume: 1
   - id: particle_container
     name: 粒子容器
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 100
     unit_volume: 2
   - id: annihilation_constraint_sphere
     name: 湮灭约束球
@@ -370,13 +370,13 @@ items:
     name: 奇异物质
     category: material
     form: solid
-    stack_limit: 20
+    stack_limit: 100
     unit_volume: 2
   - id: space_warper
     name: 空间翘曲器
     category: component
     form: solid
-    stack_limit: 20
+    stack_limit: 100
     unit_volume: 1
   - id: energetic_graphite
     name: 高能石墨
@@ -389,94 +389,94 @@ items:
     name: 液氢燃料棒
     category: fuel
     form: solid
-    stack_limit: 50
+    stack_limit: 30
     unit_volume: 2
     mecha_fuel_energy: 100
   - id: deuterium_fuel_rod
     name: 氘核燃料棒
     category: fuel
     form: solid
-    stack_limit: 50
+    stack_limit: 30
     unit_volume: 2
     mecha_fuel_energy: 250
   - id: antimatter_fuel_rod
     name: 反物质燃料棒
     category: fuel
     form: solid
-    stack_limit: 20
+    stack_limit: 30
     unit_volume: 3
     mecha_fuel_energy: 1000
   - id: proliferator_mk1
     name: 增产剂 Mk.I
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: proliferator_mk2
     name: 增产剂 Mk.II
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: proliferator_mk3
     name: 增产剂 Mk.III
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: electromagnetic_matrix
     name: 电磁矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: energy_matrix
     name: 能量矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: structure_matrix
     name: 结构矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: information_matrix
     name: 信息矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: gravity_matrix
     name: 引力矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: dark_fog_matrix
     name: 黑雾矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: universe_matrix
     name: 宇宙矩阵
     category: matrix
     form: solid
-    stack_limit: 20
+    stack_limit: 200
     unit_volume: 1
   - id: ammo_bullet
     name: 子弹
     category: ammo
     form: solid
-    stack_limit: 200
+    stack_limit: 100
     unit_volume: 1
   - id: ammo_missile
     name: 导弹组
     category: ammo
     form: solid
-    stack_limit: 50
+    stack_limit: 100
     unit_volume: 3
   - id: plasma_capsule
     name: 等离子胶囊
@@ -500,19 +500,19 @@ items:
     name: 精准无人机载荷
     category: component
     form: solid
-    stack_limit: 50
+    stack_limit: 100
     unit_volume: 2
   - id: solar_sail
     name: 太阳帆
     category: component
     form: solid
-    stack_limit: 100
+    stack_limit: 200
     unit_volume: 1
   - id: small_carrier_rocket
     name: 小型运载火箭
     category: ammo
     form: solid
-    stack_limit: 10
+    stack_limit: 20
     unit_volume: 5
   - id: kimberlite_ore
     name: 金伯利矿石

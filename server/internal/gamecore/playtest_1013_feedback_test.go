@@ -120,8 +120,8 @@ func TestTransferItemToPlayerSeparatesEmptyBuildingFromFullBag(t *testing.T) {
 	if _, _, err := depot.Storage.Load(model.ItemIronIngot, 5); err != nil {
 		t.Fatal(err)
 	}
-	capacity := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID].Mecha.InventoryCapacity
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity}
+	slots := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID].Mecha.InventorySlots
+	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
 	res = withdraw()
 	if res.Code != model.CodeInsufficientResource {
 		t.Fatalf("full-bag code = %s (%s)", res.Code, res.Message)

@@ -245,6 +245,13 @@
   letter-spacing: 0.03em;
 }
 
+/* 背包格数已满：与 danger 态同色（与缺电 chip 同一套红）。 */
+.hero-chip--danger {
+  border-color: rgba(255, 87, 87, 0.55);
+  background: rgba(255, 87, 87, 0.12);
+  color: #ff9a9a;
+}
+
 .json-preview {
   margin: 0;
   overflow: auto;

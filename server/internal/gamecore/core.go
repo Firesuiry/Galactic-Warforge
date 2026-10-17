@@ -145,7 +145,7 @@ func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstra
 	if !hasBootstrap(bootstrap) {
 		return
 	}
-	// 开局物资包绕过 inventory_capacity：预设（如 config-war 的 2090 件）本来就是
+	// 开局物资包绕过背包格数上限（inventory_slots）：预设（如 config-war 的 2090 件）本来就是
 	// 为战争预设准备的，按机甲背包上限裁剪会让 bot/玩家一开局就缺料、整局卡死
 	// （实测 bot 的基建决策链直接停摆）。这是配置作者明确给出的开局库存，
 	// 不是游戏内产出，不适用「任何入包路径都不超上限」的运行时约束。
