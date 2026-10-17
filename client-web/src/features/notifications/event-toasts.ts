@@ -352,16 +352,21 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
       // 玩家才知道是哪台机器人卡在哪座建筑外圈。
       const haulUnreachable = alertType === 'haul_unreachable';
       const haulDetails = asRecord(alert?.details) ?? {};
-      const haulTargetId = asString(haulDetails.building_id);
-      const haulTargetType = asString(haulDetails.building_type) || (haulTargetId ? buildingType : '');
+      // 服务端契约：告警的 building_id/building_type 是目标建筑，details 只有 unit_id/building_id/position。
+      const haulTargetId = asString(haulDetails.building_id) || buildingId;
+      const haulTargetType = buildingType;
+      // 位置可能来自 details.position 或 payload.position：统一塞进 details，
+      // 让 haulUnreachableDetail 自己拼在目标建筑后面（否则正文会重复一遍坐标）。
+      const haulPosition = haulUnreachable ? (haulDetails.position ?? position) : position;
+      const haulDetailSource = haulUnreachable && haulPosition && haulDetails.position === undefined
+        ? { ...haulDetails, position: haulPosition }
+        : haulDetails;
       const haulDetail = haulUnreachable
         ? haulUnreachableDetail(
-          { details: haulDetails },
+          { details: haulDetailSource },
           (buildingId) => (buildingId === haulTargetId && haulTargetType ? translateBuildingType(haulTargetType) : undefined),
         )
         : '';
-      const haulPosition = haulUnreachable ? (haulDetails.position ?? position) : position;
-      const haulPositionLabel = haulUnreachable && haulPosition ? formatPositionLabel(haulPosition) : positionLabel;
       return {
         toast: {
           // 断电类：danger + 常驻（sticky）且不套用产线节流——
@@ -371,7 +376,8 @@ export function toastFromGameEvent(event: GameEventDetail, viewerId = ''): Event
           body: beltBlocked
             ? [buildingLabel, beltDetail || issue, positionLabel].filter(Boolean).join('：') || undefined
             : haulUnreachable
-              ? [haulDetail || issue, haulPositionLabel].filter(Boolean).join(' · ') || undefined
+              // haulDetail 已经含目标建筑与坐标：不再追加一遍位置。
+              ? haulDetail || issue || undefined
               : [buildingLabel, power ? '电力不足' : issue, positionLabel].filter(Boolean).join('：') || undefined,
           href: planetHref(payload),
           // 同一建筑的同类告警合并计数并节流（采矿机满仓后每 3000 tick 重复提醒，

@@ -313,16 +313,18 @@ describe('toastFromGameEvent 事件映射', () => {
     const mapped = toastFromGameEvent(gameEvent('production_alert', {
       alert: {
         alert_id: 'a-haul',
-        building_id: 'u-184',
-        building_type: 'transport_robot',
+        // 服务端契约：告警的 building_id/building_type 是目标建筑，details 只带 unit_id/building_id/position。
+        building_id: 'b-164',
+        building_type: 'arc_smelter',
         alert_type: 'haul_unreachable',
         message: 'unit u-184 cannot reach b-164',
-        details: { unit_id: 'u-184', building_id: 'b-164', building_type: 'arc_smelter', position: { x: 61, y: 135, z: 0 } },
+        details: { unit_id: 'u-184', building_id: 'b-164', position: { x: 61, y: 135, z: 0 } },
       },
     }));
     expect(mapped?.toast.kind).toBe('warning');
     expect(mapped?.toast.title).toBe('运输机器人到不了目标');
-    expect(mapped?.toast.body).toBe('机器人 u-184 → 电弧熔炉 (61, 135) · (61, 135)');
+    // 坐标只出现一次（detail 里已含，正文不再追加）
+    expect(mapped?.toast.body).toBe('机器人 u-184 → 电弧熔炉 (61, 135)');
     expect(mapped?.toast.mergeKey).toBe('production_alert:u-184:b-164:haul_unreachable');
     expect(`${mapped?.toast.title}${mapped?.toast.body}`).not.toMatch(/[a-z]+_[a-z]+/);
   });
