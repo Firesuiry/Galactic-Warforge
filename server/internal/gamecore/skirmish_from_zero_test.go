@@ -1835,32 +1835,35 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 // 原矿排最后。planFor 是「按物品逐个下钻」的，先排的物品会先占掉机甲的动作
 // 队列，所以顺序直接决定机甲先手搓什么（见 planForSteps 的调用点注释）。
 // 同深度按名字排序，保证确定性。
+//
+// 深度必须**逐物品独立**计算（不带跨物品的记忆化）：记忆化会把「第一次从哪个
+// 物品下钻到它」的层级写进缓存，而第一次下钻的物品来自 map 迭代顺序——同一
+// 局面两次运行会算出不同的深度、进而排出不同的动作顺序（实测 seed 001 的
+// tick 5041：一次先手搓磁铁、一次先手搓铁块，整局从此分叉）。
 func sortByHandcraftDepth(items []string, recipeFor func(string) (model.RecipeDefinition, bool)) []string {
-	depth := map[string]int{}
-	var itemDepth func(item string, level int) int
-	itemDepth = func(item string, level int) int {
-		if level > 5 {
+	var itemDepth func(item string, level int, visiting map[string]bool) int
+	itemDepth = func(item string, level int, visiting map[string]bool) int {
+		if level > 5 || visiting[item] {
+			// 深度上限 / 循环配方（反馈料）：不再下钻。
 			return level
-		}
-		if d, ok := depth[item]; ok {
-			return d
 		}
 		recipe, ok := recipeFor(item)
 		if !ok {
-			depth[item] = level
 			return level
 		}
+		visiting[item] = true
 		best := level
 		for _, in := range recipe.Inputs {
-			if d := itemDepth(in.ItemID, level+1); d > best {
+			if d := itemDepth(in.ItemID, level+1, visiting); d > best {
 				best = d
 			}
 		}
-		depth[item] = best
+		delete(visiting, item)
 		return best
 	}
+	depth := make(map[string]int, len(items))
 	for _, item := range items {
-		itemDepth(item, 0)
+		depth[item] = itemDepth(item, 0, map[string]bool{})
 	}
 	sort.Slice(items, func(i, j int) bool {
 		if depth[items[i]] != depth[items[j]] {
