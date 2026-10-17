@@ -130,6 +130,21 @@ func newSettlementPipeline() settlementPipeline {
 				}
 			}
 
+			// 分拣器停工告警（sorter_stalled）：自动运输机器人跳过「分拣器喂料」
+			// 的机器，分拣器断电/暂停/取不到货时那台机器会静默断料。放在生产
+			// 结算之后判定（要看目标机器本 tick 是否真的缺料），与带堵告警同
+			// 口径进告警历史、同口径解除。
+			sorterEvents, sorterResolved := settleSorterStallAlerts(ws)
+			events = append(events, sorterEvents...)
+			resolutions = append(resolutions, sorterResolved...)
+			if gc.alertHistory != nil {
+				for _, evt := range sorterEvents {
+					if alert, ok := evt.Payload["alert"].(*model.ProductionAlert); ok && alert != nil {
+						gc.alertHistory.Record([]*model.ProductionAlert{alert})
+					}
+				}
+			}
+
 			if gc.monitor != nil {
 				monEvents, alerts, monResolved := gc.monitor.settleProductionMonitoring(ws, ws.Tick)
 				events = append(events, monEvents...)

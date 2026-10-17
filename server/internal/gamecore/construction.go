@@ -419,6 +419,27 @@ func countActiveConstructionByRegion(ws *model.WorldState) map[string]int {
 	return counts
 }
 
+// sortedConstructionTasks 施工任务按 ID 排序返回（nil 过滤掉）。
+// 结算按这个顺序处理：Tasks 是 map，同一 tick 多单一起变化时遍历顺序会
+// 决定实体 ID 分配与事件顺序，必须固定下来（整局确定性）。
+func sortedConstructionTasks(ws *model.WorldState) []*model.ConstructionTask {
+	if ws == nil || ws.Construction == nil || len(ws.Construction.Tasks) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(ws.Construction.Tasks))
+	for id := range ws.Construction.Tasks {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]*model.ConstructionTask, 0, len(ids))
+	for _, id := range ids {
+		if task := ws.Construction.Tasks[id]; task != nil {
+			out = append(out, task)
+		}
+	}
+	return out
+}
+
 func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameEvent {
 	if ws == nil {
 		return nil
@@ -437,8 +458,11 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	activeByPlayer := countActiveExecutorUsage(gc.sortedWorlds())
 	activeByRegion := countActiveConstructionByRegion(ws)
 
-	// T079: First pass - pause in-progress tasks that no longer have materials available
-	for _, task := range ws.Construction.Tasks {
+	// T079: First pass - pause in-progress tasks that no longer have materials available.
+	// 按任务 ID 排序遍历：Tasks 是 map，同一 tick 多单一起变化时（一起暂停/一起
+	// 落成）事件顺序与实体 ID 分配顺序会随 map 迭代顺序漂移。
+	orderedTasks := sortedConstructionTasks(ws)
+	for _, task := range orderedTasks {
 		if task == nil || task.State != model.ConstructionInProgress {
 			continue
 		}
@@ -526,7 +550,9 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	}
 
 	var completed []string
-	for id, task := range ws.Construction.Tasks {
+	// 完成阶段同样按任务 ID 排序：同一 tick 多单落成时实体 ID 按遍历顺序分配，
+	// map 迭代顺序会让同一 seed 两局的建筑 ID 互换。
+	for _, task := range orderedTasks {
 		if task == nil || task.State != model.ConstructionInProgress {
 			continue
 		}
@@ -576,12 +602,12 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			if task.MaterialsDeducted {
 				refundConstructionRefund(ws, task)
 			}
-			completed = append(completed, id)
+			completed = append(completed, task.ID)
 			continue
 		}
 		_ = ws.Construction.Transition(task.ID, model.ConstructionCompleted)
 		events = append(events, evts...)
-		completed = append(completed, id)
+		completed = append(completed, task.ID)
 	}
 
 	for _, id := range completed {

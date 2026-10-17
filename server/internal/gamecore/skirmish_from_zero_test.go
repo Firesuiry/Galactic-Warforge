@@ -557,11 +557,19 @@ func (op *zeroOpening) powerRescue() bool {
 // 但若建筑建成时配方为空（例如配方的 BuildingTypes 不含该建筑），
 // 这台机器就会永远待机——真人玩家会在机器面板里手动选配方，脚本在这里补。
 func (op *zeroOpening) repairRecipes() {
+	// 建筑按 ID 排序后再遍历：map 顺序随机，多台同型机器时命令下发顺序
+	// 会漂移，破坏整局模拟的确定性。
+	ids := make([]string, 0, len(op.ws.Buildings))
+	for id := range op.ws.Buildings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
 	for i, s := range op.steps {
 		if s.recipe == "" || i >= op.next {
 			continue
 		}
-		for _, b := range op.ws.Buildings {
+		for _, id := range ids {
+			b := op.ws.Buildings[id]
 			if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Type != s.btype || b.Production == nil {
 				continue
 			}
@@ -589,7 +597,15 @@ func (op *zeroOpening) sweepInventory() {
 	if op.inventoryUsed() <= op.mechaCapacity()/3 {
 		return
 	}
-	for item, qty := range op.player.Inventory {
+	// 物品按 ID 排序：dumpToIndustry 会下发 transfer_item 命令，map 迭代顺序
+	// 会让同一状态下发命令的顺序每次不同（脚本化玩家的确定性要求）。
+	items := make([]string, 0, len(op.player.Inventory))
+	for item := range op.player.Inventory {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	for _, item := range items {
+		qty := op.player.Inventory[item]
 		if qty <= 0 || needed[item] {
 			continue
 		}
@@ -1352,9 +1368,16 @@ func (op *zeroOpening) feedIndustry() {
 	}
 	// 制造台：每台按自己的配方喂料（多台同配方也各自喂）。
 	feedAssembler := func(recipeID string, inputs map[string]int) {
+		// 喂料顺序按物品 ID 排序：load 会下发 transfer_item 命令，map 迭代顺序
+		// 会让同一状态下发命令的顺序每次不同（脚本化玩家的确定性要求）。
+		items := make([]string, 0, len(inputs))
+		for item := range inputs {
+			items = append(items, item)
+		}
+		sort.Strings(items)
 		for _, b := range byRecipe[recipeID] {
-			for item, qty := range inputs {
-				load(b, item, qty, true)
+			for _, item := range items {
+				load(b, item, inputs[item], true)
 			}
 		}
 	}
@@ -1534,7 +1557,15 @@ func (op *zeroOpening) relieveBackpackFull(depots []*model.Building) {
 // byRecipeCache 按配方把 p1 的生产建筑分组的轻量快照（兜底疏通用）。
 func (op *zeroOpening) byRecipeCache() map[string][]*model.Building {
 	out := map[string][]*model.Building{}
-	for _, b := range op.ws.Buildings {
+	// 建筑按 ID 排序后再分组：调用方（feedOreToSmelters / oreDemandFor）按列表
+	// 顺序决定先喂哪台机器，map 迭代顺序会让同一状态下发命令的顺序每次不同。
+	ids := make([]string, 0, len(op.ws.Buildings))
+	for id := range op.ws.Buildings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		b := op.ws.Buildings[id]
 		if b == nil || b.OwnerID != "p1" || b.HP <= 0 || b.Storage == nil || b.Production == nil {
 			continue
 		}
@@ -1804,32 +1835,35 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 // 原矿排最后。planFor 是「按物品逐个下钻」的，先排的物品会先占掉机甲的动作
 // 队列，所以顺序直接决定机甲先手搓什么（见 planForSteps 的调用点注释）。
 // 同深度按名字排序，保证确定性。
+//
+// 深度必须**逐物品独立**计算（不带跨物品的记忆化）：记忆化会把「第一次从哪个
+// 物品下钻到它」的层级写进缓存，而第一次下钻的物品来自 map 迭代顺序——同一
+// 局面两次运行会算出不同的深度、进而排出不同的动作顺序（实测 seed 001 的
+// tick 5041：一次先手搓磁铁、一次先手搓铁块，整局从此分叉）。
 func sortByHandcraftDepth(items []string, recipeFor func(string) (model.RecipeDefinition, bool)) []string {
-	depth := map[string]int{}
-	var itemDepth func(item string, level int) int
-	itemDepth = func(item string, level int) int {
-		if level > 5 {
+	var itemDepth func(item string, level int, visiting map[string]bool) int
+	itemDepth = func(item string, level int, visiting map[string]bool) int {
+		if level > 5 || visiting[item] {
+			// 深度上限 / 循环配方（反馈料）：不再下钻。
 			return level
-		}
-		if d, ok := depth[item]; ok {
-			return d
 		}
 		recipe, ok := recipeFor(item)
 		if !ok {
-			depth[item] = level
 			return level
 		}
+		visiting[item] = true
 		best := level
 		for _, in := range recipe.Inputs {
-			if d := itemDepth(in.ItemID, level+1); d > best {
+			if d := itemDepth(in.ItemID, level+1, visiting); d > best {
 				best = d
 			}
 		}
-		depth[item] = best
+		delete(visiting, item)
 		return best
 	}
+	depth := make(map[string]int, len(items))
 	for _, item := range items {
-		itemDepth(item, 0)
+		depth[item] = itemDepth(item, 0, map[string]bool{})
 	}
 	sort.Slice(items, func(i, j int) bool {
 		if depth[items[i]] != depth[items[j]] {

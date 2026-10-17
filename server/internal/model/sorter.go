@@ -47,6 +47,17 @@ type SorterState struct {
 	NextTripTick int64           `json:"next_trip_tick,omitempty"`
 	Filter       SorterFilter    `json:"filter,omitempty"`
 	LastTransfer *SorterTransfer `json:"last_transfer,omitempty"`
+	// Stall 是 sorter_stalled 告警的专用计数（随快照落盘）。不复用
+	// ProductionMonitor 的 Samples/IdleSamples——那两个字段是产线监控采样用的，
+	// 两边各写各的会互相干扰。
+	Stall SorterStallState `json:"stall,omitempty"`
+}
+
+// SorterStallState 分拣器连续停工计数（sorter_stalled 告警专用）。
+type SorterStallState struct {
+	// StalledTicks 连续「本应搬运却失败」的 tick 数；搬成一件 / 不该搬 / 在等
+	// 下一趟时归零。
+	StalledTicks int64 `json:"stalled_ticks,omitempty"`
 }
 
 // Clone returns a deep copy of the sorter state.

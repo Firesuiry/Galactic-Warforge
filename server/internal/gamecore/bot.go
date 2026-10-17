@@ -106,6 +106,7 @@ func (gc *GameCore) botWorldFor(playerID string) *model.WorldState {
 		if player == nil {
 			continue
 		}
+		// 只判「有没有」，map 迭代顺序不影响结果。
 		for _, u := range ws.Units {
 			if u != nil && u.OwnerID == playerID && u.HP > 0 && u.Mecha != nil {
 				return ws
