@@ -9,8 +9,9 @@ describe('建造 ghost 箭头纹理（试玩 1016 U1：取/放必须形状可分
     // 试玩 1016 U1 复核：取货端再叠一重线型差异（虚线），放货端保持实线。
     expect(ghostArrowPaint('take').dashed).toBe(true);
     expect(ghostArrowPaint('drop').dashed).toBe(false);
-    // 空心端线宽必须够粗：缩到 0.62 格时细线会糊掉。
-    expect(ghostArrowPaint('take').lineWidth).toBeGreaterThanOrEqual(6);
+    // 空心端线宽要够看但不能填满 chevron 的洞（试玩 1017 K4-04：8px 会糊成实心色块）。
+    expect(ghostArrowPaint('take').lineWidth).toBeGreaterThanOrEqual(4);
+    expect(ghostArrowPaint('take').lineWidth).toBeLessThanOrEqual(6);
     // 两端线宽都要明显（空心粗描边 vs 实心填充）：差距不要大到一边消失。
     expect(ghostArrowPaint('drop').lineWidth).toBeGreaterThanOrEqual(2);
   });

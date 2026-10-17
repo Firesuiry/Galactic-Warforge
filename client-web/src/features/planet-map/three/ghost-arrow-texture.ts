@@ -29,9 +29,11 @@ export interface GhostArrowPaint {
 }
 
 const PAINT: Record<GhostArrowRole, GhostArrowPaint> = {
-  // 试玩 1016 U1 复核：取货端从「细空心」改为「粗空心 + 虚线 + 深色描边」，
+  // 试玩 1016 U1 复核：取货端从「细空心」改为「空心 + 虚线 + 深色描边」，
   // 放货端实心也加深色描边，两端在青/琥珀之外还有形状与线型两重区分。
-  take: { filled: false, lineWidth: 8, inset: 5, dashed: true },
+  // 试玩 1017 K4-04 复核：lineWidth 8 在 64px 画布里把 chevron 的洞几乎填满，
+  // 近景里仍读成一团色块。收细到 5 并放大内缩留白，空心轮廓与虚线间隔才看得出来。
+  take: { filled: false, lineWidth: 5, inset: 2, dashed: true },
   drop: { filled: true, lineWidth: 3, inset: 0, dashed: false },
 };
 
@@ -81,11 +83,12 @@ export function ghostArrowTexture(role: GhostArrowRole): THREE.CanvasTexture {
     } else {
       // 空心 + 虚线：先压一道深色实线做反差（浅色地形上白线会糊），再描白色虚线。
       ctx.strokeStyle = 'rgba(4,10,18,0.85)';
-      ctx.lineWidth = paint.lineWidth + 4;
+      ctx.lineWidth = paint.lineWidth + 3;
       ctx.stroke();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = paint.lineWidth;
-      if (paint.dashed) ctx.setLineDash([10, 7]);
+      // 虚线段更长、间隔更开：近景放大后仍能数出「一截一截」，而不是糊成实线。
+      if (paint.dashed) ctx.setLineDash([9, 9]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
