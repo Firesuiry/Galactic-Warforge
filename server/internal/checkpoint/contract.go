@@ -20,6 +20,7 @@ import "siliconworld/internal/model"
 //	building_item_at_gte {position, item_id, n} 该落点（锚点格）上玩家建筑的该物品 >= n
 //	building_item_at_lt  {position, item_id, n} 该落点（锚点格）上玩家建筑的该物品 < n
 //	building_no_alert_since {position, alert_type?, tick} 该落点建筑自 tick 起没有仍成立的该类生产告警
+//	building_alert_since {position, alert_type, tick} 该落点建筑自 tick 起出现过且此刻仍成立的该类生产告警 >= 1
 //	unit_count_gte      {type, n}       存活单位数 >= n（含机甲 executor）
 //	item_gte            {item_id, n}    玩家可用物资 >= n
 //	no_alert_since      {alert_type, tick, type?}  从 tick 起没有该类型的生产告警

@@ -1,9 +1,9 @@
 {
   "parent": "cp-base",
-  "note": "cp-lab（第 16 轮改写）：从 cp-base（tick 447）读档，只用玩家命令（p1）建成矩阵研究站 b-83@(62,146) 并让它通电运行。做法：从铜矿机 b-59 取出铜矿 10、铁矿机 b-49 取出铁矿 2，机甲走到石头矿脉 res-3012 旁手动采石头 8，手搓 玻璃×4（石矿2/个）、铜块×10、磁铁×2、磁线圈×1批（产出2）、电路板×9（铁块1+铜块1）；用这些料建矩阵研究站 (62,146)（造价 电路板4+玻璃4+铁块8+磁线圈4）与第 3 座风力涡轮机 (65,146)（造价 齿轮1+铁块6+磁线圈3）。研究站与风机相距 3 cell，在电力连线范围（3 格）内自成一张「风机→研究站」电网（发电 10 / 用电 4），因此落地即 state=running；研究站保持空配方（研究模式）。本层不产出任何矩阵，矩阵产线留给 cp-matrix-line。契约：matrix_lab 运行中 ≥1（running 蕴含已通电，断电是 no_power）、机甲与玩家存活、无 belt_blocked 告警。",
+  "note": "cp-lab（第 16 轮改写）：从 cp-base（tick 4687）读档，只用玩家命令（p1）建成矩阵研究站 b-83@(62,146) 并让它通电运行。做法：从铜矿机 b-59 取出铜矿 8、铁矿机 b-49 取出铁矿 8，机甲走到石头矿脉 res-3012 旁手动采石头 8，手搓 玻璃×4（石矿2/个）、铜块（cp-base 自带 17，不再手搓）、磁铁×4（cp-base 自带 2）、磁线圈×2批（产出4）、电路板×9（铁块1+铜块1）、铁块×8（研究站 8 + 风机 6 的缺口）；用这些料建矩阵研究站 (62,146)（造价 电路板4+玻璃4+铁块8+磁线圈4）与第 3 座风力涡轮机 (65,146)（造价 齿轮1+铁块6+磁线圈3）。研究站与风机相距 3 cell，在电力连线范围（3 格）内自成一张「风机→研究站」电网（发电 10 / 用电 4），因此落地即 state=running；研究站保持空配方（研究模式）。本层不产出任何矩阵，矩阵产线留给 cp-matrix-line。契约：matrix_lab 运行中 ≥1（running 蕴含已通电，断电是 no_power）、机甲与玩家存活、无 belt_blocked 告警。",
   "steps": [
     {
-      "advance_to_tick": 470
+      "advance_to_tick": 6305
     },
     {
       "cmd": {
@@ -17,7 +17,7 @@
           "building_id": "b-59",
           "direction": "to_player",
           "item_id": "copper_ore",
-          "quantity": 10
+          "quantity": 12
         }
       }
     },
@@ -33,7 +33,7 @@
           "building_id": "b-49",
           "direction": "to_player",
           "item_id": "iron_ore",
-          "quantity": 2
+          "quantity": 12
         }
       }
     },
@@ -52,7 +52,7 @@
       }
     },
     {
-      "advance_to_tick": 520
+      "advance_to_tick": 6355
     },
     {
       "cmd": {
@@ -109,31 +109,8 @@
           "entity_id": "u-40"
         },
         "payload": {
-          "recipe_id": "smelt_copper",
-          "quantity": 10
-        }
-      }
-    },
-    {
-      "wait_until": {
-        "kind": "item_gte",
-        "player": "p1",
-        "item_id": "copper_ingot",
-        "n": 10
-      },
-      "timeout_ticks": 1200
-    },
-    {
-      "cmd": {
-        "type": "craft_item",
-        "target": {
-          "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
-        },
-        "payload": {
           "recipe_id": "smelt_magnet",
-          "quantity": 2
+          "quantity": 4
         }
       }
     },
@@ -142,7 +119,7 @@
         "kind": "item_gte",
         "player": "p1",
         "item_id": "magnet",
-        "n": 2
+        "n": 6
       },
       "timeout_ticks": 600
     },
@@ -156,7 +133,7 @@
         },
         "payload": {
           "recipe_id": "magnetic_coil",
-          "quantity": 1
+          "quantity": 2
         }
       }
     },
@@ -165,9 +142,12 @@
         "kind": "item_gte",
         "player": "p1",
         "item_id": "magnetic_coil",
-        "n": 8
+        "n": 7
       },
-      "timeout_ticks": 600
+      "timeout_ticks": 900
+    },
+    {
+      "advance_to_tick": 7493
     },
     {
       "cmd": {
@@ -194,6 +174,29 @@
     },
     {
       "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_iron",
+          "quantity": 8
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 16
+      },
+      "timeout_ticks": 1200
+    },
+    {
+      "cmd": {
         "type": "build",
         "target": {
           "layer": "planet",
@@ -206,6 +209,9 @@
           "building_type": "matrix_lab"
         }
       }
+    },
+    {
+      "advance_to_tick": 8293
     },
     {
       "cmd": {
@@ -230,6 +236,9 @@
         "n": 1
       },
       "timeout_ticks": 900
+    },
+    {
+      "advance_to_tick": 8643
     }
   ],
   "contract": {
@@ -256,7 +265,7 @@
       {
         "kind": "no_alert_since",
         "alert_type": "belt_blocked",
-        "tick": 447
+        "tick": 6282
       }
     ]
   }
