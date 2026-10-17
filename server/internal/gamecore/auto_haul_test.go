@@ -360,7 +360,7 @@ func TestAutoHaulNeverTakesRecipeInputFromProductionInventory(t *testing.T) {
 			t.Fatalf("熔炉自己的原料被当成供给: %+v", supply)
 		}
 	}
-	if idx := nearestHaulSupply(f.ws, supplies, smelterDemand); idx >= 0 {
+	if idx := nearestHaulSupply(f.ws, supplies, smelterDemand, nil); idx >= 0 {
 		t.Fatalf("缺铁料的熔炉被指派了供给: %+v", supplies[idx])
 	}
 

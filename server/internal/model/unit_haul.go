@@ -76,6 +76,13 @@ type UnitHaulState struct {
 	DeliveredTotal int        `json:"delivered_total"`
 	// Claim 自动模式的在途认领（route/idle 模式下为空）。
 	Claim *HaulClaim `json:"claim,omitempty"`
+	// UnreachableAttempts / UnreachableSinceTick 自动模式连续「找不到落点或路径」
+	// 的尝试次数与这段连续失败的起始 tick。成功规划出一条路就清零。
+	UnreachableAttempts  int   `json:"unreachable_attempts,omitempty"`
+	UnreachableSinceTick int64 `json:"unreachable_since_tick,omitempty"`
+	// UnreachableCooldowns 本机器人对「到不了的建筑」的冷却（buildingID → 冷却结束
+	// tick）：冷却期内派单跳过这些建筑，让机器人去服务别的需求。到得了之后自动删除。
+	UnreachableCooldowns map[string]int64 `json:"unreachable_cooldowns,omitempty"`
 }
 
 // Clone returns a deep copy of the haul state for read-only snapshots.
@@ -85,6 +92,12 @@ func (h *UnitHaulState) Clone() *UnitHaulState {
 	}
 	out := *h
 	out.Claim = h.Claim.Clone()
+	if h.UnreachableCooldowns != nil {
+		out.UnreachableCooldowns = make(map[string]int64, len(h.UnreachableCooldowns))
+		for id, until := range h.UnreachableCooldowns {
+			out.UnreachableCooldowns[id] = until
+		}
+	}
 	return &out
 }
 

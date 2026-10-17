@@ -88,6 +88,7 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	}
 
 	claims := haulClaims(ws)
+	pruneHaulCooldowns(ws, haul)
 	if claim := assignHaulFromCargo(ws, robot, claims); claim != nil {
 		haul.Claim = claim
 		haul.FromBuildingID = ""
@@ -109,10 +110,16 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	bestScore := 0
 	bestSupply := -1
 	for di, demand := range demands {
+		// 到不了的建筑在冷却期内跳过：让这台机器人去服务别的需求。
+		if haulCooldownActive(haul, demand.buildingID, ws.Tick) {
+			continue
+		}
 		if served[demand.buildingID] >= haulMaxRobotsPerDemand {
 			continue
 		}
-		supply := nearestHaulSupply(ws, supplies, demand)
+		supply := nearestHaulSupply(ws, supplies, demand, func(id string) bool {
+			return haulCooldownActive(haul, id, ws.Tick)
+		})
 		if supply < 0 {
 			continue
 		}
@@ -443,7 +450,8 @@ func haulIsStorageBuilding(building *model.Building) bool {
 }
 
 // nearestHaulSupply 该需求最近的可用供给（按供给建筑到需求建筑的距离，稳定顺序）。
-func nearestHaulSupply(ws *model.WorldState, supplies []haulSupply, demand haulDemand) int {
+// blocked 非 nil 时跳过它判定为「到不了」的供给建筑。
+func nearestHaulSupply(ws *model.WorldState, supplies []haulSupply, demand haulDemand, blocked func(buildingID string) bool) int {
 	target := ws.Buildings[demand.buildingID]
 	if target == nil {
 		return -1
@@ -451,6 +459,9 @@ func nearestHaulSupply(ws *model.WorldState, supplies []haulSupply, demand haulD
 	best, bestDistance := -1, 0
 	for i, supply := range supplies {
 		if supply.itemID != demand.itemID {
+			continue
+		}
+		if blocked != nil && blocked(supply.buildingID) {
 			continue
 		}
 		source := ws.Buildings[supply.buildingID]

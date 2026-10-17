@@ -122,6 +122,7 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		return haulTravelTo(ws, robot, target, model.HaulPhaseToTarget, model.HaulPhaseUnloading)
 	case model.HaulPhaseLoading:
 		if !ringHasBuilding(ws, source, robot.Position) {
+			haulRecordArrival(robot, nil)
 			haul.Phase = model.HaulPhaseToSource
 			return nil
 		}
@@ -131,6 +132,7 @@ func settleTransportRobot(ws *model.WorldState, robot *model.Unit) []*model.Game
 		return haulLoadAtSource(ws, robot)
 	case model.HaulPhaseUnloading:
 		if !ringHasBuilding(ws, target, robot.Position) {
+			haulRecordArrival(robot, nil)
 			haul.Phase = model.HaulPhaseToTarget
 			return nil
 		}
@@ -248,6 +250,7 @@ func haulTravelTo(ws *model.WorldState, robot *model.Unit, building *model.Build
 		robot.ClearMovement()
 		robot.Stance = model.UnitStanceIdle
 		robot.Haul.Phase = arrivalPhase
+		haulRecordArrival(robot, building)
 		return nil
 	}
 	if robot.HasPath() {
@@ -260,22 +263,20 @@ func haulTravelTo(ws *model.WorldState, robot *model.Unit, building *model.Build
 }
 
 // haulRouteTo 让机器人前往建筑占地外圈的相邻空 cell。
+//
+// 自动模式下找不到落点或路径时，连续失败达到上限就放弃这一单（见
+// auto_haul_unreachable.go）；route 模式维持原来的「原地等」语义。
 func haulRouteTo(ws *model.WorldState, robot *model.Unit, building *model.Building, travelPhase model.HaulPhase) []*model.GameEvent {
 	dest, ok := haulApproachCell(ws, robot, building)
 	if !ok {
 		// 外圈一圈都被占满：停下等（waiting 阶段轮询重试）。
-		robot.Haul.Phase = haulWaitingPhaseFor(travelPhase)
-		robot.ClearMovement()
-		robot.Stance = model.UnitStanceIdle
-		return nil
+		return haulUnreachableFailure(ws, robot, building, travelPhase)
 	}
 	path, pathOK := computeUnitPath(ws, robot.Position, dest, robot.ID)
 	if !pathOK || len(path) < 2 {
-		robot.Haul.Phase = haulWaitingPhaseFor(travelPhase)
-		robot.ClearMovement()
-		robot.Stance = model.UnitStanceIdle
-		return nil
+		return haulUnreachableFailure(ws, robot, building, travelPhase)
 	}
+	haulRecordRoutePlanned(robot)
 	robot.ClearEngagement()
 	robot.Path = path
 	robot.PathIndex = 1
@@ -315,6 +316,7 @@ func haulResumeFromWait(ws *model.WorldState, robot *model.Unit, building *model
 		robot.Haul.Phase = travelPhase
 		return nil
 	}
+	haulRecordArrival(robot, building)
 	robot.Haul.Phase = workPhase
 	switch workPhase {
 	case model.HaulPhaseLoading:

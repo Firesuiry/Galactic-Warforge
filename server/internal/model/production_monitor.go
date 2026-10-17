@@ -24,6 +24,9 @@ const (
 	// 下游分拣器/建筑不收这个物品）。指向**带格本身**，避免玩家把上游矿机的
 	// 「产物阻塞」当成根因（试玩 1016 报告 B1/U7）。
 	AlertTypeBeltBlocked ProductionAlertType = "belt_blocked"
+	// AlertTypeHaulUnreachable：运输机器人连续多次都到不了某座建筑（外圈没有
+	// 落点或没有路径），已放弃该目标。指向**到不了的建筑**，机器人重新到达后解除。
+	AlertTypeHaulUnreachable ProductionAlertType = "haul_unreachable"
 )
 
 // ProductionAlert is a monitoring alert raised for a single building.
@@ -178,6 +181,8 @@ func AlertMessage(alertType ProductionAlertType, buildingID string) string {
 		return fmt.Sprintf("建筑 %s：出厂口被占满", buildingID)
 	case AlertTypeBeltBlocked:
 		return fmt.Sprintf("建筑 %s：传送带被堵，物品运不出去", buildingID)
+	case AlertTypeHaulUnreachable:
+		return fmt.Sprintf("建筑 %s：运输机器人到不了", buildingID)
 	default:
 		return fmt.Sprintf("建筑 %s：产线告警", buildingID)
 	}
