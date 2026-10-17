@@ -79,6 +79,7 @@ func placeAutoBuildingRaw(t *testing.T, ws *model.WorldState, id string, btype m
 	}
 	model.InitBuildingStorage(b)
 	model.InitBuildingProduction(b)
+	model.InitBuildingLogisticsStation(b)
 	ws.Buildings[id] = b
 	if err := ws.IndexBuilding(b); err != nil {
 		delete(ws.Buildings, id)
@@ -729,6 +730,7 @@ func placeAutoBuildingTB(tb testing.TB, ws *model.WorldState, id string, btype m
 	}
 	model.InitBuildingStorage(b)
 	model.InitBuildingProduction(b)
+	model.InitBuildingLogisticsStation(b)
 	ws.Buildings[id] = b
 	if err := ws.IndexBuilding(b); err != nil {
 		delete(ws.Buildings, id)

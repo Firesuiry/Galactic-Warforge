@@ -256,6 +256,9 @@ func TestAutoHaulFallbackSkipsCooldownNoGiveUpLoop(t *testing.T) {
 	encloseBuildingRing(t, ws, depot)
 	blocked := placeAutoSmelter(t, ws, "b-blocked", model.Position{X: 40, Y: 20})
 	encloseBuildingRing(t, ws, blocked)
+	// 开局 HQ 也是落货建筑，留着的话机器人会改送 HQ（那是正确行为，
+	// 但测不到「唯一落货点也被围死」）。这里只保留两台被围死的建筑。
+	demolishAutoBuildingsOfType(ws, model.BuildingTypeBattlefieldAnalysisBase)
 	robot := autoRobot(t, ws, model.Position{X: 30, Y: 20})
 	robot.Haul.Load(model.ItemIronOre, 4)
 

@@ -99,7 +99,8 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	}
 	// 车上有货但眼下无处可送：只允许「带货改派」，绝不派普通单——普通单会去
 	// 起点装另一种物品，装货逻辑与车上货种不符时货会凭空消失（试玩 1016 复审）。
-	// 带着货待命，等下一次派单或其它建筑出现需求。
+	// 带着货待命，等下一次派单或其它建筑出现需求（每 haulDispatchIntervalTicks
+	// 重试一次，不是每 tick 全图扫描）。
 	if haul.CargoQuantity() > 0 {
 		haulClearTask(robot)
 		return nil
@@ -155,8 +156,11 @@ func autoHaulAssign(ws *model.WorldState, robot *model.Unit) []*model.GameEvent 
 	return []*model.GameEvent{haulTaskEvent(robot, "auto_haul_assigned")}
 }
 
-// assignHaulFromCargo 车上有货且还有别的建筑缺同种原料时，直接改送过去。
-// 这是「上一条任务结束时货没送出去」的优先去向（§2.1 收尾规则）。
+// assignHaulFromCargo 车上有货且还有别的建筑缺同种原料时，直接改送过去；
+// 没有任何需求时送回最近的落货建筑（见 haulNearestStorage）。
+//
+// 这是「上一条任务结束时货没送出去」的优先去向（§2.1 收尾规则）：
+// 先服务需求，其次回仓；都找不到才带着货待命（下一次派单 tick 再试）。
 // 本机器人到不了的建筑（冷却期内）跳过，避免刚放弃又送回去。
 func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulClaimBook) *model.HaulClaim {
 	haul := robot.Haul
@@ -181,7 +185,15 @@ func assignHaulFromCargo(ws *model.WorldState, robot *model.Unit, claims *haulCl
 		}
 		return &model.HaulClaim{DemandBuildingID: demand.buildingID, ItemID: itemID, Quantity: quantity}
 	}
-	return nil
+	target := haulNearestStorage(ws, robot, itemID, quantity)
+	if target == "" {
+		return nil
+	}
+	return &model.HaulClaim{
+		DemandBuildingID: target,
+		ItemID:           itemID,
+		Quantity:         min(quantity, haulDeliverReturnCap),
+	}
 }
 
 // haulClearTask 回到「空闲待命」：清掉任务字段与认领，停在原地不乱跑。
@@ -460,6 +472,36 @@ func haulIsStorageBuilding(building *model.Building) bool {
 	return ok && def.Category == model.BuildingCategoryStorage
 }
 
+// haulIsStorageSink 该建筑能否作为「带载机器人无处可送时」的落货点（§2.1 收尾规则）。
+//
+// 判据是**功能**而不是目录里的 category 字符串：有 storage 功能、且没有任何
+// 生产/采集/加工/研究/喷涂功能。这样储物仓、储液罐、物流站、补给站（目录里
+// 是 category: production，但它不生产任何东西）、战场分析基站都算落货点；
+// 熔炉/装配机/采矿机/研究站/喷涂机这些「有自己的产出」的建筑不算——把原料
+// 塞回它们的主库存会与产线结算互相干扰。
+//
+// 试玩 1016 严重 2：旧实现只认 IsGroundLogisticsBuilding 或 category == storage，
+// 补给站因此被漏掉；机器人带着 4 铜矿、全场无需求时永久待命，货送不出去。
+func haulIsStorageSink(building *model.Building) bool {
+	if building == nil {
+		return false
+	}
+	// 物流站的库存不在 Storage 里（LogisticsStation 自己的槽位表），单独放行。
+	if model.IsGroundLogisticsBuilding(building.Type) {
+		return building.LogisticsStation != nil
+	}
+	// 其它建筑按功能判定：必须有 storage 功能、且没有生产/采集/研究/喷涂功能。
+	// 储物仓 / 储液罐 / 补给站 / 战场分析基站都满足；熔炉、装配机、采矿机、
+	// 研究站不满足。直接看 Functions（而不是 building.Storage）——落位/测试夹具
+	// 可能还没初始化运行时 Storage，但功能表来自建筑定义，始终可用。
+	fns := building.Runtime.Functions
+	if fns.Storage == nil {
+		return false
+	}
+	return fns.Production == nil && fns.Collect == nil && fns.Orbital == nil &&
+		fns.Research == nil && fns.Spray == nil
+}
+
 // nearestHaulSupply 该需求最近的可用供给（按供给建筑到需求建筑的距离，稳定顺序）。
 // blocked 非 nil 时跳过它判定为「到不了」的供给建筑。
 func nearestHaulSupply(ws *model.WorldState, supplies []haulSupply, demand haulDemand, blocked func(buildingID string) bool) int {
@@ -529,7 +571,8 @@ func haulDeliveryFallback(ws *model.WorldState, robot *model.Unit, itemID string
 	}
 }
 
-// haulNearestStorage 离机器人最近、能收下该物品的己方仓储建筑。
+// haulNearestStorage 离机器人最近、能收下该物品的己方落货建筑
+// （判据见 haulIsStorageSink：有 storage 功能、没有生产/采集功能）。
 func haulNearestStorage(ws *model.WorldState, robot *model.Unit, itemID string, quantity int) string {
 	if ws == nil || robot == nil {
 		return ""
@@ -539,7 +582,7 @@ func haulNearestStorage(ws *model.WorldState, robot *model.Unit, itemID string, 
 		if building == nil || building.HP <= 0 || building.OwnerID != robot.OwnerID {
 			continue
 		}
-		if !haulIsStorageBuilding(building) {
+		if !haulIsStorageSink(building) {
 			continue
 		}
 		ids = append(ids, id)

@@ -10,26 +10,34 @@ import (
 // 普通单会去起点装另一种物品：旧实现先 Storage.Provide 扣源、再 Load，
 // 货种不符时 Load 返回 0，扣掉的货凭空消失（实测 40 铜矿几趟后剩 36）。
 
-// 1) 车上有铜矿、全场只有熔炉缺铁矿：机器人带着货待命，铜矿不丢、仓库铁矿不动。
+// 1) 车上有铜矿、全场只有熔炉缺铁矿：机器人不得接普通单（那会去装铁矿，
+//    货种不符时旧实现会先扣源、货凭空消失）；按第 16 轮「回仓」规则，
+//    铜矿送回最近的落货建筑（这里是储物仓），铁矿不动。
 func TestAutoHaulWithUndeliverableCargoDoesNotTakeNormalTask(t *testing.T) {
 	f := newAutoHaulFixture(t)
+	demolishAutoBuildingsOfType(f.ws, model.BuildingTypeBattlefieldAnalysisBase)
 	haulFill(f.depot, model.ItemIronOre, 60)
 	robot := autoRobot(t, f.ws, model.Position{X: 30, Y: 20})
 	robot.Haul.Load(model.ItemCopperOre, 4)
 
-	advanceAutoTicks(f.core, f.ws, 800)
-
-	if robot.Haul.CargoQuantity() != 4 || robot.Haul.Cargo.ItemID != model.ItemCopperOre {
-		t.Fatalf("车上的铜矿丢了: %+v", robot.Haul.Cargo)
-	}
-	if robot.Haul.ToBuildingID != "" {
-		t.Fatalf("无处可送的货却被派了普通单: %+v", robot.Haul)
+	// 第一个派单 tick：改派目标必须是「送回储物仓的铜矿」，而不是缺铁矿的熔炉。
+	toDispatchTick(f.core, f.ws)
+	if robot.Haul.ItemID != model.ItemCopperOre || robot.Haul.ToBuildingID != f.depot.ID {
+		t.Fatalf("带货机器人应改送回仓（铜矿 → 储物仓），got %+v", robot.Haul)
 	}
 	if got := f.depot.Storage.Inventory[model.ItemIronOre]; got != 60 {
-		t.Fatalf("仓库铁矿被扣走: %d, want 60（货种不符的装货不得先扣源）", got)
+		t.Fatalf("铜矿改派时铁矿被扣走: %d, want 60", got)
 	}
 	if got := haulStored(f.smelter, model.ItemIronOre); got != 0 {
 		t.Fatalf("熔炉不该收到任何料: %d", got)
+	}
+
+	advanceAutoTicks(f.core, f.ws, 60)
+	if got := haulStored(f.depot, model.ItemCopperOre); got != 4 {
+		t.Fatalf("储物仓应收到 4 铜矿，got %d", got)
+	}
+	if robot.Haul.CargoQuantity() != 0 {
+		t.Fatalf("铜矿应已卸下，got cargo=%+v", robot.Haul.Cargo)
 	}
 }
 
