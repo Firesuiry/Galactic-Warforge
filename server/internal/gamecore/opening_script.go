@@ -371,7 +371,7 @@ func scriptGoMine(ws *model.WorldState, unit *model.Unit, node *model.ResourceNo
 		want = node.Remaining
 	}
 	if player := ws.Players[unit.OwnerID]; player != nil {
-		if free := mechaInventoryFree(player, mechaInventoryCapacity(ws, unit, player), want); free < want {
+		if free := mechaInventoryFree(player, mechaInventorySlots(ws, unit, player), node.Kind, want); free < want {
 			want = free
 		}
 	}
@@ -427,7 +427,7 @@ func (s *ScriptedOpening) driveMecha(ws *model.WorldState, unit *model.Unit, pla
 			}
 			batches := action.qty
 			if out := scriptRecipeOutputQty(recipe, action.item); out > 0 {
-				if free := mechaInventoryFree(player, mechaInventoryCapacity(ws, unit, player), batches*out); free/out < batches {
+				if free := mechaInventoryFree(player, mechaInventorySlots(ws, unit, player), action.item, batches*out); free/out < batches {
 					batches = free / out
 				}
 			}

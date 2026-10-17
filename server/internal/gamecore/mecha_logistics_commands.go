@@ -104,7 +104,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		}
 		unit := ws.Units[executor.UnitID]
 		model.SyncMechaCapabilities(unit, player)
-		used := player.InventoryCount()
+		slots := mechaInventorySlots(ws, unit, player)
 		// 试玩报告 1013 C：「无可取出物品或背包已满」把两种完全不同的原因混在
 		// 一起，玩家看不出是建筑里没货还是自己装不下。分开报，并给出背包占用。
 		stored := building.Storage.OutputQuantity(itemID)
@@ -112,18 +112,18 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			return mechaJobFailed(model.CodeInsufficientResource,
 				fmt.Sprintf("%s里没有可取出的「%s」", buildingDisplayName(building), itemDisplayName(itemID)))
 		}
-		capacity := unit.Mecha.InventoryCapacity
-		if capacity-used <= 0 {
+		free := mechaInventoryFree(player, slots, itemID, quantity)
+		if free <= 0 {
 			return mechaJobFailed(model.CodeInsufficientResource,
-				fmt.Sprintf("背包已满（%d/%d），装不下取出的「%s」：先腾出空位或改送到别的建筑",
-					used, capacity, itemDisplayName(itemID)))
+				fmt.Sprintf("%s，装不下取出的「%s」：先腾出空位或改送到别的建筑",
+					mechaInventoryFullMessage(player, slots), itemDisplayName(itemID)))
 		}
-		quantity = min(quantity, capacity-used)
+		quantity = min(quantity, free)
 		quantity = min(quantity, stored)
 		if quantity <= 0 {
 			return mechaJobFailed(model.CodeInsufficientResource,
-				fmt.Sprintf("背包已满（%d/%d），装不下取出的「%s」：先腾出空位或改送到别的建筑",
-					used, capacity, itemDisplayName(itemID)))
+				fmt.Sprintf("%s，装不下取出的「%s」：先腾出空位或改送到别的建筑",
+					mechaInventoryFullMessage(player, slots), itemDisplayName(itemID)))
 		}
 		taken, _, err := building.Storage.Provide(itemID, quantity)
 		if err != nil {
@@ -132,7 +132,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		// 上限兜底：真正入包的数量仍由 AddItems 裁剪（容量科技在取出过程中变化也不会超）。
 		// 上面已按剩余空间裁剪过，正常不会少收；万一少收，多拿出来的部分退回建筑，
 		// 不能凭空消失。
-		if accepted := player.AddItems([]model.ItemAmount{{ItemID: itemID, Quantity: taken}}, capacity); accepted < taken {
+		if accepted := player.AddItems([]model.ItemAmount{{ItemID: itemID, Quantity: taken}}, slots); accepted < taken {
 			_, _, _ = building.Storage.Load(itemID, taken-accepted)
 			taken = accepted
 		}

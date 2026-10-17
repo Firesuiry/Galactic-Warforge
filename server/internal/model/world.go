@@ -24,7 +24,11 @@ type PlayerState struct {
 	Role        string        `json:"role"`
 	Resources   Resources     `json:"resources"`
 	Inventory   ItemInventory `json:"inventory,omitempty"`
-	IsAlive     bool          `json:"is_alive"`
+	// InventorySlots 是背包格数上限（DSP 口径：按格计，每格可堆叠该物品的
+	// stack_limit 件）。0 = 不限（旧存档/测试世界）。由 SyncMechaCapabilities
+	// 从执行体的 inventory_slots 写入；读档时快照恢复的原值即为准。
+	InventorySlots int `json:"inventory_slots,omitempty"`
+	IsAlive        bool `json:"is_alive"`
 	Permissions []string      `json:"permissions,omitempty"`
 	// FocusPlanetID 是该玩家的视图焦点/默认落点行星（F4）：未显式指定行星的
 	// 命令在此行星结算；switch_active_planet 只改这个字段，不再影响全局模拟。

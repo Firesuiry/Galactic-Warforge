@@ -1472,7 +1472,7 @@ techs:
         - {item_id: information_matrix, quantity: 240}
         - {item_id: gravity_matrix, quantity: 240}
       7: [{item_id: universe_matrix, quantity: 552}]
-    effects: [{type: mecha_inventory_capacity, value: 60}]
+    effects: [{type: mecha_inventory_slots, value: 5}]
     max_level: 7
   - id: drive_engine
     name: 驱动引擎

@@ -24,7 +24,7 @@ func mechaExecutorUnit() *Unit {
 func TestSyncMechaCapabilitiesDefaultsWithoutResearch(t *testing.T) {
 	unit := mechaExecutorUnit()
 	SyncMechaCapabilities(unit, mechaTechPlayer(nil))
-	if unit.Mecha.MaxEnergy != 100 || unit.Mecha.MaxShield != 0 || unit.Mecha.InventoryCapacity != 200 {
+	if unit.Mecha.MaxEnergy != 100 || unit.Mecha.MaxShield != 0 || unit.Mecha.InventorySlots != 40 {
 		t.Fatalf("unexpected base mecha limits: %+v", unit.Mecha)
 	}
 	if unit.MaxHP != 120 || unit.MoveRange != 36 || unit.VisionRange != 18 {
@@ -77,24 +77,29 @@ func TestSyncMechaCapabilitiesUniverseExplorationRaisesVision(t *testing.T) {
 	}
 }
 
-func TestSyncMechaCapabilitiesInventoryCapacityClampsLogisticsRequests(t *testing.T) {
+func TestSyncMechaCapabilitiesInventorySlotsClampLogisticsRequests(t *testing.T) {
 	unit := mechaExecutorUnit()
 	unit.Mecha.LogisticsRequests = map[string]MechaLogisticsRequest{
-		"iron_plate": {Min: 400, Max: 500},
+		"iron_ingot": {Min: 6000, Max: 7000},
 		"gear":       {Min: 10, Max: 50},
 	}
 	player := mechaTechPlayer(map[string]int{"inventory_capacity": 2})
 	SyncMechaCapabilities(unit, player)
-	if unit.Mecha.InventoryCapacity != 320 {
-		t.Fatalf("inventory_capacity L2 should raise capacity to 320, got %d", unit.Mecha.InventoryCapacity)
+	// 基础 40 格 + 5 格/级 × 2 = 50 格；请求上限按该物品的 stack_limit 折算成件数。
+	if unit.Mecha.InventorySlots != 50 {
+		t.Fatalf("inventory_capacity L2 should raise slots to 50, got %d", unit.Mecha.InventorySlots)
 	}
-	clamped := unit.Mecha.LogisticsRequests["iron_plate"]
-	if clamped.Max != 320 || clamped.Min != 320 {
-		t.Fatalf("request above capacity must clamp to 320/320, got %+v", clamped)
+	clamped := unit.Mecha.LogisticsRequests["iron_ingot"]
+	// 50 格 × 铁块 100 件/格 = 5000 件；超出部分钳到上限。
+	if want := 50 * 100; clamped.Max != want || clamped.Min != want {
+		t.Fatalf("request above capacity must clamp to %d/%d, got %+v", want, want, clamped)
 	}
 	untouched := unit.Mecha.LogisticsRequests["gear"]
 	if untouched.Min != 10 || untouched.Max != 50 {
 		t.Fatalf("request within capacity must stay, got %+v", untouched)
+	}
+	if player.InventorySlots != 50 {
+		t.Fatalf("sync must publish slots to the player state, got %d", player.InventorySlots)
 	}
 }
 

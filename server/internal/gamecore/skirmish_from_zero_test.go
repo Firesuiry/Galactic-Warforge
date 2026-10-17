@@ -2490,15 +2490,9 @@ func recipeConsumesItem(recipeID, item string) bool {
 	return false
 }
 
-// inventoryUsed 背包已占用的数量（机甲背包按物品件数算容量，见 execTransferItem）。
+// inventoryUsed 背包已占用的格数（机甲背包按格计，每格堆叠该物品的 stack_limit 件）。
 func (op *zeroOpening) inventoryUsed() int {
-	used := 0
-	for _, qty := range op.player.Inventory {
-		if qty > 0 {
-			used += qty
-		}
-	}
-	return used
+	return op.player.InventorySlotsUsed()
 }
 
 // oreInBackpack 背包里全部原矿（手动可采的固体矿）的件数。
@@ -2510,10 +2504,10 @@ func (op *zeroOpening) oreInBackpack() int {
 	return total
 }
 
-// mechaCapacity 机甲背包容量（默认 200，科技可提升）。
+// mechaCapacity 机甲背包格数（默认 40 格，科技可提升；每格按物品 stack_limit 堆叠）。
 func (op *zeroOpening) mechaCapacity() int {
-	if exec := executorUnitQuiet(op.ws, "p1"); exec != nil && exec.Mecha != nil && exec.Mecha.InventoryCapacity > 0 {
-		return exec.Mecha.InventoryCapacity
+	if exec := executorUnitQuiet(op.ws, "p1"); exec != nil && exec.Mecha != nil && exec.Mecha.InventorySlots > 0 {
+		return exec.Mecha.InventorySlots
 	}
-	return 200
+	return 40
 }

@@ -97,7 +97,8 @@ func PublicWorldProduceUnitByID(id string) (WorldUnitCatalogEntry, bool) {
 type MechaSpec struct {
 	RespawnTicks        int64 `yaml:"respawn_ticks"`
 	MaxEnergy           int   `yaml:"max_energy"`
-	InventoryCapacity   int   `yaml:"inventory_capacity"`
+	// InventorySlots 是机甲背包格数（DSP 口径，每格按物品 stack_limit 堆叠）。
+	InventorySlots int `yaml:"inventory_slots"`
 	AttackEnergyCost    int   `yaml:"attack_energy_cost"`
 	MoveEnergyCost      int   `yaml:"move_energy_cost"`
 	ShieldRechargeDelay int64 `yaml:"shield_recharge_delay"`

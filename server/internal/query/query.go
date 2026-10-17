@@ -40,6 +40,10 @@ type StateSummary struct {
 type SummaryPlayer struct {
 	*model.PlayerState
 	Executor *model.ExecutorState `json:"executor,omitempty"`
+	// InventorySlotsUsed / InventorySlotsTotal 是背包按格计的占用与上限
+	// （DSP 口径：每格按物品 stack_limit 堆叠）。仅自己可见；敌方玩家为 0。
+	InventorySlotsUsed  int `json:"inventory_slots_used"`
+	InventorySlotsTotal int `json:"inventory_slots_total"`
 }
 
 // Summary returns a high-level view of the world (no fog clipping for own resources).
@@ -53,7 +57,19 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.Vi
 		if pid == playerID {
 			cp := *ps
 			cp.Inventory = ps.Inventory.Clone()
-			players[pid] = &SummaryPlayer{PlayerState: &cp, Executor: ps.ExecutorForPlanet(ws.PlanetID)}
+			total := cp.InventorySlots
+			if total <= 0 {
+				// 测试世界/旧档没有写 PlayerState.InventorySlots：回退到本行星执行体。
+				if unit := executorUnitFor(ws, ps); unit != nil && unit.Mecha != nil {
+					total = unit.Mecha.InventorySlots
+				}
+			}
+			players[pid] = &SummaryPlayer{
+				PlayerState:         &cp,
+				Executor:            ps.ExecutorForPlanet(ws.PlanetID),
+				InventorySlotsUsed:  cp.InventorySlotsUsed(),
+				InventorySlotsTotal: total,
+			}
 		} else {
 			// Expose non-sensitive identity fields
 			players[pid] = &SummaryPlayer{PlayerState: &model.PlayerState{
@@ -1082,4 +1098,16 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 		}
 	}
 	return view, true
+}
+
+// executorUnitFor 返回该玩家在摘要行星上的执行体单位（没有时返回 nil）。
+func executorUnitFor(ws *model.WorldState, ps *model.PlayerState) *model.Unit {
+	if ws == nil || ps == nil {
+		return nil
+	}
+	exec := ps.ExecutorForPlanet(ws.PlanetID)
+	if exec == nil {
+		return nil
+	}
+	return ws.Units[exec.UnitID]
 }

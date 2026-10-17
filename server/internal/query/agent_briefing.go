@@ -42,6 +42,10 @@ type AgentBriefingSelf struct {
 	IsAlive   bool                `json:"is_alive"`
 	Resources model.Resources     `json:"resources"`
 	Inventory model.ItemInventory `json:"inventory,omitempty"`
+	// InventorySlotsUsed / InventorySlotsTotal 是背包按格计的占用与上限
+	// （DSP 口径：每格按物品 stack_limit 堆叠）。
+	InventorySlotsUsed  int `json:"inventory_slots_used"`
+	InventorySlotsTotal int `json:"inventory_slots_total"`
 	Tech      *AgentBriefingTech  `json:"tech,omitempty"`
 	// FocusPlanetID 是该玩家当前的视图焦点/默认落点行星（F4）。
 	FocusPlanetID string `json:"focus_planet_id,omitempty"`
@@ -151,6 +155,8 @@ func buildBriefingSelf(player *model.PlayerState, playerID string) AgentBriefing
 	if player.Inventory != nil {
 		self.Inventory = player.Inventory.Clone()
 	}
+	self.InventorySlotsUsed = player.InventorySlotsUsed()
+	self.InventorySlotsTotal = player.InventorySlots
 	if player.Tech != nil {
 		self.Tech = compactBriefingTech(player.Tech)
 	}

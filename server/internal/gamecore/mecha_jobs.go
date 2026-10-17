@@ -147,7 +147,7 @@ func refundMechaJob(ws *model.WorldState, unit *model.Unit) {
 		return
 	}
 	if player := ws.Players[unit.OwnerID]; player != nil {
-		player.AddItems(unit.Mecha.Job.ReservedInputs, mechaInventoryCapacity(ws, unit, player))
+		player.AddItems(unit.Mecha.Job.ReservedInputs, mechaInventorySlots(ws, unit, player))
 	}
 	unit.Mecha.Job = nil
 }
@@ -230,14 +230,13 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 	} else {
 		output = append([]model.ItemAmount(nil), recipe.AllOutputs()...)
 	}
-	capacity := mechaInventoryCapacity(ws, unit, player)
+	slots := mechaInventorySlots(ws, unit, player)
 	if job.RemainingTicks >= job.TicksPerBatch {
-		// 每批开工前先确认背包装得下整批产出（多产出配方要一次装得下全部），
-		// 装不下就停在这里等腾空，既不扣能也不推进；否则背包满时每批都会白扣
-		// 一份核心能量却毫无产出。绝不允许绕过 inventory_capacity 把背包顶到
-		// 上限之上（试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁
-		// 变成 201/200）。
-		if need := itemAmountTotal(output); mechaInventoryFree(player, capacity, need) < need {
+		// 每批开工前先确认背包装得下整批产出（按格计：每件物品折算 ceil(数量/
+		// stack_limit) 格），装不下就停在这里等腾空，既不扣能也不推进；否则背包
+		// 满时每批都会白扣一份核心能量却毫无产出。绝不允许绕过格数上限把背包顶满
+		// （试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁变成 201/200）。
+		if need := itemAmountTotal(output); mechaInventoryFree(player, slots, output[0].ItemID, need) < need {
 			job.State = "inventory_full"
 			return nil
 		}
@@ -255,13 +254,13 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 	}
 	// 兜底：批内背包被塞满时本批不结算（节点/原料都不动，进度保留），
 	// 玩家腾出空位后自动继续，产出与原料都不会丢。
-	accepted := player.AddItems(output, capacity)
+	accepted := player.AddItems(output, slots)
 	if accepted < itemAmountTotal(output) {
 		job.State = "inventory_full"
 		return []*model.GameEvent{{EventType: model.EvtResourceChanged, VisibilityScope: unit.OwnerID, Payload: map[string]any{
 			"entity_id": unit.ID, "items": output, "job_kind": job.Kind,
 			"completed_batches": job.CompletedBatches, "blocked": "inventory_full",
-			"inventory_used": player.InventoryCount(), "inventory_capacity": capacity,
+			"inventory_slots_used": player.InventorySlotsUsed(), "inventory_slots_total": slots,
 		}}}
 	}
 	// 入包成功才结算本批：消耗矿点余量、扣减预留原料。

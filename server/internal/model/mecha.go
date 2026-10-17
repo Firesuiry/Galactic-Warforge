@@ -44,7 +44,9 @@ type MechaState struct {
 	FuelEnergy          int                              `json:"fuel_energy"`
 	Shield              int                              `json:"shield"`
 	MaxShield           int                              `json:"max_shield"`
-	InventoryCapacity   int                              `json:"inventory_capacity"`
+	// InventorySlots 是背包格数上限（DSP 机甲背包口径）：每格可堆叠该物品的
+	// stack_limit 件，容量按「占用格数」判定（不再有按件数的旧上限）。
+	InventorySlots      int                              `json:"inventory_slots"`
 	AttackEnergyCost    int                              `json:"attack_energy_cost"`
 	MoveEnergyCost      int                              `json:"move_energy_cost"`
 	ShieldRechargeDelay int64                            `json:"shield_recharge_delay"`
@@ -75,7 +77,7 @@ func newMechaState(spec MechaSpec) *MechaState {
 	return &MechaState{
 		Energy:              spec.MaxEnergy,
 		MaxEnergy:           spec.MaxEnergy,
-		InventoryCapacity:   spec.InventoryCapacity,
+		InventorySlots:      spec.InventorySlots,
 		AttackEnergyCost:    spec.AttackEnergyCost,
 		MoveEnergyCost:      spec.MoveEnergyCost,
 		ShieldRechargeDelay: spec.ShieldRechargeDelay,
@@ -147,14 +149,18 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 	spec := executorMechaSpec()
 	m.MaxEnergy = spec.MaxEnergy + int(TechEffectValue(player, "core_capacity"))
 	m.MaxShield = int(TechEffectValue(player, "shield_capacity"))
-	m.InventoryCapacity = spec.InventoryCapacity + int(TechEffectValue(player, "mecha_inventory_capacity"))
+	m.InventorySlots = spec.InventorySlots + int(TechEffectValue(player, "mecha_inventory_slots"))
+	if player != nil {
+		player.InventorySlots = m.InventorySlots
+	}
 	m.Energy = max(0, min(m.Energy, m.MaxEnergy))
 	m.Shield = max(0, min(m.Shield, m.MaxShield))
 	// Logistics requests may not ask for more than the backpack can hold; the
-	// distributor settlement reads Max when delivering to the mecha.
+	// distributor settlement reads Max when delivering to the mecha. 上限按格数
+	// 折算成该物品的件数（DSP 口径：一个请求最多占满整包）。
 	for itemID, request := range m.LogisticsRequests {
-		if request.Max > m.InventoryCapacity {
-			request.Max = m.InventoryCapacity
+		if limit := m.InventorySlots * stackSize(itemID); limit > 0 && request.Max > limit {
+			request.Max = limit
 		}
 		if request.Min > request.Max {
 			request.Min = request.Max

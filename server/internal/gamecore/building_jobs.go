@@ -132,7 +132,7 @@ func demolishBuilding(ws *model.WorldState, alerts *AlertHistory, building *mode
 	player := ws.Players[building.OwnerID]
 	if player != nil {
 		// 拆除返还同样受机甲背包上限约束（背包永远不会超过上限）。
-		player.AddItems(refund.Items, mechaInventoryCapacity(ws, nil, player))
+		player.AddItems(refund.Items, mechaInventorySlots(ws, nil, player))
 	}
 
 	entityID := building.ID

@@ -26,18 +26,28 @@ func manualMineCommand(quantity any) model.Command {
 	return model.Command{Target: model.CommandTarget{EntityID: "executor"}, Payload: map[string]any{"resource_id": "coal", "quantity": quantity}}
 }
 
-// setTestInventory 把背包设为恰好 used 件（全部是煤），并返回该行星执行体的背包上限。
-// 机甲背包上限来自 units.yaml 的 executor.mecha.inventory_capacity（默认 200），
-// 这里统一通过 SyncMechaCapabilities 同步，避免测试写死数字。
+// setTestInventory 把背包设为 used 格（全部是煤，煤 100 件/格），并返回该行星
+// 执行体的背包格数上限。机甲背包上限来自 units.yaml 的
+// executor.mecha.inventory_slots（默认 40 格），这里统一通过 SyncMechaCapabilities
+// 同步，避免测试写死数字。
 func setTestInventory(ws *model.WorldState, unit *model.Unit, used int) int {
 	player := ws.Players[unit.OwnerID]
 	model.SyncMechaCapabilities(unit, player)
-	capacity := unit.Mecha.InventoryCapacity
+	slots := unit.Mecha.InventorySlots
 	player.Inventory = model.ItemInventory{}
 	if used > 0 {
-		player.Inventory[model.ItemCoal] = used
+		player.Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
-	return capacity
+	return slots
+}
+
+// fillTestInventory 把背包塞满：煤占满全部格数（返回格数上限）。
+func fillTestInventory(ws *model.WorldState, unit *model.Unit) int {
+	player := ws.Players[unit.OwnerID]
+	model.SyncMechaCapabilities(unit, player)
+	slots := unit.Mecha.InventorySlots
+	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
+	return slots
 }
 
 func addManualCoal(ws *model.WorldState, amount int) *model.ResourceNodeState {
@@ -375,42 +385,45 @@ func TestHandcraftRequiresRecipeResearchAndDoesNotReserveOnFailure(t *testing.T)
 	}
 }
 
-// 回归（试玩 1014 问题 1）：背包任何路径都不能超过机甲上限。
-// 根因是手搓产出直接 player.AddItems(output) 不看 inventory_capacity：
-// 背包正好 200/200 时搓出一批磁铁就变成 201/200，此后「取出」全部报
-// 「背包已满（201/200）」，而玩家什么都没做错。
+// 回归（试玩 1014 问题 1）：背包任何路径都不能超过机甲格数上限。
+// 根因是手搓产出直接 player.AddItems(output) 不看容量：
+// 背包正好满格时搓出一批磁铁就超了，此后「取出」全部报「背包已满」。
+// 第 17 轮（U5）起容量按格计：每格堆叠该物品的 stack_limit 件。
 func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	capacity := setTestInventory(ws, unit, 0)
-	// 背包顶满：启动 2 批 gear 时一次性预留 2 个铁块，背包先腾出 2 格。
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity - 2, model.ItemIronIngot: 2}
-	if got := player.InventoryCount(); got != capacity {
-		t.Fatalf("setup inventory = %d, want %d", got, capacity)
+	slots := setTestInventory(ws, unit, 0)
+	coalPerSlot := model.ItemStackSize(model.ItemCoal)
+	// 背包顶满：启动 2 批 gear 时一次性预留 2 个铁块（1 格），背包先腾出 1 格。
+	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * coalPerSlot, model.ItemIronIngot: 2}
+	if got := player.InventorySlotsUsed(); got != slots {
+		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	if res, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); res.Code != model.CodeOK {
 		t.Fatalf("craft start: %+v", res)
 	}
-	// gear 一批 20 tick：产出 1 个齿轮，背包回到 capacity-1。
+	// gear 一批 20 tick：产出 1 个齿轮（1 格）。预留的 2 个铁块只占 1 格，
+	// 第一批吃掉 1 个后剩下 1 个仍留在作业预留里（不在背包），齿轮占回那 1 格。
 	advancePersonalTicks(ws, 20)
-	if got := player.InventoryCount(); got != capacity-1 || player.Inventory[model.ItemGear] != 1 {
-		t.Fatalf("first batch must fill exactly one slot: %v", player.Inventory)
+	if got := player.InventorySlotsUsed(); got != slots || player.Inventory[model.ItemGear] != 1 || player.Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("first batch must keep the bag full: %v", player.Inventory)
 	}
-	// 同 tick 之外又塞满背包（采集/取出都会这样）：下一批没有空位，
+	// 把齿轮那格换成煤（背包仍然满格、且没有齿轮可叠加）：下一批没有空位，
 	// 不得产出、不得超上限，作业停在 inventory_full 等腾空。
-	player.Inventory[model.ItemStoneOre] = 1
-	if got := player.InventoryCount(); got != capacity {
-		t.Fatalf("setup inventory = %d, want %d", got, capacity)
+	delete(player.Inventory, model.ItemGear)
+	player.Inventory[model.ItemCoal] += coalPerSlot
+	if got := player.InventorySlotsUsed(); got != slots {
+		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	advancePersonalTicks(ws, 20)
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("craft output pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("craft output pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if got := player.InventoryCount(); got != capacity {
-		t.Fatalf("blocked batch must leave the bag untouched, got %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got != slots {
+		t.Fatalf("blocked batch must leave the bag untouched, got %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemGear] != 1 || player.Inventory[model.ItemIronIngot] != 0 {
+	if player.Inventory[model.ItemGear] != 0 || player.Inventory[model.ItemIronIngot] != 0 {
 		t.Fatalf("blocked batch consumed or duplicated items: %v", player.Inventory)
 	}
 	if unit.Mecha.Job == nil || unit.Mecha.Job.State != "inventory_full" || unit.Mecha.Job.CompletedBatches != 1 {
@@ -424,13 +437,13 @@ func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatalf("full bag must not burn energy or advance the batch: energy %d->%d ticks %d->%d",
 			energyBefore, unit.Mecha.Energy, ticksBefore, unit.Mecha.Job.RemainingTicks)
 	}
-	// 腾出 1 个空位：第二批自动继续，仍然不超上限。
-	delete(player.Inventory, model.ItemStoneOre)
+	// 腾出 1 个空位（取走一格煤）：第二批自动继续，仍然不超上限。
+	player.Inventory[model.ItemCoal] -= coalPerSlot
 	advancePersonalTicks(ws, 20)
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("resumed craft pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("resumed craft pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemGear] != 2 {
+	if player.Inventory[model.ItemGear] != 1 {
 		t.Fatalf("resumed batch did not produce: %v", player.Inventory)
 	}
 	if unit.Mecha.Job != nil {
@@ -439,20 +452,21 @@ func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 
 }
 
-// 手动采集同样受上限约束：背包满时采集不产出（矿点不消耗、进度保留）。
+// 手动采集同样受上限约束：背包满格时采集不产出（矿点不消耗、进度保留）。
 func TestManualMiningNeverExceedsInventoryCapacity(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	capacity := setTestInventory(ws, unit, 0)
-	player.Inventory = model.ItemInventory{model.ItemIronOre: capacity}
+	slots := setTestInventory(ws, unit, 0)
+	perSlot := model.ItemStackSize(model.ItemIronOre)
+	player.Inventory = model.ItemInventory{model.ItemIronOre: slots * perSlot}
 	node := addManualCoal(ws, 3)
 	if res, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(3)); res.Code != model.CodeOK {
 		t.Fatalf("mine start: %+v", res)
 	}
 	advancePersonalTicks(ws, 10)
-	if got := player.InventoryCount(); got != capacity {
-		t.Fatalf("full bag must not gain mined items: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got != slots {
+		t.Fatalf("full bag must not gain mined items: %d/%d", got, slots)
 	}
 	if node.Remaining != 3 {
 		t.Fatalf("blocked mining must not drain the node, remaining=%d", node.Remaining)
@@ -460,40 +474,39 @@ func TestManualMiningNeverExceedsInventoryCapacity(t *testing.T) {
 	if unit.Mecha.Job == nil || unit.Mecha.Job.State != "inventory_full" {
 		t.Fatalf("mining job must stall as inventory_full: %+v", unit.Mecha.Job)
 	}
-	player.Inventory[model.ItemIronOre] -= 1
-	if player.Inventory[model.ItemIronOre] <= 0 {
-		delete(player.Inventory, model.ItemIronOre)
-	}
+	// 腾出一格（拿走一整摞铁矿）：采矿自动继续。
+	delete(player.Inventory, model.ItemIronOre)
 	advancePersonalTicks(ws, 10)
 	if node.Remaining != 2 || player.Inventory[model.ItemCoal] != 1 {
 		t.Fatalf("mining did not resume after freeing space: node=%d inv=%v", node.Remaining, player.Inventory)
 	}
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("resumed mining pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("resumed mining pushed the bag over capacity: %d/%d", got, slots)
 	}
 }
 
-// 取消作业的退款同样受上限约束（背包已满时退款丢弃，不超上限）。
+// 取消作业的退款同样受上限约束（背包已满格时退款丢弃，不超上限）。
 func TestMechaJobRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	capacity := setTestInventory(ws, unit, 0)
-	// 启动时扣留 3 批 gear 的原料（3 铁块），背包里再放满煤占位。
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity - 3, model.ItemIronIngot: 3}
+	slots := setTestInventory(ws, unit, 0)
+	perSlot := model.ItemStackSize(model.ItemCoal)
+	// 启动时扣留 3 批 gear 的原料（3 铁块，1 格），背包里再放满煤占位。
+	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 3}
 	if res, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 3)); res.Code != model.CodeOK {
 		t.Fatalf("craft start: %+v", res)
 	}
-	// 铁矿变成预留原料，背包空出 3 格，用别的物品占满。
-	player.Inventory[model.ItemStoneOre] = 3
-	if got := player.InventoryCount(); got != capacity {
-		t.Fatalf("setup inventory = %d, want %d", got, capacity)
+	// 铁矿变成预留原料，背包空出 1 格，用别的物品占满。
+	player.Inventory[model.ItemStoneOre] = 1
+	if got := player.InventorySlotsUsed(); got != slots {
+		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	if res, _ := execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}}); res.Code != model.CodeOK {
 		t.Fatalf("cancel: %+v", res)
 	}
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("refund pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("refund pushed the bag over capacity: %d/%d", got, slots)
 	}
 	if player.Inventory[model.ItemIronIngot] != 0 {
 		t.Fatalf("full bag should have discarded the refund, got %v", player.Inventory)

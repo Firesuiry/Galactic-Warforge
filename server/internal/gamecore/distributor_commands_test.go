@@ -101,27 +101,28 @@ func TestUninstallLogisticsBotRespectsInventoryCapacity(t *testing.T) {
 	}
 	exec := distributorTestMecha(ws, home.Position)
 	model.SyncMechaCapabilities(exec, player)
-	capacity := exec.Mecha.InventoryCapacity
-	player.Inventory = model.ItemInventory{model.ItemCoal: capacity}
+	slots := exec.Mecha.InventorySlots
+	perSlot := model.ItemStackSize(model.ItemCoal)
+	player.Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
 
 	uninstall := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2}}
 	result, _ := execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", uninstall)
 	if result.Code != model.CodeInsufficientResource {
 		t.Fatalf("full bag must refuse the uninstall, got %s (%s)", result.Code, result.Message)
 	}
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("uninstall pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("uninstall pushed the bag over capacity: %d/%d", got, slots)
 	}
 	if player.Inventory[model.ItemLogisticsBot] != 0 {
 		t.Fatalf("refused uninstall must not add bots: %v", player.Inventory)
 	}
-	// 腾出 1 个空位：只卸下装得下的 1 个。
-	player.Inventory[model.ItemCoal] = capacity - 1
+	// 腾出 1 个空位：机器人 200 件/格，两个机器人只占同一格，可以一起卸下。
+	player.Inventory[model.ItemCoal] = (slots - 1) * perSlot
 	result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", uninstall)
-	if result.Code != model.CodeOK || player.Inventory[model.ItemLogisticsBot] != 1 {
-		t.Fatalf("partial uninstall: %s inv=%v", result.Message, player.Inventory)
+	if result.Code != model.CodeOK || player.Inventory[model.ItemLogisticsBot] != 2 {
+		t.Fatalf("uninstall with one free slot: %s inv=%v", result.Message, player.Inventory)
 	}
-	if got := player.InventoryCount(); got > capacity {
-		t.Fatalf("partial uninstall pushed the bag over capacity: %d/%d", got, capacity)
+	if got := player.InventorySlotsUsed(); got > slots {
+		t.Fatalf("partial uninstall pushed the bag over capacity: %d/%d", got, slots)
 	}
 }

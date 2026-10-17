@@ -211,7 +211,7 @@ func grantDarkFogLoot(ws *model.WorldState, playerID string, storage *model.Stor
 		if remaining > 0 {
 			if player := ws.Players[playerID]; player != nil {
 				// 背包（机甲背包）满时放不下的战利品丢弃，绝不超上限。
-				carried := player.AddItems([]model.ItemAmount{{ItemID: drop.ItemID, Quantity: remaining}}, mechaInventoryCapacity(ws, nil, player))
+				carried := player.AddItems([]model.ItemAmount{{ItemID: drop.ItemID, Quantity: remaining}}, mechaInventorySlots(ws, nil, player))
 				grant.CarriedQty = carried
 				remaining -= carried
 			}
