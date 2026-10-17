@@ -11,8 +11,8 @@
  * - 只标**本行星视口里确实存在的带子格**（服务端告警历史不带行星 id，
  *   也不能凭空给一块空地画红杠）；
  * - 只标**仍然成立**的告警（`active !== false`，第 16 轮契约：恢复流动的告警留在历史里
- *   但标 `active=false`）；带子在场时再要求 `conveyor.blocked_ticks > 0`，
- *   避免旧告警在已恢复的带格上留红杠（试玩 1016 严重 2）。
+ *   但标 `active=false`），是否恢复只看服务端的 `active`——现场 `blocked_ticks` 是
+ *   `omitempty`，归零时字段直接缺失，不能用来区分「在流动」与「旧服务端」。
  */
 
 import type { AlertEntry, Building } from '@shared/types';
@@ -65,10 +65,8 @@ export function blockedBeltMarks(
     if (!position) continue;
     const belt = beltAtTile(buildings, position);
     if (!belt) continue;
-    // 带子在场时再看现场计数：blocked_ticks 已归零 = 已经在流动，告警是旧噪音。
-    // 字段缺失（旧服务端）时不下结论，仍按告警显示。
-    const liveBlocked = belt.conveyor?.blocked_ticks;
-    if (typeof liveBlocked === 'number' && liveBlocked <= 0) continue;
+    // 不再看现场 blocked_ticks：服务端 ConveyorState.BlockedTicks 带 omitempty，
+    // 0 时字段缺失，「<= 0」守卫永远不会触发；恢复与否以告警的 active 为准。
     const key = `${position.x}:${position.y}`;
     const mark: BlockedBeltMark = {
       alertId: alert.alert_id,

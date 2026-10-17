@@ -101,15 +101,9 @@ describe('传送带堵塞标记（试玩 1016 B1）', () => {
     expect(marks).toEqual([]);
   });
 
-  it('带子现场 blocked_ticks 已归零 = 已恢复流动，旧告警不画红杠', () => {
-    const marks = blockedBeltMarks(
-      [beltAlert(12, 7)],
-      [belt('b-9', 12, 7, 'east', 0)],
-    );
-    expect(marks).toEqual([]);
-  });
-
-  it('带子仍在堵（blocked_ticks > 0）或字段缺失时照常画', () => {
+  it('恢复与否只看告警 active：现场 blocked_ticks 缺失/为 0 都照常画', () => {
+    // 服务端 blocked_ticks 是 omitempty：0 时字段缺失，不能拿它判「已恢复」。
+    expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 0)])).toHaveLength(1);
     expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', 500)])).toHaveLength(1);
     expect(blockedBeltMarks([beltAlert(12, 7)], [belt('b-9', 12, 7, 'east', undefined)])).toHaveLength(1);
   });
