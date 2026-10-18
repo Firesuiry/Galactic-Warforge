@@ -12,6 +12,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
@@ -145,6 +146,8 @@ export class PlanetThreeScene {
   private dressingSignature = '';
   private localSurface: ReturnType<typeof createLocalSurface> = null;
   private localSurfaceKey = '';
+  /** 战术叠加层输入签名（悬停/选中/图层/数据未变时跳过重建）。 */
+  private tacticalOverlaySignature = '';
   private groundView = false;
   private tilt = .65;
   private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite } }>();
@@ -327,7 +330,9 @@ export class PlanetThreeScene {
 
   setData(data: PlanetThreeData) {
     this.data = data;
-    updatePlanetSurface(this.surface, data);
+    // 大行星的局部曲面与全球球面共用 surface.material（同一个 swFog uniform），
+    // 这里把图层开关一起喂进去，重建局部曲面后迷雾开关同样生效。
+    updatePlanetSurface(this.surface, { ...data, fogLayer: this.interaction?.layers.fog });
     const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? [data.planet.bounds, data.planet.surface_patches?.map(p => [p.bounds, p.height?.length ?? 0]), data.planet.height?.length ?? 0] : null]);
     if (localKey !== this.localSurfaceKey) {
       if (this.localSurface) { this.world.remove(this.localSurface); this.localSurface.geometry.dispose(); }
@@ -354,6 +359,7 @@ export class PlanetThreeScene {
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
     // 图层「迷雾」：关闭时去掉未探索测绘面纱（R20-A D5；开关与 2D 的 layers.fog 同义）。
+    // 局部曲面与全球球面共用同一份材质/uniform，这一处同时覆盖两者。
     setPlanetSurfaceFog(this.surface, interaction.layers.fog);
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
     this.updateMarks();
@@ -1053,9 +1059,27 @@ export class PlanetThreeScene {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
     const faceSize = data.planet.surface.face_size;
-    const circles: RangeCircleItem[] = [];
     const mode = interaction.interactionMode;
     const hovered = interaction.hoveredTile;
+    // 输入签名短路：updateMarks 在每次悬停/选中/数据刷新时都会调用，叠加层输入没变就
+    // 不重建（hover 变化只影响建造 ghost 的射程圈，其余两项与 hover 无关）。
+    const selectedBuilding = interaction.selected?.kind === 'building'
+      ? data.planet.buildings?.[interaction.selected.id]
+      : undefined;
+    const signature = JSON.stringify([
+      faceSize,
+      interaction.layers.selection, interaction.layers.threat, interaction.layers.construction,
+      mode.kind === 'build' ? mode.buildingType : null,
+      mode.kind === 'build' ? hovered : null,
+      interaction.selected?.kind === 'building' ? interaction.selected.id : null,
+      selectedBuilding?.position ?? null,
+      // runtime（侦测点/施工进度）与 catalog（射程圈）按引用比较：查询层结构共享，
+      // 未变时引用不变（2s 轮询/事件刷新才换引用）。
+      refId(data.runtime), refId(data.catalog), refId(selectedBuilding), refId(data.planet.buildings),
+    ]);
+    if (signature === this.tacticalOverlaySignature) return;
+    this.tacticalOverlaySignature = signature;
+    const circles: RangeCircleItem[] = [];
     if (mode.kind === 'build' && hovered && interaction.layers.selection) {
       const footprint = getBuildingCatalogEntry(data.catalog, mode.buildingType)?.footprint ?? { width: 1, height: 1 };
       const center = footprintCenterTile(hovered, footprint, faceSize);
@@ -1073,8 +1097,10 @@ export class PlanetThreeScene {
     }
     this.rangeCircles.sync(circles, faceSize);
 
+    // 侦测点/施工进度只画已探索格（与施工脚手架同一口径）：未探索区域连地形都没有。
     const detections = interaction.layers.threat
       ? (data.runtime?.available ? data.runtime.detections ?? [] : []).flatMap(detection => detection.detected_positions ?? [])
+        .filter(position => this.known(position))
       : [];
     this.detectionMarks.sync(detections, faceSize);
 
@@ -1082,7 +1108,7 @@ export class PlanetThreeScene {
       id: task.id,
       tile: { x: Math.round(task.position.x), y: Math.round(task.position.y) },
       progress: constructionBarProgress(task),
-    }));
+    })).filter(bar => this.known(bar.tile));
     this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
   }
 
@@ -1335,9 +1361,16 @@ export class PlanetThreeScene {
   }
   zoom(factor: number) {
     if (!(factor > 0)) return;
-    this.altitude = THREE.MathUtils.clamp(this.altitude / factor, Math.max(this.tileScale() * 2.5, 0.03), 430);
-    if (this.altitude > 190) this.groundView = false;
-    else if (this.altitude < 130) this.groundView = true;
+    this.setAltitude(this.altitude / factor);
+  }
+  /**
+   * 绝对高度入口（深链 `?zoom=`）：与 `zoom(factor)` 同一套 190/130 阈值决定地面视角，
+   * 全球高度（300）读回 `groundView === false`，贴地高度读回 true。
+   */
+  setAltitude(altitude: number) {
+    if (!Number.isFinite(altitude)) return;
+    this.altitude = THREE.MathUtils.clamp(altitude, Math.max(this.tileScale() * 2.5, 0.03), 430);
+    this.groundView = groundViewAtAltitude(this.altitude, this.groundView);
     this.updateCamera();
   }
   private updateCamera() {

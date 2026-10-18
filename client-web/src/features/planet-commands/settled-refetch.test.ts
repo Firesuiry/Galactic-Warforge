@@ -16,6 +16,16 @@ function commandResultEvent(requestId: string) {
   };
 }
 
+function pendingEntry(requestId: string, commandType = "theater_define_zone") {
+  usePlanetCommandStore.getState().addJournalEntry({
+    requestId,
+    commandType,
+    planetId: "planet-1-1",
+    status: "pending",
+    acceptedMessage: "accepted",
+  });
+}
+
 describe("refetchAfterCommandSettles", () => {
   let queryClient: QueryClient;
 
@@ -30,49 +40,62 @@ describe("refetchAfterCommandSettles", () => {
     vi.useRealTimers();
   });
 
-  it("HTTP 已接受但服务端尚未结算：立即重取拿旧数据，结算事件到达后才刷新", () => {
+  it("按 requestId 跟踪：结算事件到达后才刷新", () => {
+    pendingEntry("req-zone-1");
     const cancel = refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_define_zone",
+      requestId: "req-zone-1",
       queryKey: THEATERS_KEY,
     });
 
-    // 提交占位（本地 requestId）→ HTTP 回执原位替换成服务端 requestId，仍是 pending。
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "local-theater_define_zone-1",
-      commandType: "theater_define_zone",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "已提交",
-    });
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-zone-1",
-      commandType: "theater_define_zone",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "accepted",
-    });
     // 命令还没在 tick 结算：此刻不能刷新（否则画面继续用旧战区）。
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
 
-    // 下一个 tick 的 command_result 到达 → 条目变 succeeded → 刷新。
     usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-1"));
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: THEATERS_KEY });
     cancel();
   });
 
+  it("别的 requestId（同类型命令）结算不触发这条的刷新", () => {
+    pendingEntry("req-zone-1");
+    pendingEntry("req-zone-2");
+    const cancel = refetchAfterCommandSettles(queryClient, {
+      requestId: "req-zone-1",
+      queryKey: THEATERS_KEY,
+    });
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-2"));
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-1"));
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    cancel();
+  });
+
+  it("连续两次划定各自刷新一次（订阅按各自 requestId 独立）", () => {
+    pendingEntry("req-zone-1");
+    pendingEntry("req-zone-2");
+    const cancelFirst = refetchAfterCommandSettles(queryClient, {
+      requestId: "req-zone-1",
+      queryKey: THEATERS_KEY,
+    });
+    const cancelSecond = refetchAfterCommandSettles(queryClient, {
+      requestId: "req-zone-2",
+      queryKey: THEATERS_KEY,
+    });
+
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-1"));
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-2"));
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+    cancelFirst();
+    cancelSecond();
+  });
+
   it("SSE 事件丢失时按兜底延迟补刷一次（画面最终也用新数据）", () => {
+    pendingEntry("req-zone-2");
     refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_define_zone",
+      requestId: "req-zone-2",
       queryKey: THEATERS_KEY,
       fallbackDelayMs: 1500,
-    });
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-zone-2",
-      commandType: "theater_define_zone",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "accepted",
     });
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1499);
@@ -81,47 +104,12 @@ describe("refetchAfterCommandSettles", () => {
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
   });
 
-  it("别的命令的结算不触发战区刷新；trackLatestExisting 跟踪已提交的 theater_create", () => {
-    // 已经提交返回后才注册（PlanetTheaterControls.onChanged）：journal 里已有条目。
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-create-1",
-      commandType: "theater_create",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "accepted",
-    });
-    refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_create",
-      queryKey: THEATERS_KEY,
-      trackLatestExisting: true,
-    });
-
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-move-1",
-      commandType: "move",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "accepted",
-    });
-    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-move-1"));
-    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
-
-    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-create-1"));
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
-  });
-
   it("超时仍未结算也补刷一次，之后不再重复刷新", () => {
+    pendingEntry("req-zone-3");
     refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_define_zone",
+      requestId: "req-zone-3",
       queryKey: THEATERS_KEY,
       timeoutMs: 20_000,
-    });
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-zone-3",
-      commandType: "theater_define_zone",
-      planetId: "planet-1-1",
-      status: "pending",
-      acceptedMessage: "accepted",
     });
     vi.advanceTimersByTime(20_000);
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
@@ -130,18 +118,13 @@ describe("refetchAfterCommandSettles", () => {
   });
 
   it("取消函数生效：卸载后不再刷新", () => {
+    pendingEntry("req-zone-4");
     const cancel = refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_define_zone",
+      requestId: "req-zone-4",
       queryKey: THEATERS_KEY,
     });
     cancel();
-    usePlanetCommandStore.getState().addJournalEntry({
-      requestId: "req-zone-4",
-      commandType: "theater_define_zone",
-      planetId: "planet-1-1",
-      status: "succeeded",
-      acceptedMessage: "accepted",
-    });
+    usePlanetCommandStore.getState().reconcileAuthoritativeEvent(commandResultEvent("req-zone-4"));
     vi.advanceTimersByTime(20_000);
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
   });

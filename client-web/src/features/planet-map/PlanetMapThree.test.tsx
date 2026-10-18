@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { getFixtureScenario } from '@/fixtures';
@@ -18,8 +19,10 @@ let zoomCalls: number[] = [];
 let projectResult: ((tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null) | null = null;
 /** scene.project 收到的格坐标（验证战区地面圆用浮点、不取整）。 */
 let projectedTiles: { x: number; y: number }[] = [];
-/** clickTile 收到的选项（验证 button 透传 / 右键退回）。 */
+/** clickTile 收到的选项（验证 button 透传）。 */
 let clickTileCalls: ({ tile: { x: number; y: number }; options?: { button?: 0 | 2 } })[] = [];
+/** scene.setAltitude 收到的绝对高度（深链 ?zoom= 恢复）。 */
+let altitudeCalls: number[] = [];
 
 vi.mock('./planet-three-scene', () => ({
   PlanetThreeScene: class {
@@ -39,6 +42,7 @@ vi.mock('./planet-three-scene', () => ({
     focus() {}
     orbit() {}
     zoom(factor: number) { zoomCalls.push(factor); }
+    setAltitude(altitude: number) { altitudeCalls.push(altitude); }
     getCenterTile() { return { x: 4, y: 4 }; }
     setTilt() {}
     pickAt() { return pickResult; }
@@ -66,6 +70,7 @@ afterEach(() => {
   pickResult = null;
   dragPaths = [];
   zoomCalls = [];
+  altitudeCalls = [];
   projectResult = null;
   clickTileCalls = [];
   projectedTiles = [];
@@ -672,7 +677,6 @@ describe('3D 战区拖拽（R20-A ③）', () => {
     drag(host, 'pointerMove', { clientX: 200, clientY: 180 });
     // 预览是**地面圆**（不是屏幕矩形）：圆心 = 两角中点、半径 = 半宽/半高取大。
     expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
-    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
     expect(screen.getByText('半径 10 格')).toBeInTheDocument();
     drag(host, 'pointerUp', { clientX: 200, clientY: 180 });
 
@@ -862,6 +866,44 @@ describe('__planetThree 测试接口（R20-A ⑤）', () => {
     expect(clickTileCalls).toHaveLength(1);
     expect(clickTileCalls[0].options).toEqual({ button: 2 });
     expect(clickTileCalls[0].tile).toEqual({ x: 3, y: 4 });
+  });
+
+  it('首次聚焦会重置高度，深链 ?zoom= 在聚焦后重新落回绝对高度', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    render(<PlanetMapThree initialZoom={300} planet={scenario.planets['planet-1-1']} />);
+    act(() => usePlanetViewStore.getState().requestFocus({ x: 12, y: 9 }));
+    // 场景就绪时先设一次；首次聚焦（会压到贴地）之后再设一次。
+    expect(altitudeCalls).toEqual([300, 300]);
+  });
+
+  it('深链 ?zoom=300：按绝对高度恢复相机（setAltitude），不是相对倍率', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    render(<PlanetMapThree initialZoom={300} planet={scenario.planets['planet-1-1']} />);
+    expect(altitudeCalls).toEqual([300]);
+  });
+
+  it('onCanvasReady 只在场景就绪时上报一次；父组件重渲染不重复上报（渲染死循环回归）', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    const onCanvasReady = vi.fn();
+    function Parent() {
+      // 每次渲染都新建内联回调（旧 PlanetPage 就是这样）：组件内部不能因此重跑上报 effect。
+      const [, force] = useState(0);
+      return (
+        <>
+          <button type="button" onClick={() => force(value => value + 1)}>rerender</button>
+          <PlanetMapThree onCanvasReady={() => onCanvasReady()} planet={scenario.planets['planet-1-1']} />
+        </>
+      );
+    }
+    render(<Parent />);
+    expect(onCanvasReady).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'rerender' }));
+    fireEvent.click(screen.getByRole('button', { name: 'rerender' }));
+    // 上报次数不随父组件渲染增长（旧实现 onCanvasReady 进 effect 依赖 → setState → 无限重渲染）。
+    expect(onCanvasReady).toHaveBeenCalledTimes(1);
   });
 
   it('dragTiles：派发的 clientX/clientY 是页面坐标（不做二次换算）', async () => {

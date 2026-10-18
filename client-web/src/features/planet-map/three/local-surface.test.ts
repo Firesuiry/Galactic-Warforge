@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
 import { createLocalSurface, createTerrainRelief } from './local-surface';
+import { createPlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
 import { normalTile, tileNormal } from './projection';
 
 it('keeps the local surface on the sphere even when the scene carries authoritative height', () => {
@@ -88,4 +89,25 @@ it('joins geometric face boundaries without atlas-spanning triangles and include
   const normal=tileNormal({x:n+101,y:n+1},n);
   expect(new THREE.Raycaster(normal.clone().multiplyScalar(101),normal.clone().negate()).intersectObject(mesh)).not.toHaveLength(0);
   mesh.geometry.dispose();mesh.material.dispose();
+});
+
+it('局部曲面与全球球面共用材质：迷雾图层开关同时作用于大行星的局部曲面', () => {
+  const n = 512;
+  const planet: PlanetSceneView = { planet_id: 'p', discovered: true, tick: 1, surface: { topology: 'cube_sphere' as const, face_size: n }, map_width: 3 * n, map_height: 2 * n, bounds: { x: 100, y: 100, width: 8, height: 8 } };
+  const surface = createPlanetSurface(100);
+  const shader = { uniforms: {}, vertexShader: '', fragmentShader: '' } as Parameters<typeof surface.material.onBeforeCompile>[0];
+  surface.material.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
+  // 大行星才会生成局部曲面（face_size × 3 > 512）；它复用全球球面的材质。
+  const mesh = createLocalSurface(planet, 100, surface.material)!;
+  expect(mesh.material).toBe(surface.material);
+  setPlanetSurfaceFog(surface, false);
+  expect(shader.uniforms.swFog.value).toBe(0);
+  // setData 每次重建局部曲面后也要带上图层开关（scene.setData 传 fogLayer）。
+  updatePlanetSurface(surface, { planet, fogLayer: true });
+  expect(shader.uniforms.swFog.value).toBe(1);
+  updatePlanetSurface(surface, { planet, fogLayer: false });
+  expect(shader.uniforms.swFog.value).toBe(0);
+  mesh.geometry.dispose();
+  surface.geometry.dispose();
+  surface.material.dispose();
 });

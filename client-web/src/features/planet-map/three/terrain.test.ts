@@ -102,6 +102,20 @@ describe('3D player-visible terrain', () => {
     expect(SHADER_HEADER).toContain('uniform float swFog;');
   });
 
+  it('updatePlanetSurface 的 fogLayer 同步到 swFog uniform（局部曲面重建后开关同样生效）', () => {
+    const mesh = createPlanetSurface(100);
+    const shader = uniforms(mesh);
+    updatePlanetSurface(mesh, { planet: scene(), fogLayer: false });
+    expect(shader.swFog.value).toBe(0);
+    updatePlanetSurface(mesh, { planet: scene(), fogLayer: true });
+    expect(shader.swFog.value).toBe(1);
+    // 不带 fogLayer 的刷新不改开关（实时数据更新不会把玩家的图层选择重置）。
+    updatePlanetSurface(mesh, { planet: scene(), fogLayer: false });
+    updatePlanetSurface(mesh, { planet: { ...scene(), tick: 2 } });
+    expect(shader.swFog.value).toBe(0);
+    disposePlanetSurface(mesh);
+  });
+
   it('迷雾图层开关：swFog uniform 默认 1，setPlanetSurfaceFog(false) 后未探索格不再盖测绘面纱', () => {
     // 着色器里面纱与已知地形按 swFog 混合：关掉 = 未探索格按已知地形显示（与 2D layers.fog 同义）。
     expect(SHADER_COLOR).toContain('swAlbedo = mix(mix(swAlbedo, mix(swUnknownBase, swVeil, swFog), swFog), swAlbedo, swKnown);');

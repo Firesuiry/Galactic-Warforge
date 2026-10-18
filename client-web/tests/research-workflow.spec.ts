@@ -35,6 +35,8 @@ function createScene() {
     map_width: 4,
     map_height: 4,
     tick: 120,
+    // 3D 行星页需要 surface（球面拓扑 + 每面格数）；2D 画布不读它。
+    surface: { topology: "cube_sphere", face_size: 4 },
     bounds: { x: 0, y: 0, width: 4, height: 4 },
     terrain: [
       ["buildable", "buildable", "buildable", "buildable"],
@@ -291,7 +293,9 @@ async function installPlanetRoutes(
     });
   });
 
-  await page.route("**/state/stats", async (route) => {
+  // 3D 行星页在首屏等待 stats 查询结束才渲染（2D 不等待）：stats 失败会让页面停在
+  // 「服务器连接异常」而不是「工作台/抽屉可点」。同一份 mock 要覆盖带查询串的变体。
+  await page.route("**/state/stats**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(createStats()),
@@ -481,7 +485,7 @@ test("默认新局在浏览器中展示推荐路径、分组研究列表并可�
     completedTechIds: ["dyson_sphere_program"],
   });
 
-  await page.goto("/planet/planet-1-1?view=2d");
+  await page.goto("/planet/planet-1-1");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();
@@ -512,7 +516,7 @@ test("midgame 在浏览器中按建筑上下文展示装料与射线接收站提
     completedTechIds: ["dyson_sphere_program", "electromagnetism", "energy_matrix"],
   });
 
-  await page.goto("/planet/planet-1-1?view=2d");
+  await page.goto("/planet/planet-1-1");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();

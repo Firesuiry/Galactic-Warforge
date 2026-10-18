@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, interactionModeStatusText, isTypingTarget, parseTiltParam, readPlanetThreeCameraState, toPagePoint, unitsInScreenRect, zoomFactorForKey } from './planet-three-status';
+import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, groundViewAtAltitude, interactionModeStatusText, isTypingTarget, parseTiltParam, readPlanetThreeCameraState, toPagePoint, unitsInScreenRect, zoomFactorForKey } from './planet-three-status';
 
 describe('interactionModeStatusText（与 2D 状态行逐字一致）', () => {
   it.each([
@@ -102,24 +102,23 @@ describe('isTypingTarget / zoomFactorForKey', () => {
 });
 
 describe('3D 相机状态读取（R20-A ⑥）', () => {
-  it('有 getCameraState 时用它（中心格/高度/俯仰/地面视角）', () => {
+  it('读取 scene.getCameraState（中心格/高度/俯仰/地面视角）', () => {
     const state = readPlanetThreeCameraState({
-      getCameraState: () => ({ center: { x: 12, y: 30 }, altitude: 8.5, tilt: 0.4, groundView: true }),
-    }, 0.65);
+      getCameraState: () => ({ center: { x: 12, y: 30 }, altitude: 8.5, zoom: 8.5, tilt: 0.4, groundView: true }),
+    });
     expect(state).toEqual({ center: { x: 12, y: 30 }, altitude: 8.5, tilt: 0.4, groundView: true });
   });
 
-  it('没有 getCameraState 时退化到 getCenterTile + 当前 tilt，高度记 null（不伪造 0）', () => {
-    const state = readPlanetThreeCameraState({ getCenterTile: () => ({ x: 3, y: 4 }), isGroundView: () => true }, 0.65);
-    expect(state).toEqual({ center: { x: 3, y: 4 }, altitude: null, tilt: 0.65, groundView: true });
+  it('groundViewAtAltitude：>190 全球、<130 贴地、中间保持原状态（与 zoom 同一套阈值）', () => {
+    expect(groundViewAtAltitude(300, true)).toBe(false);
+    expect(groundViewAtAltitude(8, false)).toBe(true);
+    expect(groundViewAtAltitude(160, true)).toBe(true);
+    expect(groundViewAtAltitude(160, false)).toBe(false);
+    expect(groundViewAtAltitude(190, true)).toBe(true);
+    expect(groundViewAtAltitude(130, false)).toBe(false);
   });
 
-  it('scene 为 null 时也给安全值', () => {
-    expect(readPlanetThreeCameraState(null, 0.7)).toEqual({ center: null, altitude: null, tilt: 0.7, groundView: true });
-  });
-
-  it('zoomLabel 只在拿到高度时出现；深链 tilt 解析做范围夹取', () => {
-    expect(cameraZoomLabel(null)).toBeNull();
+  it('zoomLabel 档位；深链 tilt 解析做范围夹取', () => {
     expect(cameraZoomLabel(8.46)).toBe('缩放 贴地 · 高度 8.5');
     expect(cameraZoomLabel(80)).toContain('近景');
     expect(cameraZoomLabel(220)).toContain('全球');

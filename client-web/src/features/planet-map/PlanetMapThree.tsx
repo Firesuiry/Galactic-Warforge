@@ -13,10 +13,11 @@ import { PlanetLegionLayer } from './PlanetLegionLayer';
 import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
+import { useProjectionFrame } from './use-projection-frame';
 import { PlanetThreeScene, type PickMeta } from './planet-three-scene';
 import { theaterZoneColor, theaterZoneFromDragRect, type TheaterZoneGeometry } from './squad-commands';
 import { describePickNotice, offscreenPickNotice, PICK_MISS_NOTICE, type PickNotice } from './pick-feedback';
-import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, isTypingTarget, readPlanetThreeCameraState, sceneLayerVisibility, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
+import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, groundViewAtAltitude, isTypingTarget, readPlanetThreeCameraState, sceneLayerVisibility, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
 import { projectTheaterZoneRing, theaterZoneContainsTile } from './planet-three-zone-ring';
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
@@ -86,7 +87,10 @@ export function PlanetMapThree(props: Props) {
   const [tilt, setTilt] = useState(() => Math.min(1.1, Math.max(0, props.initialTilt ?? 0.65)));
   const tiltRef = useRef(tilt);
   tiltRef.current = tilt;
-  /** 最近一次读到的相机高度（R20-A ⑥：scene 没有 getCameraState 时省略 zoomLabel）。 */
+  /** 深链 `?zoom=` 的绝对高度：首次聚焦后重新落回该高度（分享链接的视角优先）。 */
+  const initialZoomRef = useRef(props.initialZoom);
+  initialZoomRef.current = props.initialZoom;
+  /** 最近一次读到的相机高度（R20-A ⑥）：场景就绪前为 null，状态行省略缩放档。 */
   const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
@@ -135,14 +139,14 @@ export function PlanetMapThree(props: Props) {
   const zoneDragRef = useRef<{
     startX: number; startY: number; active: boolean;
     startTile: TilePoint | null; endTile: TilePoint | null;
+    /** 松手提交用的几何：与预览用**同一份**取整后的起止格换算，预览与提交不会差一格。 */
+    geometry: TheaterZoneGeometry | null;
   } | null>(null);
   /** 拖拽预览的地面圆几何（圆心 + 半径），null = 没有预览。 */
   const [zoneDragGeometry, setZoneDragGeometry] = useState<{ x: number; y: number; radius: number } | null>(null);
-  /** 投影刷新帧（R20-A ⑥）：相机转动/缩放时重算地面圆的多边形。 */
-  const [projectionFrame, setProjectionFrame] = useState(0);
-  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen, sceneWindow } = usePlanetViewStore(useShallow(s => ({
+  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
-    layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen, sceneWindow: s.sceneWindow,
+    layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen,
   })));
   // 拖拽中按 PageUp/PageDown 改目标高度：整条路径立刻按新目标重算（后面的格子自动起坡/落坡，
   // §3.5 的「拖带时调高度」手感）。结算仍然只在松手时发生，这里只刷新预览。
@@ -272,16 +276,17 @@ export function PlanetMapThree(props: Props) {
     return () => window.removeEventListener('blur', onBlur);
   }, [cancelBeltDrag, cancelZoneDrag]);
 
-  // 相机状态轮询（R20-A ⑥）：scene 有 getCameraState 时把相机高度同步到状态行
-  // （zoomLabel），并在转动/缩放后触发地面圆重新投影。没有该方法时高度为 null，
-  // 状态行省略缩放档（不伪造数字）。
+  // 相机状态轮询（R20-A ⑥）：把相机高度同步到状态行（zoomLabel）。
+  // 高度没变就不 setState；地面圆投影由 `useProjectionFrame` 按相机签名变化重算，
+  // 不在这里无条件递增（旧实现每 250ms 都重渲染一次）。
   useEffect(() => {
     if (!ready) return undefined;
     const timer = window.setInterval(() => {
       if (document.hidden || !scene.current) return;
-      const state = readPlanetThreeCameraState(scene.current, tiltRef.current);
-      setCameraAltitude(state.altitude);
-      setProjectionFrame(value => value + 1);
+      setCameraAltitude(previous => {
+        const next = readPlanetThreeCameraState(scene.current!).altitude;
+        return previous === next ? previous : next;
+      });
     }, 250);
     return () => window.clearInterval(timer);
   }, [ready]);
@@ -373,30 +378,26 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
-    // 深链 `?tilt=`：scene 的初始俯仰固定 0.65，深链值要在场景就绪后补一次。
-    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // 相机状态按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时经 capture.getViewport 拉，
     // 不再在挂载时上报一次。scene 有 getCameraState 就用它（中心格 + 高度 + 俯仰），
-    // 没有时退化到 getCenterTile() + 本组件的 tilt（高度记 0，界面标为不可用）。
     const readViewport = (): PlanetThreeViewportSnapshot => {
-      const state = readPlanetThreeCameraState(renderer, tiltRef.current);
+      const state = readPlanetThreeCameraState(renderer);
       return {
         center: state.center,
-        altitude: state.altitude ?? 0,
+        altitude: state.altitude,
         tilt: state.tilt,
         width: host.current?.clientWidth ?? 0,
         height: host.current?.clientHeight ?? 0,
       };
     };
     viewportReader.current = readViewport;
-    // 深链 `?zoom=`（R20-A ⑥）：分享链接里的相机高度 → 按相对倍率落到该高度。
-    // 只在 scene 提供高度读取时做（否则无法换算倍率，保持默认聚焦高度）。
+    // 深链 `?zoom=`（R20-A ⑥）：分享链接里存的是**绝对相机高度**，按同一套阈值落到该高度
+    // （相对倍率会把全球视角 300 换算成贴地视角，`groundView` 读回就是错的）。
+    // 首次 focus（下面的 focusRequest effect）会重置高度/地面视角，effect 里会在聚焦后
+    // 再按 initialZoomRef 落回一次。
     if (typeof props.initialZoom === 'number' && Number.isFinite(props.initialZoom) && props.initialZoom > 0) {
-      const current = readPlanetThreeCameraState(renderer, tiltRef.current).altitude;
-      if (current && current > 0) renderer.zoom(current / props.initialZoom);
+      renderer.setAltitude(props.initialZoom);
     }
-    // 场景初始俯仰固定 0.65：用户改过滑杆（tiltRef 与默认不同）时补设一次。
-    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
     if (exposeHook) installTestApi(renderer);
@@ -438,17 +439,20 @@ export function PlanetMapThree(props: Props) {
     if (ready) scene.current?.setQuality(quality);
   }, [ready, quality]);
 
+  // capture 只在场景就绪/卸载时上报（onCanvasReady 由调用方 useCallback 固定）。
+  const onCanvasReadyRef = useRef(props.onCanvasReady);
+  onCanvasReadyRef.current = props.onCanvasReady;
   useEffect(() => {
     if (!ready || !scene.current || !host.current) return;
     const element = host.current;
-    props.onCanvasReady?.({
+    onCanvasReadyRef.current?.({
       get clientWidth() { return element.clientWidth; },
       get clientHeight() { return element.clientHeight; },
       captureScreenshot: () => scene.current?.capture() ?? null,
       // R20-A ⑥：调试面板按需拉相机状态（打开面板 / 点「复制链接」时）。
       getViewport: () => viewportReader.current?.() ?? null,
     });
-  }, [ready, props.onCanvasReady]);
+  }, [ready]);
 
   useEffect(() => {
     scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers: sceneLayerVisibility(layers) });
@@ -457,9 +461,13 @@ export function PlanetMapThree(props: Props) {
   const initiallyFocused = useRef(false);
   useEffect(() => {
     if (!ready || !focusRequest) return;
-    scene.current?.focus(focusRequest.position, initiallyFocused.current);
+    const initial = !initiallyFocused.current;
+    scene.current?.focus(focusRequest.position, initial);
     initiallyFocused.current = true;
     usePlanetViewStore.getState().consumeFocusRequest(focusRequest.nonce);
+    // 首次聚焦只负责转向目标格；深链给了绝对高度时，相机高度/地面视角以深链为准
+    // （分享链接的全球视角不能被聚焦重新压回贴地）。
+    if (initial && initialZoomRef.current !== undefined) scene.current?.setAltitude(initialZoomRef.current);
   }, [ready, focusRequest]);
 
   // 镜头设置弹出层：点外面关掉（与顶栏设置弹层同一模式）。
@@ -528,6 +536,7 @@ export function PlanetMapThree(props: Props) {
         startX: event.clientX, startY: event.clientY, active: false,
         startTile: scene.current?.pickAt(event.clientX, event.clientY) ?? null,
         endTile: null,
+        geometry: null,
       };
       capturePointer(event.currentTarget, event.pointerId);
       event.stopPropagation();
@@ -575,10 +584,12 @@ export function PlanetMapThree(props: Props) {
         // 地面圆预览（R20-A ⑥）：两角格子 → 圆心 + 半径（与服务端同一几何），
         // 不再画屏幕正矩形——倾斜球面上屏幕矩形与服务端战区圆对不上。
         if (zoneDrag.startTile && zoneDrag.endTile) {
+          // 取整后的两角格（与提交同一口径）；同一份几何既用于预览也用于松手提交。
           const zone = theaterZoneFromDragRect(
-            { x: zoneDrag.startTile.x, y: zoneDrag.startTile.y },
-            { x: zoneDrag.endTile.x, y: zoneDrag.endTile.y },
+            { x: Math.round(zoneDrag.startTile.x), y: Math.round(zoneDrag.startTile.y) },
+            { x: Math.round(zoneDrag.endTile.x), y: Math.round(zoneDrag.endTile.y) },
           );
+          zoneDrag.geometry = zone;
           setZoneDragGeometry({ x: zone.position.x, y: zone.position.y, radius: zone.radius });
         }
       }
@@ -644,14 +655,9 @@ export function PlanetMapThree(props: Props) {
       setZoneDragGeometry(null);
       releasePointer(event.currentTarget, event.pointerId);
       if (!zoneDrag.active) return;
-      // 两个角点都拾取成格子（指针离开球面时沿用上一次命中的格子）。
-      const start = zoneDrag.startTile ?? scene.current?.pickAt(zoneDrag.startX, zoneDrag.startY);
-      const end = zoneDrag.endTile ?? scene.current?.pickAt(event.clientX, event.clientY);
-      if (!start || !end) return;
-      latest.current.onDefineZone?.(theaterZoneFromDragRect(
-        { x: start.x, y: start.y },
-        { x: end.x, y: end.y },
-      ));
+      // 提交与预览同一份几何（取整后的起止格）；没有预览几何时不提交。
+      if (!zoneDrag.geometry) return;
+      latest.current.onDefineZone?.(zoneDrag.geometry);
       return;
     }
     const marquee = marqueeRef.current;
@@ -691,8 +697,7 @@ export function PlanetMapThree(props: Props) {
    * 全部内部调用场景已有方法（project/focus/pickAt/clickTile），不复制拾取逻辑：
    * - tileScreenPos(tile)：不在视野内先聚焦，再返回投影点；
    * - entityScreenPos(id)：建筑/单位按位置投影；多格建筑取**占地中心**；
-   * - clickTile(tile, button?)：button=2 走右键情境指令（scene 支持 `{button}` 就透传，
-   *   否则合成一次真实右键 pointer 事件序列走组件已有的右键路径）；
+   * - clickTile(tile, button?)：button=2 走右键情境指令（透传 scene 的 `{button}`）；
    * - dragTiles(from, to, modifiers?)：两个格子的屏幕点之间拖一次（Shift=框选，Ctrl=加选）。
    */
   function installTestApi(target: PlanetThreeScene) {
@@ -727,27 +732,7 @@ export function PlanetMapThree(props: Props) {
         const unit = current.planet.units?.[id];
         return unit ? pagePos(unit.position) : null;
       },
-      clickTile: (tile: TilePoint, button: 0 | 2 = 0) => {
-        const scene = target as unknown as { clickTile: (tile: TilePoint, options?: { button?: 0 | 2 }) => unknown };
-        if (button === 2) {
-          // scene 支持 `{button}` 透传就用它（R20-B 接口）；返回值形状不对（旧版只认 focus）
-          // 或抛错时退回合成右键事件。
-          try {
-            const result = scene.clickTile(tile, { button });
-            if (result && typeof result === 'object') return result;
-          } catch { /* 旧版 scene 不认 button 选项：走下面的合成右键。 */ }
-          const point = pagePos(tile);
-          if (!point) return { dispatched: false, offscreen: true };
-          dispatchPointer('pointerdown', point, { button: 2, buttons: 2 });
-          // 合成一次真实右键序列，走组件已有的 onContextMenu 右键路径（情境指令/退出模式）。
-          host.current?.dispatchEvent(new MouseEvent('contextmenu', {
-            bubbles: true, cancelable: true, button: 2, clientX: point.x, clientY: point.y,
-          }));
-          dispatchPointer('pointerup', point, { button: 2 });
-          return { dispatched: true, offscreen: false };
-        }
-        return scene.clickTile(tile);
-      },
+      clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);
         const end = pagePos(to);
@@ -783,7 +768,7 @@ export function PlanetMapThree(props: Props) {
     selectedUnits,
     selectedSquads,
     interactionMode,
-    zoomLabel: cameraZoomLabel(cameraAltitude) ?? undefined,
+    zoomLabel: cameraAltitude === null ? undefined : cameraZoomLabel(cameraAltitude),
   });
 
   /**
@@ -791,6 +776,8 @@ export function PlanetMapThree(props: Props) {
    * 沿圆周 48 个格坐标逐点 project，与服务端存下来的战区同一套几何；
    * 中心画十字、旁边标「半径 N 格」。屏幕正矩形不再画。
    */
+  // 相机转动/缩放时重算地面圆多边形（签名变化才重渲染，见 useProjectionFrame）。
+  const projectionFrame = useProjectionFrame(projectTileExact, zoneDragGeometry !== null);
   const zonePreview = useMemo(() => {
     // 不依赖 ready：jsdom/测试环境里场景可能没有画布尺寸，但 project 仍可喂；
     // 场景不存在时 project 返回 null → ring 为 null，自然不画。
@@ -799,7 +786,7 @@ export function PlanetMapThree(props: Props) {
     if (!ring) return null;
     const color = theaterZoneColor(interactionMode.kind === 'theater_zone' ? interactionMode.zoneType : 'primary');
     return { ring, color };
-    // projectionFrame 让相机转动/缩放后重算多边形。
+    // projectionFrame：相机变化后重投影（值本身不参与计算）。
   }, [zoneDragGeometry, projectionFrame, interactionMode, projectTileExact]);
 
   /**

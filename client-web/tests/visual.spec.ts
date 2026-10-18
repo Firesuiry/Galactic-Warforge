@@ -38,8 +38,8 @@ test('银河星图截图基线', async ({ page }) => {
 
 test('行星地图主视图截图基线', async ({ page }) => {
   await openFixtureMode(page);
-  // freeze 模式冻结氛围动效（水面流光/岩浆呼吸）与脉冲，保证截图确定性
-  await page.goto('/planet/planet-1-1?view=2d&freeze=1');
+  // D3：3D 基线用 ?freeze=1&quality=low 冻结动画/相位并固定画质档（DPR 由 config 固定为 1）。
+  await page.goto('/planet/planet-1-1?freeze=1&quality=low');
   await expect(page.getByRole('heading', { name: 'Gaia' })).toBeVisible();
   // 调试入口默认隐藏（085f063：debugMode 关闭时工具条不渲染调试图标与面板）：
   // 基线里调试图标在、面板是收起的，所以先按 Ctrl+Shift+D 打开调试模式（此时面板同时展开），
@@ -84,8 +84,9 @@ test('行星地图主视图截图基线', async ({ page }) => {
 test('移动端行星页保留地图首屏并提供工作台切换', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openFixtureMode(page);
-  await page.goto('/planet/planet-1-1?view=2d');
-  await expect(page.getByRole('img', { name: '行星地图' })).toBeVisible();
+  await page.goto('/planet/planet-1-1?freeze=1&quality=low');
+  // 2D 画布（role=img「行星地图」）已下线；3D 地图容器是 role=application。
+  await expect(page.getByRole('application', { name: '3D 行星地图' })).toBeVisible();
   // V3 全屏布局：工作台默认收起为右侧边缘把手，点击滑出抽屉
   await page.getByRole('button', { name: '工作台' }).click();
   await expect(page.getByRole('tab', { name: '工作台' })).toBeVisible();

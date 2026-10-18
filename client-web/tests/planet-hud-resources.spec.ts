@@ -74,7 +74,7 @@ test('选中建筑：迷你条显示库存摘要，自动切到选中对象页�
   await installSession(page);
   // 战争服 p1 的 battlefield_analysis_base（战场分析基站），带 60 格本地存储
   const baseId = await findOwnedBuildingId(request, 'battlefield_analysis_base');
-  await page.goto(`${webEntry()}/planet/planet-1-1?view=2d&select=building:${baseId}`);
+  await page.goto(`${webEntry()}/planet/planet-1-1?select=building:${baseId}`);
 
   // web-14：深链选中建筑 → 迷你条 + 侧栏"选中对象"页签
   const bar = page.locator('[data-testid="planet-selection-bar"]');
