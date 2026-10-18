@@ -619,6 +619,22 @@ export function PlanetMapThree(props: Props) {
       // 等真正对应的左键抬起再结算（B2：右键抬起不得下单）。
       if (event.button !== 0) return;
       const drag = beltDrag.current;
+      // 松手点本身也要进笔迹：浏览器会合并/丢弃最后几次 pointermove（并行 worker、
+      // 软渲染下实测 8 格只下 6 格），只按 `drag.path` 结算会让带子停在前半段。
+      // 用抬起事件坐标重新拾取再走一次与 move 相同的逐格逻辑（traceBeltStroke 会补齐中间格）；
+      // 拾取失败（指针已离开画布/落在 HUD 上）时保持原路径。
+      const upTile = scene.current?.pickAt(event.clientX, event.clientY);
+      if (upTile) {
+        const reconciled = applyBeltStrokeStep(drag.path, drag.tile, upTile, props.planet.surface.face_size);
+        if (reconciled) {
+          drag.path = reconciled;
+          drag.tile = drag.path.at(-1)?.tile ?? upTile;
+          scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
+          const tail = drag.path.at(-1)!;
+          const mode = usePlanetViewStore.getState().interactionMode;
+          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: tail.direction });
+        }
+      }
       // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
       // 单格点击（没拖拽过）且建造模式朝向为 auto：把朝向留空交回 interactTile 的
       // `mode.direction` 兜底——与旧的单格 placeBelt 口径一致（B1）。

@@ -396,6 +396,44 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     ]);
   });
 
+  it('B6 只有 pointerdown + pointerup（中间无 move）：按抬起坐标补齐笔迹，相距 5 格下 6 格', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    // 浏览器合并了所有 pointermove：路径里只有起点。抬起时指针已在 (8,3)。
+    pickResult = { x: 8, y: 3 };
+    drag(host, 'pointerUp');
+
+    const calls = onInteractTile.mock.calls.map(([tile, placement]) => ({ tile, ...placement }));
+    expect(calls.map(call => call.tile.x)).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(calls.every(call => call.tile.y === 3)).toBe(true);
+    expect(calls.every(call => call.direction === 'east')).toBe(true);
+  });
+
+  it('B6 松手点在画布外（pickAt 返回 null）：保持 move 已走过的路径，不丢已下格的单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    pickResult = null;
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile.mock.calls.map(([tile]) => tile.x)).toEqual([3, 4, 5, 6]);
+  });
+
   it('B2 拖拽中按 Esc：清空预览且松手不下单', () => {
     const scenario = getFixtureScenario('baseline');
     const planet = scenario.planets['planet-1-1'];
