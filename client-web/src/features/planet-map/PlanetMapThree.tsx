@@ -87,6 +87,9 @@ export function PlanetMapThree(props: Props) {
   const [tilt, setTilt] = useState(() => Math.min(1.1, Math.max(0, props.initialTilt ?? 0.65)));
   const tiltRef = useRef(tilt);
   tiltRef.current = tilt;
+  /** 深链 `?zoom=` 的绝对高度：首次聚焦后重新落回该高度（分享链接的视角优先）。 */
+  const initialZoomRef = useRef(props.initialZoom);
+  initialZoomRef.current = props.initialZoom;
   /** 最近一次读到的相机高度（R20-A ⑥：scene 没有 getCameraState 时省略 zoomLabel）。 */
   const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
@@ -391,11 +394,11 @@ export function PlanetMapThree(props: Props) {
     viewportReader.current = readViewport;
     // 深链 `?zoom=`（R20-A ⑥）：分享链接里存的是**绝对相机高度**，按同一套阈值落到该高度
     // （相对倍率会把全球视角 300 换算成贴地视角，`groundView` 读回就是错的）。
+    // 首次 focus（下面的 focusRequest effect）会重置高度/地面视角，effect 里会在聚焦后
+    // 再按 initialZoomRef 落回一次。
     if (typeof props.initialZoom === 'number' && Number.isFinite(props.initialZoom) && props.initialZoom > 0) {
       renderer.setAltitude(props.initialZoom);
     }
-    // 场景初始俯仰固定 0.65：用户改过滑杆（tiltRef 与默认不同）时补设一次。
-    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
     if (exposeHook) installTestApi(renderer);
@@ -459,9 +462,13 @@ export function PlanetMapThree(props: Props) {
   const initiallyFocused = useRef(false);
   useEffect(() => {
     if (!ready || !focusRequest) return;
-    scene.current?.focus(focusRequest.position, initiallyFocused.current);
+    const initial = !initiallyFocused.current;
+    scene.current?.focus(focusRequest.position, initial);
     initiallyFocused.current = true;
     usePlanetViewStore.getState().consumeFocusRequest(focusRequest.nonce);
+    // 首次聚焦只负责转向目标格；深链给了绝对高度时，相机高度/地面视角以深链为准
+    // （分享链接的全球视角不能被聚焦重新压回贴地）。
+    if (initial && initialZoomRef.current !== undefined) scene.current?.setAltitude(initialZoomRef.current);
   }, [ready, focusRequest]);
 
   // 镜头设置弹出层：点外面关掉（与顶栏设置弹层同一模式）。
