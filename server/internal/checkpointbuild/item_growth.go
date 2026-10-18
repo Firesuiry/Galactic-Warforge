@@ -73,10 +73,7 @@ func buildingItemCountAtLayer(core *gamecore.GameCore, pos model.Position, eleva
 			building = ws.Buildings[ws.TileBuilding[model.TileKey(pos.X, pos.Y)]]
 		}
 		if building != nil && building.HP > 0 {
-			count := 0
-			if building.Storage != nil {
-				count = building.Storage.ItemQuantity(itemID)
-			}
+			count := countItemInBuilding(building, itemID)
 			ws.RUnlock()
 			return count, nil
 		}
@@ -86,4 +83,25 @@ func buildingItemCountAtLayer(core *gamecore.GameCore, pos model.Position, eleva
 		return 0, fmt.Errorf("(%d,%d) 第 %d 层上没有建筑，无法做 item_growth", pos.X, pos.Y, elevation)
 	}
 	return 0, fmt.Errorf("(%d,%d) 上没有建筑，无法做 item_growth", pos.X, pos.Y)
+}
+
+// countItemInBuilding 数一台建筑里某物品的存量：主库存（含输入/输出缓冲）+
+// 传送带格子上的货。传送带没有 Storage，货只存在 Conveyor.Buffer 里——不数它
+// 的话，`item_growth` 在高架/地面传送带上永远读到 0。
+func countItemInBuilding(building *model.Building, itemID string) int {
+	if building == nil {
+		return 0
+	}
+	count := 0
+	if building.Storage != nil {
+		count = building.Storage.ItemQuantity(itemID)
+	}
+	if building.Conveyor != nil {
+		for _, stack := range building.Conveyor.Buffer {
+			if stack.ItemID == itemID {
+				count += stack.Quantity
+			}
+		}
+	}
+	return count
 }
