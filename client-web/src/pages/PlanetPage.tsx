@@ -45,6 +45,7 @@ import { useMechaJobProgress } from "@/features/planet-map/mecha-job-progress";
 import { PlanetLegionPanel } from "@/features/planet-map/PlanetLegionPanel";
 import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { refetchAfterCommandSettles } from "@/features/planet-commands/settled-refetch";
 import { reportLocalPreflightBlock } from "@/features/planet-commands/local-preflight";
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from "@/features/planet-commands/store";
 import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
@@ -408,12 +409,42 @@ export function PlanetPage() {
     }, { replace: true });
   }
 
+  const theatersQueryKey = ["war-theaters", session.serverUrl, session.playerId] as const;
+
+  /**
+   * 战区类命令（划定/新建）结算后刷新战区列表。
+   *
+   * 不能 `.then(() => refetch())`：HTTP 202 只表示命令入队，服务端在**下一个 tick**
+   * 才结算；立刻重取拿到的是旧战区（试玩 1020 A2：(54,144) r6 改成 (48,139) r4 后
+   * 画面 3.5s 仍是旧圆，要等 15s 兜底轮询）。改为等 journal 条目拿到权威回写
+   * （SSE command_result / 快照补拉）再刷新，另带一次延迟兜底（见 settled-refetch.ts）。
+   */
+  function refetchTheatersAfterCommand(commandType: string) {
+    refetchAfterCommandSettles(queryClient, {
+      commandType,
+      queryKey: theatersQueryKey,
+    });
+  }
+
+  /**
+   * PlanetTheaterControls 的 onChanged（theater_create 提交返回后才触发）：
+   * 同样等它结算，否则新建的战区要等 15s 兜底轮询才出现在地图上。
+   */
+  function refetchTheatersAfterCreate() {
+    refetchAfterCommandSettles(queryClient, {
+      commandType: "theater_create",
+      queryKey: theatersQueryKey,
+      trackLatestExisting: true,
+    });
+  }
+
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
   function handleDefineZone(zone: TheaterZoneGeometry) {
     const mode = usePlanetViewStore.getState().interactionMode;
     if (mode.kind !== "theater_zone" || !planetId) {
       return;
     }
+    refetchTheatersAfterCommand("theater_define_zone");
     void submitPlanetCommand({
       commandType: "theater_define_zone",
       planetId,
@@ -428,8 +459,6 @@ export function PlanetPage() {
         event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
         limit: 50,
       }),
-    }).then(() => {
-      void theatersQuery.refetch();
     });
     // 保持划定模式，便于连续画多个区域（右键/Esc 退出，对齐建造模式）
   }
@@ -948,7 +977,7 @@ export function PlanetPage() {
           layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} threeDimensional />}
           theaterControls={(
             <PlanetTheaterControls
-              onChanged={() => { void theatersQuery.refetch(); }}
+              onChanged={refetchTheatersAfterCreate}
               planetId={planet.planet_id}
               theaters={theatersQuery.data?.theaters ?? []}
             />
@@ -1151,7 +1180,7 @@ export function PlanetPage() {
           runtime={runtime}
         >
           <PlanetTheaterControls
-            onChanged={() => { void theatersQuery.refetch(); }}
+            onChanged={refetchTheatersAfterCreate}
             planetId={planet.planet_id}
             theaters={theatersQuery.data?.theaters ?? []}
           />
