@@ -230,9 +230,14 @@ function conveyorLayout(buildings: readonly Building[], faceSize: number, radius
     for (const [start, end] of routes) paths.push(makePath(start, end, port(start), port(end), center, centerHeight));
     // 侧面汇入：从格边界直伸到主带带面边缘（T 形接头），主带在这一侧的侧栏开口。
     for (const direction of sides) {
-      const a = port(direction), b = port(direction, BELT_DECK_HALF);
+      const a = port(direction);
+      // 支带内端在**局部切平面**里离主带中心线 BELT_DECK_HALF（带面半宽也是按局部量的）；
+      // 按图集格坐标偏移 .24 在 tan 映射下会停在主带带面边缘之外，接缝露出一道暗缝。
+      const inward = a.normal.clone().sub(center);
+      inward.addScaledVector(center, -inward.dot(center)).normalize();
+      const b = { normal: center.clone().multiplyScalar(base).addScaledVector(inward, BELT_DECK_HALF * size).normalize(), side: a.side, height: centerHeight };
       const control = a.normal.clone().add(b.normal).normalize();
-      merges.push({ direction, path: makePath(direction, opposite[direction], a, { ...b, height: centerHeight }, control, centerHeight) });
+      merges.push({ direction, path: makePath(direction, opposite[direction], a, b, control, centerHeight) });
     }
   }
   return { paths, merges, belts };
