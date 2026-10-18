@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPlanetThreeStatus, interactionModeStatusText, isTypingTarget, toPagePoint, unitsInScreenRect, zoomFactorForKey } from './planet-three-status';
+import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, interactionModeStatusText, isTypingTarget, parseTiltParam, readPlanetThreeCameraState, toPagePoint, unitsInScreenRect, zoomFactorForKey } from './planet-three-status';
 
 describe('interactionModeStatusText（与 2D 状态行逐字一致）', () => {
   it.each([
@@ -91,6 +91,59 @@ describe('isTypingTarget / zoomFactorForKey', () => {
     expect(zoomFactorForKey('-')).toBeCloseTo(1 / 1.4);
     expect(zoomFactorForKey('_')).toBeCloseTo(1 / 1.4);
     expect(zoomFactorForKey('PageUp')).toBeNull();
+  });
+
+  it('Ctrl/Meta/Alt 组合键不抢缩放（留给浏览器/系统快捷键）', () => {
+    expect(zoomFactorForKey('+', { ctrlKey: true, metaKey: false, altKey: false })).toBeNull();
+    expect(zoomFactorForKey('-', { ctrlKey: false, metaKey: true, altKey: false })).toBeNull();
+    expect(zoomFactorForKey('=', { ctrlKey: false, metaKey: false, altKey: true })).toBeNull();
+    expect(zoomFactorForKey('+', { ctrlKey: false, metaKey: false, altKey: false })).toBe(1.4);
+  });
+});
+
+describe('3D 相机状态读取（R20-A ⑥）', () => {
+  it('有 getCameraState 时用它（中心格/高度/俯仰/地面视角）', () => {
+    const state = readPlanetThreeCameraState({
+      getCameraState: () => ({ center: { x: 12, y: 30 }, altitude: 8.5, tilt: 0.4, groundView: true }),
+    }, 0.65);
+    expect(state).toEqual({ center: { x: 12, y: 30 }, altitude: 8.5, tilt: 0.4, groundView: true });
+  });
+
+  it('没有 getCameraState 时退化到 getCenterTile + 当前 tilt，高度记 null（不伪造 0）', () => {
+    const state = readPlanetThreeCameraState({ getCenterTile: () => ({ x: 3, y: 4 }), isGroundView: () => true }, 0.65);
+    expect(state).toEqual({ center: { x: 3, y: 4 }, altitude: null, tilt: 0.65, groundView: true });
+  });
+
+  it('scene 为 null 时也给安全值', () => {
+    expect(readPlanetThreeCameraState(null, 0.7)).toEqual({ center: null, altitude: null, tilt: 0.7, groundView: true });
+  });
+
+  it('zoomLabel 只在拿到高度时出现；深链 tilt 解析做范围夹取', () => {
+    expect(cameraZoomLabel(null)).toBeNull();
+    expect(cameraZoomLabel(8.46)).toBe('缩放 贴地 · 高度 8.5');
+    expect(cameraZoomLabel(80)).toContain('近景');
+    expect(cameraZoomLabel(220)).toContain('全球');
+    expect(parseTiltParam(null, 0.65)).toBe(0.65);
+    expect(parseTiltParam('abc', 0.65)).toBe(0.65);
+    expect(parseTiltParam('0.4', 0.65)).toBe(0.4);
+    expect(parseTiltParam('9', 0.65)).toBe(1.1);
+  });
+});
+
+describe('bindSceneMethods（R20-A ①）', () => {
+  it('原型方法绑定到真实实例：focus/zoom 改的是 target 的字段', () => {
+    class Fake {
+      ground = false;
+      altitude = 100;
+      focus() { this.ground = true; }
+      zoom(f: number) { this.altitude /= f; }
+    }
+    const target = new Fake();
+    const bound = bindSceneMethods(target);
+    (bound.focus as () => void)();
+    (bound.zoom as (f: number) => void)(4);
+    expect(target.ground).toBe(true);
+    expect(target.altitude).toBe(25);
   });
 });
 

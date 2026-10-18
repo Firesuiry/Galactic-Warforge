@@ -31,6 +31,8 @@ interface PlanetTheaterLayerProps {
   selectedTheaterId?: string;
   /** 高亮：当前悬停格落在哪个战区圆内（战区 id）。 */
   hoveredTheaterId?: string | null;
+  /** 3D 下已建成的战区层压在画布上方的 z-index（默认 4；3D 画布是普通文档流，需抬高）。 */
+  zIndex?: number;
 }
 
 export function PlanetTheaterLayer({
@@ -42,6 +44,7 @@ export function PlanetTheaterLayer({
   projectTile,
   selectedTheaterId,
   hoveredTheaterId,
+  zIndex,
 }: PlanetTheaterLayerProps) {
   const zones = (theaters ?? []).flatMap((theater) =>
     (theater.zones ?? [])
@@ -54,7 +57,12 @@ export function PlanetTheaterLayer({
     return null;
   }
   return (
-    <div aria-hidden="true" className="planet-theater-layer">
+    <div
+      aria-hidden="true"
+      className="planet-theater-layer"
+      data-projected={projectTile ? 'true' : undefined}
+      style={zIndex !== undefined ? { zIndex } : undefined}
+    >
       <svg className="planet-theater-layer__svg">
         {zones.map(({ theater, zone }, index) => {
           const position = zone.position ?? { x: 0, y: 0, z: 0 };

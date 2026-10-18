@@ -879,6 +879,7 @@ export function PlanetMapThree(props: Props) {
       tileSize={1}
       selectedTheaterId={selectedTheaterId}
       hoveredTheaterId={hoveredTheaterId}
+      zIndex={5}
     />
     <PlanetLegionLayer
       offsetX={0}

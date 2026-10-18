@@ -695,6 +695,51 @@ describe('3D 战区拖拽（R20-A ③）', () => {
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
     expect(screen.queryByTestId('planet-three-zone-ring')).not.toBeInTheDocument();
   });
+
+  it('战区模式下 HUD 上的指针不被拦截（左下导航列/滑杆照常可用）', () => {
+    const onDefineZone = vi.fn();
+    const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    const surface = container.querySelector('.planet-three__surface') as HTMLElement;
+    const zoomButton = screen.getByRole('button', { name: '3D 放大' });
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    projectResult = linearProjection;
+    pickResult = { x: 10, y: 20 };
+    // 在 HUD 按钮上按下/抬起（事件冒泡到根节点，但 target 不在画布上 → 不进入战区拖拽）。
+    fireEvent.pointerDown(zoomButton, { button: 0, pointerId: 1, clientX: 5, clientY: 5 });
+    fireEvent.pointerMove(zoomButton, { button: 0, pointerId: 1, clientX: 200, clientY: 200 });
+    fireEvent.pointerUp(zoomButton, { button: 0, pointerId: 1, clientX: 200, clientY: 200 });
+    expect(onDefineZone).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('planet-three-zone-ring')).not.toBeInTheDocument();
+    // 画布上的拖拽仍然生效。
+    pickResult = { x: 10, y: 20 };
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    pickResult = { x: 30, y: 40 };
+    fireEvent.pointerMove(surface, { button: 0, pointerId: 1, clientX: 200, clientY: 180 });
+    expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
+  });
+
+  it('已建成战区在 3D 下以地面圆多边形显示，并带选中/悬停高亮', () => {
+    const theaters = [{
+      id: 'th-1',
+      name: '北线',
+      zones: [{ zone_type: 'primary' as const, planet_id: 'planet-1-1', position: { x: 10, y: 10, z: 0 }, radius: 4, hostile_count: 0, alerted: false }],
+    }];
+    const { container } = render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} theaters={theaters} />);
+    projectResult = linearProjection;
+    act(() => usePlanetViewStore.getState().setHoveredTile({ x: 11, y: 11 }));
+    const layer = container.querySelector('.planet-theater-layer') as HTMLElement;
+    expect(layer).not.toBeNull();
+    // 3D 画的是地面圆路径（不是屏幕 circle），并抬高 z-index 压在画布上。
+    expect(layer.getAttribute('data-projected')).toBe('true');
+    expect(layer.style.zIndex).toBe('5');
+    const path = layer.querySelector('path');
+    expect(path).not.toBeNull();
+    expect(path!.getAttribute('d')!.endsWith('Z')).toBe(true);
+    // 悬停落在圆内 → 高亮（描边加粗）。
+    expect(path!.getAttribute('stroke-width')).toBe('3');
+    act(() => usePlanetViewStore.getState().setHoveredTile({ x: 40, y: 40 }));
+    expect(layer.querySelector('path')!.getAttribute('stroke-width')).toBe('2');
+  });
 });
 
 describe('__planetThree 测试接口（R20-A ⑤）', () => {
