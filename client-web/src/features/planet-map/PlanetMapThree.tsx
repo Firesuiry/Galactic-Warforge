@@ -363,6 +363,8 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
+    // 深链 `?tilt=`：scene 的初始俯仰固定 0.65，深链值要在场景就绪后补一次。
+    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // 相机状态按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时经 capture.getViewport 拉，
     // 不再在挂载时上报一次。scene 有 getCameraState 就用它（中心格 + 高度 + 俯仰），
     // 没有时退化到 getCenterTile() + 本组件的 tilt（高度记 0，界面标为不可用）。
