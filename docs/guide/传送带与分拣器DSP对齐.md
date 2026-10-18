@@ -125,10 +125,14 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
   （先确认快捷键没被占用；被占就换并在文档写明），建造栏传送带格旁显示「高度 N」+ ▲▼ 按钮。切换建筑类型时归零。
 - 拖拽铺带逐格下单（现状），每格的 `elevation` 这样定（**与服务端坡道规则一致**）：
   - 第一格：若相邻有一条现成的带子正对着它输出，取那条带子的高度，否则取目标高度；
+    **单格放置例外**（R20-E）：路径只有一格（按下即抬起/点一格就松手）时，上游带比目标高度低
+    就取目标高度（单格不成坡道、没有下游）；否则点地面带上方架高会被上游拽回地面层、再被占格预检拦下。
   - 之后每格：若与上一格**同方向**（直行），高度向目标高度走 1 步（每格最多 ±1）；转弯格保持上一格高度。
   - 拖拽中途按 `PageUp/PageDown` 改目标高度，后面的格子自动起坡/落坡（DSP 拖带时调高度的手感）。
 - 预览：`scene.setBeltDragPath(path: { tile, direction, elevation }[])`（3D 主代理消费）；单格悬停时 ghost 用
   `interactionMode.elevation`。本地预检 `assessBuildTiles` 按 §3.2 判可放（高架格允许压在地面带/分拣器上）。
+- 松手结算（R20-E）：浏览器会合并/丢弃最后几次 `pointermove`，松手时用 `pointerup` 坐标再走一次
+  `applyBeltStrokeStep` 补齐笔迹后再逐格下单（`traceBeltStroke` 补中间格）；拾取失败时保持已走路径。
 - 选中：3D 场景 `onPick(tile, { offscreen, buildingId? })`——命中高架带时带 `buildingId`，消费端
   （`use-planet-interactions`）有 `buildingId` 就直接选它，没有再按格找地面建筑。详情面板对传送带显示「高度 N 层」。
 
