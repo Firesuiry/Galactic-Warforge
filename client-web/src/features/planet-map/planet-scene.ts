@@ -99,6 +99,7 @@ import {
   type TilePoint,
   type ViewportTileBounds,
 } from '@/features/planet-map/model';
+import { resolveGhostRangeCircles, resolveSelectedCombatRange, type RangeCircleSpec } from '@/features/planet-map/range-circles';
 import {
   BUILDING_SPRITE_TILE_PX,
   FURNACE_GLOW_FRACTION,
@@ -250,44 +251,6 @@ export function buildDashArcSegments(
     }
   }
   return segments;
-}
-
-/** 范围圈规格：kind 决定配色/线型（combat 橙红细实线，power 黄色虚线对齐电网语义）。 */
-export interface RangeCircleSpec {
-  kind: 'combat' | 'power';
-  /** 半径（tile 单位，与 server 曼哈顿距离语义一致，绘制时换算像素）。 */
-  radiusTiles: number;
-}
-
-/**
- * build 幽灵范围圈：catalog 条目带 combat_range / power_range 时各出一圈；
- * 无范围字段的建筑类型不画。
- */
-export function resolveGhostRangeCircles(
-  catalog: CatalogView | undefined,
-  buildingType: string | undefined,
-): RangeCircleSpec[] {
-  if (!buildingType) {
-    return [];
-  }
-  const entry = getBuildingCatalogEntry(catalog, buildingType);
-  const circles: RangeCircleSpec[] = [];
-  if (entry?.combat_range && entry.combat_range > 0) {
-    circles.push({ kind: 'combat', radiusTiles: entry.combat_range });
-  }
-  if (entry?.power_range && entry.power_range > 0) {
-    circles.push({ kind: 'power', radiusTiles: entry.power_range });
-  }
-  return circles;
-}
-
-/**
- * 选中建筑射程圈半径（tile）：已放置防御建筑读 runtime.functions.combat.range；
- * 无战斗能力返回 undefined。供电建筑的无线覆盖由电网图层（连线 + 覆盖标记）承担，不重复画圈。
- */
-export function resolveSelectedCombatRange(building: Building | undefined | null): number | undefined {
-  const range = building?.runtime?.functions?.combat?.range;
-  return range !== undefined && range > 0 ? range : undefined;
 }
 
 /** 确定性 id hash → [0, 2π) 动画相位（同 id 同相位，截图可复现）。 */

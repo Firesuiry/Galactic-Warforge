@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
@@ -37,6 +37,9 @@ import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, tr
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
+import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
+import { buildingCoveringTile } from './three/pick-targets';
+import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
 import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
 
@@ -44,7 +47,7 @@ import type { PlanetInteractionMode } from './store';
  * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
  * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
  */
-export interface PickMeta { offscreen: boolean; buildingId?: string }
+export interface PickMeta { offscreen: boolean; buildingId?: string; /** 触发这次派发的鼠标键：0 = 左键、2 = 右键（情境指令）。 */ button?: 0 | 2 }
 
 export interface PlanetThreeData {
   planet: PlanetRenderView;
@@ -182,6 +185,13 @@ export class PlanetThreeScene {
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
   /** 建造 ghost 朝向箭头（传送带/分拣器/带旋转的建筑）：跟随悬停格，2D/3D 同一套方向推导。 */
   private readonly ghostMarks = new THREE.Group();
+  /**
+   * 战术叠加（第 20 轮 R20-B，契约 D4）：建造 ghost 射程圈 / 选中防御建筑射程圈、
+   * 侦测点脉冲圆环、施工脚手架上方进度条。几何按半径缓存、mesh 按 key 复用（ghost 移动只改朝向）。
+   */
+  private readonly rangeCircles = new RangeCircleOverlay(RADIUS);
+  private readonly detectionMarks = new DetectionOverlay(RADIUS);
+  private readonly constructionBars = new ConstructionProgressOverlay(RADIUS);
   /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
   private beltDragPath: BeltDragCell[] = [];
 
@@ -242,6 +252,7 @@ export class PlanetThreeScene {
     this.world.add(this.content, this.staticMarks, this.marks);
     this.world.add(this.powerAlertMarksGroup);
     this.world.add(this.logisticsMarks.group, this.ghostMarks, this.haulRoutes, this.sorterGhost.group, this.conveyorGhost.group);
+    this.world.add(this.rangeCircles.group, this.detectionMarks.group, this.constructionBars.group);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -264,9 +275,14 @@ export class PlanetThreeScene {
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       if (!tap) return;
       // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
+      // 用抬起时刻的坐标**重新拾取**（不用节流后的 hover 结果）：指针在按下与抬起之间
+      // 微移时，旧 hover 可能是相邻格/上一帧的格，多格建筑会因此「点两次才选中」（试玩 1019 C）。
       const target = this.pickTargetAtCoords(event.clientX, event.clientY);
-      if (target) this.onPick(target.tile, target.buildingId ? { offscreen: false, buildingId: target.buildingId } : { offscreen: false });
-      else this.onMiss?.();
+      if (target) {
+        const meta: PickMeta = { offscreen: false, button: event.button === 2 ? 2 : 0 };
+        if (target.buildingId) meta.buildingId = target.buildingId;
+        this.onPick(target.tile, meta);
+      } else this.onMiss?.();
     });
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointermove', this.pointerMove);
@@ -337,6 +353,8 @@ export class PlanetThreeScene {
 
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
+    // 图层「迷雾」：关闭时去掉未探索测绘面纱（R20-A D5；开关与 2D 的 layers.fog 同义）。
+    setPlanetSurfaceFog(this.surface, interaction.layers.fog);
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
     this.updateMarks();
     this.renderer.domElement.style.cursor = interaction.interactionMode.kind === 'inspect' ? 'grab' : 'crosshair';
@@ -434,13 +452,14 @@ export class PlanetThreeScene {
     const occupiedTiles = new Set<string>();
     // Only rendering inputs enter the signature. Production inventories, health,
     // research progress and network allocation do not change a model's structure.
-    const retain = (key: string, appearance: unknown[], create: () => THREE.Group) => {
+    const retain = (key: string, appearance: unknown[], create: () => THREE.Group | null) => {
       staticKeys.add(key);
       const signature = JSON.stringify([dimensions, ...appearance]);
       const previous = this.staticEntities.get(key);
       if (previous?.signature === signature) return;
       if (previous) this.removeModel(previous.group);
-      this.staticEntities.set(key, { signature, group: create() });
+      const group = create();
+      if (group) this.staticEntities.set(key, { signature, group });
     };
     const sorters: Building[] = [];
     for (const building of visibleBuildings) {
@@ -501,7 +520,9 @@ export class PlanetThreeScene {
     }
     for (const task of runtime?.construction_tasks ?? []) {
       if (!this.known(task.position)) continue;
-      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type], () => {
+      // 施工脚手架只画在**已探索**格：未探索区域连地形都没有，立柱会浮在测绘面纱上。
+      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type, this.known(task.position)], () => {
+        if (!this.known(task.position)) return null;
         const group = new THREE.Group();
         for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(group, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
         this.place(group, task.position, 'construction');
@@ -1017,6 +1038,52 @@ export class PlanetThreeScene {
       } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
     }
     this.updateBuildGhost();
+    this.syncTacticalOverlays();
+  }
+
+  /**
+   * 射程圈 / 侦测点 / 施工进度（第 20 轮 R20-B）。
+   *
+   * 射程圈：建造模式悬停格 → catalog 的 combat_range/power_range（圆心 = 占地中心）；
+   * 选中防御建筑 → runtime.functions.combat.range（圆心 = 占地中心）。判定纯函数在 range-circles。
+   * 侦测点：runtime.detections[].detected_positions（与 2D 同源），随敌情图层开关。
+   * 施工进度：runtime.construction_tasks 的 remaining/total，画在脚手架上方的 billboard。
+   */
+  private syncTacticalOverlays() {
+    const data = this.data, interaction = this.interaction;
+    if (!data || !interaction) return;
+    const faceSize = data.planet.surface.face_size;
+    const circles: RangeCircleItem[] = [];
+    const mode = interaction.interactionMode;
+    const hovered = interaction.hoveredTile;
+    if (mode.kind === 'build' && hovered && interaction.layers.selection) {
+      const footprint = getBuildingCatalogEntry(data.catalog, mode.buildingType)?.footprint ?? { width: 1, height: 1 };
+      const center = footprintCenterTile(hovered, footprint, faceSize);
+      for (const spec of resolveGhostRangeCircles(data.catalog, mode.buildingType)) {
+        circles.push({ key: `ghost:${spec.kind}`, center, spec });
+      }
+    }
+    if (interaction.layers.selection && interaction.selected?.kind === 'building') {
+      const building = data.planet.buildings?.[interaction.selected.id];
+      const range = resolveSelectedCombatRange(building);
+      if (building && range !== undefined) {
+        const center = footprintCenterTile({ x: Math.round(building.position.x), y: Math.round(building.position.y) }, getBuildingFootprint(building), faceSize);
+        circles.push({ key: `selected:${building.id}`, center, spec: { kind: 'combat', radiusTiles: range } });
+      }
+    }
+    this.rangeCircles.sync(circles, faceSize);
+
+    const detections = interaction.layers.threat
+      ? (data.runtime?.available ? data.runtime.detections ?? [] : []).flatMap(detection => detection.detected_positions ?? [])
+      : [];
+    this.detectionMarks.sync(detections, faceSize);
+
+    const bars = (data.runtime?.available ? data.runtime.construction_tasks ?? [] : []).map(task => ({
+      id: task.id,
+      tile: { x: Math.round(task.position.x), y: Math.round(task.position.y) },
+      progress: constructionBarProgress(task),
+    }));
+    this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
   }
 
   /**
@@ -1255,6 +1322,8 @@ export class PlanetThreeScene {
   /** 是否处于地面视角（全球视角下不需要「未探索区域」这类贴地提示）。 */
   isGroundView() { return this.groundView; }
   setTilt(value: number) { this.tilt = THREE.MathUtils.clamp(value, 0, 1.1); this.groundView = true; this.updateCamera(); }
+  /** 当前俯仰角（0–1.1，与 `setTilt` 入参同口径；全球视角下仍返回设置值）。 */
+  getTilt() { return this.tilt; }
   project(tile: TilePoint) {
     if (!this.data) return null;
     this.world.updateMatrixWorld(true);
@@ -1289,6 +1358,23 @@ export class PlanetThreeScene {
   getCenterTile() {
     return this.data ? this.tileFromNormal(FRONT.clone().applyQuaternion(this.world.quaternion.clone().invert())) : null;
   }
+  /**
+   * 相机状态（R20-A ④/⑥ 的调试面板视口快照与分享链接）：
+   * - center：画面中心格；
+   * - altitude：相机离地高度（世界单位，与 `zoom()` 的夹取范围同一量纲）；
+   * - zoom：与 `altitude` 同一口径的当前高度（`zoom(factor)` 是**相对倍率**，
+   *   分享链接里的 `?zoom=` 按 `altitude` 存，恢复时用 `zoom(current / target)`，见 PlanetMapThree）；
+   * - tilt：俯仰（0–1.1，全球视角恒 0）；groundView：是否地面视角。
+   */
+  getCameraState(): { center: { x: number; y: number } | null; altitude: number; zoom: number; tilt: number; groundView: boolean } {
+    return {
+      center: this.getCenterTile(),
+      altitude: this.altitude,
+      zoom: this.altitude,
+      tilt: this.groundView ? this.tilt : 0,
+      groundView: this.groundView,
+    };
+  }
   capture() {
     this.composer.render();
     return this.renderer.domElement;
@@ -1314,14 +1400,37 @@ export class PlanetThreeScene {
    * 任何反馈，驱动脚本白丢过两次建造（试玩 1016 B4）。
    * 返回 `{ dispatched, offscreen }`，调用侧据此判断命令是否真的走了同一条点击路径。
    */
-  clickTile(tile: TilePoint, options: { focus?: boolean } = {}): { dispatched: boolean; offscreen: boolean } {
+  clickTile(tile: TilePoint, options: { focus?: boolean; button?: 0 | 2 } = {}): { dispatched: boolean; offscreen: boolean } {
     if (!this.data) return { dispatched: false, offscreen: false };
     const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
     const projected = this.project(rounded);
     const offscreen = !projected?.visible;
     if (offscreen && options.focus !== false) this.focus(rounded);
-    this.onPick(rounded, { offscreen });
+    if (options.button === 2) {
+      // 右键（R20-A 测试接口 `__planetThree.clickTile(tile, 2)`）：在画布上合成一次
+      // contextmenu，走**真实右键同一条路径**（组件的 onContextMenu → pickAt → onContextTile：
+      // 情境指令/退出模式）。合成事件冒泡到画布父节点，React 的 onContextMenu 照常收到。
+      const projectedPoint = this.project(rounded);
+      const canvas = this.renderer.domElement;
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true, button: 2,
+        clientX: rect.left + (projectedPoint?.x ?? rect.width / 2),
+        clientY: rect.top + (projectedPoint?.y ?? rect.height / 2),
+      }));
+      return { dispatched: true, offscreen };
+    }
+    const buildingId = this.buildingCoveringTile(rounded);
+    this.onPick(rounded, { offscreen, ...(buildingId ? { buildingId } : {}) });
     return { dispatched: true, offscreen };
+  }
+  /**
+   * 按格找命中的建筑（`clickTile` 与批量实例拾取用）：扫描占地含该格的建筑，
+   * 取离该格最近的一个（多格建筑点在任意一格都返回同一栋，避免落到相邻格选错对象）。
+   */
+  private buildingCoveringTile(tile: TilePoint): string | undefined {
+    const planet = this.data?.planet;
+    return planet ? buildingCoveringTile(planet.buildings, tile, planet.surface.face_size) : undefined;
   }
   private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
     return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
@@ -1339,7 +1448,11 @@ export class PlanetThreeScene {
       const tile = point ? this.tileFromNormal(this.world.worldToLocal(point).normalize()) : null;
       return tile ? { tile } : null;
     }
+    // 两遍拾取：**先看所有实体命中**（建筑/传送带/分拣器/资源），再看地形。
+    // 旧实现按射线距离取第一个命中——建筑底座/影子边缘没盖住的像素先打中地面，
+    // 于是 3×3/5×5 建筑点边角会落到相邻格，玩家感觉「要点两次」（试玩 1019 C）。
     const hits = this.raycaster.intersectObjects([this.surface, this.content], true);
+    let surfaceTile: TilePoint | null = null;
     for (const hit of hits) {
       if (!hit.object.visible) continue;
       let object: THREE.Object3D | null = hit.object;
@@ -1350,15 +1463,34 @@ export class PlanetThreeScene {
       if (beltTile) return { tile: beltTile, buildingId: this.conveyors.resolveBuilding(hit) ?? undefined };
       const sorter = this.sorterRigs.resolveHit(hit);
       if (sorter) return { tile: sorter.tile, buildingId: sorter.id };
+      // 批量实例（建筑/资源）按**实例所属建筑**回 id（不是实例所在格）：3×3/5×5 建筑点边角
+      // 也要选中整栋，而不是落到相邻格或只给格坐标（试玩 1019 C：补给站要点两次）。
       const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
-      if (batchTile) return { tile: batchTile };
+      if (batchTile) {
+        // 资源点/装饰实例：只记格，等实体遍扫完仍无建筑时再用。
+        surfaceTile ??= batchTile;
+        continue;
+      }
       object = hit.object;
-      while (object && object !== this.world) { if (object.userData.tile) return { tile: object.userData.tile as TilePoint }; object = object.parent; }
+      while (object && object !== this.world) {
+        if (object.userData.tile) {
+          surfaceTile ??= object.userData.tile as TilePoint;
+          break;
+        }
+        object = object.parent;
+      }
       if (hit.object === this.surface || hit.object.userData.terrain) {
         const exact = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
         const tile = this.tileFromNormal(this.world.worldToLocal(exact ?? hit.point.clone()).normalize());
-        return tile ? { tile } : null;
+        if (tile) surfaceTile ??= tile;
       }
+    }
+    // 遍扫完仍没有精确建筑命中：如果这次射线落点在某个建筑占地内（底座/影子没盖住的边角），
+    // 选整栋；否则退回最近的资源/地形格（点空地/资源仍要能选中）。
+    if (surfaceTile) {
+      const buildingId = this.buildingCoveringTile(surfaceTile);
+      if (buildingId) return { tile: surfaceTile, buildingId };
+      return { tile: surfaceTile };
     }
     return null;
   }
@@ -1412,6 +1544,7 @@ export class PlanetThreeScene {
         this.commandMarkers.update(dt * 1000);
         this.updateTurretAims(dt, time);
       }
+      this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);
       // 补给光环缓慢呼吸（2.4s 周期），减弱运动时保持常亮。
       const breath = this.frozen || reducedMotion ? 1 : .78 + .22 * Math.sin(time / 1000 * 2.6);
       for (const material of this.auraMaterials) material.opacity = material.userData.baseOpacity * breath;
@@ -1454,6 +1587,9 @@ export class PlanetThreeScene {
     this.logisticsMarks.dispose();
     this.clearMarks(this.ghostMarks);
     this.ghostMarks.removeFromParent();
+    this.rangeCircles.dispose();
+    this.detectionMarks.dispose();
+    this.constructionBars.dispose();
     disposeLogisticsTextures();
     this.combat.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });

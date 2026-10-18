@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
-import { SHADER_COLOR, createPlanetSurface, disposePlanetSurface, updatePlanetSurface } from './terrain';
+import { SHADER_COLOR, SHADER_HEADER, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
 
 function scene(): PlanetSceneView {
   return {
@@ -92,9 +92,24 @@ describe('3D player-visible terrain', () => {
     // Terrain relief stays exclusive to known cells for explored terrain, while
     // unknown cells get their own relief gated by (1.0 - swKnown).
     expect(SHADER_COLOR).toContain('* swKnown;');
-    expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown)');
+    expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown) * swFog');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
+    disposePlanetSurface(mesh);
+  });
+
+  it('迷雾开关 uniform 在着色器里声明（漏声明会让整个片元着色器编译失败）', () => {
+    expect(SHADER_HEADER).toContain('uniform float swFog;');
+  });
+
+  it('迷雾图层开关：swFog uniform 默认 1，setPlanetSurfaceFog(false) 后未探索格不再盖测绘面纱', () => {
+    // 着色器里面纱与已知地形按 swFog 混合：关掉 = 未探索格按已知地形显示（与 2D layers.fog 同义）。
+    expect(SHADER_COLOR).toContain('swAlbedo = mix(mix(swAlbedo, mix(swUnknownBase, swVeil, swFog), swFog), swAlbedo, swKnown);');
+    const mesh = createPlanetSurface(100);
+    expect(() => setPlanetSurfaceFog(mesh, false)).not.toThrow();
+    expect(() => setPlanetSurfaceFog(mesh, true)).not.toThrow();
+    // 没有 uniform 的网格（已销毁/非本模块创建）也不抛。
+    expect(() => setPlanetSurfaceFog({} as never, false)).not.toThrow();
     disposePlanetSurface(mesh);
   });
 
@@ -108,7 +123,7 @@ describe('3D player-visible terrain', () => {
     expect(edgeBlock).not.toContain('swLocalColor');
     expect(SHADER_COLOR).toContain('swKnownEdge *');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
     disposePlanetSurface(mesh);
   });
 
