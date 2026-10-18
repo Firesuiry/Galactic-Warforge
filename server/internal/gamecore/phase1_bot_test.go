@@ -6,6 +6,7 @@ import (
 )
 
 func TestPhase1BotIndustrialCycle(t *testing.T) {
+	t.Parallel()
 	core := newBotTestCore(t, "hard")
 	ws := core.World()
 	produced, supplied := false, false

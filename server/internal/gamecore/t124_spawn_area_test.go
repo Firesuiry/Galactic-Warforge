@@ -222,6 +222,7 @@ func TestT124StarterIronAndCopperWithinMineDistance(t *testing.T) {
 // config-dev + map.yaml (seed-001) must guarantee iron/copper near the base so
 // the documented matrix chain is operable without seed luck.
 func TestConfigDevStarterOresReachableForMatrixChain(t *testing.T) {
+	t.Parallel()
 	core := newConfigDevTestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]

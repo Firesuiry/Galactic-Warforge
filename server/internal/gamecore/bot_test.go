@@ -54,6 +54,7 @@ func runBotGame(core *GameCore, ticks int) {
 
 // bot 会采矿、建电力与矿机、攒制造台：运营链条真实发生。
 func TestA1BotRunsEconomy(t *testing.T) {
+	t.Parallel()
 	core := newBotTestCore(t, "normal")
 	ws := core.World()
 

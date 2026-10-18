@@ -8,6 +8,7 @@ import (
 )
 
 func TestProbeBeltThroughputSweep(t *testing.T) {
+	t.Parallel()
 	for _, stack := range []int{2, 3, 4, 5, 6, 8, 10, 12} {
 		for _, tp := range []int{2, 4, 6, 10} {
 			got := measureSweep(t, stack, tp)

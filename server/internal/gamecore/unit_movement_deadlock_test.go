@@ -64,6 +64,7 @@ func TestMutuallyBlockedUnitsNeverFreeze(t *testing.T) {
 
 // 一团单位挤成一堆朝同一目标移动：最终都要到达或稳定停下，不能永久卡住。
 func TestClumpedUnitsReachOrSettleWithoutDeadlock(t *testing.T) {
+	t.Parallel()
 	ws := newRTTWorld(false)
 	gc := &GameCore{}
 	dest := model.Position{X: 20, Y: 10}

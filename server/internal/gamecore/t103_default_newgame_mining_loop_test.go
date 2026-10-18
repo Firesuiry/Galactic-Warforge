@@ -13,6 +13,7 @@ import (
 )
 
 func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T) {
+	t.Parallel()
 	core := newConfigDevTestCore(t)
 	ws := core.World()
 

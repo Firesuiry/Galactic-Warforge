@@ -16,6 +16,7 @@ import (
 //   - 风机数量不无限增长（远低于旧局 332）；
 //   - 已建成的风机都落在己方电网的无线覆盖内。
 func TestBotPowerFarmsInsideGridCoverage(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	ws := core.World()
