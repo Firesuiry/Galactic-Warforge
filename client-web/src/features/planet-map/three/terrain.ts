@@ -234,8 +234,10 @@ export const SHADER_COLOR = /* glsl */`
   // Fog frontier edge light: a soft band where the unknown region meets explored
   // land, so the boundary reads as a scan frontier instead of a hard cut.
   swVeil += vec3(0.055, 0.105, 0.115) * swKnownEdge * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
-  // layers.fog = off：不盖测绘面纱，未探索格按已知地形显示（图层开关语义与 2D 一致）。
-  swAlbedo = mix(mix(swAlbedo, swVeil, swFog), swAlbedo, swKnown);
+  // layers.fog = off：不盖测绘面纱。未探索格没有地形数据（未知格），仍用面纱的不透明
+  // 填充当底色，只是去掉网格/前沿光/浮雕——否则会露出球体背面的天体，画面读成「星球消失」。
+  vec3 swUnknownBase = vec3(0.046, 0.062, 0.088);
+  swAlbedo = mix(mix(swAlbedo, mix(swUnknownBase, swVeil, swFog), swFog), swAlbedo, swKnown);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
   float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
@@ -272,7 +274,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v5';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v6';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';
