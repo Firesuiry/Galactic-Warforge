@@ -172,3 +172,15 @@ describe('拖拽笔迹逐格更新路径（回拖/自交）', () => {
     expect(applyBeltStrokeStep(path, { x: 6, y: 3 }, { x: 6, y: 3 }, SIZE)).toBeNull();
   });
 });
+
+describe('跨面笔迹（立方体接缝）', () => {
+  it('跨面追加的格与上一格仍按 surfaceStep 相邻，方向取源面步进方向', () => {
+    const size = 8;
+    // (20,7) 向南跨到另一面 (19,15)；traceBeltStroke 携带的朝向在目标面会翻转。
+    const path: BeltElevationPlacement[] = [{ tile: { x: 20, y: 7 }, direction: 'south', elevation: 0 }];
+    const next = applyBeltStrokeStep(path, { x: 20, y: 7 }, { x: 19, y: 15 }, size)!;
+    expect(next.map(part => part.tile)).toEqual([{ x: 20, y: 7 }, { x: 19, y: 15 }]);
+    expect(next.map(part => part.direction)).toEqual(['south', 'south']);
+    expect(surfaceStep(next[0].tile, next[0].direction, size).tile).toEqual(next[1].tile);
+  });
+});
