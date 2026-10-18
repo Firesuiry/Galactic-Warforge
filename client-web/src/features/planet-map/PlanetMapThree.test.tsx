@@ -447,6 +447,9 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     pickResult = { x: 4, y: 3 };
     drag(host, 'pointerMove');
     expect(dragPaths.at(-1)!.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }]);
+    // 截断处不改方向：方向仍是「从这格出发走向下一格」（回拖的反向笔迹不能把末端格掉头，
+    // 否则 (3,3) 与 (4,3) 会互相指向、带子在两格间打转）。
+    expect(dragPaths.at(-1)!.map(part => part.direction)).toEqual(['east', 'east']);
 
     // 再往前拖到 (5,3)：只补回新增格，路径按格去重。
     pickResult = { x: 5, y: 3 };

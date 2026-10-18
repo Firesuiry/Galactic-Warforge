@@ -419,12 +419,13 @@ export function PlanetMapThree(props: Props) {
           }
           // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只处理后面新增的格。
           // 回拖（DSP 拖带回拖 = 把带子缩短）时指针会回到路径里已有的格：截断到指针所在格
-          //（含），既不追加反向格，也不会把同一格下单两次（B3）。
-          const last = segment[segment.length - 1];
-          const revisited = drag.path.findIndex(part => part.tile.x === last.tile.x && part.tile.y === last.tile.y);
+          //（含），既不追加反向格，也不会把同一格下单两次（B3）。截断处**不改方向**——
+          // 每格的方向是「从这格出发走向下一格」，回拖时用的是反向笔迹，照着改会让
+          // 末端格掉头指回上一格（同层互指成环），带子会在两格之间打转。
+          const lastTile = segment[segment.length - 1].tile;
+          const revisited = drag.path.findIndex(part => part.tile.x === lastTile.x && part.tile.y === lastTile.y);
           if (revisited >= 0) {
             drag.path.length = revisited + 1;
-            drag.path[revisited] = { ...drag.path[revisited], direction: last.direction };
           } else {
             for (const part of segment.slice(1)) {
               // 防御性按格去重：自交的笔迹可能再次经过路径里的格。
