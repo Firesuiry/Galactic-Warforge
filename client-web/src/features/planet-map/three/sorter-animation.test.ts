@@ -168,9 +168,31 @@ describe('SorterMotion (authoritative playback)', () => {
       for (let index = 0; index < 600; index++) {
         if (motion.advance(.005).carrying) { carryingAt = index * .005; break; }
       }
-      // 物品在取货段末出现（.1 × cycle），cycle 夹在 [.45, 1.8] 秒。
+      // 物品在取货段末出现（.1 × cycle），cycle 夹在 [.45, 4.5] 秒。
       expect(carryingAt).toBeGreaterThan(0);
-      expect(carryingAt).toBeLessThanOrEqual(.1 * 1.8 + .01);
+      expect(carryingAt).toBeLessThanOrEqual(.1 * 4.5 + .01);
     }
+  });
+
+  it('stretches the cycle with the span like the server round trip (cycle_ticks × max(1, in+out−1))', () => {
+    const cycleOf = (lengthUnits: number) => {
+      const motion = new SorterMotion();
+      // 首个 sync 只建立 tick/s 估计窗口（兜底 4 tick/s）。
+      motion.sync(sorter({ tick: 50, sequence: 1, cycleTicks: 3 }), 50, 0, lengthUnits);
+      // 物品在 RELEASE_AT（.62 × cycle）落下：量「携货 → 放下」的时刻反推周期。
+      let elapsed = 0, carried = false;
+      while (elapsed < 10) {
+        const pose = motion.advance(.005); elapsed += .005;
+        if (pose.carrying) carried = true;
+        else if (carried) break;
+      }
+      return elapsed / .62;
+    };
+    // 3 tick × 1 / 4 tick/s = .75 s；3+3 格 → 5 单位 = 3.75 s。
+    expect(cycleOf(1)).toBeCloseTo(.75, 1);
+    expect(cycleOf(5)).toBeCloseTo(3.75, 1);
+    // 上限 4.5 s。
+    expect(cycleOf(20)).toBeCloseTo(4.5, 1);
+    expect(cycleOf(5) / cycleOf(1)).toBeCloseTo(5, 0);
   });
 });

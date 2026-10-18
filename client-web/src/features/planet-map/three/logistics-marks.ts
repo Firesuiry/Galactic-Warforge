@@ -222,7 +222,8 @@ export class LogisticsDirectionMarks {
 
   /** 顶面箭头 + 过滤物品标签：标签是 sprite，数量等于「配了过滤物品的分拣器」。 */
   refreshLabels(buildings: readonly Building[], faceSize: number, radius: number, label: (itemId: string) => { text: string; color: string } | null) {
-    for (const child of [...this.group.children]) if (child instanceof THREE.Sprite) child.removeFromParent();
+    // 克隆出来的 SpriteMaterial 要释放（贴图走 filterLabelTexture 的缓存，不在这里 dispose）。
+    for (const child of [...this.group.children]) if (child instanceof THREE.Sprite) { child.material.dispose(); child.removeFromParent(); }
     const size = surfaceTileSize(radius, faceSize);
     for (const building of buildings) {
       const items = building.sorter?.filter?.items ?? [];

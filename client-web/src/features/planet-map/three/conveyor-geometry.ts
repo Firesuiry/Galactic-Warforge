@@ -75,7 +75,7 @@ function allowsInput(building: Building, direction: SurfaceDirection) {
  * 带与带之间的链接（第 19 轮契约 §3.3，与服务端同一算法）：
  *
  * 1. 同层：邻格同一层的运输建筑接受这一侧输入 → 连；
- * 2. 坡道（同层没连上时）：邻格 a−1、a+1 层的**纯传送带**，且它的输出方向就是本次行进方向
+ * 2. 坡道（同层没连上时，源是任意运输建筑）：邻格 a−1、a+1 层的**纯传送带**，且它的输出方向就是本次行进方向
  *    （直行延续，坡道上不转弯、不侧汇）并接受来自背后的输入 → 连；
  * 3. 否则死头。
  *
@@ -99,7 +99,8 @@ function resolveBeltLinks(belts: readonly Building[], faceSize: number) {
         // auto 输出不回灌给正对着自己输出的邻居。
         && !(!building.splitter && !cardinal(output) && !level.splitter && cardinal(level.conveyor!.output) && level.conveyor!.output === back)) {
         target = level;
-      } else if (isPureBelt(building) && cardinal(output)) {
+      } else {
+        // 源不限（分流器/集装机/auto 带都能接坡道），只约束目标 B 是直行延续的纯传送带（服务端 conveyorDownstreamAt）。
         for (const ramp of [elevation - 1, elevation + 1]) {
           if (ramp < 0 || ramp > MAX_BELT_ELEVATION) continue;
           const candidate = byLayer.get(key(step.tile, ramp));
@@ -551,10 +552,19 @@ function tierOf(building: Pick<Building, 'type'>): 1 | 2 | 3 {
 }
 
 /** 地面被占的格（footprint 展开），高架带下不立柱用。 */
+/**
+ * 是否登记地面格（服务端 `TileBuilding` 口径）：高架带走 `BeltLayers`；地基是地形修饰；
+ * 物流配送器与其它 `z > 0` 叠层挂在宿主上，都不占地面格。
+ */
+export function occupiesGround(building: Pick<Building, 'type' | 'position' | 'conveyor'>) {
+  return beltElevation(building) === 0 && (building.position.z ?? 0) === 0
+    && building.type !== 'foundation' && building.type !== 'logistics_distributor';
+}
+
 export function groundOccupancy(buildings: readonly Building[], faceSize: number) {
   const tiles = new Set<string>();
   for (const building of buildings) {
-    if (beltElevation(building) > 0) continue;
+    if (!occupiesGround(building)) continue;
     const footprint = getBuildingFootprint(building);
     for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
       const tile = surfaceOffset(building.position, dx, dy, faceSize);

@@ -6,8 +6,8 @@ import { getItemColorValue } from '../item-colors';
 import { surfaceOffset } from '@shared/surface';
 import { beltElevation, tierColor } from '../logistics-tier';
 import { OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns, stepTile, type CardinalDirection } from '../logistics-direction';
-import { BELT_BASE_LIFT, BELT_BODY_BOTTOM, BELT_DECK_TOP } from './conveyor-geometry';
-import { itemColor } from './industrial-activity';
+import { BELT_BASE_LIFT, BELT_BODY_BOTTOM, BELT_DECK_TOP, occupiesGround } from './conveyor-geometry';
+import { conveyorAllowedInputs } from '../sorter-filter';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 import { SorterMotion, poseAt, type SorterPose } from './sorter-animation';
 
@@ -22,7 +22,8 @@ import { SorterMotion, poseAt, type SorterPose } from './sorter-animation';
  * `+X` = 放货端（正面），`−X` = 取货端（背面），`+Y` 法线，`+Z` 横向。
  *
  * 端点来自真实布局：沿朝向前后各扫 `range` 格，第一个被占的格就是端点（与服务端
- * `sorterFindEndpoint` 同口径）。带子 = 带子中心线；建筑 = 建筑外壁内侧一点。没接上的一端按 1 格画、灯条变暗。
+ * `sorterFindEndpoint` 同口径，见 `findEnd`）。带子 = 带子中心线；建筑 = 建筑外壁内侧一点。
+ * 没接上的一端按 1 格画、灯条变暗。底板只占本格（DSP 的机座就是 1 格，跨 2–3 格伸长的是摆臂）。
  *
  * 全部分拣器共用十几个 InstancedMesh（静态件只在布局变化时写，动态件逐帧写），
  * 分拣器再多也只有固定的 draw 数。
@@ -52,11 +53,14 @@ export type SorterEndKind = 'belt' | 'building' | null;
 export interface SorterEnd { steps: number; kind: SorterEndKind; /** 端点建筑沿轴的占地格数。 */ depth: number }
 export interface SorterSpan { pickup: SorterEnd; drop: SorterEnd }
 
-/** 地面占用：格 → 建筑（footprint 展开；高架带不占地面）。 */
+/**
+ * 地面占用：格 → 建筑（footprint 展开），与服务端 `TileBuilding` 同口径：
+ * 高架带（`BeltLayers`）、地基（地形修饰，不占格）、物流配送器与其它 `z > 0` 叠层都不登记。
+ */
 export function groundBuildingMap(buildings: readonly Building[], faceSize: number) {
   const map = new Map<string, Building>();
   for (const building of buildings) {
-    if (beltElevation(building) > 0) continue;
+    if (!occupiesGround(building)) continue;
     const footprint = getBuildingFootprint(building);
     for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
       const tile = surfaceOffset(toTilePoint(building.position), dx, dy, faceSize);
@@ -66,21 +70,34 @@ export function groundBuildingMap(buildings: readonly Building[], faceSize: numb
   return map;
 }
 
-/** 沿一个方向找端点（第一个被占的格；己方；分流器/集装机不接，与服务端同口径）。 */
+const DEAD_END: SorterEnd = { steps: 1, kind: null, depth: 1 };
+
+/**
+ * 沿一个方向找端点，逐条对齐服务端 `sorterFindEndpoint`：跳过空格，第一个被占格就是端点——
+ * 敌方 → 断头；传送带类（含集装机）须运行中且不是分流器，放货端还要求该格接受这一侧插入；
+ * 其它建筑须有仓储且有对应方向的 IO 口（取 = output/both，放 = input/both），否则断头。
+ */
 function findEnd(origin: TilePoint, owner: string, selfId: string, direction: CardinalDirection, range: number,
-  ground: ReadonlyMap<string, Building>, faceSize: number): SorterEnd {
+  ground: ReadonlyMap<string, Building>, faceSize: number, side: 'pickup' | 'drop'): SorterEnd {
   let cursor = { tile: origin, direction };
   for (let step = 1; step <= range; step++) {
     cursor = stepTile(cursor.tile, cursor.direction, faceSize);
     const hit = ground.get(`${cursor.tile.x}:${cursor.tile.y}`);
     if (!hit || hit.id === selfId) continue;
-    if (hit.owner_id !== owner) return { steps: 1, kind: null, depth: 1 };
-    if (hit.conveyor) return hit.splitter || !hit.type.startsWith('conveyor_belt_') ? { steps: 1, kind: null, depth: 1 } : { steps: step, kind: 'belt', depth: 1 };
+    if (hit.owner_id !== owner) return DEAD_END;
+    if (hit.conveyor) {
+      if (hit.splitter || (hit.runtime?.state && hit.runtime.state !== 'running')) return DEAD_END;
+      if (side === 'drop' && !conveyorAllowedInputs(hit.conveyor).has(OPPOSITE_DIRECTION[cursor.direction])) return DEAD_END;
+      return { steps: step, kind: 'belt', depth: 1 };
+    }
+    const wanted = side === 'pickup' ? 'output' : 'input';
+    const ports = hit.storage ? hit.runtime?.params?.io_ports ?? [] : [];
+    if (!ports.some(port => port.direction === wanted || port.direction === 'both')) return DEAD_END;
     const footprint = getBuildingFootprint(hit);
     const axis = direction === 'east' || direction === 'west' ? footprint.width : footprint.height;
     return { steps: step, kind: 'building', depth: axis };
   }
-  return { steps: 1, kind: null, depth: 1 };
+  return DEAD_END;
 }
 
 export function sorterFacing(rotation: Building['rotation'] | number | undefined): CardinalDirection {
@@ -93,8 +110,8 @@ export function sorterSpan(building: Pick<Building, 'id' | 'position' | 'rotatio
   const origin = toTilePoint(building.position);
   const reach = Math.max(1, Math.min(3, range));
   return {
-    pickup: findEnd(origin, building.owner_id, building.id, OPPOSITE_DIRECTION[facing], reach, ground, faceSize),
-    drop: findEnd(origin, building.owner_id, building.id, facing, reach, ground, faceSize),
+    pickup: findEnd(origin, building.owner_id, building.id, OPPOSITE_DIRECTION[facing], reach, ground, faceSize, 'pickup'),
+    drop: findEnd(origin, building.owner_id, building.id, facing, reach, ground, faceSize, 'drop'),
   };
 }
 
@@ -117,7 +134,8 @@ export interface SorterArmPose {
  * 摆臂几何：物品中心沿「取货点 → 翻过头顶 → 放货点」的弧线走（φ = π(1 − swing)），
  * 两侧水平半径各自等于到端点的距离，顶点高度按两侧平均臂长定（短跨度时是正圆，臂长基本不变）。
  */
-export function sorterArmPose(span: SorterSpan, pose: Pick<SorterPose, 'swing' | 'lift'>): SorterArmPose {
+export function sorterArmPose(span: SorterSpan, pose: Pick<SorterPose, 'swing' | 'lift'>,
+  out: SorterArmPose = { wrist: new THREE.Vector2(), angle: 0, length: 0 }): SorterArmPose {
   const pickup = sorterGripPoint(span.pickup), drop = sorterGripPoint(span.drop);
   const phi = Math.PI * (1 - THREE.MathUtils.clamp(pose.swing, 0, 1));
   const cos = Math.cos(phi), sin = Math.sin(phi);
@@ -126,9 +144,11 @@ export function sorterArmPose(span: SorterSpan, pose: Pick<SorterPose, 'swing' |
   const x = end.distance * cos;
   const ground = 1 - sin;
   const y = SORTER_PIVOT_Y + apex * sin + (end.height - SORTER_PIVOT_Y) * ground + HOVER * pose.lift * ground;
-  const wrist = new THREE.Vector2(x, y + SORTER_HANG);
-  const arm = wrist.clone().sub(new THREE.Vector2(0, SORTER_PIVOT_Y));
-  return { wrist, angle: Math.atan2(arm.y, arm.x), length: arm.length() };
+  out.wrist.set(x, y + SORTER_HANG);
+  const dy = out.wrist.y - SORTER_PIVOT_Y;
+  out.angle = Math.atan2(dy, x);
+  out.length = Math.hypot(x, dy);
+  return out;
 }
 
 type MaterialKey = 'graphite' | 'ceramic' | 'alloy' | 'light' | 'dock' | 'payload';
@@ -183,7 +203,10 @@ export class SorterRigs {
   private signature = '';
   private ghostTime = 0;
   private readonly scratch = { matrix: new THREE.Matrix4(), local: new THREE.Matrix4(), position: new THREE.Vector3(),
-    rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), euler: new THREE.Euler(), color: new THREE.Color() };
+    rotation: new THREE.Quaternion(), scale: new THREE.Vector3(), euler: new THREE.Euler(),
+    arm: { wrist: new THREE.Vector2(), angle: 0, length: 0 } as SorterArmPose };
+  /** 灯色/物品色缓存：逐帧 setColorAt 不再每次 new Color。 */
+  private readonly colors = new Map<string, THREE.Color>();
   private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
   constructor(private readonly options: SorterRigOptions = {}) {
@@ -213,17 +236,19 @@ export class SorterRigs {
    * 同步布局与权威快照。`sorters` 只含要画的分拣器；`buildings` 用于找端点（地面占用）。
    * 布局签名不变时只同步搬运记录（不重建实例）。返回 true 表示实例被重建。
    */
-  refresh(sorters: readonly Building[], buildings: readonly Building[], faceSize: number, radius: number, tick = 0,
+  refresh(sorters: readonly Building[], buildings: readonly Building[] | ReadonlyMap<string, Building>, faceSize: number, radius: number, tick = 0,
     range?: (building: Building) => number): boolean {
-    const ground = groundBuildingMap(buildings, faceSize);
+    // 场景每次 setData 预先算好一张地面占用图传进来（实物与 ghost 共用），避免悬停时反复展开 3000 座建筑。
+    const ground = buildings instanceof Map ? buildings : groundBuildingMap(buildings as readonly Building[], faceSize);
     const spans = sorters.map(building => sorterSpan(building, ground, faceSize, range?.(building)));
     const signature = JSON.stringify([faceSize, radius, sorters.map((building, index) => [building.id, building.type, building.position,
       building.rotation, building.runtime?.state === 'running', spans[index]])]);
-    for (const building of sorters) {
+    sorters.forEach((building, index) => {
       let motion = this.motions.get(building.id);
       if (!motion) { motion = new SorterMotion(); this.motions.set(building.id, motion); }
-      if (!this.options.ghost) motion.sync(building, tick);
-    }
+      // 往返周期按服务端口径随跨度变长：cycle_ticks × max(1, 取端步数 + 放端步数 − 1)。
+      if (!this.options.ghost) motion.sync(building, tick, undefined, Math.max(1, spans[index].pickup.steps + spans[index].drop.steps - 1));
+    });
     if (signature === this.signature) {
       this.rigs.forEach((rig, index) => { rig.building = sorters[index]; });
       return false;
@@ -325,7 +350,9 @@ export class SorterRigs {
   }
 
   private color(name: PartName, rig: number, slot: number, hex: string) {
-    this.meshes.get(name)!.setColorAt(rig * COUNTS[name] + slot, itemColor(hex));
+    let color = this.colors.get(hex);
+    if (!color) { color = new THREE.Color(hex); this.colors.set(hex, color); }
+    this.meshes.get(name)!.setColorAt(rig * COUNTS[name] + slot, color);
   }
 
   private writeStatic() {
@@ -368,23 +395,30 @@ export class SorterRigs {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
     }
+    // 动态件（摆臂/夹爪）逐帧在动：包围球取底板的再外扩 1.6 格（最长臂展 + 物品），拾取不随摆角丢失。
+    const plate = this.meshes.get('plate')!.boundingSphere!;
+    const reach = (this.rigs[0]?.frame.getMaxScaleOnAxis() ?? 1) * 1.6;
+    for (const name of PART_NAMES) {
+      if (!PARTS[name].dynamic) continue;
+      this.meshes.get(name)!.boundingSphere = new THREE.Sphere(plate.center.clone(), plate.radius + reach);
+    }
   }
 
   private writeDynamic() {
     if (!this.meshes.size) return;
     this.rigs.forEach((rig, index) => {
       const pose = this.poseOf(rig);
-      const arm = sorterArmPose(rig.span, pose);
+      const arm = sorterArmPose(rig.span, pose, this.scratch.arm);
       const connected = rig.span.pickup.kind !== null && rig.span.drop.kind !== null;
       const light = this.options.ghost ? SORTER_GHOST_COLOR : connected ? tierColor(rig.building.type) : DIM_LIGHT;
       // 双平行摆臂：合金套筒（定长）+ 石墨伸缩杆（到腕轴），套筒顶上一道档位色灯条。
       const along = (distance: number): [number, number] => [Math.cos(arm.angle) * distance, SORTER_PIVOT_Y + Math.sin(arm.angle) * distance];
       const rodStart = .3, rodEnd = Math.max(rodStart + .01, arm.length - .02);
+      const liftX = -Math.sin(arm.angle) * .035, liftY = Math.cos(arm.angle) * .035;
       for (const [pair, z] of [[0, .05], [1, -.05]] as const) {
         const [sx, sy] = along(.18);
         this.put('sleeve', index, pair, [sx, sy, z], [.3, .065, .038], arm.angle);
-        const lift = new THREE.Vector2(-Math.sin(arm.angle), Math.cos(arm.angle)).multiplyScalar(.035);
-        this.put('stripe', index, pair, [sx + lift.x, sy + lift.y, z], [.22, .008, .022], arm.angle);
+        this.put('stripe', index, pair, [sx + liftX, sy + liftY, z], [.22, .008, .022], arm.angle);
         this.color('stripe', index, pair, light);
         const [rx, ry] = along((rodStart + rodEnd) / 2);
         this.put('rod', index, pair, [rx, ry, z], [rodEnd - rodStart, .04, .026], arm.angle);

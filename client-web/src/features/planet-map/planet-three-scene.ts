@@ -13,7 +13,7 @@ import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
-import { SORTER_GHOST_COLOR, SorterRigs } from './three/sorter-rig';
+import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -131,6 +131,8 @@ export class PlanetThreeScene {
   private readonly sorterRigs = new SorterRigs();
   /** 建造预览：分拣器 ghost（同一套 rig，半透明，循环演示一次搬运）与铺带 ghost（含坡道/桥墩，按将要建成的样子画）。 */
   private readonly sorterGhost = new SorterRigs({ ghost: true });
+  /** 本次 setData 的地面占用图（实物分拣器与分拣器 ghost 共用，悬停时不再重建）。 */
+  private groundMap?: ReadonlyMap<string, Building>;
   private readonly conveyorGhost = new ConveyorGeometry({ ghost: true });
   /** 分拣器/分流器顶面方向箭头（全网络合并 1 draw）+ 过滤物品标签。 */
   private readonly logisticsMarks = new LogisticsDirectionMarks();
@@ -471,7 +473,8 @@ export class PlanetThreeScene {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
     }
-    this.sorterRigs.refresh(sorters, visibleBuildings, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
+    this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
+    this.sorterRigs.refresh(sorters, this.groundMap, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
     this.layer('buildings').add(this.sorterRigs.group);
     // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
     const previousAims = new Map(this.turretAims.map((aim) => [aim.id, aim]));
@@ -1038,12 +1041,12 @@ export class PlanetThreeScene {
       const sorterRoutes = sorterGhostDirections(mode.buildingType, mode.rotation);
       const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
       if (!direction && !sorterRoutes) return;
-      const context = Object.values(data.planet.buildings ?? {}).filter(building => building.owner_id === data.playerId || this.visible(building.position));
       if (sorterRoutes) {
         const ghost = { id: '__ghost-sorter', type: mode.buildingType, position: { x: hovered.x, y: hovered.y, z: 0 },
           rotation: mode.rotation, owner_id: data.playerId ?? '', hp: 1, sorter: { range: SORTER_GHOST_RANGE } } as unknown as Building;
         // 契约 §1：所有档位分拣器跨度 1–3 格。
-        this.sorterGhost.refresh([ghost], context, faceSize, RADIUS, 0, () => SORTER_GHOST_RANGE);
+        this.sorterGhost.refresh([ghost], this.groundMap ?? Object.values(data.planet.buildings ?? {})
+          .filter(building => building.owner_id === data.playerId || this.visible(building.position)), faceSize, RADIUS, 0, () => SORTER_GHOST_RANGE);
         sorterGhost = true;
         const span = this.sorterGhost.inspect(ghost.id)?.span;
         const size = this.tileScale();
@@ -1402,7 +1405,7 @@ export class PlanetThreeScene {
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
       this.conveyors.update(this.frozen || reducedMotion ? 0 : dt);
       this.sorterRigs.animate(dt, !this.frozen && !reducedMotion);
-      this.sorterGhost.animate(dt, !reducedMotion);
+      this.sorterGhost.animate(dt, !this.frozen && !reducedMotion);
       if (!this.frozen) {
         this.combat.update(dt * 1000);
         this.commandMarkers.update(dt * 1000);

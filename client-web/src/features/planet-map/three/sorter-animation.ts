@@ -25,6 +25,9 @@ export const DROP_END = .65;
 export const RELEASE_AT = .62;
 /** tick/s 兜底：快照里拿不到差值时按 4 tick/s 估 cycle 时长。 */
 const FALLBACK_TICK_RATE = 4;
+/** 一次往返的播放时长上下限（秒）：再快看不清翻转，再慢（3+3 格 mk1 = 3 s）就是服务端真实节拍。 */
+const MIN_CYCLE = .45;
+const MAX_CYCLE = 4.5;
 /** 迟到太多 tick 的记录是历史回放，不当成当前活动（只对首次观察生效）。 */
 const RECENT_TICKS = 20;
 
@@ -54,8 +57,11 @@ export class SorterMotion {
   private rateTime?: number;
   private current: SorterPose = { swing: 0, lift: 1, carrying: false };
 
-  /** 同步一条权威快照：停机冻结；新的 `last_transfer` 排队播放一次。 */
-  sync(building: Building, tick: number, now = clock()) {
+  /**
+   * 同步一条权威快照：停机冻结；新的 `last_transfer` 排队播放一次。
+   * `lengthUnits` = 服务端往返周期的长度系数 `max(1, 取端步数 + 放端步数 − 1)`。
+   */
+  sync(building: Building, tick: number, now = clock(), lengthUnits = 1) {
     this.tickRate = this.estimateTickRate(tick, now);
     this.enabled = building.runtime?.state === 'running';
     if (!this.enabled) {
@@ -75,7 +81,7 @@ export class SorterMotion {
     }
     this.observedSequence = transfer.sequence;
     this.pendingItemId = transfer.item_id;
-    this.cycle = THREE.MathUtils.clamp((building.sorter?.cycle_ticks ?? 6) / this.tickRate, .45, 1.8);
+    this.cycle = THREE.MathUtils.clamp((building.sorter?.cycle_ticks ?? 6) * Math.max(1, lengthUnits) / this.tickRate, MIN_CYCLE, MAX_CYCLE);
   }
 
   /** 每帧推进（`active` = 整机运行且场景不冻结）。 */

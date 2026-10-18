@@ -19,9 +19,10 @@ function belt(id: string, x: number, y: number, output = 'east', input = 'west',
   return { id, type, position: { x, y, z: 0 }, owner_id: owner,
     runtime: { state: 'running' }, conveyor: { input, output, ...(elevation ? { elevation } : {}) } } as unknown as Building;
 }
-function machine(id: string, x: number, y: number, owner = 'p', width = 1, height = 1): Building {
+function machine(id: string, x: number, y: number, owner = 'p', width = 1, height = 1, ports: string[] = ['both']): Building {
   return { id, type: 'arc_smelter', position: { x, y, z: 0 }, owner_id: owner, storage: {},
-    runtime: { params: { footprint: { width, height } } } } as unknown as Building;
+    runtime: { params: { footprint: { width, height },
+      io_ports: ports.map((direction, index) => ({ id: `p${index}`, direction, offset: { x: 0, y: 0 }, capacity: 1 })) } } } as unknown as Building;
 }
 function ground(buildings: Building[]) { return groundBuildingMap(buildings, FACE); }
 const spanOf = (buildings: Building[], range?: number) => sorterSpan(sorter(8, 8), ground(buildings), FACE, range);
@@ -43,20 +44,43 @@ describe('sorterSpan (real endpoints, contract §4.1)', () => {
     expect(spanOf([belt('west', 5, 8), belt('east', 11, 8)], 10).pickup.steps).toBe(3);
   });
 
-  it('does not end on enemy buildings, splitters, pilers or elevated belts', () => {
+  it('does not end on enemy buildings, splitters or elevated belts', () => {
     // 敌方带子：整条轴视为断头。
     expect(spanOf([belt('west', 7, 8, 'east', 'west', 0, 'enemy'), belt('east', 9, 8)]).pickup.kind).toBeNull();
-    // 分流器/集装机不是分拣器端点。
+    // 分流器不是分拣器端点（服务端 sorterFindEndpoint 只排除分流器）。
     const splitter = { ...belt('splitter', 7, 8), type: 'splitter',
       splitter: { input_directions: ['east'], output_directions: ['west'], input_cursor: 0, output_cursor: 0, transferred_items: 0, last_transfer_tick: 0 } } as Building;
     expect(spanOf([splitter]).pickup.kind).toBeNull();
-    const piler = { ...belt('piler', 9, 8), type: 'automatic_piler' } as Building;
-    expect(spanOf([piler]).drop.kind).toBeNull();
     // 高架带不占地面：不挡地面端点，也不算地面端点。
     expect(spanOf([belt('high', 7, 8, 'east', 'west', 2)]).pickup.kind).toBeNull();
     // 高架带压在地面带上方时，分拣器只接地面带。
     const stacked = spanOf([belt('high', 7, 8, 'east', 'west', 2), belt('ground', 7, 8, 'east', 'west')]);
     expect(stacked.pickup).toMatchObject({ kind: 'belt', steps: 1 });
+  });
+
+  it('follows the server endpoint rules (sorterFindEndpoint parity)', () => {
+    // 集装机带 conveyor、不是分流器 → 服务端照接，是带子端点。
+    const piler = { ...belt('piler', 9, 8), type: 'automatic_piler' } as Building;
+    expect(spanOf([piler]).drop).toEqual({ steps: 1, kind: 'belt', depth: 1 });
+    // 停机/未运行的带子：两端都不接。
+    expect(spanOf([{ ...belt('idle', 7, 8), runtime: { state: 'no_power' } } as Building]).pickup.kind).toBeNull();
+    // 放货端：带子输出正对分拣器（output=west）时不收这一侧插入；取货端不挑朝向。
+    expect(spanOf([belt('back', 9, 8, 'west', 'east')]).drop.kind).toBeNull();
+    expect(spanOf([belt('back', 7, 8, 'east', 'west'), belt('away', 9, 8, 'east', 'west')]).drop.kind).toBe('belt');
+    expect(spanOf([belt('toward', 7, 8, 'west', 'east')]).pickup.kind).toBe('belt');
+    // 放货端：显式 input 是转弯侧（north）时只收北侧，不收西侧来的分拣器。
+    expect(spanOf([belt('turn', 9, 8, 'east', 'north')]).drop.kind).toBeNull();
+    // 建筑端点要有仓储 + 对应方向的 IO 口：取货要 output/both，放货要 input/both。
+    expect(spanOf([machine('out', 7, 8, 'p', 1, 1, ['output'])]).pickup.kind).toBe('building');
+    expect(spanOf([machine('in', 7, 8, 'p', 1, 1, ['input'])]).pickup.kind).toBeNull();
+    expect(spanOf([machine('in', 9, 8, 'p', 1, 1, ['input'])]).drop.kind).toBe('building');
+    expect(spanOf([machine('none', 9, 8, 'p', 1, 1, [])]).drop.kind).toBeNull();
+    const monitor = { id: 'monitor', type: 'traffic_monitor', position: { x: 9, y: 8, z: 0 }, owner_id: 'p', runtime: { params: {} } } as unknown as Building;
+    expect(spanOf([monitor]).drop.kind).toBeNull();
+    // 地基、配送器、z>0 叠层不登记地面格：分拣器越过它们继续找到后面的带子。
+    const foundation = { id: 'f', type: 'foundation', position: { x: 9, y: 8, z: 0 }, owner_id: 'p', runtime: { params: {} } } as unknown as Building;
+    const stackedLayer = { ...machine('layer', 9, 8), position: { x: 9, y: 8, z: 1 } } as Building;
+    expect(spanOf([foundation, stackedLayer, belt('east', 10, 8)]).drop).toEqual({ steps: 2, kind: 'belt', depth: 1 });
   });
 
   it('reports a multi-tile building endpoint with its along-axis depth', () => {
@@ -80,7 +104,8 @@ describe('sorterSpan (real endpoints, contract §4.1)', () => {
       const offsets: Record<string, { x: number; y: number }> = { north: { x: 0, y: -1 }, east: { x: 1, y: 0 }, south: { x: 0, y: 1 }, west: { x: -1, y: 0 } };
       const drop = { x: 8 + offsets[facing].x, y: 8 + offsets[facing].y };
       const pickup = { x: 8 + offsets[back].x, y: 8 + offsets[back].y };
-      const spanWithBelts = sorterSpan(sorter(8, 8, rotation), ground([belt('drop', drop.x, drop.y), belt('pickup', pickup.x, pickup.y)]), FACE);
+      // 放货带沿朝向继续往前流（不朝回指向分拣器，否则这一侧不收插入）。
+      const spanWithBelts = sorterSpan(sorter(8, 8, rotation), ground([belt('drop', drop.x, drop.y, facing, back), belt('pickup', pickup.x, pickup.y)]), FACE);
       expect(spanWithBelts.drop.kind, `rotation=${rotation} drop`).toBe('belt');
       expect(spanWithBelts.pickup.kind, `rotation=${rotation} pickup`).toBe('belt');
     }

@@ -332,6 +332,17 @@ describe('multi-layer belts (contract §3.3)', () => {
     expect(hitHeight(down.point(.5),16)).toBeLessThan(hitHeight(down.point(0),16));
   });
 
+  it('ramps from any transport source (splitter / auto belt) onto a straight elevated belt', () => {
+    // 契约 §3.3 只约束目标是直行延续的纯传送带；源不限（服务端 conveyorDownstreamAt）。
+    const fromSplitter = conveyorPaths([splitter(5,5), elevated('up',6,5,'east',1)],16);
+    expect(fromSplitter.find(path => path.building.id === 'up')!.connected.has('west')).toBe(true);
+    const fromAuto = conveyorPaths([belt('auto',5,5,'auto' as SurfaceDirection,'west'), elevated('up',6,5,'east',1)],16);
+    expect(fromAuto.find(path => path.building.id === 'up')!.connected.has('west')).toBe(true);
+    // 目标仍须是纯传送带且直行：高架带转弯时 auto 源也不上坡。
+    const bend = conveyorPaths([belt('auto',5,5,'auto' as SurfaceDirection,'west'), elevated('bend',6,5,'south',1)],16);
+    expect(bend.find(path => path.building.id === 'bend')!.connected.has('west')).toBe(false);
+  });
+
   it('does not ramp on turns, across 2 layers, or onto a non-straight neighbor', () => {
     // 转弯：高架带输出方向不是直行延续。
     const turn = conveyorPaths([belt('ground',5,5,'east'), elevated('bend',6,5,'south',1)],16);
