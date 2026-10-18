@@ -5,7 +5,6 @@ import {
   commandableUnitIds,
   isDarkFogUnit,
   orderEligibleUnitIds,
-  ownUnitsInTileRect,
   pruneControlGroup,
   resolveContextCommand,
   sameTypeOwnUnitsInView,
@@ -90,13 +89,6 @@ describe('rts-commands 选择器推导', () => {
 });
 
 describe('rts-commands 框选与双击同类', () => {
-  it('ownUnitsInTileRect：矩形内只选己方单位', () => {
-    const planet = makePlanet();
-    expect(ownUnitsInTileRect(planet, 'p1', { minX: 0, minY: 0, maxX: 3, maxY: 3 })).toEqual(['u-1', 'u-2']);
-    expect(ownUnitsInTileRect(planet, 'p1', { minX: 0, minY: 0, maxX: 24, maxY: 16 })).toEqual(['u-1', 'u-2', 'u-3', 'u-4']);
-    expect(ownUnitsInTileRect(planet, 'p1', { minX: 10, minY: 10, maxX: 12, maxY: 12 })).toEqual([]);
-  });
-
   it('sameTypeOwnUnitsInView：视口内同类己方单位', () => {
     const planet = makePlanet();
     const bounds: ViewportTileBounds = { minX: 0, minY: 0, maxX: 3, maxY: 3, centerX: 1, centerY: 1 };

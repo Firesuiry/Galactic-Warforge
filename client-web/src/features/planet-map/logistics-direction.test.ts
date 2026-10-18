@@ -10,7 +10,6 @@ import {
   directionVector,
   isOmnidirectionalLogistics,
   logisticsArrows,
-  resolveLogisticsDirection,
   sorterGhostDirections,
   stepTile,
 } from './logistics-direction';
@@ -35,7 +34,6 @@ describe('物流方向推导', () => {
   it('直线：传送带取服务端 input/output，输出侧就是流向', () => {
     const straight = belt('a', 5, 5, 'east', 'west');
     expect(logisticsArrows(straight)).toEqual({ arrows: [{ from: 'west', to: 'east' }], omnidirectional: false });
-    expect(resolveLogisticsDirection(straight)).toBe('east');
     expect(describeFlowText(straight)).toBe('西→东');
   });
 
@@ -43,7 +41,6 @@ describe('物流方向推导', () => {
     const noInput = { id: 'a', type: 'conveyor_belt_mk1', position: { x: 5, y: 5, z: 0 }, owner_id: 'p', conveyor: { input: 'auto', output: 'south' } } as Building;
     expect(logisticsArrows(noInput).arrows).toEqual([{ from: 'north', to: 'south' }]);
     expect(logisticsArrows({ ...noInput, conveyor: { input: 'auto', output: 'auto' } }).arrows).toEqual([]);
-    expect(resolveLogisticsDirection({ ...noInput, conveyor: { input: 'auto', output: 'auto' } })).toBeNull();
   });
 
   it('转角：输入与输出不同侧时保留两端', () => {
@@ -60,7 +57,6 @@ describe('物流方向推导', () => {
     expect(logisticsArrows(sorter('s270', 4, 4, '270'))).toEqual({ arrows: [{ from: 'east', to: 'west' }], omnidirectional: false });
     // rotation 缺失按 0 处理（服务端 normalizePlanRotation 同样落到 "0"）。
     expect(logisticsArrows(sorter('s-missing', 4, 4))).toEqual({ arrows: [{ from: 'south', to: 'north' }], omnidirectional: false });
-    expect(resolveLogisticsDirection(sorter('s90', 4, 4, '90'))).toBe('east');
     expect(describeFlowText(sorter('s90', 4, 4, '90'))).toBe('西→东');
     // 分拣器永远有单一方向：不存在「四向皆可」。
     expect(isOmnidirectionalLogistics(sorter('s90', 4, 4, '90'))).toBe(false);

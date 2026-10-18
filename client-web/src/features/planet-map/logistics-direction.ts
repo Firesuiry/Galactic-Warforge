@@ -126,17 +126,6 @@ export function isSorterBuilding(building: Pick<Building, 'type' | 'sorter' | 's
   return Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type));
 }
 
-/**
- * 2D 方向纹朝向：单一方向的物流建筑取输出侧；四向皆可返回 null（改画枢纽标记）。
- * 与 planet-logistics-flow.beltFlowVector 的「auto 回退 east」不同——那里是货物流向的近似，
- * 这里要的是真实方向，未配置就不画箭头。
- */
-export function resolveLogisticsDirection(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): CardinalDirection | null {
-  const { arrows, omnidirectional } = logisticsArrows(building);
-  if (omnidirectional) return null;
-  return arrows[0]?.to ?? null;
-}
-
 /** 物流建筑是否四向皆可（分拣器/分流器默认配置）：2D 画枢纽、3D 画枢纽标记。 */
 export function isOmnidirectionalLogistics(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): boolean {
   return logisticsArrows(building).omnidirectional;

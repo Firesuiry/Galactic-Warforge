@@ -959,35 +959,24 @@ describe("传送带详情显示高度层（第 19 轮 §3.5）", () => {
   });
 });
 
-describe("PlanetLayerPanel 3D 口径（R20-A ④）", () => {
+describe("PlanetLayerPanel 3D 口径（R20-A ④ / R20-D）", () => {
   beforeEach(() => {
     useSessionStore.getState().setSession({ serverUrl: "http://server", playerId: "p1", playerKey: "key" });
   });
 
   const planet = { planet_id: "planet-1-1", map_width: 24, map_height: 16 } as never;
 
-  it("3D 下不渲染 2D 缩放档按钮，但保留「回到基地」", () => {
-    render(<PlanetLayerPanel planet={planet} threeDimensional />);
+  it("2D 缩放档按钮已随 2D 视图删除，只保留「回到基地」", () => {
+    render(<PlanetLayerPanel planet={planet} />);
     expect(screen.queryByRole("button", { name: "16px" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "1px/300cell" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回到基地" })).toBeInTheDocument();
   });
 
-  it("2D（默认）仍渲染缩放档按钮", () => {
+  it("去掉「地形」图层开关（3D 里不是独立图层），其它图层开关保留", () => {
     render(<PlanetLayerPanel planet={planet} />);
-    expect(screen.getByRole("button", { name: "16px" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "1px/300cell" })).toBeInTheDocument();
-  });
-
-  it("3D 下去掉「地形」图层开关，其它图层开关保留", () => {
-    render(<PlanetLayerPanel planet={planet} threeDimensional />);
     expect(screen.queryByLabelText("地形")).not.toBeInTheDocument();
     expect(screen.getByLabelText("迷雾")).toBeInTheDocument();
     expect(screen.getByLabelText("建筑")).toBeInTheDocument();
-  });
-
-  it("2D（默认）保留「地形」开关", () => {
-    render(<PlanetLayerPanel planet={planet} />);
-    expect(screen.getByLabelText("地形")).toBeInTheDocument();
   });
 });
