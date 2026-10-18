@@ -46,7 +46,7 @@ import type { PlanetInteractionMode } from './store';
  * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
  * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
  */
-export interface PickMeta { offscreen: boolean; buildingId?: string }
+export interface PickMeta { offscreen: boolean; buildingId?: string; /** 触发这次派发的鼠标键：0 = 左键、2 = 右键（情境指令）。 */ button?: 0 | 2 }
 
 export interface PlanetThreeData {
   planet: PlanetRenderView;
@@ -274,9 +274,14 @@ export class PlanetThreeScene {
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       if (!tap) return;
       // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
+      // 用抬起时刻的坐标**重新拾取**（不用节流后的 hover 结果）：指针在按下与抬起之间
+      // 微移时，旧 hover 可能是相邻格/上一帧的格，多格建筑会因此「点两次才选中」（试玩 1019 C）。
       const target = this.pickTargetAtCoords(event.clientX, event.clientY);
-      if (target) this.onPick(target.tile, target.buildingId ? { offscreen: false, buildingId: target.buildingId } : { offscreen: false });
-      else this.onMiss?.();
+      if (target) {
+        const meta: PickMeta = { offscreen: false, button: event.button === 2 ? 2 : 0 };
+        if (target.buildingId) meta.buildingId = target.buildingId;
+        this.onPick(target.tile, meta);
+      } else this.onMiss?.();
     });
     const canvas = this.renderer.domElement;
     canvas.addEventListener('pointermove', this.pointerMove);
@@ -1316,6 +1321,8 @@ export class PlanetThreeScene {
   /** 是否处于地面视角（全球视角下不需要「未探索区域」这类贴地提示）。 */
   isGroundView() { return this.groundView; }
   setTilt(value: number) { this.tilt = THREE.MathUtils.clamp(value, 0, 1.1); this.groundView = true; this.updateCamera(); }
+  /** 当前俯仰角（0–1.1，与 `setTilt` 入参同口径；全球视角下仍返回设置值）。 */
+  getTilt() { return this.tilt; }
   project(tile: TilePoint) {
     if (!this.data) return null;
     this.world.updateMatrixWorld(true);
@@ -1350,6 +1357,23 @@ export class PlanetThreeScene {
   getCenterTile() {
     return this.data ? this.tileFromNormal(FRONT.clone().applyQuaternion(this.world.quaternion.clone().invert())) : null;
   }
+  /**
+   * 相机状态（R20-A ④/⑥ 的调试面板视口快照与分享链接）：
+   * - center：画面中心格；
+   * - altitude：相机离地高度（世界单位，与 `zoom()` 的夹取范围同一量纲）；
+   * - zoom：与 `altitude` 同一口径的当前高度（`zoom(factor)` 是**相对倍率**，
+   *   分享链接里的 `?zoom=` 按 `altitude` 存，恢复时用 `zoom(current / target)`，见 PlanetMapThree）；
+   * - tilt：俯仰（0–1.1，全球视角恒 0）；groundView：是否地面视角。
+   */
+  getCameraState(): { center: { x: number; y: number } | null; altitude: number; zoom: number; tilt: number; groundView: boolean } {
+    return {
+      center: this.getCenterTile(),
+      altitude: this.altitude,
+      zoom: this.altitude,
+      tilt: this.groundView ? this.tilt : 0,
+      groundView: this.groundView,
+    };
+  }
   capture() {
     this.composer.render();
     return this.renderer.domElement;
@@ -1375,14 +1399,49 @@ export class PlanetThreeScene {
    * 任何反馈，驱动脚本白丢过两次建造（试玩 1016 B4）。
    * 返回 `{ dispatched, offscreen }`，调用侧据此判断命令是否真的走了同一条点击路径。
    */
-  clickTile(tile: TilePoint, options: { focus?: boolean } = {}): { dispatched: boolean; offscreen: boolean } {
+  clickTile(tile: TilePoint, options: { focus?: boolean; button?: 0 | 2 } = {}): { dispatched: boolean; offscreen: boolean } {
     if (!this.data) return { dispatched: false, offscreen: false };
     const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
     const projected = this.project(rounded);
     const offscreen = !projected?.visible;
     if (offscreen && options.focus !== false) this.focus(rounded);
-    this.onPick(rounded, { offscreen });
+    if (options.button === 2) {
+      // 右键（R20-A 测试接口 `__planetThree.clickTile(tile, 2)`）：在画布上合成一次
+      // contextmenu，走**真实右键同一条路径**（组件的 onContextMenu → pickAt → onContextTile：
+      // 情境指令/退出模式）。合成事件冒泡到画布父节点，React 的 onContextMenu 照常收到。
+      const projectedPoint = this.project(rounded);
+      const canvas = this.renderer.domElement;
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true, button: 2,
+        clientX: rect.left + (projectedPoint?.x ?? rect.width / 2),
+        clientY: rect.top + (projectedPoint?.y ?? rect.height / 2),
+      }));
+      return { dispatched: true, offscreen };
+    }
+    const buildingId = this.buildingCoveringTile(rounded);
+    this.onPick(rounded, { offscreen, ...(buildingId ? { buildingId } : {}) });
     return { dispatched: true, offscreen };
+  }
+  /**
+   * 按格找命中的建筑（`clickTile` 与批量实例拾取用）：扫描占地含该格的建筑，
+   * 取离该格最近的一个（多格建筑点在任意一格都返回同一栋，避免落到相邻格选错对象）。
+   */
+  private buildingCoveringTile(tile: TilePoint): string | undefined {
+    const planet = this.data?.planet;
+    if (!planet) return undefined;
+    const faceSize = planet.surface.face_size;
+    let best: { id: string; distance: number } | undefined;
+    for (const building of Object.values(planet.buildings ?? {})) {
+      const footprint = getBuildingFootprint(building);
+      for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
+        const cell = surfaceOffset(building.position, dx, dy, faceSize);
+        if (cell.x !== tile.x || cell.y !== tile.y) continue;
+        const distance = Math.abs(building.position.x - tile.x) + Math.abs(building.position.y - tile.y);
+        if (!best || distance < best.distance) best = { id: building.id, distance };
+      }
+    }
+    return best?.id;
   }
   private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
     return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
@@ -1411,8 +1470,10 @@ export class PlanetThreeScene {
       if (beltTile) return { tile: beltTile, buildingId: this.conveyors.resolveBuilding(hit) ?? undefined };
       const sorter = this.sorterRigs.resolveHit(hit);
       if (sorter) return { tile: sorter.tile, buildingId: sorter.id };
+      // 批量实例（建筑/资源）按**实例所属建筑**回 id（不是实例所在格）：3×3/5×5 建筑点边角
+      // 也要选中整栋，而不是落到相邻格或只给格坐标（试玩 1019 C：补给站要点两次）。
       const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
-      if (batchTile) return { tile: batchTile };
+      if (batchTile) return { tile: batchTile, buildingId: this.buildingCoveringTile(batchTile) };
       object = hit.object;
       while (object && object !== this.world) { if (object.userData.tile) return { tile: object.userData.tile as TilePoint }; object = object.parent; }
       if (hit.object === this.surface || hit.object.userData.terrain) {
