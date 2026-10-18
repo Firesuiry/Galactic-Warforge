@@ -3,6 +3,7 @@ import { Bug, Crosshair, Globe2, House, Layers, Minus, Plus, Settings2 } from 'l
 import { useShallow } from 'zustand/react/shallow';
 import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './planet-map-capture';
+import type { PlanetThreeViewportSnapshot } from './PlanetPanels';
 import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
 import { applyBeltStrokeStep, assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, type BeltElevationPlacement } from './belt-stroke';
 import { DEFAULT_BELT_DIRECTION, isConveyorBeltBuilding } from './build-workflow';
@@ -68,6 +69,8 @@ interface Props {
   theaterControls?: ReactNode;
   /** 黑雾是否对当前玩家敌对（summary 玩家 dark_fog.hostile）。 */
   darkFogHostile?: boolean;
+  /** 相机视口快照（R20-A ④）：调试面板的分享链接/视口 JSON 在 3D 下按中心格 + zoom + tilt 导出。 */
+  onViewportChange?: (viewport: PlanetThreeViewportSnapshot | null) => void;
 }
 
 export function PlanetMapThree(props: Props) {
@@ -317,6 +320,18 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
+    const reportViewport = () => {
+      const state = renderer.getCameraState();
+      latest.current.onViewportChange?.({
+        center: state.center ? { x: state.center.x, y: state.center.y } : null,
+        altitude: state.altitude,
+        tilt: state.tilt,
+        width: host.current?.clientWidth ?? 0,
+        height: host.current?.clientHeight ?? 0,
+      });
+    };
+    const unsubscribeZoom = renderer.onZoom(reportViewport);
+    reportViewport();
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
     if (exposeHook) installTestApi(renderer);
@@ -340,6 +355,8 @@ export function PlanetMapThree(props: Props) {
     }, 500);
     return () => {
       clearInterval(timer);
+      unsubscribeZoom();
+      latest.current.onViewportChange?.(null);
       unsubscribeBattle();
       renderer.destroy();
       scene.current = null;

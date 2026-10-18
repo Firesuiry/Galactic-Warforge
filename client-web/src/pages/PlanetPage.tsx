@@ -32,7 +32,7 @@ import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { initialBuildDirection } from "@/features/planet-map/build-workflow";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
 import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
-import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
+import { PlanetLayerPanel, type PlanetThreeViewportSnapshot } from "@/features/planet-map/PlanetPanels";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -140,6 +140,8 @@ export function PlanetPage() {
   );
   const { planetId = "" } = useParams();
   const captureRef = useRef<PlanetMapCapture | null>(null);
+  // 3D 相机视口快照（R20-A ④）：调试面板在 3D 下按中心格 + zoom + tilt 导出分享链接/视口 JSON。
+  const [threeViewport, setThreeViewport] = useState<PlanetThreeViewportSnapshot | null>(null);
   // 跨场景窗口的己方实体累积（只增不减）：新手引导是「有没有建过」的历史推导，
   // 不能用只覆盖相机窗口的 sceneQuery 数据——镜头一平移，窗口外的基地就从响应里
   // 消失，引导会从 4/8 回退到 1/8（试玩报告 2026-10-07 阻断级 4）。
@@ -917,6 +919,7 @@ export function PlanetPage() {
           onContextTile={interactions.contextTile}
           onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
+          onViewportChange={setThreeViewport}
           onSelectEntity={() => {
             setActiveDetailPanel("selection");
             toggleDrawer(true);
@@ -927,7 +930,7 @@ export function PlanetPage() {
           theaters={theatersQuery.data?.theaters}
           /* 3D 左下那一列的「图层与视角」与 2D 工具条是**同一份**面板：
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
-          layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
+          layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} threeDimensional />}
           theaterControls={(
             <PlanetTheaterControls
               onChanged={() => { void theatersQuery.refetch(); }}
@@ -1093,6 +1096,7 @@ export function PlanetPage() {
         />
         <PlanetDebugPanel
           capture={captureRef.current}
+          threeViewport={isThree ? threeViewport : null}
           catalog={catalog}
           currentTick={planet.tick}
           game={currentGameQuery.data}

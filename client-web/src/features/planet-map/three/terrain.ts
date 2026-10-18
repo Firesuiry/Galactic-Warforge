@@ -40,6 +40,8 @@ interface SurfaceState {
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewDimensions: { value: THREE.Vector2 };
     swTime: { value: number };
+    /** 迷雾图层开关（`layers.fog`）：0 = 不画未探索的测绘面纱（已探索区域不受影响）。 */
+    swFogEnabled: { value: number };
     swPatchBounds: {value: THREE.Vector4[]};
     swPatchUV: {value: THREE.Vector4[]};
   };
@@ -104,6 +106,7 @@ const SHADER_HEADER = /* glsl */`
   uniform vec2 swLocalDimensions;
   uniform vec2 swOverviewDimensions;
   uniform float swTime;
+  uniform float swFogEnabled;
   uniform vec4 swPatchBounds[7];
   uniform vec4 swPatchUV[7];
   float swHash(vec3 p) {
@@ -232,7 +235,9 @@ export const SHADER_COLOR = /* glsl */`
   // Fog frontier edge light: a soft band where the unknown region meets explored
   // land, so the boundary reads as a scan frontier instead of a hard cut.
   swVeil += vec3(0.055, 0.105, 0.115) * swKnownEdge * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
-  swAlbedo = mix(swVeil, swAlbedo, swKnown);
+  // 迷雾图层关闭：面纱让位给已知地表（不泄漏未知地形数据，只是不再盖一层深色）。
+  float swVeilMix = mix(1.0, swKnown, swFogEnabled);
+  swAlbedo = mix(swVeil, swAlbedo, swVeilMix);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
   float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
@@ -249,7 +254,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
     swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
-    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 },
+    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 }, swFogEnabled: { value: 1 },
   };
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
   material.onBeforeCompile = (shader) => {
@@ -269,7 +274,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v4';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v5';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';
@@ -350,4 +355,13 @@ export function disposePlanetSurface(mesh: PlanetSurface) {
 export function updatePlanetSurfaceTime(mesh: PlanetSurface, seconds: number) {
   const state = states.get(mesh);
   if (state) state.uniforms.swTime.value = seconds;
+}
+
+/**
+ * 迷雾图层开关（第 20 轮 R20-A ④）：`layers.fog` 控制未探索区域的测绘面纱是否绘制。
+ * 只改 uniform（无重编译、无贴图重建）；已探索区域本来就不画面纱，不受影响。
+ */
+export function setPlanetSurfaceFogVisible(mesh: PlanetSurface, visible: boolean) {
+  const state = states.get(mesh);
+  if (state) state.uniforms.swFogEnabled.value = visible ? 1 : 0;
 }

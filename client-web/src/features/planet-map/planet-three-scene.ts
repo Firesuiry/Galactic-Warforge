@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFogVisible } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
@@ -118,6 +118,8 @@ export class PlanetThreeScene {
   private frame = 0;
   private destroyed = false;
   private altitude = 300;
+  /** 缩放监听（PlanetMapThree 用它把相机状态写进调试面板的 3D 视口快照）。 */
+  private zoomListener?: (state: { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean }) => void;
   /** 左键按下/抬起与指针捕获（画布外抬起、捕获丢失等异常序列的兜底收尾）。 */
   private readonly press: PointerPress;
   private readonly composer: EffectComposer;
@@ -338,6 +340,9 @@ export class PlanetThreeScene {
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
+    // `layers.fog`（R20-A ④）：未探索区域的测绘面纱是地表着色器的一部分，不在 groupByLayer 里。
+    // 局部高精度表面与主球面共用同一个材质/ uniforms，改一次即可。
+    setPlanetSurfaceFogVisible(this.surface, interaction.layers.fog ?? true);
     this.updateMarks();
     this.renderer.domElement.style.cursor = interaction.interactionMode.kind === 'inspect' ? 'grab' : 'crosshair';
   }
@@ -1270,6 +1275,12 @@ export class PlanetThreeScene {
     if (this.altitude > 190) this.groundView = false;
     else if (this.altitude < 130) this.groundView = true;
     this.updateCamera();
+    this.zoomListener?.(this.getCameraState());
+  }
+  /** 订阅相机缩放状态（调试面板的 3D 视口快照）；返回退订函数。 */
+  onZoom(listener: (state: { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean }) => void) {
+    this.zoomListener = listener;
+    return () => { if (this.zoomListener === listener) this.zoomListener = undefined; };
   }
   private updateCamera() {
     this.camera.near = Math.max(0.0001, this.altitude * 0.05);

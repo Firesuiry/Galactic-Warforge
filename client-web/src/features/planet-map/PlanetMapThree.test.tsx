@@ -11,6 +11,8 @@ let pickResult: { x: number; y: number } | null = null;
 let dragPaths: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)[] = [];
 let onHover: ((tile: { x: number; y: number }) => void) | undefined;
 let onMiss: (() => void) | undefined;
+/** +/- 缩放键：记录场景收到的 zoom 倍率。 */
+let zoomCalls: number[] = [];
 
 vi.mock('./planet-three-scene', () => ({
   PlanetThreeScene: class {
@@ -29,7 +31,9 @@ vi.mock('./planet-three-scene', () => ({
     setInteraction() {}
     focus() {}
     orbit() {}
-    zoom() {}
+    zoom(factor: number) { zoomCalls.push(factor); }
+    getCameraState() { return { center: { x: 4, y: 4 }, altitude: 12, tilt: 0.65, groundView: true }; }
+    onZoom() { return () => {}; }
     setTilt() {}
     pickAt() { return pickResult; }
     setBeltDragPath(path: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)) { dragPaths.push(path); }
@@ -50,6 +54,7 @@ afterEach(() => {
   onMiss = undefined;
   pickResult = null;
   dragPaths = [];
+  zoomCalls = [];
 });
 
 /** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
@@ -548,5 +553,142 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     drag(host, 'pointerUp');
     const calls = onInteractTile.mock.calls.map(([, placement]) => placement.elevation);
     expect(calls).toEqual([0, 1, 1, 1]);
+  });
+});
+
+describe('3D 状态行（R20-A ②）', () => {
+  const scenario = () => getFixtureScenario('baseline');
+
+  it('选中建筑/单位/小队时显示与 2D 同一套选中文案', () => {
+    const { container } = render(<PlanetMapThree planet={scenario().planets['planet-1-1']} />);
+    act(() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: 'smelter-1', position: { x: 3, y: 3, z: 0 } }));
+    const status = container.querySelector('.planet-three__nav-status')!;
+    expect(status).toHaveTextContent('建筑 smelter-1');
+    act(() => usePlanetViewStore.getState().setSelected({ kind: 'unit', id: 'worker-1', position: { x: 0, y: 3, z: 0 } }));
+    expect(status).toHaveTextContent('单位 worker-1');
+    act(() => usePlanetViewStore.getState().setSelected({ kind: 'squad', id: 'squad-1', position: { x: 0, y: 3, z: 0 } }));
+    expect(status).toHaveTextContent('小队 squad-1');
+  });
+
+  it('建造/战区模式提示与 2D 文案逐字一致；框选数与小队数各有提示', () => {
+    const { container } = render(<PlanetMapThree planet={scenario().planets['planet-1-1']} />);
+    const status = container.querySelector('.planet-three__nav-status')!;
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' }));
+    expect(status).toHaveTextContent('建造模式：点击放置 · 右键/Esc 取消');
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    expect(status).toHaveTextContent('战区划定：主战区 · 左键拖拽矩形画出区域 · 右键/Esc 退出');
+    expect(status.querySelector('.planet-three__nav-status-line--zone')).not.toBeNull();
+    act(() => usePlanetViewStore.getState().setSelectedUnits(['a', 'b']));
+    expect(status).toHaveTextContent('已框选 2 个单位');
+    act(() => usePlanetViewStore.getState().setSelectedSquads(['squad-1', 'squad-2']));
+    expect(status).toHaveTextContent('已选 2 个小队');
+  });
+
+  it('没有悬停/选中/模式时状态行不留空壳', () => {
+    const { container } = render(<PlanetMapThree planet={scenario().planets['planet-1-1']} />);
+    expect(container.querySelector('.planet-three__nav-status')?.childElementCount).toBe(0);
+  });
+});
+
+describe('3D 缩放快捷键与 Esc（R20-A ④）', () => {
+  it('+ / = 放大，- 缩小；输入框聚焦时不抢按键', () => {
+    render(<><input aria-label="聊天输入" /><PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} /></>);
+    fireEvent.keyDown(window, { key: '+' });
+    fireEvent.keyDown(window, { key: '=' });
+    fireEvent.keyDown(window, { key: '-' });
+    expect(zoomCalls).toEqual([1.4, 1.4, 1 / 1.4]);
+    const input = screen.getByLabelText('聊天输入');
+    input.focus();
+    fireEvent.keyDown(input, { key: '+' });
+    expect(zoomCalls).toHaveLength(3);
+  });
+
+  it('Esc 在 inspect 模式同时清空小队选择与单位/选中', () => {
+    render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    act(() => {
+      const store = usePlanetViewStore.getState();
+      store.setSelected({ kind: 'squad', id: 'squad-1', position: { x: 0, y: 3, z: 0 } });
+      store.setSelectedSquads(['squad-1', 'squad-2']);
+    });
+    expect(usePlanetViewStore.getState().selectedSquads).toEqual(['squad-1', 'squad-2']);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    const store = usePlanetViewStore.getState();
+    expect(store.selectedSquads).toEqual([]);
+    expect(store.selected).toBeNull();
+  });
+});
+
+describe('3D 战区拖拽（R20-A ③）', () => {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  }
+  beforeEach(() => {
+    vi.stubGlobal('PointerEvent', PointerEventPolyfill);
+  });
+
+  function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp', init: Record<string, unknown> = {}) {
+    const target = host as HTMLElement & { setPointerCapture?: () => void; releasePointerCapture?: () => void; hasPointerCapture?: () => boolean };
+    target.setPointerCapture = () => {};
+    target.releasePointerCapture = () => {};
+    target.hasPointerCapture = () => true;
+    const fire = (fireEvent as unknown as Record<string, (el: HTMLElement, init: object) => void>)[type];
+    fire(host, { button: 0, pointerId: 1, clientX: 0, clientY: 0, ...init });
+  }
+
+  it('左键拖矩形：拖拽中出预览，松手按两角格子换算圆心+半径', () => {
+    const onDefineZone = vi.fn();
+    const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    const host = container.querySelector('.planet-three') as HTMLElement;
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+
+    pickResult = { x: 10, y: 20 };
+    drag(host, 'pointerDown', { clientX: 100, clientY: 100 });
+    pickResult = { x: 30, y: 40 };
+    drag(host, 'pointerMove', { clientX: 200, clientY: 180 });
+    expect(screen.getByTestId('planet-three-zone-rect')).toBeInTheDocument();
+    drag(host, 'pointerUp', { clientX: 200, clientY: 180 });
+
+    // 圆心 = 两角中点，半径 = 半宽/半高取大（theaterZoneFromDragRect 同口径）。
+    expect(onDefineZone).toHaveBeenCalledWith({ position: { x: 20, y: 30, z: 0 }, radius: 10 });
+    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
+    // 划定模式保持（可连续画多个区域，与 2D 一致）。
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('theater_zone');
+  });
+
+  it('没拖动（单击）不定义战区；Esc 清预览并退出模式', () => {
+    const onDefineZone = vi.fn();
+    const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    const host = container.querySelector('.planet-three') as HTMLElement;
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    pickResult = { x: 5, y: 5 };
+    drag(host, 'pointerDown', { clientX: 10, clientY: 10 });
+    drag(host, 'pointerUp', { clientX: 11, clientY: 11 });
+    expect(onDefineZone).not.toHaveBeenCalled();
+
+    drag(host, 'pointerDown', { clientX: 10, clientY: 10 });
+    drag(host, 'pointerMove', { clientX: 90, clientY: 90 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
+    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
+  });
+});
+
+describe('__planetThree 测试接口（R20-A ⑤）', () => {
+  it('暴露 tileScreenPos/entityScreenPos/clickTile/dragTiles，坐标是页面 CSS 像素', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    render(<PlanetMapThree planet={scenario.planets['planet-1-1']} />);
+    const api = (window as unknown as { __planetThree?: Record<string, unknown> }).__planetThree;
+    // vitest 里 import.meta.env.DEV 为真 → 测试钩子暴露。
+    expect(api).toBeTruthy();
+    for (const name of ['tileScreenPos', 'entityScreenPos', 'clickTile', 'dragTiles']) {
+      expect(typeof api![name]).toBe('function');
+    }
+    // 场景 mock 的 project 返回 null → 接口给 null（而不是抛错）。
+    expect((api!.tileScreenPos as (t: { x: number; y: number }) => unknown)({ x: 1, y: 1 })).toBeNull();
   });
 });

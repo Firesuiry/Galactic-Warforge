@@ -58,7 +58,9 @@ import {
   selectionLabel,
   summarizeEvent,
   toTilePoint,
+  type PlanetLayerVisibility,
   type PlanetRenderView,
+  type SelectedEntity,
 } from "@/features/planet-map/model";
 import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
 import { beltElevation } from "@/features/planet-map/logistics-tier";
@@ -744,11 +746,18 @@ interface PlanetLayerPanelProps {
   networks?: PlanetNetworksView;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+  /**
+   * 3D 视图（R20-A ④）：缩放由 3D 相机（滚轮/±按钮）负责，2D 的缩放档按钮没有意义；
+   * `layers.terrain` 在 3D 里不是独立图层（地形与测绘面纱在同一张贴图上），
+   * 勾掉它只会让开关与画面不一致——两者在 3D 下都不渲染。
+   */
+  threeDimensional?: boolean;
 }
 export function PlanetLayerPanel({
   networks,
   planet,
   runtime,
+  threeDimensional = false,
 }: PlanetLayerPanelProps) {
   const {
     camera,
@@ -794,7 +803,9 @@ export function PlanetLayerPanel({
       <section className="planet-side-section">
         <div className="section-title">图层与视角</div>
         <div className="toggle-grid">
-          {Object.entries(layers).map(([key, enabled]) => (
+          {Object.entries(layers)
+            .filter(([key]) => !(threeDimensional && key === "terrain"))
+            .map(([key, enabled]) => (
             <label className="toggle-pill" key={key}>
               <input
                 checked={enabled}
@@ -808,7 +819,9 @@ export function PlanetLayerPanel({
           ))}
         </div>
         <div className="zoom-actions">
-          {PLANET_ZOOM_LEVELS.map((zoomLevel, index) => (
+          {/* 3D 只保留「回到基地」：缩放档按钮走 2D 的 requestZoom（tileSize 换算），
+              3D 相机不消费它（R20-A ④）。 */}
+          {threeDimensional ? null : PLANET_ZOOM_LEVELS.map((zoomLevel, index) => (
             <button
               className={
                 index === camera.zoomIndex
@@ -1872,10 +1885,25 @@ export function PlanetActivityPanel({
   );
 }
 
+/**
+ * 3D 相机视口快照（R20-A ④）：调试面板的分享链接/视口 JSON 在 3D 下按
+ * 「中心格 + zoom + tilt」导出，不再用 2D 的 tileSize/offset 视口矩形。
+ */
+export interface PlanetThreeViewportSnapshot {
+  center: { x: number; y: number } | null;
+  /** 相机高度（世界单位，与 2D 的 tileSize 同为「缩放」量纲）。 */
+  altitude: number;
+  tilt: number;
+  width: number;
+  height: number;
+}
+
 interface PlanetDebugPanelProps {
   catalog?: CatalogView;
-  /** 行星地图截图捕获句柄（Pixi extract）；Pixi 尚未就绪时为 null。 */
+  /** 行星地图截图捕获句柄（Pixi extract / 3D 画布）；尚未就绪时为 null。 */
   capture: PlanetMapCapture | null;
+  /** 3D 相机快照：提供时分享链接/视口 JSON 走 3D 口径（中心格 + zoom + tilt）。 */
+  threeViewport?: PlanetThreeViewportSnapshot | null;
   currentTick: number;
   /** 本局概要（GET /games/current）：判断 admin 身份与多人门禁提示。 */
   game?: GameSummary;
@@ -1887,9 +1915,40 @@ interface PlanetDebugPanelProps {
   runtime?: PlanetRuntimeView;
 }
 
+/**
+ * 3D 视口导出（R20-A ④）：分享链接与视口 JSON 的 3D 口径，抽成纯函数便于单测。
+ * 2D 的 offset/tileSize 视口矩形在 3D 下不适用——相机状态是「中心格 + 高度(zoom) + 俯仰」。
+ */
+export function buildThreeShareUrl(options: {
+  href: string;
+  selected: SelectedEntity | null;
+  layers: PlanetLayerVisibility;
+  viewport: PlanetThreeViewportSnapshot;
+}): string {
+  const params = buildViewLinkSearchParams(
+    options.selected,
+    options.layers,
+    {
+      minX: options.viewport.center?.x ?? 0,
+      minY: options.viewport.center?.y ?? 0,
+      maxX: options.viewport.center?.x ?? 0,
+      maxY: options.viewport.center?.y ?? 0,
+      centerX: options.viewport.center?.x ?? 0,
+      centerY: options.viewport.center?.y ?? 0,
+    },
+    options.viewport.altitude,
+  );
+  params.set("view", "3d");
+  params.set("tilt", String(Number(options.viewport.tilt.toFixed(3))));
+  const url = new URL(options.href);
+  url.search = params.toString();
+  return url.toString();
+}
+
 export function PlanetDebugPanel({
   catalog,
   capture,
+  threeViewport,
   currentTick,
   game,
   networks,
@@ -1998,6 +2057,10 @@ export function PlanetDebugPanel({
     if (typeof window === "undefined") {
       return "";
     }
+    // 3D（R20-A ④）：视口 = 中心格 + zoom（相机高度）+ tilt，2D 的 offset/tileSize 不适用。
+    if (threeViewport) {
+      return buildThreeShareUrl({ href: window.location.href, selected, layers, viewport: threeViewport });
+    }
     const tileSize = getPlanetRenderTileSize(
       camera.zoomIndex,
       capture?.clientWidth || planet.map_width,
@@ -2036,6 +2099,40 @@ export function PlanetDebugPanel({
   }
 
   function exportViewportJson() {
+    if (threeViewport) {
+      // 3D：整张行星都在场景里，可见集合不按 2D 视口矩形裁剪；视口只记录相机状态。
+      const payload = buildViewportExport({
+        planet,
+        runtime,
+        networks,
+        catalog,
+        selection: selected,
+        layers,
+        camera,
+        tileSize: 1,
+        viewportWidth: threeViewport.width || 1,
+        viewportHeight: threeViewport.height || 1,
+        shareUrl: buildShareUrl(),
+      });
+      const withCamera = {
+        ...payload,
+        viewport: {
+          ...payload.viewport,
+          mode: "3d" as const,
+          center: threeViewport.center,
+          zoom: threeViewport.altitude,
+          tilt: threeViewport.tilt,
+          width: threeViewport.width,
+          height: threeViewport.height,
+        },
+      };
+      downloadData(
+        `${planet.planet_id}-viewport.json`,
+        JSON.stringify(withCamera, null, 2),
+        "application/json",
+      );
+      return;
+    }
     const tileSize = getPlanetRenderTileSize(
       camera.zoomIndex,
       capture?.clientWidth || planet.map_width,

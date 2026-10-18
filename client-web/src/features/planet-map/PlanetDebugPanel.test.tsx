@@ -38,10 +38,11 @@ function adminGame(): GameSummary {
   };
 }
 
-function renderPanel(overrides: { game?: GameSummary; currentTick?: number } = {}) {
+function renderPanel(overrides: { game?: GameSummary; currentTick?: number; threeViewport?: Parameters<typeof PlanetDebugPanel>[0]["threeViewport"] } = {}) {
   return render(
     <PlanetDebugPanel
       capture={null}
+      threeViewport={overrides.threeViewport}
       currentTick={overrides.currentTick ?? 120}
       game={overrides.game ?? adminGame()}
       onPullEvents={vi.fn().mockResolvedValue(undefined)}
@@ -177,5 +178,35 @@ describe("PlanetDebugPanel 快进控件布局", () => {
     expect(screen.getByText(/快进需要 admin 身份/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "开始快进" })).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
+  });
+});
+
+describe("PlanetDebugPanel 3D 视口（R20-A ④）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSessionStore.getState().setSession({ serverUrl: "http://server", playerId: "p1", playerKey: "key_player_1" });
+    usePlanetViewStore.getState().toggleDebugOpen();
+  });
+
+  it("分享链接按 3D 中心格 + zoom(相机高度) + tilt 生成，不再带 2D 的 offset 视口", async () => {
+    const { buildThreeShareUrl } = await import("./PlanetPanels");
+    const url = new URL(buildThreeShareUrl({
+      href: "http://localhost/planet/planet-1-1",
+      selected: { kind: "building", id: "b-1", position: { x: 42, y: 17, z: 0 } },
+      layers: { terrain: true, buildings: true, units: true, resources: true, fog: true, logistics: false, power: true, selection: true, grid: true, alerts: true, routes: true, zones: true } as never,
+      viewport: { center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.6549, width: 1200, height: 800 },
+    }));
+    expect(url.searchParams.get("x")).toBe("42");
+    expect(url.searchParams.get("y")).toBe("17");
+    expect(url.searchParams.get("zoom")).toBe("3.5");
+    expect(url.searchParams.get("tilt")).toBe("0.655");
+    expect(url.searchParams.get("view")).toBe("3d");
+    expect(url.searchParams.get("select")).toContain("b-1");
+  });
+
+  it("面板在 3D 快照下渲染（分享/导出入口存在）", () => {
+    renderPanel({ threeViewport: { center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.65, width: 1200, height: 800 } });
+    expect(screen.getByText("复制视角链接")).toBeInTheDocument();
+    expect(screen.getByText("导出视角 JSON")).toBeInTheDocument();
   });
 });

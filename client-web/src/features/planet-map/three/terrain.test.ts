@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
-import { SHADER_COLOR, createPlanetSurface, disposePlanetSurface, updatePlanetSurface } from './terrain';
+import { SHADER_COLOR, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFogVisible, updatePlanetSurface } from './terrain';
 
 function scene(): PlanetSceneView {
   return {
@@ -94,7 +94,7 @@ describe('3D player-visible terrain', () => {
     expect(SHADER_COLOR).toContain('* swKnown;');
     expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown)');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v5');
     disposePlanetSurface(mesh);
   });
 
@@ -108,7 +108,7 @@ describe('3D player-visible terrain', () => {
     expect(edgeBlock).not.toContain('swLocalColor');
     expect(SHADER_COLOR).toContain('swKnownEdge *');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v4');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v5');
     disposePlanetSurface(mesh);
   });
 
@@ -131,4 +131,22 @@ describe('3D player-visible terrain', () => {
     disposePlanetSurface(mesh);
   });
 
+});
+
+describe('layers.fog 控制测绘面纱（R20-A ④）', () => {
+  it('着色器按 swFogEnabled 在「面纱」与「已知地表」之间插值；关闭时已探索区域不受影响', () => {
+    // uniform 声明在 SHADER_HEADER（与 swTime 同处），插值在 SHADER_COLOR。
+    expect(SHADER_COLOR).toContain('float swVeilMix = mix(1.0, swKnown, swFogEnabled);');
+    expect(SHADER_COLOR).toContain('swAlbedo = mix(swVeil, swAlbedo, swVeilMix);');
+  });
+
+  it('setPlanetSurfaceFogVisible 只改 uniform（同一材质、无重编译）', () => {
+    const mesh = createPlanetSurface(10);
+    // 直接改 uniform 不会触发 needsUpdate；重建表面时默认回到「面纱可见」。
+    expect(() => setPlanetSurfaceFogVisible(mesh, false)).not.toThrow();
+    expect(() => setPlanetSurfaceFogVisible(mesh, true)).not.toThrow();
+    // 未注册的网格（例如测试里手工 new 的 Mesh）静默忽略。
+    expect(() => setPlanetSurfaceFogVisible({} as never, false)).not.toThrow();
+    disposePlanetSurface(mesh);
+  });
 });
