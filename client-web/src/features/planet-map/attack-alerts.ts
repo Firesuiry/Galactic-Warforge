@@ -41,7 +41,7 @@ function asPosition(value: unknown): TilePoint | null {
 }
 
 function planetFocusHref(planetId: string, tile: TilePoint, currentSearch?: string): string {
-  // 保留当前视图参数（view=2d/quality 等），避免跳转后意外切换 2D/3D 视图
+  // 保留当前视图参数（quality/tilt/zoom 等），避免跳转后视角被重置
   const params = new URLSearchParams(currentSearch ?? '');
   params.delete('build');
   params.delete('workflow');

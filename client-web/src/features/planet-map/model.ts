@@ -18,7 +18,6 @@ import type {
   Unit,
 } from "@shared/types";
 
-import type { PlanetSceneWindow } from "@/features/planet-map/store";
 import { beltElevation } from "@/features/planet-map/logistics-tier";
 import { isResearchStationBuildingType } from "@/features/production-alerts";
 import {
@@ -97,12 +96,6 @@ export interface SelectionExportPayload {
 }
 
 export type PlanetLayerVisibility = Record<PlanetLayerKey, boolean>;
-
-export interface PlanetCameraSnapshot {
-  offsetX: number;
-  offsetY: number;
-  zoomIndex: number;
-}
 
 export interface ViewportTileBounds {
   /** 可见展开图坐标范围，限制在地图内；跨面邻接由球面拓扑决定。 */
@@ -957,32 +950,6 @@ export function resolveSelectionFromQueryValue(
   return null;
 }
 
-/**
- * 小图轴（世界像素尺寸 < 视口）的居中偏移。
- * 用于初始相机与"聚焦/缩放"路径：小图在视口中居中而非顶左锚定。
- */
-export function centerCameraAxisOffset(worldPx: number, viewportPx: number) {
-  return (viewportPx - worldPx) / 2;
-}
-
-/**
- * 单轴相机偏移钳位：小图轴（worldPx < viewportPx）不允许地图中心被拖出视口
- * （偏移钳在 [center - viewport/2, center + viewport/2]，即地图中心 ∈ [0, viewport]）；
- * 大图轴维持现状不钳（自由拖拽）。
- */
-export function clampCameraAxisOffset(worldPx: number, viewportPx: number, offset: number) {
-  if (worldPx >= viewportPx) {
-    return offset;
-  }
-  const center = centerCameraAxisOffset(worldPx, viewportPx);
-  return clamp(offset, center - viewportPx / 2, center + viewportPx / 2);
-}
-
-/** 小图轴取居中、大图轴保留聚焦目标的相机偏移（聚焦基地/小图居中通用）。 */
-export function resolveFocusCameraAxisOffset(worldPx: number, viewportPx: number, focusedOffset: number) {
-  return worldPx < viewportPx ? centerCameraAxisOffset(worldPx, viewportPx) : focusedOffset;
-}
-
 /** 非负取模：(-4, 1000) → 996。 */
 export function wrapMod(value: number, size: number) {
   if (size <= 0) {
@@ -991,57 +958,12 @@ export function wrapMod(value: number, size: number) {
   return ((value % size) + size) % size;
 }
 
-/** Camera movement in the cut atlas never wraps to an unrelated cube face. */
-export function resolveCameraAxisOffset(worldPx: number, viewportPx: number, offset: number) {
-  return clampCameraAxisOffset(worldPx,viewportPx,offset);
-}
-
 /**
  * tile 的规范（unwrapped）坐标：映射到以 cut 为起点的一个周期 [cut, cut + size) 内。
  * 渲染层用它把真实 tile 摆到屏幕位置（如 cut=996 时 tile 2 → 1002）。
  */
 export function canonicalTileIndex(tile: number, cut: number, size: number) {
   return cut + wrapMod(tile - cut, size);
-}
-
-export function getViewportTileBounds(
-  planet: PlanetRenderView,
-  camera: PlanetCameraSnapshot,
-  tileSize: number,
-  viewportWidth: number,
-  viewportHeight: number,
-): ViewportTileBounds {
-  const mapWidth = Math.max(planet.map_width, 0);
-  const mapHeight = Math.max(planet.map_height, 0);
-  const wrapX = false;
-  const wrapY = false;
-  // 六面展开图的可见区域限制在 atlas 边界内。
-  const minX = wrapX
-    ? Math.floor(-camera.offsetX / tileSize)
-    : clamp(Math.floor(-camera.offsetX / tileSize), 0, Math.max(mapWidth - 1, 0));
-  const minY = wrapY
-    ? Math.floor(-camera.offsetY / tileSize)
-    : clamp(Math.floor(-camera.offsetY / tileSize), 0, Math.max(mapHeight - 1, 0));
-  const maxX = wrapX
-    ? Math.ceil((viewportWidth - camera.offsetX) / tileSize) - 1
-    : clamp(Math.ceil((viewportWidth - camera.offsetX) / tileSize) - 1, 0, Math.max(mapWidth - 1, 0));
-  const maxY = wrapY
-    ? Math.ceil((viewportHeight - camera.offsetY) / tileSize) - 1
-    : clamp(Math.ceil((viewportHeight - camera.offsetY) / tileSize) - 1, 0, Math.max(mapHeight - 1, 0));
-  const rawCenterX = (minX + maxX) / 2 || 0;
-  const rawCenterY = (minY + maxY) / 2 || 0;
-  return {
-    minX,
-    minY,
-    maxX,
-    maxY,
-    centerX: Number((wrapX ? wrapMod(rawCenterX, mapWidth || 1) : rawCenterX).toFixed(2)),
-    centerY: Number((wrapY ? wrapMod(rawCenterY, mapHeight || 1) : rawCenterY).toFixed(2)),
-    wrapX,
-    wrapY,
-    mapWidth,
-    mapHeight,
-  };
 }
 
 function isInsideBounds(position: Position, bounds: ViewportTileBounds | null | undefined) {
@@ -1484,23 +1406,14 @@ export function buildViewportExport(options: {
   catalog?: CatalogView;
   selection: SelectedEntity | null;
   layers: PlanetLayerVisibility;
-  camera: PlanetCameraSnapshot;
   tileSize: number;
   viewportWidth: number;
   viewportHeight: number;
   shareUrl: string;
-  /** 3D：按 scene 当前场景窗口裁剪（R20-A ⑥）；null = 不裁剪，导出整张行星。 */
+  /** 按 scene 当前场景窗口裁剪（R20-A ⑥）；null = 不裁剪，导出整张行星。 */
   bounds?: ViewportTileBounds | null;
 }) {
-  const bounds = options.bounds !== undefined
-    ? options.bounds
-    : getViewportTileBounds(
-      options.planet,
-      options.camera,
-      options.tileSize,
-      options.viewportWidth,
-      options.viewportHeight,
-    );
+  const bounds = options.bounds ?? null;
 
   const buildings = getBuildingList(options.planet)
     .filter((building) => isInsideBounds(building.position, bounds))
@@ -1570,61 +1483,6 @@ export function buildViewportExport(options: {
       power_coverage: powerCoverage,
       pipeline_nodes: pipelineNodes,
     },
-  };
-}
-
-const SCENE_WINDOW_ALIGNMENT = 32;
-const SCENE_WINDOW_PADDING = 24;
-const MIN_SCENE_WINDOW_SIZE = 96;
-const MAX_SCENE_WINDOW_SIZE = 320;
-
-export function buildSceneWindow(
-  planet: PlanetRenderView,
-  camera: PlanetCameraSnapshot,
-  tileSize: number,
-  viewportWidth: number,
-  viewportHeight: number,
-): PlanetSceneWindow {
-  const bounds = getViewportTileBounds(
-    planet,
-    camera,
-    tileSize,
-    viewportWidth,
-    viewportHeight,
-  );
-  const visibleWidth = Math.max(1, bounds.maxX - bounds.minX + 1);
-  const visibleHeight = Math.max(1, bounds.maxY - bounds.minY + 1);
-
-  const width = clamp(
-    visibleWidth + SCENE_WINDOW_PADDING * 2,
-    MIN_SCENE_WINDOW_SIZE,
-    Math.min(MAX_SCENE_WINDOW_SIZE, planet.map_width),
-  );
-  const height = clamp(
-    visibleHeight + SCENE_WINDOW_PADDING * 2,
-    MIN_SCENE_WINDOW_SIZE,
-    Math.min(MAX_SCENE_WINDOW_SIZE, planet.map_height),
-  );
-
-  const centerX = Math.floor((bounds.minX + bounds.maxX) / 2);
-  const centerY = Math.floor((bounds.minY + bounds.maxY) / 2);
-  const rawX = centerX - Math.floor(width / 2);
-  const rawY = centerY - Math.floor(height / 2);
-  const alignedX =
-    Math.floor(rawX / SCENE_WINDOW_ALIGNMENT) * SCENE_WINDOW_ALIGNMENT;
-  const alignedY =
-    Math.floor(rawY / SCENE_WINDOW_ALIGNMENT) * SCENE_WINDOW_ALIGNMENT;
-
-  // 环绕轴跨接缝时（可见范围越出地图任一侧），服务端窗口无法表达
-  // "尾部 + 头部"两段并集，退化为整轴拉取（仅贴边浏览时触发）。
-  const crossX = Boolean(bounds.wrapX) && (bounds.minX < 0 || bounds.maxX >= planet.map_width);
-  const crossY = Boolean(bounds.wrapY) && (bounds.minY < 0 || bounds.maxY >= planet.map_height);
-
-  return {
-    x: crossX ? 0 : clamp(alignedX, 0, Math.max(planet.map_width - width, 0)),
-    y: crossY ? 0 : clamp(alignedY, 0, Math.max(planet.map_height - height, 0)),
-    width: crossX ? planet.map_width : width,
-    height: crossY ? planet.map_height : height,
   };
 }
 

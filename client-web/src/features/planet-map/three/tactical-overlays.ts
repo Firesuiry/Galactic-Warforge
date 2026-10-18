@@ -70,7 +70,7 @@ export function footprintCenterTile(origin: TilePoint, footprint: { width: numbe
   return normalTile(sum.normalize(), faceSize);
 }
 
-/** 施工进度（与 2D planet-scene.constructionProgress 同源字段；2D 删除后这是唯一实现）。 */
+/** 施工进度（remaining/total，与状态行同一口径）。 */
 export function constructionBarProgress(task: { state: string; remaining_ticks?: number; total_ticks?: number }): number | null {
   if (task.state === 'completed') return 1;
   if (task.total_ticks === undefined || task.total_ticks <= 0 || task.remaining_ticks === undefined) return null;

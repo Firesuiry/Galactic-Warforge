@@ -48,7 +48,7 @@ export function createPlanetInvalidationScheduler(
     pending = {};
     const { serverUrl, playerId, planetId, systemId } = getScope();
     const queries: [keyof InvalidationFlags, QueryKey][] = [
-      ['scene', ['planet-scene', serverUrl, playerId, planetId]],
+      ['scene', ['planet-view', serverUrl, playerId, planetId]],
       ['runtime', ['planet-runtime', serverUrl, playerId, planetId]],
       ['networks', ['planet-networks', serverUrl, playerId, planetId]],
       ['summary', ['summary', serverUrl, playerId]],

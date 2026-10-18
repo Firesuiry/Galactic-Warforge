@@ -75,7 +75,7 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
 边界用例见 `conveyor_pipeline_test.go`（侧面汇入、带尾接建筑、分流器三路输出，每条都断言总数守恒）与
 `conveyor_throughput_test.go`（分档比例、紧 stack_limit、混带守恒）。
 
-## 3. 多层传送带（服务端 S2 + 网页 C + 2D D + 3D 主代理）
+## 3. 多层传送带（服务端 S2 + 网页 C + 3D 主代理）
 
 ### 3.1 数据模型
 
@@ -95,7 +95,7 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
 - 反过来：在有高架带的格子上造**非** `LowLogistics` 建筑（任一占地格）→ `POSITION_OCCUPIED`「上方有高架传送带」。
 - 拆除/摧毁按 building id，照常退料；高架带被摧毁不影响地面层。
 
-### 3.3 连接规则（服务端、3D、2D 三处必须同一算法）
+### 3.3 连接规则（服务端、3D 两处必须同一算法）
 
 带 A（高度 `a`，输出方向 `d`）的下游：沿 `SurfaceStep(A.pos, d)` 到邻格 `N`（跨面后方向为 `d'`）：
 
@@ -132,13 +132,15 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
 - 选中：3D 场景 `onPick(tile, { offscreen, buildingId? })`——命中高架带时带 `buildingId`，消费端
   （`use-planet-interactions`）有 `buildingId` 就直接选它，没有再按格找地面建筑。详情面板对传送带显示「高度 N 层」。
 
-### 3.6 视觉常量（3D/2D 共用，见 `client-web/src/features/planet-map/logistics-tier.ts`）
+### 3.6 视觉常量（见 `client-web/src/features/planet-map/logistics-tier.ts`）
 
 - 层高 `BELT_LEVEL_HEIGHT = .5` 格（3D）；坡道在两格之间按高度均值连成一条直坡。
 - 档位色：带 Mk.I `#f5b942` 琥珀黄 / Mk.II `#46d483` 绿 / Mk.III `#3ea6ff` 蓝；
   分拣器 Mk.I/II/III 同色，集装分拣器 `#b48cff` 紫。
 
-## 4. 画面（3D 由主代理亲自做；2D 由 D 按同一造型做）
+## 4. 画面
+
+> 2D 表现（分拣器俯视剪影、2D 带面方向纹、2D 带上圆点）已随 2D 视图删除（第 20 轮），本节只描述 3D。
 
 ### 4.1 分拣器：门控（道闸）式
 
@@ -152,7 +154,6 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
   空闲时停在取货端、夹爪悬在带面上方；停机冻结。
 - **端点**：取/放点由 `sorterEndpointStatuses` 求出的真实端点格决定——带子 = 带子中心线，建筑 = 建筑外壁内侧一点；
   没接上的一端按 1 格画并显示为暗色。
-- 2D（D）：俯视剪影 = 细长底板（取端→放端）+ 中心闸座方块 + 指向取货端的摆臂短杆 + 放货端小三角，档位色灯条。
 
 ### 4.2 传送带
 
@@ -178,7 +179,7 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
 
 - 逻辑测试：S2 在 `docs/guide/checkpoints/` 新增一层 `cp-belt-dsp`（父 `cp-base`）：只用玩家命令 + 快进，
   造一个立体交叉（地面横线穿过，竖线 0→1→1→0 跨过去）、一个侧面汇入、一台跨 2+1 步的 mk1 分拣器；契约：
-  两条线终点各自只收到自己的物品（`building_item_gte`）、分拣器 running 且搬过货。3D/2D 操作测试从这层读档。
+  两条线终点各自只收到自己的物品（`building_item_gte`）、分拣器 running 且搬过货。3D 操作测试从这层读档。
 - S1 的改动让 `cp-mining` 及下游的存档点失效：主代理合并 S1/S2 后统一 `checkpointbuild -from cp-mining` 重建。
 - 子代理只跑定向测试 + `go test ./internal/gamecore/ -short`（服务端）/ 相关 vitest + `tsc --noEmit`（网页）；
   长回归由主代理合并前跑一次。
@@ -190,7 +191,7 @@ DSP 标志性的分档彩色流向箭头反而被压掉了。本轮按 DSP 的**
 | S1 分拣器/带速逻辑 | `r19-sorter-logic` | `server/data/buildings.yaml`（只分拣器与传送带条目）、`sorter_settlement.go`、`conveyor_settlement.go`（只为 §2）、相关测试、客户端 `sorter-filter.ts` 文案 | 231 |
 | S2 多层带服务端 | `r19-elevation-server` | `server/internal/model`、`gamecore` 的建造/占格/带连接、`query`、`persistence`、`client-cli`、`docs/dev`、`docs/guide/checkpoints/cp-belt-dsp.json` | 232 |
 | C 网页建造交互 | `r19-elevation-web` | `PlanetBuildBar`、`store.ts`、`PlanetMapThree.tsx`、`belt-stroke.ts`、`build-workflow.ts`/预检、`use-planet-interactions.ts`、详情面板 | 233 |
-| D 2D 战术图 | `r19-2d` | `planet-scene.ts`、`planet-building-sprites.ts`、`PlanetMapPixi.tsx` 的拾取 | 234 |
+| D 2D 战术图（已作废，第 20 轮删除） | `r19-2d` | 无（`planet-scene.ts` / `planet-building-sprites.ts` / `PlanetMapPixi.tsx` 已删） | 234 |
 | 主代理 3D | `r19-visual` | `planet-three-scene.ts`、`three/*`（分拣器/传送带/ghost/物品） | 230 |
 
 冲突纪律：`conveyor_settlement.go` S1 只动吞吐相关、S2 动连接相关，各自小步提交，合并由主代理处理；

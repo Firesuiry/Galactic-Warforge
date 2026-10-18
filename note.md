@@ -4,7 +4,7 @@
 
 - 2026-09-18 DSP 行星内全量对齐进行中：冻结范围与验收基线见 [dsp行星内生产对齐范围](docs/guide/星球玩法覆盖与验收.md)；数据工具链 develop_tools/dsp-catalog（scope.json=冻结闭包，mapping.json=未匹配清单，catalogdump 生成 current_dump.json 后跑 build_scope.py 即得差距）。W1 目录对齐已合 main（物品102/资源18/配方118/科技147/建筑62，parity+closure 测试在 model/dsp_alignment_test.go）。
 - 用户要求：复杂游戏计算留在后端；浏览器负责 3D 表现与操作，目标为《戴森球计划》式工业与星球质感，不能把能转动的球体当成画质完成。
-- 行星与恒星系默认 3D，`?view=2d` 切平面战术；3D 必须实际浏览器验证建造、兵力移动和局势显示。
+- 行星与恒星系默认 3D（行星页的 2D「平面战术」视图已在第 20 轮删除，`?view=2d` 对行星页不再生效；恒星系页的 `/system?view=2d` 仍是星图 Pixi 视图）；3D 必须实际浏览器验证建造、兵力移动和局势显示。
 - Go：`/home/firesuiry/sdk/go1.25.0/bin`。前端构建和测试在 `client-web/` 运行。
 - 3D 开发、验证、素材与待完成事项见 [3D表现开发指南](docs/guide/3D与画质.md)；素材来源见 [3D素材来源](docs/guide/3D与画质.md)。
 - 用户已有的 AGENTS.md、B站 cookie/二维码、视频和下载目录不随本任务提交。只提交当前任务文件，测试通过后提交 main 并推远程。
@@ -106,3 +106,5 @@
 - 2026-10-18 第 18 轮：传送带与分拣器 DSP 化（用户反馈：报告 17 截图里的带子/夹爪和戴森球计划不像）。设计与尺寸口径见 [传送带与分拣器DSP化](docs/guide/传送带与分拣器DSP化.md)，试玩报告 `tmp/playtest-1018/report.md`（截图 18 张）。分拣器改成 DSP 机械臂（深色圆底座 + 窄铜环 + 压矮立柱 + 水平横臂 + 臂端夹爪，绕柱摆 π、夹爪升降、payload 用真实物品色）；摆角由**建造朝向 + 格切向**推出（不能按 `last_transfer` 端点连线：3×3 熔炉的 position 是占地左上角，会偏到 ~215°）。传送带剖面重做（底盘/侧护栏/合金顶盖/深色带面滚动 slat 贴图，端口统一 .5、连接端不封口、弯道 16 段）；带上物品 0.24 格、每格最多 4 个、随流向旋转、堵塞堆到输出端。建造 ghost 改「半透明分拣器机体 + 取货端→放货端绿色细箭头」（旧的两支大箭头 + 取/放徽章已删）；2D 战术图新增独立 `sorter` 原型。**联调修掉的两个真问题**：① 场景查询只由 SSE 事件驱动，挂机产线数据会冻住 → `use-planet-realtime` 在 `tick_completed` 上按 1.2s 节流补一次 scene 刷新；② 旧动画把「tick 差 > 20」的新搬运当历史跳过 → 只有首次观察才判历史，之后只看 sequence。测试：client-web vitest 87 files/767 tests、`tsc --noEmit`、生产 `vite build`、playwright `--project=war planet-build-workflow`（5 passed,1 skipped）全绿。
 
 - 2026-10-18 第 19 轮 cp-belt-dsp 补丁（给 UI 操作测试留余量；分支 r19-cpbelt2，方案 `tmp/r19-keep/r19-cp-belt-dsp-plan2.md`）：生成器收进仓库 `develop_tools/checkpoint-gen/cp_belt_dsp/`（`gen.py` + `ids.json`；`ROOT` 按脚本位置推算，`--probe` 探路读新建筑 ID、`--configure` 正式生成，输出 `docs/guide/checkpoints/cp-belt-dsp.json`）。在原有场景末尾追加：手搓磁铁→磁线圈/齿轮/电路板后补 2 台风机 (56,149)(58,149)（p1 电网发电 70 / 负载 43，余量 27）；死端带 (45,156..158) 向南 + 上料分拣器 (45,155) rot180（allow copper_ingot），往 C_src 放铜锭 8 后带尾 (45,158) 堆货、`blocked_ticks` 持续增长（真死端样本）；走廊地面带 (44,161)..(44,165) 向南（空带）。**走廊 x36..52,y161..165 除 x=44 这一列外保持全空，为 UI 拖拽测试保留**（沿 y=163 拖 1 层高架带从 x=38 到 x=50 跨过 x=44），以后别在这里建东西。契约 sorter running 11→12、新增 wind_turbine running 7；end_tick 13132→14832。重建：`cd server && go run ./cmd/checkpointbuild -root .. -checkpoint-dir <dir> -layer cp-belt-dsp`。
+
+- 2026-10-18 第 20 轮：行星页删除 2D「平面战术」视图（用户拍板只保留 3D；3D 不是 WebGL 回退，每个画面功能做两遍且高架/立交在 2D 只能凑）。删 `PlanetMapPixi` 等 16 个 2D 源文件与只服务 2D 的导出，`PlanetPage` 去掉 `isThree` 分支与视图切换按钮，store/model/CSS 同步清理；E2E 改走 `window.__planetThree` 的投影/查询接口（不重建 `data-entity-*` DOM 层），固定机位只保留 3D。契约与摸底见 [删除2D视图](docs/guide/删除2D视图.md)。

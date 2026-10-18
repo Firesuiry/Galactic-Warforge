@@ -373,7 +373,7 @@ export function PlanetMapThree(props: Props) {
         }
       }, tile => usePlanetViewStore.getState().setHoveredTile(tile), () => setPickNotice(PICK_MISS_NOTICE));
     } catch {
-      setError('无法启动 3D 画面，请启用浏览器硬件加速，或切换到平面战术视图。');
+      setError('无法启动 3D 画面，请启用浏览器硬件加速后重试。');
       return;
     }
     scene.current = renderer;
@@ -1071,9 +1071,8 @@ export function PlanetMapThree(props: Props) {
             取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
           </button>
         ) : null}
-        {/* 状态行（R20-A ②）：文案与 2D 的 .planet-map-canvas__status 逐字对齐——
-            悬停坐标、选中文案（selectionLabel）、模式提示、框选数、小队数。
-            2D 退役后这些是玩家判断「当前模式/选了什么」的唯一可见反馈。 */}
+        {/* 状态行（R20-A ②）：悬停坐标、选中文案（selectionLabel）、模式提示、框选数、
+            小队数——这些是玩家判断「当前模式/选了什么」的唯一可见反馈。 */}
         <div className="planet-three__nav-status">
           {statusLines.map(line => (
             <small

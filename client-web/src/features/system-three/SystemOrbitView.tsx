@@ -27,7 +27,7 @@ export function SystemOrbitView({ systemId }: { systemId: string }) {
         onSelectPlanet: id => { selectPlanet(id); selectFleet(null); },
         onSelectFleet: id => { selectFleet(id); selectPlanet(null); },
       });
-    } catch { setError('无法启动 3D 星系画面，请切换平面战术视图。'); return; }
+    } catch { setError('无法启动 3D 星系画面，请启用浏览器硬件加速后重试。'); return; }
     scene.current = renderer; setReady(true);
     // Projection helper for browser tests——与 PlanetMapThree 的 __planetThree 同口径（见 @/test-hooks）。
     const exposeHook = exposeTestHook();
@@ -58,7 +58,7 @@ export function SystemOrbitView({ systemId }: { systemId: string }) {
     </div>
     <div className="system-orbit__tools">
       <button className="secondary-button" onClick={()=>scene.current?.resetView()}>全系视角</button>
-      <Link className="secondary-button" to={`/system/${encodeURIComponent(systemId)}?view=2d`}>平面战术与调兵</Link>
+      <Link className="secondary-button" to="/war">军事指挥</Link>
     </div>
     {(query.isLoading||runtime.isLoading)&&<div className="system-orbit__notice" role="status">正在同步恒星系...</div>}
     {(error||query.error||runtime.error)&&<div className="system-orbit__notice" role="alert">{error||(query.error||runtime.error)?.message}</div>}
@@ -79,7 +79,7 @@ export function SystemOrbitView({ systemId }: { systemId: string }) {
         <p>公转周期 {planet.orbit?.period_days.toFixed(1)??'—'} 天 · 卫星 {planet.moon_count??0}</p>
         <Link className="secondary-button" to={`/planet/${encodeURIComponent(planet.planet_id)}`}>进入行星</Link>
         <button className="secondary-button" onClick={()=>scene.current?.focusPlanet(planet.planet_id)}>观测星体</button>
-      </> : fleet ? <><span className="system-orbit__eyebrow">舰队态势</span><h2>{fleet.fleet_id}</h2><p>{fleet.transit?'跃迁中':fleet.state==='attacking'?'交战中':'待命'}</p><Link className="secondary-button" to={`/system/${encodeURIComponent(systemId)}?view=2d`}>打开战术调度</Link></> : null}
+      </> : fleet ? <><span className="system-orbit__eyebrow">舰队态势</span><h2>{fleet.fleet_id}</h2><p>{fleet.transit?'跃迁中':fleet.state==='attacking'?'交战中':'待命'}</p><Link className="secondary-button" to="/war">打开战术调度</Link></> : null}
     </aside>}
     <div className="system-orbit__bodies" aria-label="已发现行星">
       {planets.map((body,i)=><button key={body.planet_id} className="system-orbit__body" aria-pressed={selectedPlanet===body.planet_id} onClick={()=>{selectPlanet(body.planet_id);selectFleet(null);}}>

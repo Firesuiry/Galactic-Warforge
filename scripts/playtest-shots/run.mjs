@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeApi, waitTicks, shoot3d, shoot2d, cropAndScale, sleep } from './lib.mjs';
+import { makeApi, waitTicks, shoot3d, cropAndScale, sleep } from './lib.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const [, , N, sceneName, outDirArg, ...rest] = process.argv;
@@ -33,7 +33,6 @@ if (compareDir && !fs.existsSync(compareDir)) {
   process.exit(2);
 }
 const server = `http://127.0.0.1:${Number(N) * 100}`;
-const web = `http://127.0.0.1:${Number(N) * 100 + 1}`;
 const driver = Number(N) * 100 + 2;
 const api = makeApi({ server });
 
@@ -84,8 +83,8 @@ const errors = [];
 for (const shot of scene.shots) {
   process.stdout.write(`[shots] ${shot.name} … `);
   try {
-    if (shot.kind === '2d') await shoot2d(driver, shot, outDir, web);
-    else await shoot3d(driver, shot, outDir);
+    if (shot.kind !== '3d') throw new Error(`不支持的机位类型 ${shot.kind}（2D 视图已删除，只支持 '3d'）`);
+    await shoot3d(driver, shot, outDir);
     const file = path.join(outDir, `${shot.name}.png`);
     if (!fs.existsSync(file)) throw new Error('截图未生成');
     const size = fs.statSync(file).size;

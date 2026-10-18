@@ -281,7 +281,9 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动', async ({
   await page.goto(`/planet/${planetId}?e2e=1`);
   const canvas = page.locator('.planet-three__surface canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('button', { name: '3D 星球', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  // R20-D：视图切换按钮组已随 2D 视图删除，只剩「恒星系 ↗」入口。
+  await expect(page.getByRole('button', { name: '3D 星球', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '恒星系 ↗', exact: true })).toBeVisible();
   await page.waitForFunction(() => Boolean((window as unknown as { __planetThree?: ThreeDebug }).__planetThree?.project));
   // §3.2 快捷栏按分类页签分页：切到风力涡轮机所在的分类（推荐位通常已在首页）。
   await revealBuildCard(page, 'wind_turbine');
