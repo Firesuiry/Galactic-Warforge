@@ -183,7 +183,7 @@ describe('多层传送带本地预检（第 19 轮 §3.2）', () => {
     )!.buildable).toBe(true);
   });
 
-  it('L2 物流塔豁免「上方有高架传送带」（服务端 build_commands.go 明确跳过）', () => {
+  it('物流塔走独立分支（只查宿主仓库）：同格有高架带也能建，风机仍被拦', () => {
     const scene = planet();
     // 物流塔要建在己方仓库上；同一格上再放一条高架带。
     scene.buildings = {
@@ -198,7 +198,34 @@ describe('多层传送带本地预检（第 19 轮 §3.2）', () => {
     } as never;
     const assessment = assessBuildTiles(distributor, 'logistics_distributor', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!;
     expect(assessment.blockedTiles).toEqual([]);
-    // 同样位置的风机仍然被拦（豁免只给物流塔）
+    // 同样位置的风机仍然被拦（物流塔能建是因为走了独立分支，不是通用豁免）。
     expect(assessBuildTiles(catalog, 'wind_turbine', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!.buildable).toBe(false);
+  });
+
+  it('M1 occupiesGround 口径：地基 / 物流配送器 / z>0 叠层 / 其它层带子不挡高架带，地面风机挡', () => {
+    const elevated = (scene: PlanetSceneView) => assessBuildTiles(
+      catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined, undefined, 2,
+    )!;
+    const withBuilding = (building: Building) => {
+      const scene = planet();
+      scene.buildings = { [building.id]: building } as never;
+      return scene;
+    };
+
+    // 地基：地形修饰，不登记地面格 → 可建
+    expect(elevated(withBuilding(buildingAt('b-foundation', 'foundation', 6, 6))).buildable).toBe(true);
+    // 物流配送器（z=1）：挂在宿主上 → 可建
+    const distributor = { ...buildingAt('b-distributor', 'logistics_distributor', 6, 6), position: { x: 6, y: 6, z: 1 } };
+    expect(elevated(withBuilding(distributor)).buildable).toBe(true);
+    // 其它 z>0 叠层（非带子）→ 可建
+    const stacked = { ...buildingAt('b-stacked', 'arc_smelter', 6, 6), position: { x: 6, y: 6, z: 1 } };
+    expect(elevated(withBuilding(stacked)).buildable).toBe(true);
+    // 其它层的带子（elevation=1）→ 可建（只与同层冲突）
+    const otherLayerBelt = { ...buildingAt('b-belt-1', 'conveyor_belt_mk1', 6, 6), conveyor: { input: 'west', output: 'east', elevation: 1 } } as Building;
+    expect(elevated(withBuilding(otherLayerBelt)).buildable).toBe(true);
+    // 地面风机：登记地面格 → elevated_ground_occupied
+    const turbine = elevated(withBuilding(buildingAt('b-turbine', 'wind_turbine', 6, 6, 2, 2)));
+    expect(turbine.buildable).toBe(false);
+    expect(turbine.blockedTiles).toEqual([expect.objectContaining({ reason: 'elevated_ground_occupied', groundBuildingId: 'b-turbine' })]);
   });
 });

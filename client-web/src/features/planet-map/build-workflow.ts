@@ -494,8 +494,10 @@ function buildTileAssessment(input: {
       const sameLayerBuilding = buildings.find((building) => occupiesLayer(building) && (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
       // 高架带（elevation>0）只看同层占用：地面带/分拣器等 LowLogistics 允许压在下面。
       const blockingBuilding = sameLayerBuilding;
-      // 高架带脚下只能是空地或 LowLogistics：地面层压着非 LowLogistics 建筑（含地基）时
+      // 高架带脚下只能是空地或 LowLogistics：地面层压着非 LowLogistics 建筑时
       // 服务端回 POSITION_OCCUPIED「高架传送带不能架在建筑上方」（M1，文案与服务端同字）。
+      // 地面占用按 occupiesGround 判（服务端 TileBuilding 口径）：地基、物流配送器、
+      // z>0 叠层与高架带都不登记地面格，不挡高架带。
       const groundOccupant = targetElevation > 0
         // 服务端按 TileBuilding 判（地基/配送器/z>0 叠层不登记地面格），这里用同一口径。
         ? buildings.find((building) => occupiesGround(building) && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
@@ -506,11 +508,10 @@ function buildTileAssessment(input: {
         blockedTiles.push({ x, y, terrain, reason: "invalid_elevation" });
       }
       // 地面建筑（非 LowLogistics）不能建在有高架带的格子上：任一占地格有高架带即拒。
-      // 物流塔豁免：服务端 build_commands.go 对 logistics_distributor 明确跳过这条检查
-      //（它比地面带高，允许「下方穿带」，L2）。物流塔现在走上方的独立分支（只查宿主仓库），
-      // 本来到不了这里；这条显式豁免是与服务端对齐的护栏，免得以后分支合并回去又踩上。
+      // 物流配送器不走这里：它在上面有独立分支（只查宿主仓库）并提前返回，因此不需要
+      // 在这里再写豁免（旧条件 `!== "logistics_distributor"` 不可达，已删）。
       const overheadBelt = !invalidElevation && targetElevation === 0 && input.buildingType
-        && !isLowLogisticsType(input.buildingType) && input.buildingType !== "logistics_distributor"
+        && !isLowLogisticsType(input.buildingType)
         ? buildings.find((building) => beltElevation(building) > 0 && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
         : undefined;
 

@@ -42,6 +42,48 @@ export function traceBeltStroke(from: SurfacePoint, to: SurfacePoint, size: numb
   return [];
 }
 
+/**
+ * 指针从 `from` 移到 `to` 后更新拖拽路径（逐格处理笔迹，第 19 轮 §3.5 / B3–B5）。
+ *
+ * 旧实现只看笔迹终点：回拖跨过路径里的已有格时会追加反向格，得到首尾不接的路径；
+ * 截断处也不刷新方向，回拖后再转向会留下指向已截掉格子的断链。这里逐格处理：
+ * - 该格已在路径里（下标 i）→ 截断到 i+1，并把新的末端格方向设成「从 path[i-1] 进入它」
+ *   （即 path[i-1].direction；i=0 时保留原方向）——不会掉头成环；
+ * - 否则追加：末端格方向改成 `dir(e→c)`，新格方向也是 `dir(e→c)`。
+ *
+ * 方向取笔迹的携带朝向（跨面时 surfaceStep 会翻转），保证每格输出方向都能步进到下一格。
+ * 高度不在这里算：调用方用 `assignBeltElevations` 按目标高度重算整条路径。
+ * 笔迹为空（指针没动/追踪失败）返回 null，调用方保持原路径。
+ */
+export function applyBeltStrokeStep(
+  path: readonly BeltElevationPlacement[],
+  from: SurfacePoint,
+  to: SurfacePoint,
+  size: number,
+): BeltElevationPlacement[] | null {
+  const segment = traceBeltStroke(from, to, size);
+  if (segment.length === 0) return null;
+  const next = path.map(part => ({ ...part }));
+  // 第一格是拖拽起点（已在路径里），只处理笔迹后面的格。
+  for (let index = 1; index < segment.length; index++) {
+    const part = segment[index];
+    // dir(e→c)：笔迹上一格记录的就是「从它走到本格」的携带朝向。
+    const stepDirection = segment[index - 1].direction;
+    const revisited = next.findIndex(entry => entry.tile.x === part.tile.x && entry.tile.y === part.tile.y);
+    if (revisited >= 0) {
+      next.length = revisited + 1;
+      // 截断处的末端格要朝路径的前进方向（从 path[i-1] 进入它的方向），不能照抄反向笔迹，
+      // 否则末端格会掉头指回上一格。i=0 时保留原方向（第一格的方向等第一次追加时回填）。
+      if (revisited > 0) next[revisited] = { ...next[revisited], direction: next[revisited - 1].direction };
+      continue;
+    }
+    const previous = next[next.length - 1];
+    next[next.length - 1] = { ...previous, direction: stepDirection };
+    next.push({ tile: part.tile, direction: stepDirection, elevation: previous.elevation });
+  }
+  return next;
+}
+
 function isCardinal(direction: string | undefined): direction is SurfaceDirection {
   return direction === 'north' || direction === 'east' || direction === 'south' || direction === 'west';
 }
