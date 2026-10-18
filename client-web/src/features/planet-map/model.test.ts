@@ -213,6 +213,24 @@ describe('planet map model helpers', () => {
     expect(resolveSelectionAtTile(bare, 0, 0)).toMatchObject({ kind: 'resource', id: 'iron-1' });
   });
 
+  it('L1 高架带不参与按格选择（只认地面层建筑，与 buildingAtTile 同口径）', () => {
+    const base = createPlanetFixture();
+    const highBelt = (x: number, y: number) => ({
+      id: 'belt-high', type: 'conveyor_belt_mk1', owner_id: 'p1',
+      position: { x, y, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 0,
+      runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+      conveyor: { input: 'west', output: 'east', elevation: 2 },
+    });
+    // 只有高架带：按格选不到建筑（高架带不占地面格，命中它由场景 onPick 的 buildingId 负责）
+    expect(resolveSelectionAtTile({ ...base, buildings: { 'belt-high': highBelt(2, 1) } as never, units: {} }, 2, 1)).toBeNull();
+    // 高架带压在资源点上：仍然选中资源
+    expect(resolveSelectionAtTile({ ...base, buildings: { 'belt-high': highBelt(0, 0) } as never, units: {} }, 0, 0))
+      .toMatchObject({ kind: 'resource', id: 'iron-1' });
+    // 地面建筑 + 同格高架带：返回地面建筑（不是上面那条带）
+    expect(resolveSelectionAtTile({ ...base, buildings: { ...base.buildings, 'belt-high': highBelt(1, 1) } as never }, 1, 1))
+      .toMatchObject({ kind: 'building', id: 'miner-1' });
+  });
+
   it('按建筑、单位、资源优先级解析地块选中对象', () => {
     const planet = {...createPlanetFixture(),surface: { topology: 'cube_sphere' as const, face_size: 12 / 3 }, map_width:12,map_height:8};
 

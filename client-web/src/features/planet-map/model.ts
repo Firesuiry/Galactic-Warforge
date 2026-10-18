@@ -19,6 +19,7 @@ import type {
 } from "@shared/types";
 
 import type { PlanetSceneWindow } from "@/features/planet-map/store";
+import { beltElevation } from "@/features/planet-map/logistics-tier";
 import { isResearchStationBuildingType } from "@/features/production-alerts";
 import {
   translateAlertType,
@@ -347,8 +348,11 @@ export function resolveSelectionAtTile(
     const tile = toTilePoint(position);
     return tile.x === x && tile.y === y;
   };
+  // §3.5：只认地面层建筑——高架带（elevation > 0）不占地面格（服务端也不写 TileBuilding），
+  // 命中它由场景 onPick 的 buildingId 直接选中；与 use-planet-interactions 的
+  // buildingAtTile 同口径，否则点高架带下方会选中「上面那条带」。
   const buildings = getBuildingList(planet).filter((candidate) =>
-    tileContainsBuilding(candidate, x, y, planet.map_width / 3),
+    beltElevation(candidate) === 0 && tileContainsBuilding(candidate, x, y, planet.map_width / 3),
   );
   const building = buildings.find((candidate) => candidate.type === "logistics_distributor")
     ?? buildings.find((candidate) => candidate.type !== "foundation") ?? buildings[0];
