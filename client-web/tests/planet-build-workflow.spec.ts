@@ -24,7 +24,7 @@ requireScenario('war', '需要官方战争场景（预置战场分析基站/重�
  * → 命令回执出现在工作台（journal 最近结果）。
  *
  * R20-C1：2D 视图删除后（docs/guide/删除2D视图.md D1）不再有 DOM 实体层与
- * `.planet-map-canvas__surface`，落点一律用 `window.__planetThree.tileScreenPos`
+ * `.planet-map-canvas__surface`（2D 已删除），落点一律用 `window.__planetThree.tileScreenPos`
  * 投影成页面像素，再用真实鼠标点击。
  */
 

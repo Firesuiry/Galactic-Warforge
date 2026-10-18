@@ -111,14 +111,20 @@ function pickCorridor(scene: ScenePayload): { x: number; ground: Array<{ x: numb
     && !blocked.has(`${x}:${y}`)
     && distance(x, y) <= 18
   );
-  // 由近及远扫：优先基地附近（施工快、镜头默认就在附近）。
+  // 并行 spec（planet-build-workflow 等）会抢机甲附近最近的空地：走廊必须离所有
+  // 现成建筑 ≥3 格（Chebyshev），否则拖拽途中那一格可能已被别人建成风机，
+  // 高架带会以「不能架在建筑上方」被本地预检拦下。
+  const clearOfBuildings = (x: number, y: number) => Object.values(scene.buildings ?? {}).every((building) => (
+    Math.max(Math.abs(building.position.x - x), Math.abs(building.position.y - y)) >= 3
+  ));
+  // 由近及远扫：优先机甲作业范围内、但仍离建筑群有一点余量的走廊。
   for (let radius = 2; radius <= 24; radius += 1) {
     for (let dx = -radius; dx <= radius; dx += 1) {
       const x = executor.position.x + dx;
       for (let dy = -radius; dy <= radius; dy += 1) {
         const y0 = executor.position.y + dy;
         const path = Array.from({ length: SPAN }, (_, index) => ({ x, y: y0 + index }));
-        if (!path.every((tile) => free(tile.x, tile.y))) continue;
+        if (!path.every((tile) => free(tile.x, tile.y) && clearOfBuildings(tile.x, tile.y))) continue;
         const groundStart = Math.floor((SPAN - GROUND_SPAN) / 2);
         return { x, ground: path.slice(groundStart, groundStart + GROUND_SPAN), path };
       }
@@ -305,6 +311,15 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
   }, { timeout: 150_000, intervals: [1000, 1500, 2000, 3000] }).toMatchObject({
     ground: true,
   });
+  // 高架带是逐格施工的（执行体一次只推进有限个任务，并行规格还会排队），
+  // 给足等待再断言落成数量。
+  await expect.poll(async () => {
+    const live = await fetchScene();
+    return corridor.path.filter((tile) => Object.values(live.buildings).some((building) => (
+      building.type === BELT && building.position.x === tile.x && building.position.y === tile.y
+      && ((building as { conveyor?: { elevation?: number } }).conveyor?.elevation ?? 0) === 1
+    ))).length;
+  }, { timeout: 120_000, intervals: [1000, 1500, 2000, 3000] }).toBeGreaterThanOrEqual(SPAN - 1);
   const landed = await fetchScene();
   const elevatedLanded = corridor.path.filter((tile) => Object.values(landed.buildings).some((building) => (
     building.type === BELT && building.position.x === tile.x && building.position.y === tile.y
