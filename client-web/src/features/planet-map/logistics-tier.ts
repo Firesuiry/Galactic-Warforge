@@ -22,6 +22,13 @@ export const TIER_COLOR: Record<LogisticsTier, string> = {
 
 /** DSP 带速比 6 : 12 : 30 件/秒 = 1 : 2 : 5（带面箭头滚速同比）。 */
 export const BELT_TIER_SPEED: Record<1 | 2 | 3, number> = { 1: 1, 2: 2, 3: 5 };
+/** 3D 带面箭头与带上方块的视觉流速（格/秒）= 基速 × 档位比；Mk.III 4 格/秒仍看得清。 */
+export const BELT_VISUAL_BASE_SPEED = .8;
+
+export function beltVisualSpeed(type: string): number {
+  const tier = logisticsTier(type);
+  return BELT_VISUAL_BASE_SPEED * BELT_TIER_SPEED[tier === 'pile' ? 1 : tier];
+}
 
 export function logisticsTier(type: string): LogisticsTier {
   if (type === 'pile_sorter') return 'pile';
