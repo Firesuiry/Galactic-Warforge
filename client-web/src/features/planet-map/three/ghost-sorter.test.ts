@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { SORTER_GHOST_COLOR, SORTER_GHOST_OPACITY, sorterGhostGroup } from './ghost-sorter';
+import {
+  SORTER_GHOST_COLOR,
+  SORTER_GHOST_OPACITY,
+  SORTER_GHOST_OUTLINE,
+  sorterGhostGroup,
+} from './ghost-sorter';
 
 /**
  * 建造 ghost 的分拣器本体（DSP 放置预览）：半透明机体必须**一眼认出是分拣器**，
@@ -9,38 +14,68 @@ import { SORTER_GHOST_COLOR, SORTER_GHOST_OPACITY, sorterGhostGroup } from './gh
  * 总高 ≤ .55 格），并且不依赖 industrial-models（那份模型由分拣器代理并发重写）。
  */
 describe('分拣器建造 ghost 机体', () => {
-  it('半透明绿色、不写深度（DSP 玻璃感），所有部件同一口径', () => {
+  const collect = (group: THREE.Group) => {
+    const body: THREE.Mesh[] = [];
+    const outline: THREE.Mesh[] = [];
+    group.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      if (object.userData.ghostRole === 'body') body.push(object);
+      if (object.userData.ghostRole === 'outline') outline.push(object);
+    });
+    return { body, outline };
+  };
+
+  it('机体 = 真光照半透明绿色（写深度/单面），每个部件都有一圈深色反向外壳', () => {
     const group = sorterGhostGroup();
-    const meshes: THREE.Mesh[] = [];
-    group.traverse((object) => { if (object instanceof THREE.Mesh) meshes.push(object); });
-    expect(meshes.length).toBeGreaterThanOrEqual(10);
-    for (const mesh of meshes) {
-      const material = mesh.material as THREE.MeshBasicMaterial;
+    const { body, outline } = collect(group);
+    expect(body.length).toBeGreaterThanOrEqual(12);
+    expect(outline.length).toBe(body.length);
+    for (const mesh of body) {
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      expect(material).toBeInstanceOf(THREE.MeshStandardMaterial);
       expect(material.transparent).toBe(true);
-      expect(material.depthWrite).toBe(false);
-      expect(material.toneMapped).toBe(false);
+      // 写深度：不写的话 10+ 个重叠透明面会叠成一团亮斑（1018 实测）。
+      expect(material.depthWrite).toBe(true);
+      expect(material.side).toBe(THREE.FrontSide);
       expect(material.color.getHexString()).toBe(new THREE.Color(SORTER_GHOST_COLOR).getHexString());
-      // 主色 .42；铜环/夹爪指等点缀略亮一档（机体有层次，不是一团绿）。
+      // 自发光用更饱和的绿（只加亮度会把机体冲成惨白）。
+      expect(material.emissive.getHexString()).toBe(new THREE.Color('#2fd489').getHexString());
+      expect(material.emissiveIntensity).toBeGreaterThan(0);
       expect(material.opacity).toBeGreaterThanOrEqual(SORTER_GHOST_OPACITY);
-      expect(material.opacity).toBeLessThanOrEqual(SORTER_GHOST_OPACITY + .15);
+      expect(material.opacity).toBeLessThanOrEqual(SORTER_GHOST_OPACITY + .2);
+    }
+    for (const mesh of outline) {
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      expect(material.side).toBe(THREE.BackSide);
+      expect(material.depthWrite).toBe(false);
+      expect(material.color.getHexString()).toBe(new THREE.Color(SORTER_GHOST_OUTLINE).getHexString());
+      // 外壳比本体大一圈，只在剪影外缘露出一道深色轮廓。
+      expect(mesh.scale.x).toBeGreaterThan(1);
+      expect(mesh.renderOrder).toBeLessThan(body[0].renderOrder);
     }
   });
 
-  it('尺寸按 §1.1：总高 ≤ .55 格、直径 ≤ .62 格（不能比熔炉抢眼）', () => {
+  it('尺寸按 §1.1：总高 ≤ .55 格、机体直径 ≤ .62 格（底板按 foundation 铺满一格）', () => {
     const group = sorterGhostGroup();
-    group.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(group);
-    const size = box.max.clone().sub(box.min);
+    const { body } = collect(group);
+    const bodyBox = new THREE.Box3();
+    for (const mesh of body) {
+      if (mesh.geometry.type === 'BoxGeometry' && (mesh.geometry as THREE.BoxGeometry).parameters.width > .9) continue; // foundation 底板
+      bodyBox.expandByObject(mesh);
+    }
+    const size = bodyBox.max.clone().sub(bodyBox.min);
     expect(size.y).toBeLessThanOrEqual(.55 + 1e-6);
     expect(size.y).toBeGreaterThan(.4);
-    // 底座/立柱/铜环等本体不超过 Φ.62；横臂伸向取货端（会探出格边）是分拣器的特征。
-    const body = new THREE.Box3();
-    for (const child of group.children) if (child.name !== 'sorter-ghost-arm') body.expandByObject(child);
-    const bodySize = body.max.clone().sub(body.min);
-    expect(Math.max(bodySize.x, bodySize.z)).toBeLessThanOrEqual(.62 + 1e-6);
-    // 贴地：最低点在 y ≈ 0（底座盘底面）。
-    expect(box.min.y).toBeGreaterThanOrEqual(-1e-6);
-    expect(box.min.y).toBeLessThanOrEqual(.01);
+    // 机体水平范围 = foundation 底板 .96 格（外壳 1.12 倍 ≈ 1.075）；横臂伸向取货端
+    // （会探出格边）是分拣器的特征，所以只量非横臂部件。
+    const nonArmBox = new THREE.Box3();
+    const arm = group.getObjectByName('sorter-ghost-arm')!;
+    for (const mesh of body) if (!arm.getObjectById(mesh.id)) nonArmBox.expandByObject(mesh);
+    const footprint = nonArmBox.max.clone().sub(nonArmBox.min);
+    expect(Math.max(footprint.x, footprint.z)).toBeLessThanOrEqual(.96 + 1e-6);
+    // 贴地：最低点在 y ≈ 0。
+    expect(bodyBox.min.y).toBeGreaterThanOrEqual(-1e-6);
+    expect(bodyBox.min.y).toBeLessThanOrEqual(.02);
   });
 
   it('机械臂旋到取货端（模型 +Z = 背面）：ghost 上能读出取货侧', () => {
@@ -48,7 +83,6 @@ describe('分拣器建造 ghost 机体', () => {
     const arm = group.getObjectByName('sorter-ghost-arm');
     expect(arm).toBeDefined();
     expect(arm!.rotation.y).toBeCloseTo(-Math.PI / 2, 9);
-    // +X 生长的手臂绕 Y 转 -90° 后指向 +Z。
     const direction = new THREE.Vector3(1, 0, 0).applyQuaternion(arm!.quaternion);
     expect(direction.z).toBeCloseTo(1, 6);
     expect(direction.x).toBeCloseTo(0, 6);
@@ -58,27 +92,20 @@ describe('分拣器建造 ghost 机体', () => {
     const first = sorterGhostGroup();
     const second = sorterGhostGroup();
     expect(second).not.toBe(first);
-    const geometriesOf = (group: THREE.Group) => {
-      const found: THREE.BufferGeometry[] = [];
-      group.traverse((object) => { if (object instanceof THREE.Mesh) found.push(object.geometry); });
+    const meshes = (group: THREE.Group) => {
+      const found: THREE.Mesh[] = [];
+      group.traverse((object) => { if (object instanceof THREE.Mesh) found.push(object); });
       return found;
     };
-    const a = geometriesOf(first);
-    const b = geometriesOf(second);
+    const a = meshes(first);
+    const b = meshes(second);
     expect(a.length).toBe(b.length);
     for (let i = 0; i < a.length; i += 1) {
-      expect(a[i]).toBe(b[i]);
+      expect(a[i].geometry).toBe(b[i].geometry);
       // `clearMarks` 靠这个标记跳过共享几何的 dispose。
-      expect(a[i].userData.shared).toBe(true);
-    }
-    const materialsOf = (group: THREE.Group) => {
-      const found: THREE.Material[] = [];
-      group.traverse((object) => { if (object instanceof THREE.Mesh) found.push(object.material as THREE.Material); });
-      return found;
-    };
-    for (let i = 0; i < materialsOf(first).length; i += 1) {
-      expect(materialsOf(first)[i]).toBe(materialsOf(second)[i]);
-      expect(materialsOf(first)[i].userData.shared).toBe(true);
+      expect(a[i].geometry.userData.shared).toBe(true);
+      expect(a[i].material).toBe(b[i].material);
+      expect((a[i].material as THREE.Material).userData.shared).toBe(true);
     }
   });
 });

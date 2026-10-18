@@ -42,16 +42,16 @@ export const GHOST_ARROW_SHAPE = {
 
 /**
  * 分拣器贴地箭头（格宽倍数）：**贯穿前后各半格**，从取货端（-0.5）指到放货端（+0.5）。
- * 杆宽 .06 格，远细于旧版 0.62 格粗 chevron，近景里读成「一条线 + 一个箭头头」。
+ * 杆宽 .07 格，远细于旧版 0.62 格粗 chevron，近景里读成「一条线 + 一个箭头头」。
  */
 export const SORTER_GHOST_ARROW_SHAPE = {
   /** 尾端沿朝向的位置（格，负 = 背面/取货侧）。 */
   tail: -.5,
   /** 尖端沿朝向的位置（格，正 = 正面/放货侧）。 */
   tip: .5,
-  shaftWidth: .06,
-  headLength: .16,
-  headHalfWidth: .09,
+  shaftWidth: .07,
+  headLength: .18,
+  headHalfWidth: .11,
 } as const;
 
 /** 三角箭头 + 细杆的贴地几何；尺寸以 `size`（格宽）为单位。 */

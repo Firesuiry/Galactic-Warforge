@@ -1014,7 +1014,7 @@ export class PlanetThreeScene {
       for (const tile of tiles) {
         this.ghostMarks.add(this.placeGhost(sorterGhostGroup(), tile, mode.rotation, .02));
         // 一条箭头贯穿前后各半格：从取货端指到放货端，绿色（可放置色）。
-        this.ghostMarks.add(this.ghostArrowMesh(tile, sorterRoutes.to, sorterGhostArrowGeometry(size), SORTER_GHOST_COLOR, .08));
+        this.ghostMarks.add(this.ghostArrowMesh(tile, sorterRoutes.to, sorterGhostArrowGeometry(size), SORTER_GHOST_COLOR, .09, true));
       }
       return;
     }
@@ -1157,18 +1157,26 @@ export class PlanetThreeScene {
    */
   private ghostArrow(tile: TilePoint, direction: CardinalDirection) {
     const size = this.tileScale();
-    return this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, .1);
+    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, .1));
   }
 
-  /** 贴地细箭头 mesh：抬 `lift` 格、平铺在格平面、朝向 direction。 */
+  /**
+   * 贴地细箭头 mesh：抬 `lift` 格、平铺在格平面、朝向 direction。
+   *
+   * `overlay = true`（分拣器方向箭头）时关掉深度测试：箭头要压在**半透明机体**（立柱/横臂）
+   * 和地面上方，否则穿过立柱的那一段会被机体遮住、读不出「从取货端指向放货端」。
+   */
   private ghostArrowMesh(
     tile: TilePoint,
     direction: CardinalDirection,
     geometry: THREE.BufferGeometry,
     color: string,
     lift: number,
+    overlay = false,
   ) {
-    const mesh = new THREE.Mesh(geometry, this.markMaterial(color, .92));
+    const mesh = new THREE.Mesh(geometry, overlay
+      ? new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .95, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide })
+      : this.markMaterial(color, .92));
     const { position, quaternion } = ghostArrowTransform(tile, direction, this.data!.planet.surface.face_size, RADIUS, {
       size: this.tileScale(),
       lift,

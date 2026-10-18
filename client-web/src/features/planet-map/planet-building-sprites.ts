@@ -794,9 +794,12 @@ function drawBelt(
 }
 
 /**
- * 分拣器剪影（DSP 口径）：深色圆盘底座（俯视椭圆）+ 从中心指向**放货方向**的铜色横臂 +
- * 末端小夹爪。4 向变体复用 belt 的方向缓存机制（缓存键追加方向）；`palette.accent` 由
- * 类型决定，mk2 蓝色发光、mk3 橙色点缀（与 3D 模型分层颜色同口径）。
+ * 分拣器剪影（DSP 口径）：**深色圆盘底座（俯视椭圆）+ 铜色横臂 + 末端夹爪**。
+ *
+ * 1018 复核：旧版把分拣器套 belt 原型（深色块 + 黄纹）完全认不出。现在底座用石墨色
+ * （与 3D 机体同口径），横臂/夹爪用铜色，两者对比在 16px/cell 低档也能读成「一台带臂的机器」。
+ * 4 向变体复用 belt 的方向缓存机制（缓存键追加方向）；`palette.accent` 由类型决定，
+ * mk2 蓝色、mk3 橙色（与 3D 模型分层颜色同口径）。
  */
 function drawSorter(
   ctx: CanvasRenderingContext2D,
@@ -809,48 +812,54 @@ function drawSorter(
   const fy = topExtra;
   const cx = fx + fw * 0.5;
   const cy = fy + fh * 0.58;
-  const rx = fw * 0.32;
-  const ry = fh * 0.2;
+  const rx = fw * 0.31;
+  const ry = fh * 0.19;
 
   // 投影。
   ctx.beginPath();
-  ctx.ellipse(cx + fw * 0.02, cy + fh * 0.08, rx, ry, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(3, 6, 12, 0.4)';
+  ctx.ellipse(cx + fw * 0.02, cy + fh * 0.075, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(3, 6, 12, 0.42)';
   ctx.fill();
 
-  // 圆盘底座：上亮下暗的金属盘。
+  // 圆盘底座：深色盘面 + **浅色外沿** + 铜环。2D 战术图地表是暗色（夜面/黑雾），
+  // 纯深色盘会整块消失、只剩铜圈读成「弹簧」；浅色外沿保住「圆盘」剪影。
   const disc = ctx.createLinearGradient(cx, cy - ry, cx, cy + ry);
-  disc.addColorStop(0, '#6a594a');
-  disc.addColorStop(1, numToCss(palette.bodyDark));
+  disc.addColorStop(0, '#5b6675');
+  disc.addColorStop(1, '#2a323c');
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
   ctx.fillStyle = disc;
   ctx.fill();
-  ctx.strokeStyle = OUTLINE;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // 铜环（内圈）+ 中央转台。
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx * 0.64, ry * 0.64, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = numToCss(palette.accent, 0.95);
+  ctx.strokeStyle = '#cfd9e4';
   ctx.lineWidth = 1.4;
   ctx.stroke();
   ctx.beginPath();
-  ctx.ellipse(cx, cy - ry * 0.08, rx * 0.24, ry * 0.24, 0, 0, Math.PI * 2);
-  ctx.fillStyle = numToCss(palette.body, 0.95);
+  ctx.ellipse(cx, cy, rx * 0.84, ry * 0.84, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = numToCss(palette.accent, 0.9);
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // 中心转台（亮一点的小圆）+ 铜环（弱，不抢横臂）。
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 0.56, ry * 0.56, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = numToCss(palette.accent, 0.45);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - ry * 0.08, rx * 0.2, ry * 0.2, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#5c6a78';
   ctx.fill();
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // 横臂：从中心指向放货方向，末端夹爪（两片小指成 V 形）。
+  // 横臂：从盘心指向放货方向（直线活塞杆，不是卷曲的环）。
   const vector = DIRECTION_VECTORS[direction];
-  const armLength = fw * 0.34;
+  const armLength = fw * 0.32;
   const tipX = cx + vector.x * armLength;
   const tipY = cy + vector.y * armLength;
-  const armWidth = Math.max(2, fw * 0.075);
-  ctx.lineCap = 'round';
+  const armWidth = Math.max(2, fw * 0.085);
+  ctx.lineCap = 'butt';
   ctx.beginPath();
   ctx.moveTo(cx, cy);
   ctx.lineTo(tipX, tipY);
@@ -861,33 +870,38 @@ function drawSorter(
   ctx.lineWidth = armWidth;
   ctx.stroke();
 
+  // 末端关节（小方块）+ 两片夹指（朝放货方向张开的 V）。
   const px = -vector.y;
   const py = vector.x;
-  const claw = fw * 0.11;
-  for (const sign of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(tipX + vector.x * claw * 0.55 + px * sign * claw * 0.7,
-      tipY + vector.y * claw * 0.55 + py * sign * claw * 0.7);
-    ctx.strokeStyle = numToCss(palette.accent);
-    ctx.lineWidth = Math.max(1.2, fw * 0.035);
-    ctx.stroke();
-  }
-  // 夹爪关节（亮点）。
-  ctx.beginPath();
-  ctx.arc(tipX, tipY, Math.max(1.4, fw * 0.05), 0, Math.PI * 2);
-  ctx.fillStyle = '#e8eef5';
-  ctx.fill();
+  const joint = Math.max(2, fw * 0.1);
+  ctx.save();
+  ctx.translate(tipX, tipY);
+  ctx.rotate(Math.atan2(vector.y, vector.x));
+  ctx.fillStyle = '#e6edf5';
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(-joint / 2, -joint / 2, joint, joint);
+  ctx.fill();
   ctx.stroke();
+  ctx.restore();
+  const claw = fw * 0.12;
+  ctx.lineWidth = Math.max(1.1, fw * 0.035);
+  for (const sign of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(tipX + vector.x * joint * 0.4, tipY + vector.y * joint * 0.4);
+    ctx.lineTo(tipX + vector.x * claw + px * sign * claw * 0.62,
+      tipY + vector.y * claw + py * sign * claw * 0.62);
+    ctx.strokeStyle = numToCss(palette.accent);
+    ctx.stroke();
+  }
 
-  // 类型点缀灯（mk1 铜 / mk2 蓝 / mk3 橙）：中心一颗发光点，低缩放档也能按颜色分辨型号。
-  const glow = ctx.createRadialGradient(cx, cy - ry * 0.1, 0, cx, cy - ry * 0.1, fw * 0.14);
-  glow.addColorStop(0, numToCss(palette.accent, 0.55));
+  // 类型点缀灯（mk1 铜 / mk2 蓝 / mk3 橙）：盘心一颗微光，低缩放档按颜色分辨型号。
+  const glow = ctx.createRadialGradient(cx, cy - ry * 0.1, 0, cx, cy - ry * 0.1, fw * 0.16);
+  glow.addColorStop(0, numToCss(palette.accent, 0.5));
   glow.addColorStop(1, numToCss(palette.accent, 0));
   ctx.fillStyle = glow;
-  ctx.fillRect(cx - fw * 0.14, cy - ry * 0.1 - fw * 0.14, fw * 0.28, fw * 0.28);
+  ctx.fillRect(cx - fw * 0.16, cy - ry * 0.1 - fw * 0.16, fw * 0.32, fw * 0.32);
 }
 
 function drawSpecial(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, palette: ArchetypePalette) {
