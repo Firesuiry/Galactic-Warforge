@@ -349,7 +349,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。
 - 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（第 19 轮起四种分拣器的 `range` 全为 3）。分拣器耗电（`sorter_mk1/2` 1、`sorter_mk3`/`pile_sorter` 2 点/tick，需接入电网），没电时 `runtime.state = no_power`、不搬运；往返周期 = `cycle_ticks × max(1, 取端步数 + 放端步数 − 1)`（最短布局「带|分拣器|机器」算 1 个长度单位）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
 - **取货端是传送带时扫描整段带子**（试玩 1016 报告 B1）：按顺序取第一个「过滤允许 + 放货端收得下」的栈，跳过被过滤掉或目标不收的物品，其余货的顺序不变。旧实现只看队首那一栈——队首是下游不要的矿种时后面的货永远取不到，配上「带尾对着分拣器、下游不收」的布局就是整线死锁（带满 → 上游矿机输出缓冲满 → 矿机停采）。带子长期堵死时另发 `belt_blocked` 告警（见 §6.7）。
-- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
+- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × max(1, 取端步数 + 放端步数 − 1)`（最短布局「带|分拣器|机器」算 1 个长度单位），`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
 - **从生产建筑取货只拿产物**（试玩 1016 报告 B-2，DSP 口径）：分拣器 / 传送带直连 / 管道 / 运输机器人对带 `production` 功能的建筑（熔炉、制造台、研究站、精炼厂、化工厂……）只导出**输出缓冲**里的成品；主库存 / 输入缓冲里尚未加工的原料不会被抽走（否则输出端分拣器会把刚到货的铁矿搬上产物带，机器永远吃不饱）。仓储类建筑（储物仓、储液罐、补给站、物流站、战场分析基站等无 `production` 功能的建筑）主库存整仓可导出。循环配方的反馈料同样只算输出缓冲里的产物份额。玩家手工取货（`transfer_item` `direction=to_player`）不受此限，仍可取出机器里的原料。
 - `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
 - 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
@@ -564,12 +564,12 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
   | reason | 含义 |
   | --- | --- |
-  | `no_power` | 分拣器断电。分拣器本身不耗电（`buildings.yaml` 没有 energy 模块），正常运行时分拣器不会被置为 `no_power`，这条分支实际很少出现，只为兼容旧存档/未来给分拣器加耗电保留 |
+  | `no_power` | 分拣器断电。第 19 轮起四种分拣器都耗电（`sorter_mk1/2` 1、`sorter_mk3`/`pile_sorter` 2 点/tick），没接电网或电网供电不足时 `runtime.state = no_power`、不搬运，这是产线断料最常见的根因 |
   | `not_running` | 分拣器未运行（暂停、故障 `error`、拆除作业中）。旧存档里的 `paused` 含义相同，客户端按同一文案显示 |
   | `pick_empty` | 取货端没有本分拣器认的货；**只在目标建筑确实因缺料停工**（`input_shortage` 判据）时才报，目标还够料时不刷噪音 |
   | `drop_blocked` | 放货端收不下（目标输入缓冲/主库存满、带子满）；**只在取货端确实有货时才报** |
 
-  选路与 `settleSorters` 共用 `sorterBestRoute`：一次往返只走「取货端距离 + 放货端距离」最短的那一对端点，`reason` / `target_position` 对应实际尝试搬运的那条路线（range>1 的 mk2/mk3 有多个候选端点）。停工计数存在分拣器自己的 `sorter.stall.stalled_ticks`（随快照落盘，读档后继续累计），不复用产线监控的采样计数。
+  选路与 `settleSorters` 共用 `sorterBestRoute`：一次往返只走「取货端步数 + 放货端步数」最短的那一对端点，`reason` / `target_position` 对应实际尝试搬运的那条路线（四种分拣器的 `range` 都是 3，每个方向可能有多个候选端点）。停工计数存在分拣器自己的 `sorter.stall.stalled_ticks`（随快照落盘，读档后继续累计），不复用产线监控的采样计数。
 
   存在意义：自动运输机器人会跳过「已有分拣器喂料」的建筑（见 §5.6），分拣器一停那台机器就静默断料——机器人不会来救，告警条也不会有任何条目。分拣器**成功转移一件**（`sorter.last_transfer.tick` 前进到当前 tick）即解除；分拣器被拆除/摧毁时与其它告警一样随建筑解除。往返周期内正常的等待（`next_trip_tick` 未到）不累计停工时长；端点缺失（刚放下还没接好）也不累计。
 

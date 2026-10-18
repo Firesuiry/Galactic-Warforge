@@ -344,6 +344,9 @@ func restoreBuilding(id string, snap *BuildingSnapshot) (*model.Building, error)
 		mb.ProductionMonitor = snap.ProductionMonitor.Clone()
 	}
 	model.SyncBuildingProduction(mb)
+	// 旧存档的 Runtime 冻结着当时的物流参数（stack_limit/range/耗电），
+	// 先用当前定义覆盖，再让 Sync* 把参数投影到 Conveyor/Sorter 实例上。
+	model.RefreshLogisticsRuntime(mb)
 	model.SyncBuildingConveyor(mb)
 	model.SyncBuildingSorter(mb)
 	model.SyncBuildingLogisticsStation(mb)

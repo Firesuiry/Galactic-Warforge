@@ -40,7 +40,7 @@ type SorterTransfer struct {
 // SorterFacing / ApplyBuildingRotation），沿该轴前后各扫 Range 格。配置命令
 // 只能改 Filter。
 type SorterState struct {
-	// CycleTicks 是往返周期系数：往返周期 = CycleTicks × 两端点距离格数。
+	// CycleTicks 是往返周期系数：往返周期 = CycleTicks × max(1, 取端步数 + 放端步数 − 1)。
 	CycleTicks int `json:"cycle_ticks"`
 	Range      int `json:"range"`
 	// NextTripTick 是下一次允许往返的最早 tick（0 表示随时可搬）。

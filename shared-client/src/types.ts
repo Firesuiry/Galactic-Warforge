@@ -220,9 +220,9 @@ export interface SorterTransfer {
  * `model.SorterFacing` 同一张锚点表。
  */
 export interface BuildingSorterState {
-  /** 往返周期系数：往返周期 = cycle_ticks × 两端点距离格数（mk1/mk2/mk3 = 6/3/2）。 */
+  /** 往返周期系数：往返周期 = cycle_ticks × max(1, 取端步数 + 放端步数 − 1)（mk1/mk2/mk3 = 6/3/2）。 */
   cycle_ticks: number;
-  /** 沿朝向轴前后各扫几格找端点（mk1/mk2/mk3 = 1/2/3）。 */
+  /** 沿朝向轴前后各扫几格找端点（第 19 轮起四种分拣器全为 3）。 */
   range: number;
   /** 下一次允许往返的最早 tick（0 = 随时可搬）。 */
   next_trip_tick?: number;

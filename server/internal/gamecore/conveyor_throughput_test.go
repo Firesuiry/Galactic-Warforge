@@ -12,6 +12,11 @@ import (
 // 夹具：30 格直带（x=0..29，向东），源头每 tick 尽量塞满（塞到带子容量为止），
 // 尾端每 tick 全部取走（无限吸收）。跑 600 tick，只统计后 300 tick 从尾端取走的
 // 件数 / 300 = 件/tick。比例断言 mk1 : mk2 : mk3 = 1 : 2 : 5（±10%）。
+//
+// 同时统计守恒量：塞入的总件数 == 尾端取走的 + 结束时刻还留在带上的。
+// 结算改成「流水线口径」（送出即腾位，见 settleConveyors 注释）后，吞吐不再依赖
+// stack_limit 放大，所以还有 TestConveyorThroughputSurvivesTightStackLimit 守着
+// 「stack_limit 只留物理余量」这件事。
 
 const (
 	beltThroughputCells = 30
@@ -22,10 +27,21 @@ const (
 type beltThroughputResult struct {
 	perTick float64
 	total   int
+	// 守恒量：inserted == drained + onBelt。
+	inserted int
+	drained  int
+	onBelt   int
 }
 
 // measureBeltThroughput 返回后 300 tick 的稳态吞吐（件/tick）。
 func measureBeltThroughput(t *testing.T, btype model.BuildingType, mixed bool) beltThroughputResult {
+	t.Helper()
+	return measureBeltThroughputWithStack(t, btype, mixed, 0)
+}
+
+// measureBeltThroughputWithStack 同上，stackOverride > 0 时把每格 stack_limit 压到该值
+// （用来验证吞吐只受 throughput 约束，不再被 stack_limit/2 卡住）。
+func measureBeltThroughputWithStack(t *testing.T, btype model.BuildingType, mixed bool, stackOverride int) beltThroughputResult {
 	t.Helper()
 	ws := model.NewWorldState("planet-1", beltThroughputCells)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
@@ -33,12 +49,17 @@ func measureBeltThroughput(t *testing.T, btype model.BuildingType, mixed bool) b
 	belts := make([]*model.Building, 0, beltThroughputCells)
 	for x := 0; x < beltThroughputCells; x++ {
 		belt := newConveyorBuildingOfType("belt-"+strconv.Itoa(x), btype, model.Position{X: x, Y: 0}, model.ConveyorEast)
+		if stackOverride > 0 {
+			belt.Conveyor.MaxStack = stackOverride
+		}
 		attachBuilding(ws, belt)
 		belts = append(belts, belt)
 	}
 	head, tail := belts[0], belts[len(belts)-1]
 
 	sink := 0
+	inserted := 0
+	drained := 0
 	for tick := int64(0); tick < beltThroughputTicks; tick++ {
 		ws.Tick = tick
 		// 源头持续塞满：塞到这一格再也放不下为止。
@@ -54,15 +75,36 @@ func measureBeltThroughput(t *testing.T, btype model.BuildingType, mixed bool) b
 			if accepted <= 0 {
 				break
 			}
+			inserted += accepted
 		}
 		settleConveyors(ws)
 		// 尾端无限吸收。
 		taken := tail.Conveyor.Take(tail.Conveyor.TotalItems())
+		moved := countStacks(taken)
+		drained += moved
 		if tick >= beltMeasureFrom {
-			sink += countStacks(taken)
+			sink += moved
 		}
 	}
-	return beltThroughputResult{perTick: float64(sink) / float64(beltThroughputTicks-beltMeasureFrom), total: sink}
+	onBelt := 0
+	for _, belt := range belts {
+		onBelt += belt.Conveyor.TotalItems()
+	}
+	return beltThroughputResult{
+		perTick:  float64(sink) / float64(beltThroughputTicks-beltMeasureFrom),
+		total:    sink,
+		inserted: inserted,
+		drained:  drained,
+		onBelt:   onBelt,
+	}
+}
+
+// assertBeltLineConserved 断言「塞入 = 抽走 + 还留在带上」（不丢件、不复制件）。
+func assertBeltLineConserved(t *testing.T, label string, res beltThroughputResult) {
+	t.Helper()
+	if res.inserted != res.drained+res.onBelt {
+		t.Fatalf("%s: items not conserved: inserted=%d drained=%d onBelt=%d", label, res.inserted, res.drained, res.onBelt)
+	}
 }
 
 func newConveyorBuildingOfType(id string, btype model.BuildingType, pos model.Position, output model.ConveyorDirection) *model.Building {
@@ -107,5 +149,34 @@ func TestConveyorTierThroughputRatio(t *testing.T) {
 	// 混合物品带子不能因为分流启发式降速。
 	if ratio := mixed.perTick / mk3.perTick; ratio < 0.9 {
 		t.Fatalf("mixed-item belt throughput %.3f is below 90%% of single-item mk3 %.3f", mixed.perTick, mk3.perTick)
+	}
+	// 每条带子（含混带）都要守恒：塞入 = 抽走 + 还留在带上。
+	assertBeltLineConserved(t, "mk1", mk1)
+	assertBeltLineConserved(t, "mk2", mk2)
+	assertBeltLineConserved(t, "mk3", mk3)
+	assertBeltLineConserved(t, "mixed_mk3", mixed)
+}
+
+// TestConveyorThroughputSurvivesTightStackLimit 守住「吞吐只由 throughput 决定」：
+// stack_limit 只留物理余量（throughput+1）时，稳态吞吐一点都不能掉。
+// 旧口径（每格接收容量按 tick 初缓冲算，送出腾出的位不记回）下这里是 min(throughput,
+// stack_limit/2)，mk3 会从 5 掉到 3 —— 这条用例就是拦这个回归的。
+func TestConveyorThroughputSurvivesTightStackLimit(t *testing.T) {
+	for _, tc := range []struct {
+		btype model.BuildingType
+		want  float64
+	}{
+		{model.BuildingTypeConveyorBeltMk1, 1},
+		{model.BuildingTypeConveyorBeltMk2, 2},
+		{model.BuildingTypeConveyorBeltMk3, 5},
+	} {
+		stack := int(tc.want) + 1
+		got := measureBeltThroughputWithStack(t, tc.btype, false, stack)
+		t.Logf("stack_limit=%d: %s -> %.3f items/tick", stack, tc.btype, got.perTick)
+		if got.perTick < tc.want*0.95 || got.perTick > tc.want*1.05 {
+			t.Fatalf("%s with stack_limit=%d (throughput+1): %.3f items/tick, want %.3f±5%%",
+				tc.btype, stack, got.perTick, tc.want)
+		}
+		assertBeltLineConserved(t, string(tc.btype), got)
 	}
 }
