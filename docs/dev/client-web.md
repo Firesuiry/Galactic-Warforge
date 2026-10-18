@@ -50,7 +50,7 @@ VITE_SW_AGENT_PROXY_TARGET=http://127.0.0.1:18181 npm run dev  # 改 agent-gatew
 
 ## 4. 行星页
 
-- **视图**：默认 3D 立方体球面视图（`PlanetMapThree`）；`?view=2d` 切到 Pixi 平面战术视图（`PlanetMapPixi`）。2D 视图将在 P4 退役，届时 `data-entity-*` 测试钩子迁到 3D。3D 表现、画质档位与素材见 [3D与画质](../guide/3D与画质.md)。
+- **视图**：只有 3D 立方体球面视图（`PlanetMapThree`）。2D「平面战术」视图已在第 20 轮删除（`?view=2d` 不再生效）；E2E 用 `window.__planetThree` 的投影/查询接口，不再有 `data-entity-*` DOM 实体层。3D 表现、画质档位与素材见 [3D与画质](../guide/3D与画质.md)。
 - **网格协议**：行星为 `cube_sphere` 六面网格，`map_width=3N`、`map_height=2N` 是存储图集尺寸（N = `surface.face_size`），图集边缘相邻不代表地表相邻。scene 的跨面 `surface_patches` 按各自 bounds 合成；overview 使用响应中的实际 step。
 - **寻路**：建造靠近与移动使用 `GET /world/planets/{id}/path`（`stop_range` 0..128，最多 512 步）；`reachable=false` 时不能直接尝试建造；局势变化后应刷新并重规划。
 - **地图直操作**：`interactionMode`（`inspect / build / move / attack`）决定点击语义，Esc/右键退出。底部建造栏按 catalog 分类展示（锁定/可建/造价），选卡后幽灵预览跟随悬停；传送带 R 键切方向、支持拖拽铺设；有配方的建筑可随建造携带配方。建筑布局蓝图的选区需在单面内。
@@ -93,7 +93,7 @@ npx playwright test --project=skirmish   # 只跑默认遭遇战场景的用例
 npm run storybook
 ```
 
-主要 Playwright 用例：`planet-build-workflow`（建造全流程）、`planet-entity-dom`（`data-entity-*` 定位契约）、`planet-three`、`cube-surface` / `cube-poles`、`planet-produce-units`、`research-workflow`、`dyson-workflow`、`industrial-development`、`war-workbench` / `war-workbench-authoritative` / `war-workbench-pure-gui`（纯 GUI 打完官方战争局）、`agent-platform`、`visual`（截图基线，重录前人工核对 actual）。
+主要 Playwright 用例：`planet-build-workflow`（建造全流程）、`planet-three`、`cube-surface` / `cube-poles`、`planet-produce-units`、`research-workflow`、`dyson-workflow`、`industrial-development`、`war-workbench` / `war-workbench-authoritative` / `war-workbench-pure-gui`（纯 GUI 打完官方战争局）、`agent-platform`、`visual`（截图基线，重录前人工核对 actual）。
 
 改到 client-web 必须进浏览器实测（AGENTS.md）：
 
