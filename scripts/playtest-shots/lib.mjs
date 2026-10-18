@@ -1,10 +1,10 @@
-// 固定机位截图的公共库：读档、等 tick、3D/2D 取景、截图与特写。
+// 固定机位截图的公共库：读档、等 tick、3D 取景、截图与特写。
 //
 // 场景脚本（scripts/playtest-shots/<场景名>.mjs）的约定见 docs/guide/试玩速查.md
 // 「固定机位截图」。脚本导出一个对象：
 //   export default {
 //     title: 'cp-belt-dsp 标准镜头',
-//     shots: [ { name, kind: '3d'|'2d', ... }, ... ],
+//     shots: [ { name, kind: '3d', ... }, ... ],
 //   }
 // 运行器（run.mjs）按 shots 顺序逐张拍，文件名固定为 <name>.png。
 import fs from 'node:fs';
@@ -100,60 +100,6 @@ return S.errors.slice(-5);
 `;
   const errs = await runSnippet(driver, body);
   return errs ?? [];
-}
-
-/**
- * 2D「平面战术」机位：view=2d + zoom（px/cell 档位，见 PLANET_ZOOM_LEVELS）+ x/y 聚焦。
- * 2D 视图没有暴露测试钩子，取景全靠 URL 深链（PlanetPage 的 x/y/zoom 参数）。
- *
- * 注意：深链聚焦在视口测量完成前结算，目标格固定落在 (480, 320)（默认 960×640 视口
- * 的中心），与 zoom 档无关。取景分两步：
- *   1) 按 zoom=16 打开，用**滚轮**逐档放大（以鼠标位置为锚，目标格在屏幕上不动）；
- *   2) 双击目标格 = requestFocus，把目标格移到视口正中（双击落在传送带/建筑上时
- *      可能触发「同类型全选」，截图前按 Esc 清空选中）。
- */
-export async function shoot2d(driver, shot, outDir, web) {
-  const target = shot.zoom;
-  const zoomInSteps = { 8: 1, 16: 0, 24: 1, 32: 2 }[target];
-  if (zoomInSteps == null) throw new Error(`2D 机位只支持 zoom ∈ {8,16,24,32}，收到 ${target}`);
-  const q = new URLSearchParams({
-    view: '2d',
-    quality: 'low',
-    e2e: '1',
-    zoom: '16',
-    x: String(shot.focus.x),
-    y: String(shot.focus.y),
-  });
-  const body = `
-await page.emulateMedia({ reducedMotion: 'no-preference' });
-await page.goto(${JSON.stringify(`${web}/planet/planet-1-1?${q}`)});
-await page.waitForSelector('.planet-map-canvas__pixi canvas', { timeout: 90000 });
-await L.sleep(${shot.settleMs ?? 3000});
-const readCam = () => page.evaluate(() => {
-  const s = document.querySelector('.planet-map-canvas__surface');
-  const tile = parseFloat(s.dataset.tileSize);
-  const tx = Number(s.dataset.cameraOffsetX), ty = Number(s.dataset.cameraOffsetY);
-  return { tile, sx: tx + ${shot.focus.x + 0.5} * tile, sy: ty + ${shot.focus.y + 0.5} * tile };
-});
-let cam = await readCam();
-for (let i = 0; i < ${zoomInSteps}; i++) {
-  await page.mouse.move(cam.sx, cam.sy);
-  await page.mouse.wheel(0, -1);
-  await L.sleep(1200);
-  cam = await readCam();
-}
-await page.mouse.dblclick(cam.sx, cam.sy);
-await L.sleep(1200);
-await page.keyboard.press('Escape');
-cam = await readCam();
-await page.mouse.move(1150, 620);
-await L.sleep(${shot.settleMs ?? 1500});
-await page.screenshot({ path: ${JSON.stringify(path.join(outDir, shot.name + '.png'))}, timeout: 120000 });
-return { tile: cam.tile, sx: cam.sx, sy: cam.sy, errors: S.errors.slice(-5) };
-`;
-  const info = await runSnippet(driver, body);
-  if (info?.tile !== target) throw new Error(`2D 缩放未到 ${target}px/cell（实际 ${info?.tile}）`);
-  return info?.errors ?? [];
 }
 
 // ---- 2x 特写：裁剪局部再放大（纯 Node 解码 PNG，避免额外依赖）----

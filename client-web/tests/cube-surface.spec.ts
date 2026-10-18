@@ -208,8 +208,11 @@ test('cube face seam: real GUI construction, movement, neighbor streaming and fi
   expect(executor).toBeDefined();
   await page.addInitScript(()=>localStorage.setItem('siliconworld-client-web-session',JSON.stringify({state:{serverUrl:location.origin,playerId:'p2',playerKey:'key_player_2'},version:0})));
   await page.goto(`/planet/${planet}?e2e=1`);
-  await page.waitForFunction(()=>Boolean((window as any).__planetThree?.data?.planet?.surface_patches?.length));
-  const beforeScale=await page.evaluate(id=>(window as any).__planetThree.moving.get(`unit:${id}`).group.scale.toArray(),executor.id);
+  // R20-A 起 `__planetThree` 只暴露绑定后的公开方法（不再有 data/moving 等场景私有字段）：
+  // 就绪改看中心格，移动的「位置」断言走投影（单位模型位置 = 它所在格的屏幕点）。
+  await page.waitForFunction(()=>Boolean((window as any).__planetThree?.getCenterTile?.()));
+  const beforeScreen=await page.evaluate(id=>(window as any).__planetThree.entityScreenPos(id),executor.id);
+  expect(beforeScreen).not.toBeNull();
   const selectionBar = page.getByTestId('planet-selection-bar');
 
   // ① 清场：p2 出生角那侧唯一可见的跨面格被场景预置的自家风机占着，先像玩家一样拆掉它。
@@ -257,20 +260,16 @@ test('cube face seam: real GUI construction, movement, neighbor streaming and fi
   const {response:moved,tile:moveTarget}=await clickTileExpectingCommand(page,async()=>{const me=await liveExecutor();return seamTileNear(await scene(me.position),me.position,OPERATE_RANGE_CELLS,buildTile);},'move');
   expect(await moved.json()).toMatchObject({accepted:true,results:[{code:'OK'}]});
   await expect.poll(async()=>(await scene(moveTarget)).units[executor.id]?.position,{timeout:20_000}).toMatchObject(moveTarget);
+  // 单位模型确实挪到了目标格：聚焦目标格后，单位屏幕点应落在该格投影附近
+  // （投影随相机变化，所以先 focus 再比较；容差按画布像素给）。
   await expect.poll(()=>page.evaluate(({id,target})=>{
     const renderer=(window as any).__planetThree;
-    const p=renderer.data.planet.units[id]?.position;
-    return p?.x===target.x&&p?.y===target.y;
-  },{id:executor.id,target:moveTarget})).toBe(true);
-  const afterScale=await page.evaluate(id=>(window as any).__planetThree.moving.get(`unit:${id}`).group.scale.toArray(),executor.id);
-  expect(afterScale).toEqual(beforeScale);
-  await expect.poll(()=>page.evaluate(()=>{
-    const renderer=(window as any).__planetThree;
-    const mark=renderer.marks.children.find((m:any)=>m.material.color.getHex()===0xfff1a8);
-    if(!mark)return null;
-    mark.geometry.computeBoundingSphere();
-    return renderer.tileFromNormal(mark.geometry.boundingSphere.center.clone().normalize());
-  })).toMatchObject(moveTarget);
+    renderer.focus(target,true);
+    const unit=renderer.entityScreenPos(id);
+    const tile=renderer.tileScreenPos(target);
+    if(!unit||!tile)return Number.POSITIVE_INFINITY;
+    return Math.hypot(unit.x-tile.x,unit.y-tile.y);
+  },{id:executor.id,target:moveTarget}),{timeout:20_000}).toBeLessThan(8);
   await page.screenshot({path:'/tmp/siliconworld-cube-seam.png',fullPage:true});
   await page.getByRole('button',{name:'全球视角',exact:true}).click();
   await page.screenshot({path:'/tmp/siliconworld-cube-globe.png',fullPage:true});
