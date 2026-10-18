@@ -1,0 +1,134 @@
+/**
+ * 3D 行星地图状态行与键位（第 20 轮 R20-A ②④）的纯逻辑。
+ *
+ * 文案与 2D 的 `.planet-map-canvas__status`（PlanetMapPixi.tsx）逐字对齐：
+ * 2D 退役后玩家只看到 3D，状态行必须补回选中文案、小队/战区/建造等模式提示，
+ * 否则「现在是什么模式、选了什么」在 3D 下没有任何可见反馈。
+ * 放在纯函数里便于单测（jsdom 里渲染整个 3D 组件只能看到 DOM，不好逐条断言）。
+ */
+
+import { selectionLabel, type SelectedEntity } from './model';
+import { theaterZoneTypeLabel } from './squad-commands';
+import type { PlanetInteractionMode } from './store';
+
+export interface PlanetThreeStatusInput {
+  /** 悬停格坐标（无悬停时为 null）。 */
+  hoveredTile: { x: number; y: number } | null;
+  selected: SelectedEntity | null;
+  selectedUnits: readonly string[];
+  selectedSquads: readonly string[];
+  interactionMode: PlanetInteractionMode;
+  /** 地面视角下的缩放档文案（`缩放 16px/cell` 一类）。 */
+  zoomLabel?: string;
+}
+
+export interface PlanetThreeStatusLine {
+  /** 稳定 key（React 列表/测试用），同时对应 2D 的 CSS 类语义。 */
+  key: 'hover' | 'zoom' | 'selection' | 'mode' | 'units' | 'squads';
+  text: string;
+  /** 与 2D 相同的语义色调修饰：attack 红、zone 青。 */
+  tone?: 'attack' | 'zone';
+}
+
+/**
+ * 交互模式提示：与 2D 状态行同一套文案（建造/移动/攻击/单位指令/战区/运输）。
+ * inspect 模式没有提示行。
+ */
+export function interactionModeStatusText(mode: PlanetInteractionMode): { text: string; tone?: 'attack' | 'zone' } | null {
+  switch (mode.kind) {
+    case 'build':
+      return { text: '建造模式：点击放置 · 右键/Esc 取消' };
+    case 'move':
+      return { text: '移动模式：点击目标点 · 右键/Esc 取消' };
+    case 'attack':
+      return { text: '攻击模式：点击目标 · 右键/Esc 取消', tone: 'attack' };
+    case 'unit_order':
+      return {
+        text: `${mode.order === 'attack_move' ? '攻击移动：点击目标点（沿途交战）' : mode.order === 'patrol' ? '巡逻：点击巡逻目标点' : '守卫：点击要守卫的目标'} · 右键/Esc 取消`,
+        tone: 'attack',
+      };
+    case 'theater_zone':
+      return {
+        text: `战区划定：${theaterZoneTypeLabel(mode.zoneType)} · 左键拖拽矩形画出区域 · 右键/Esc 退出`,
+        tone: 'zone',
+      };
+    case 'haul':
+      return { text: `设置运输：${mode.fromBuildingId ? '已选起点，点击终点建筑' : '点击起点建筑'} · 右键/Esc 取消` };
+    case 'squad_order':
+      return { text: `小队指令：${mode.order === 'attack' ? '攻击' : mode.order === 'defend' ? '防守' : '撤退'} · 点击目标点 · 右键/Esc 取消` };
+    case 'inspect':
+    default:
+      return null;
+  }
+}
+
+/**
+ * 状态行的全部条目（顺序与 2D 一致：缩放 → 悬停 → 选中 → 模式 → 框选 → 小队）。
+ * 空条目（没有悬停、没有选中且没进入任何模式）不返回，状态行不留空壳。
+ */
+export function buildPlanetThreeStatus(input: PlanetThreeStatusInput): PlanetThreeStatusLine[] {
+  const lines: PlanetThreeStatusLine[] = [];
+  if (input.zoomLabel) lines.push({ key: 'zoom', text: input.zoomLabel });
+  if (input.hoveredTile) lines.push({ key: 'hover', text: `Hover (${input.hoveredTile.x}, ${input.hoveredTile.y})` });
+  // 选中文案：2D 无条件显示（「未选中对象」也是信息），3D 只在真有选中时显示，
+  // 否则一行「未选中对象」常驻在左下角，反而盖住坐标/提示。
+  if (input.selected) lines.push({ key: 'selection', text: selectionLabel(input.selected) });
+  const mode = interactionModeStatusText(input.interactionMode);
+  if (mode) lines.push({ key: 'mode', text: mode.text, tone: mode.tone });
+  if (input.selectedUnits.length > 1) {
+    lines.push({ key: 'units', text: `已框选 ${input.selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击` });
+  }
+  if (input.selectedSquads.length > 0) {
+    lines.push({ key: 'squads', text: `已选 ${input.selectedSquads.length} 个小队 · 右键点地部署任务群` });
+  }
+  return lines;
+}
+
+/** 缩放快捷键（+/-）：输入框/文本域/下拉/可编辑元素聚焦时不抢按键。 */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element) return false;
+  return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT' || element.isContentEditable;
+}
+
+/** +/- 键 → 3D 缩放倍率（null = 不是缩放键）。`=` 与 `+` 同键（US 键盘 Shift+=）。 */
+export function zoomFactorForKey(key: string): number | null {
+  if (key === '+' || key === '=') return 1.4;
+  if (key === '-' || key === '_') return 1 / 1.4;
+  return null;
+}
+
+/**
+ * 测试接口的屏幕坐标换算（R20-A ⑤）：场景的 `project` 返回相对宿主画布左上角的
+ * CSS 像素，测试要的是**页面**坐标（Playwright 的 `locator.click({position})`
+ * 也是相对元素）。这里把宿主元素的位置补上。
+ */
+export function toPagePoint(
+  offset: { left: number; top: number },
+  point: { x: number; y: number },
+): { x: number; y: number } {
+  return { x: offset.left + point.x, y: offset.top + point.y };
+}
+
+/** 拖动修饰键：Shift 框选 / Ctrl（元键）加选。 */
+export interface DragModifiers {
+  shift?: boolean;
+  ctrl?: boolean;
+}
+
+/**
+ * 拖动矩形松手时，Shift 框选要选中的单位：投影落在屏幕矩形内、且属于当前玩家的单位。
+ * 纯函数（输入投影结果），jsdom 单测可直接覆盖；与真实场景同一套判定
+ * （PlanetMapThree 的 handleMarqueeUp 用的就是它）。
+ */
+export function unitsInScreenRect(
+  units: ReadonlyArray<{ id: string; ownerId: string; screen: { x: number; y: number } | null }>,
+  rect: { minX: number; minY: number; maxX: number; maxY: number },
+): string[] {
+  return units
+    .filter((unit) => unit.screen
+      && unit.screen.x >= rect.minX && unit.screen.x <= rect.maxX
+      && unit.screen.y >= rect.minY && unit.screen.y <= rect.maxY)
+    .map((unit) => unit.id)
+    .sort();
+}

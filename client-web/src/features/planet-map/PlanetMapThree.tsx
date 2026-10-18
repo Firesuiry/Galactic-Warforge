@@ -14,7 +14,9 @@ import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene, type PickMeta } from './planet-three-scene';
+import { theaterZoneFromDragRect, type TheaterZoneGeometry } from './squad-commands';
 import { describePickNotice, offscreenPickNotice, PICK_MISS_NOTICE, type PickNotice } from './pick-feedback';
+import { buildPlanetThreeStatus, isTypingTarget, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
@@ -54,11 +56,16 @@ interface Props {
   onInteractTile?: (tile: TilePoint, placement?: { direction?: 'north' | 'east' | 'south' | 'west'; elevation?: number }) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
   onContextTile?: (tile: TilePoint) => boolean;
+  /** C4 / R20-A ③：theater_zone 模式拖拽矩形松手 → 战区圆几何（圆心+半径）。 */
+  onDefineZone?: (zone: TheaterZoneGeometry) => void;
   /** 打开右侧抽屉的「选中对象」页签（与 2D 工具条的同一入口）。 */
   onSelectEntity?: () => void;
   /** 图层与视角浮层的内容（由 PlanetPage 复用 PlanetLayerPanel：与 2D 同一份勾选项）。
       传 `null` = 本视图不提供「图层与视角」入口（例如战争图之外的简化场景）。 */
   layerPanel?: ReactNode;
+  /** 战区划定控件（PlanetTheaterControls）：2D 工具条在 3D 下整条不渲染，
+      这个按钮改挂在 3D 自己的图标列末尾（R20-A ③，与 2D 工具条同一视觉位置）。 */
+  theaterControls?: ReactNode;
   /** 黑雾是否对当前玩家敌对（summary 玩家 dark_fog.hostile）。 */
   darkFogHostile?: boolean;
 }
@@ -114,6 +121,13 @@ export function PlanetMapThree(props: Props) {
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // D2 战区划定：theater_zone 模式下左键在球面拖出矩形（与 Shift 框选同一套屏幕矩形判定），
+  // 松手时把两个角点拾取成格子再换算圆心+半径（与 2D 的 PlanetMapPixi 同一口径）。
+  const zoneDragRef = useRef<{
+    startX: number; startY: number; active: boolean;
+    startTile: TilePoint | null; endTile: TilePoint | null;
+  } | null>(null);
+  const [zoneDragRect, setZoneDragRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen,
@@ -165,25 +179,46 @@ export function PlanetMapThree(props: Props) {
     scene.current?.setBeltDragPath(null);
   }, []);
 
+  /** 放弃战区拖拽（Esc / 右键 / 指针取消）：只清预览，不定义战区。 */
+  const cancelZoneDrag = useCallback(() => {
+    zoneDragRef.current = null;
+    setZoneDragRect(null);
+  }, []);
+
   useEffect(() => {
     const cancelInteraction = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       // 拖拽铺带中按 Esc：先丢掉这条预览（否则松手还会按旧路径逐格下单）。
       cancelBeltDrag();
+      // 战区拖拽中按 Esc：丢掉矩形预览（模式本身由下面的 exitInteractionMode 退出）。
+      cancelZoneDrag();
       const store = usePlanetViewStore.getState();
       if (store.interactionMode.kind !== 'inspect') {
         store.exitInteractionMode();
         return;
       }
-      // inspect 模式 Esc = 清空选择
-      if (store.selectedUnits.length > 0 || store.selected) {
+      // inspect 模式 Esc = 清空选择（R20-A ④：小队选择也一起清，2D 退役后不再有两套口径）
+      if (store.selectedUnits.length > 0 || store.selected || store.selectedSquads.length > 0) {
         store.setSelectedUnits([]);
+        store.setSelectedSquads([]);
         store.setSelected(null);
       }
     };
     window.addEventListener('keydown', cancelInteraction);
     return () => window.removeEventListener('keydown', cancelInteraction);
-  }, [cancelBeltDrag]);
+  }, [cancelBeltDrag, cancelZoneDrag]);
+
+  // 缩放快捷键（R20-A ④）：+/- 走场景已有的 zoom 入口（以画面中心为锚），
+  // 与导航列的 3D 放大/缩小按钮同一口径。输入框聚焦时不抢按键（与 2D 一致）。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const factor = zoomFactorForKey(event.key);
+      if (factor !== null) scene.current?.zoom(factor);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   /** 多选落库：单选时同步 selected，多选/清空时 selected 置空（与 2D 一致）。 */
   function applyUnitSelection(ids: string[]) {
@@ -214,6 +249,16 @@ export function PlanetMapThree(props: Props) {
         const store = usePlanetViewStore.getState();
         const fog = current.fog;
         const kind = store.interactionMode.kind;
+        // 测试接口 clickTile(tile, 2)（R20-A ⑤）：与右键情境指令同一条路径——
+        // 非 inspect 模式先退出模式（右键语义），inspect 模式交给 onContextTile。
+        if (meta.button === 2) {
+          if (kind !== 'inspect') {
+            store.exitInteractionMode();
+            return;
+          }
+          current.onContextTile?.(tile);
+          return;
+        }
         // §3.5：命中高架带时场景给 buildingId——inspect 直接选它（地面按格兜底会选中脚下的建筑）。
         if (kind === 'inspect' && meta.buildingId) {
           const building = current.planet.buildings?.[meta.buildingId];
@@ -274,7 +319,7 @@ export function PlanetMapThree(props: Props) {
     setReady(true);
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
-    if (exposeHook) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
+    if (exposeHook) installTestApi(renderer);
     // 战斗事件总线 → 3D 战斗演出（弹道/命中/爆炸/残骸）；卸载退订防重复演出
     const unsubscribeBattle = subscribeBattleEvents((event) => renderer.handleBattleEvent(event));
     const timer = window.setInterval(() => {
@@ -299,7 +344,7 @@ export function PlanetMapThree(props: Props) {
       renderer.destroy();
       scene.current = null;
       latest.current.onCanvasReady?.(null);
-      if (exposeHook) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
+      if (exposeHook) delete (window as unknown as { __planetThree?: unknown }).__planetThree;
     };
   }, []);
 
@@ -394,6 +439,18 @@ export function PlanetMapThree(props: Props) {
       }
       return;
     }
+    // D2 战区划定：theater_zone 模式下左键拖动出区域矩形（优先于 Shift 框选与球面旋转）。
+    if (event.button === 0 && interactionMode.kind === 'theater_zone') {
+      zoneDragRef.current = {
+        startX: event.clientX, startY: event.clientY, active: false,
+        startTile: scene.current?.pickAt(event.clientX, event.clientY) ?? null,
+        endTile: null,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0 || !event.shiftKey || interactionMode.kind !== 'inspect') return;
     marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
     // 捕获指针：松开时光标即使落在建造栏等 HUD 上，抬起事件也归框选，选框不会卡住。
@@ -421,6 +478,23 @@ export function PlanetMapThree(props: Props) {
           const mode = usePlanetViewStore.getState().interactionMode;
           if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: tail.direction });
         }
+      }
+      return;
+    }
+    const zoneDrag = zoneDragRef.current;
+    if (zoneDrag) {
+      event.stopPropagation();
+      zoneDrag.endTile = scene.current?.pickAt(event.clientX, event.clientY) ?? zoneDrag.endTile;
+      if (!zoneDrag.active && Math.abs(event.clientX - zoneDrag.startX) + Math.abs(event.clientY - zoneDrag.startY) > 4) {
+        zoneDrag.active = true;
+      }
+      if (zoneDrag.active) {
+        setZoneDragRect({
+          x0: Math.min(zoneDrag.startX, event.clientX),
+          y0: Math.min(zoneDrag.startY, event.clientY),
+          x1: Math.max(zoneDrag.startX, event.clientX),
+          y1: Math.max(zoneDrag.startY, event.clientY),
+        });
       }
       return;
     }
@@ -477,6 +551,23 @@ export function PlanetMapThree(props: Props) {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
+    const zoneDrag = zoneDragRef.current;
+    if (zoneDrag) {
+      event.stopPropagation();
+      zoneDragRef.current = null;
+      setZoneDragRect(null);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      if (!zoneDrag.active) return;
+      // 两个角点都拾取成格子（指针离开球面时沿用上一次命中的格子）。
+      const start = zoneDrag.startTile ?? scene.current?.pickAt(zoneDrag.startX, zoneDrag.startY);
+      const end = zoneDrag.endTile ?? scene.current?.pickAt(event.clientX, event.clientY);
+      if (!start || !end) return;
+      latest.current.onDefineZone?.(theaterZoneFromDragRect(
+        { x: start.x, y: start.y },
+        { x: end.x, y: end.y },
+      ));
+      return;
+    }
     const marquee = marqueeRef.current;
     marqueeRef.current = null;
     if (!marquee) return;
@@ -492,24 +583,86 @@ export function PlanetMapThree(props: Props) {
     };
     const hostRect = host.current?.getBoundingClientRect();
     if (!hostRect) return;
-    const ids: string[] = [];
-    for (const unit of Object.values(latest.current.planet.units ?? {})) {
-      if (unit.owner_id !== session.playerId) continue;
-      const projected = scene.current.project({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) });
-      if (!projected?.visible) continue;
-      const sx = hostRect.left + projected.x;
-      const sy = hostRect.top + projected.y;
-      if (sx >= rect.minX && sx <= rect.maxX && sy >= rect.minY && sy <= rect.maxY) ids.push(unit.id);
-    }
-    ids.sort();
-    applyUnitSelection(ids);
+    // 屏幕矩形 → 单位集合：与测试接口 dragTiles(…, {shift:true}) 同一套判定（纯函数）。
+    const projectedUnits = Object.values(latest.current.planet.units ?? {})
+      .filter(unit => unit.owner_id === session.playerId)
+      .map(unit => {
+        const projected = scene.current?.project({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) });
+        return {
+          id: unit.id,
+          ownerId: unit.owner_id,
+          screen: projected?.visible ? { x: hostRect.left + projected.x, y: hostRect.top + projected.y } : null,
+        };
+      });
+    applyUnitSelection(unitsInScreenRect(projectedUnits, rect));
   }
+
+  /**
+   * 浏览器测试接口（R20-A ⑤）：D1 决定不重建 DOM 实体层，Playwright 改为经
+   * `window.__planetThree` 用投影 + 派发。返回值一律是**页面 CSS 像素**（相对页面左上角），
+   * 供 `page.mouse.*` 直接使用；`locator.click` 用 `tileScreenPos` 减去画布位置即可。
+   *
+   * 全部内部调用场景已有方法（project/focus/pickAt/clickTile），不复制拾取逻辑：
+   * - tileScreenPos(tile)：不在视野内先聚焦，再返回投影点；
+   * - entityScreenPos(id)：建筑/单位按位置投影（高架带与地面同格，按格投影即可）；
+   * - clickTile(tile, button?)：button=2 走右键情境指令（场景 clickTile 的同一条 onPick）；
+   * - dragTiles(from, to, modifiers?)：两个格子的屏幕点之间拖一次（Shift=框选，Ctrl=加选）。
+   */
+  function installTestApi(target: PlanetThreeScene) {
+    const hostRect = () => host.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const pagePos = (tile: TilePoint) => {
+      const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
+      let projected = target.project(rounded);
+      if (!projected?.visible) {
+        target.focus(rounded);
+        projected = target.project(rounded);
+      }
+      return projected ? toPagePoint(hostRect(), projected) : null;
+    };
+    const api = {
+      ...target,
+      // 覆盖场景原方法：场景的 project 是相对画布的，测试接口要求页面坐标。
+      project: (tile: TilePoint) => target.project(tile),
+      tileScreenPos: pagePos,
+      entityScreenPos: (id: string) => {
+        const current = latest.current;
+        const entity = current.planet.buildings?.[id] ?? current.planet.units?.[id];
+        return entity ? pagePos(entity.position) : null;
+      },
+      clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
+      dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
+        const start = pagePos(from);
+        const end = pagePos(to);
+        if (!start || !end) return false;
+        const element = host.current;
+        if (!element) return false;
+        const canvasRect = element.getBoundingClientRect();
+        const local = (point: { x: number; y: number }) => ({ x: point.x - canvasRect.left, y: point.y - canvasRect.top });
+        const init = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0,
+          shiftKey: Boolean(modifiers.shift), ctrlKey: Boolean(modifiers.ctrl), metaKey: Boolean(modifiers.ctrl) };
+        const dispatch = (type: string, point: { x: number; y: number }) => {
+          const localPoint = local(point);
+          element.dispatchEvent(new PointerEvent(type, { ...init, clientX: localPoint.x, clientY: localPoint.y }));
+        };
+        dispatch('pointerdown', start);
+        // 分几步移动：框选阈值是 4px，一次跳到终点也算拖动，但分段更接近真实指针轨迹。
+        for (let step = 1; step <= 4; step++) {
+          dispatch('pointermove', { x: start.x + (end.x - start.x) * step / 4, y: start.y + (end.y - start.y) * step / 4 });
+        }
+        dispatch('pointerup', end);
+        return true;
+      },
+    };
+    (window as unknown as { __planetThree?: typeof api }).__planetThree = api;
+  }
+
+  const statusLines = buildPlanetThreeStatus({ hoveredTile, selected, selectedUnits, selectedSquads, interactionMode });
 
   return <div className="planet-three" ref={root}
     onPointerDownCapture={handleMarqueeDown}
     onPointerMoveCapture={handleMarqueeMove}
     onPointerUpCapture={handleMarqueeUp}
-    onPointerCancelCapture={cancelBeltDrag}
+    onPointerCancelCapture={() => { cancelBeltDrag(); cancelZoneDrag(); }}
     onDoubleClick={event => {
       // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
@@ -534,6 +687,8 @@ export function PlanetMapThree(props: Props) {
     event.preventDefault();
     // 拖拽铺带中按右键 = 取消这条预览（与 Esc 同一口径，B2），不进入情境指令分支。
     cancelBeltDrag();
+    // D2：战区划定模式右键 = 退出模式（拖拽中的矩形一并丢弃）。
+    cancelZoneDrag();
     const store = usePlanetViewStore.getState();
     if (store.interactionMode.kind !== 'inspect') {
       store.exitInteractionMode();
@@ -581,6 +736,19 @@ export function PlanetMapThree(props: Props) {
           top: marqueeRect.y0 - host.current.getBoundingClientRect().top,
           width: marqueeRect.x1 - marqueeRect.x0,
           height: marqueeRect.y1 - marqueeRect.y0,
+        }}
+      />
+    ) : null}
+    {zoneDragRect && host.current ? (
+      <div
+        aria-hidden="true"
+        className="planet-three__marquee planet-three__zone-rect"
+        data-testid="planet-three-zone-rect"
+        style={{
+          left: zoneDragRect.x0 - host.current.getBoundingClientRect().left,
+          top: zoneDragRect.y0 - host.current.getBoundingClientRect().top,
+          width: zoneDragRect.x1 - zoneDragRect.x0,
+          height: zoneDragRect.y1 - zoneDragRect.y0,
         }}
       />
     ) : null}
@@ -689,6 +857,7 @@ export function PlanetMapThree(props: Props) {
         {/* 调试入口（§3.2 复核）：2D 的那条工具条在 3D 下整条不渲染，
             所以 3D 的调试开关放在这一列的最后，面板同样浮在列上方。
             默认隐藏（debugMode 关闭时不渲染），Ctrl+Shift+D 与 2D 同口径。 */}
+        {props.theaterControls}
         {debugMode ? (
           <button
             aria-expanded={debugOpen}
@@ -711,9 +880,18 @@ export function PlanetMapThree(props: Props) {
             取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
           </button>
         ) : null}
+        {/* 状态行（R20-A ②）：文案与 2D 的 .planet-map-canvas__status 逐字对齐——
+            悬停坐标、选中文案（selectionLabel）、模式提示、框选数、小队数。
+            2D 退役后这些是玩家判断「当前模式/选了什么」的唯一可见反馈。 */}
         <div className="planet-three__nav-status">
-          {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
-          {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
+          {statusLines.map(line => (
+            <small
+              className={line.tone ? `planet-three__nav-status-line planet-three__nav-status-line--${line.tone}` : 'planet-three__nav-status-line'}
+              key={line.key}
+            >
+              {line.text}
+            </small>
+          ))}
         </div>
       </div>
     </div>

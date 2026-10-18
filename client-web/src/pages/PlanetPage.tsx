@@ -915,6 +915,7 @@ export function PlanetPage() {
           networks={networks}
           onCanvasReady={(capture) => { captureRef.current = capture; }}
           onContextTile={interactions.contextTile}
+          onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
           onSelectEntity={() => {
             setActiveDetailPanel("selection");
@@ -927,6 +928,13 @@ export function PlanetPage() {
           /* 3D 左下那一列的「图层与视角」与 2D 工具条是**同一份**面板：
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
           layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
+          theaterControls={(
+            <PlanetTheaterControls
+              onChanged={() => { void theatersQuery.refetch(); }}
+              planetId={planet.planet_id}
+              theaters={theatersQuery.data?.theaters ?? []}
+            />
+          )}
         /> : <PlanetMapPixi
           alerts={liveAlerts}
           catalog={catalog}
@@ -1110,7 +1118,8 @@ export function PlanetPage() {
         {/* 工具条（C3）：2D 的左下图标列；3D 由 PlanetMapThree 自带的同构列渲染
             （dimensional 时整条返回 null，避免左下出现两列重复图标）。
             战区划定（C4）作为这一列的最后一格：2D 拖矩形建 zone；
-            3D 不渲染——球面拖拽是旋转，划不出矩形（§3.2 复核）。 */}
+            R20-A ③ 起 3D 也有战区拖拽，但按钮渲染在 PlanetMapThree 自己的图标列里
+            （这条 2D 工具条在 3D 下整条返回 null）。 */}
         <PlanetMapToolbar
           dimensional={isThree}
           networks={networks}
@@ -1121,14 +1130,11 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         >
-          {isThree ? null : (
-            <PlanetTheaterControls
-              dimensional={false}
-              onChanged={() => { void theatersQuery.refetch(); }}
-              planetId={planet.planet_id}
-              theaters={theatersQuery.data?.theaters ?? []}
-            />
-          )}
+          <PlanetTheaterControls
+            onChanged={() => { void theatersQuery.refetch(); }}
+            planetId={planet.planet_id}
+            theaters={theatersQuery.data?.theaters ?? []}
+          />
         </PlanetMapToolbar>
         {countOutOfAmmoUnits(planet.units, session.playerId) > 0 ? (
           <div className="planet-ammo-alert" role="alert" data-testid="planet-ammo-alert">

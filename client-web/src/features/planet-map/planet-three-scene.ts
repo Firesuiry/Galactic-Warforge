@@ -44,7 +44,7 @@ import type { PlanetInteractionMode } from './store';
  * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
  * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
  */
-export interface PickMeta { offscreen: boolean; buildingId?: string }
+export interface PickMeta { offscreen: boolean; buildingId?: string; /** 2 = 右键（测试接口 clickTile(tile, 2) 派发的情境指令）。 */ button?: 0 | 2 }
 
 export interface PlanetThreeData {
   planet: PlanetRenderView;
@@ -1314,14 +1314,24 @@ export class PlanetThreeScene {
    * 任何反馈，驱动脚本白丢过两次建造（试玩 1016 B4）。
    * 返回 `{ dispatched, offscreen }`，调用侧据此判断命令是否真的走了同一条点击路径。
    */
-  clickTile(tile: TilePoint, options: { focus?: boolean } = {}): { dispatched: boolean; offscreen: boolean } {
+  clickTile(tile: TilePoint, options: { focus?: boolean; button?: number } = {}): { dispatched: boolean; offscreen: boolean } {
     if (!this.data) return { dispatched: false, offscreen: false };
     const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
     const projected = this.project(rounded);
     const offscreen = !projected?.visible;
     if (offscreen && options.focus !== false) this.focus(rounded);
+    // R20-A ⑤：浏览器测试需要「点右键」这条同路径入口（2D 的 data-entity DOM 层删除后，
+    // Playwright 只能经 __planetThree 派发）。默认仍是左键 tap。
+    if (options.button === 2) {
+      this.onPick(rounded, { offscreen, button: 2 });
+      return { dispatched: true, offscreen };
+    }
     this.onPick(rounded, { offscreen });
     return { dispatched: true, offscreen };
+  }
+  /** 相机快照（调试面板分享链接/视口 JSON 与测试接口用）：中心格 + 缩放高度 + 俯仰。 */
+  getCameraState(): { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean } {
+    return { center: this.getCenterTile(), altitude: this.altitude, tilt: this.tilt, groundView: this.groundView };
   }
   private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
     return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
