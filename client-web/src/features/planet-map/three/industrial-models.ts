@@ -5,7 +5,7 @@ import { createIndustrialFinishes } from './industrial-finishes';
 import { animateSorterArm } from './sorter-animation';
 import type { UnitFaction } from '../rts-commands';
 
-type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
+type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
 /** 单位涂装：己方白蓝、敌方玩家橙、黑雾中立暗紫灰、黑雾敌对暗红。 */
 const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
   own: { armor: 'ceramic', light: 'blue' },
@@ -33,6 +33,8 @@ export class IndustrialModels {
       alloy: { color: 0x798c94, roughness: 0.35, metalness: 0.78 },
       graphite: { color: 0x26363e, roughness: 0.47, metalness: 0.64 },
       copper: { color: 0xbb7842, roughness: 0.34, metalness: 0.78 },
+      // 嵌在深色底座里的窄铜环：比高光铜暗一档，避免在近景里读成 LED 亮圈。
+      copperDark: { color: 0x7d4a24, roughness: 0.55, metalness: 0.62 },
       blue: { color: 0x8befff, emissive: 0x24b7dc, emissiveIntensity: 6, roughness: 0.25, metalness: 0.3 },
       orange: { color: 0xffc97c, emissive: 0xff720d, emissiveIntensity: 6, roughness: 0.38, metalness: 0.3 },
       glass: { color: 0x153c4f, roughness: 0.17, metalness: 0.72, emissive: 0x073341, emissiveIntensity: 0.5 },
@@ -400,30 +402,55 @@ export class IndustrialModels {
     this.box(group, light, [.12, .035, .012], [0, .67, .312]);
   }
 
+  /**
+   * DSP 口径分拣器（第 18 轮契约 §1）：低矮圆底座 + 中央立柱 + 绕柱水平摆动的横臂 + 臂端夹爪。
+   *
+   * - 局部单位 1 cell，+X 东 / +Y 上 / +Z 南；`rotation=0` 时正面（放货端）朝局部 −Z。
+   * - 节点分层：`sorter-arm`（yaw 组，整机唯一绕 Y 摆的节点）→ `sorter-boom`（横臂，
+   *   动画写 `scale.x` 拉伸臂长）与 `sorter-claw`（臂端升降组，动画写 `position.y`）；
+   *   `sorter-payload` 挂在夹爪下，按 `last_transfer.item_id` 逐实例上色。
+   * - `sorter-boom` 里只放**长度成比例**的部件：臂端关节/夹爪挂回 `sorter-arm`，
+   *   由动画同步 `sorter-claw.position.x`，避免 `scale.x` 把夹爪和货物一起拉长。
+   * - 整机压得很矮（总高 ≤ .5，底座直径 ≤ .58，比熔炉矮一截）；不做上下浮动、
+   *   不做两段式举升臂。底座是**深色**石墨盘 + 窄铜环，不能读成「白色转盘」。
+   */
   private sorter(group: THREE.Group, light: Finish) {
-    this.part(group, 'cylinder', 'graphite', [0.34, 0.1, 0.34], [0, 0.16, 0]);
+    const tier: Finish = /mk3|_3/.test(group.name) ? 'orange' : /mk2|_2/.test(group.name) ? 'blue' : 'copper';
+    // 圆底座直接坐在矿场上（与物流分流器同口径，不铺方形地基）：深色石墨盘压在合金边圈上，
+    // 铜环收窄到 .2 半径、换成更暗的 copperDark 做「金属嵌线」，不再读成 LED 亮圈。
+    this.part(group, 'cylinder', 'graphite', [.58, .05, .58], [0, .025, 0]);
+    this.part(group, 'cylinder', 'alloy', [.5, .022, .5], [0, .055, 0]);
+    this.part(group, 'cylinder', 'graphite', [.45, .03, .45], [0, .07, 0]);
+    this.ring(group, 'copperDark', .2, .088);
+    // 中央立柱（压矮）+ 柱顶铜箍；柱身一圈按层级换色的点缀环（mk1 铜 / mk2 蓝 / mk3 橙）。
+    this.part(group, 'cylinder', 'graphite', [.12, .26, .12], [0, .21, 0]);
+    this.part(group, 'cylinder', tier, [.135, .02, .135], [0, .18, 0]);
+    this.part(group, 'cylinder', 'copper', [.15, .04, .15], [0, .345, 0]);
     const joint = (parent: THREE.Object3D, name: string) => {
       const node = new THREE.Group(); node.name = name; parent.add(node);
-      // Mark every mutable transform so dynamic instancing follows the whole linkage.
+      // 会被动画写变换的节点都要登记：batchStatic 跳过整棵子树，DynamicBatches 逐帧复制姿态。
       this.registerRotation(node, 'y', 0);
       return node;
     };
-    const arm = joint(group, 'sorter-arm'); arm.position.y = 0.24;
-    this.part(arm, 'cylinder', 'copper', [0.19, 0.15, 0.19], [0, 0, 0]);
-    const shoulder = joint(arm, 'sorter-shoulder'); shoulder.rotation.z = .9;
-    const upper = joint(shoulder, 'sorter-upper'); upper.scale.x = .46;
-    this.box(upper, 'ceramic', [1, .10, .12], [.5, 0, 0]);
-    this.box(upper, 'copper', [.75, .025, .13], [.5, .062, 0]);
-    const elbow = joint(shoulder, 'sorter-elbow'); elbow.position.x = .46; elbow.rotation.z = -1.55;
-    this.part(elbow, 'cylinder', 'copper', [.16, .18, .16], [0, 0, 0], [Math.PI / 2, 0, 0]);
-    const lower = joint(elbow, 'sorter-lower'); lower.scale.x = .46;
-    this.box(lower, 'alloy', [1, .075, .075], [.5, 0, 0]);
-    const wrist = joint(elbow, 'sorter-wrist'); wrist.position.x = .46; wrist.rotation.z = .65;
-    this.box(wrist, 'ceramic', [.16, .10, .14], [0, 0, 0]);
-    for (const z of [-.075, .075]) this.box(wrist, 'graphite', [.065, .12, .025], [0, -.09, z]);
-    const payload = joint(wrist, 'sorter-payload'); payload.visible = false;
-    this.box(payload, 'copper', [.14, .12, .12], [0, -.11, 0]);
-    this.box(payload, light, [.09, .018, .10], [0, .06, 0]);
+    const arm = joint(group, 'sorter-arm');
+    // 转台（合金，压暗）+ 横臂：臂身加宽加厚（.085 高 × .10 宽）才有 DSP 的机械臂体量。
+    this.part(arm, 'cylinder', 'alloy', [.18, .04, .18], [0, .365, 0]);
+    const boom = joint(arm, 'sorter-boom');
+    this.box(boom, 'graphite', [.55, .085, .10], [.275, .395, 0]);
+    this.box(boom, 'copper', [.55, .018, .042], [.275, .4415, 0]);
+    // 臂端关节 + 夹爪升降组（x 由动画按 range 同步到 L，和 boom 拉伸后的臂端对齐）。
+    // 夹爪壳体/两指用合金 + 石墨（不要纯白陶瓷），两指在 payload 两侧留出开口。
+    const claw = joint(arm, 'sorter-claw');
+    claw.position.set(.55, 0, 0);
+    this.box(claw, 'alloy', [.11, .1, .11], [0, .395, 0]);
+    this.box(claw, tier, [.026, .026, .02], [0, .405, .058]);
+    this.box(claw, 'graphite', [.12, .08, .15], [0, .315, 0]);
+    for (const z of [-.08, .08]) this.box(claw, 'alloy', [.035, .14, .035], [0, .23, z]);
+    // 物品占位：默认隐藏，材质在动画里按物品色逐实例写入；挂在两指之间、露出指底，携带段一眼可见。
+    const payload = joint(claw, 'sorter-payload');
+    payload.position.set(0, .215, 0); payload.visible = false;
+    const cargo = this.box(payload, 'copper', [.16, .16, .16], [0, 0, 0]);
+    cargo.userData.independentMaterial = true;
   }
 
   private headquarters(group: THREE.Group, light: Finish, armor: Finish) {
@@ -482,7 +509,8 @@ export class IndustrialModels {
     const cached = this.cached(key); if (cached) return cached;
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
-    if (type !== 'foundation' && type !== 'splitter' && type !== 'logistics_distributor' && !/conveyor/.test(type)) this.foundation(group, light);
+    // 分拣器自己带圆底座（DSP 口径），不铺方形地基：否则 .62 的圆盘会被 .86 的合金台吞掉。
+    if (type !== 'foundation' && type !== 'splitter' && type !== 'logistics_distributor' && !/conveyor/.test(type) && !/sorter/.test(type)) this.foundation(group, light);
     if (type === 'foundation') {
       this.box(group, 'alloy', [0.98, 0.035, 0.98], [0, 0.012, 0]);
       for (const edge of [-1, 1]) {
