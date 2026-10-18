@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"siliconworld/internal/model"
@@ -316,6 +317,7 @@ func TestBuildElevationValidation(t *testing.T) {
 		want    string
 	}{
 		{"non-belt", map[string]any{"building_type": "arc_smelter", "recipe_id": "smelt_iron", "elevation": 1}, "只有传送带可以架高"},
+		{"negative", map[string]any{"building_type": "conveyor_belt_mk1", "direction": "east", "elevation": -1}, fmt.Sprintf("高度只能 0–%d 层", model.MaxBeltElevation)},
 		{"out-of-range", map[string]any{"building_type": "conveyor_belt_mk1", "direction": "east", "elevation": model.MaxBeltElevation + 1}, fmt.Sprintf("高度只能 0–%d 层", model.MaxBeltElevation)},
 		{"auto", map[string]any{"building_type": "conveyor_belt_mk1", "direction": "auto", "elevation": 1}, "高架传送带必须有明确的输出方向（不能是 auto）"},
 	}
@@ -329,5 +331,41 @@ func TestBuildElevationValidation(t *testing.T) {
 				t.Fatalf("got %+v, want INVALID_ELEVATION %q", res, tc.want)
 			}
 		})
+	}
+}
+
+// 错误信息契约（§3.2）：高架层同格同层的两种冲突都回 POSITION_OCCUPIED，
+// 且中文提示要能看出「第几层、和什么冲突」——玩家据此才知道该换层还是拆东西。
+func TestBuildElevationLayerConflictMessages(t *testing.T) {
+	core := newConstructionTestCore(t, 2, 2)
+	ws := core.world
+	pos, _ := findTwoOpenTiles(ws)
+	beltFixture(ws, "layer1", pos, model.ConveyorEast, 1)
+
+	// 同格同层已有带子：报出层号与占用者归属。
+	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+		Target:  model.CommandTarget{Position: &pos},
+		Payload: map[string]any{"building_type": "conveyor_belt_mk1", "direction": "north", "elevation": 1},
+	})
+	if res.Code != model.CodePositionOccupied || !strings.Contains(res.Message, "该格已有你的建筑") {
+		t.Fatalf("same-layer belt conflict message: %+v", res)
+	}
+
+	// 同格同层已有施工任务：提示里带建筑名与任务状态。
+	ws.Construction = model.NewConstructionQueue()
+	task := &model.ConstructionTask{
+		ID: "c-1", PlayerID: "p1", BuildingType: model.BuildingTypeConveyorBeltMk1,
+		Position: pos, Elevation: 2, ConveyorDirection: model.ConveyorEast,
+		State: model.ConstructionPending,
+	}
+	if err := ws.Construction.Enqueue(ws, task); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	res, _ = execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+		Target:  model.CommandTarget{Position: &pos},
+		Payload: map[string]any{"building_type": "conveyor_belt_mk1", "direction": "north", "elevation": 2},
+	})
+	if res.Code != model.CodePositionOccupied || !strings.Contains(res.Message, "施工任务") || !strings.Contains(res.Message, "传送带") {
+		t.Fatalf("same-layer construction conflict message: %+v", res)
 	}
 }
