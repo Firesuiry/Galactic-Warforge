@@ -140,13 +140,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		tile := footprintTiles[0]
 		if id := ws.BeltLayerAt(tile.X, tile.Y, p.Elevation); id != "" {
 			res.Code = model.CodePositionOccupied
-			res.Message = tileOccupiedMessage(ws, playerID, id, "该层已有传送带")
+			res.Message = fmt.Sprintf("第 %d 层：%s", p.Elevation, tileOccupiedMessage(ws, playerID, id, "该层已有传送带"))
 			return res, nil
 		}
 		if ws.Construction != nil {
 			if key := model.BeltLayerKey(tile.X, tile.Y, p.Elevation); ws.Construction.IsTileReserved(key) {
 				res.Code = model.CodePositionOccupied
-				res.Message = constructionReservationMessage(ws, playerID, key)
+				res.Message = fmt.Sprintf("第 %d 层：%s", p.Elevation, constructionReservationMessage(ws, playerID, key))
 				return res, nil
 			}
 		}
@@ -156,6 +156,14 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			if ground == nil || !model.IsLowLogistics(ground.Type) {
 				res.Code = model.CodePositionOccupied
 				res.Message = "高架传送带不能架在建筑上方"
+				return res, nil
+			}
+		}
+		// 地面施工预留同理：高架带下方只能有空地或低矮物流（含施工中）。
+		if ws.Construction != nil {
+			if groundTask := ws.Construction.ReservedGroundTaskAt(tile.X, tile.Y); groundTask != nil && !model.IsLowLogistics(groundTask.BuildingType) {
+				res.Code = model.CodePositionOccupied
+				res.Message = fmt.Sprintf("第 %d 层该格下方有地面施工任务：%s", p.Elevation, buildingTypeDisplayName(groundTask.BuildingType))
 				return res, nil
 			}
 		}
@@ -180,6 +188,18 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 				res.Code = model.CodePositionOccupied
 				res.Message = "上方有高架传送带"
 				return res, nil
+			}
+			// 施工中的高架带同理（契约 §3.2：含施工中）。
+			if ws.Construction != nil {
+				for _, tile := range footprintTiles {
+					for elevation := 1; elevation <= model.MaxBeltElevation; elevation++ {
+						if over := ws.Construction.ReservedElevatedTaskAt(tile.X, tile.Y, elevation); over != nil {
+							res.Code = model.CodePositionOccupied
+							res.Message = fmt.Sprintf("该格上方第 %d 层已有传送带施工任务：%s", elevation, buildingTypeDisplayName(over.BuildingType))
+							return res, nil
+						}
+					}
+				}
 			}
 		}
 		if ws.Construction != nil && pos.Z == 0 {
@@ -1153,7 +1173,7 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 			}
 			if reserved := ws.Construction.ReservedTiles[model.BeltLayerKey(p.X, p.Y, task.Elevation)]; reserved != "" && reserved != taskID {
 				res.Code = model.CodePositionOccupied
-				res.Message = "该层已有施工任务"
+				res.Message = fmt.Sprintf("第 %d 层该格已有施工任务", task.Elevation)
 				return res, nil
 			}
 			if !ws.Grid[p.Y][p.X].Terrain.Buildable() {
@@ -1168,6 +1188,11 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 					return res, nil
 				}
 			}
+			if groundTask := ws.Construction.ReservedGroundTaskAt(p.X, p.Y); groundTask != nil && !model.IsLowLogistics(groundTask.BuildingType) {
+				res.Code = model.CodePositionOccupied
+				res.Message = fmt.Sprintf("第 %d 层该格下方有地面施工任务：%s", task.Elevation, buildingTypeDisplayName(groundTask.BuildingType))
+				return res, nil
+			}
 			continue
 		}
 		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation && !lavaSite) || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
@@ -1180,6 +1205,13 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 				res.Code = model.CodePositionOccupied
 				res.Message = "上方有高架传送带"
 				return res, nil
+			}
+			for elevation := 1; elevation <= model.MaxBeltElevation; elevation++ {
+				if over := ws.Construction.ReservedElevatedTaskAt(p.X, p.Y, elevation); over != nil {
+					res.Code = model.CodePositionOccupied
+					res.Message = fmt.Sprintf("该格上方第 %d 层已有传送带施工任务：%s", elevation, buildingTypeDisplayName(over.BuildingType))
+					return res, nil
+				}
 			}
 		}
 		if foundation := ws.FoundationAt(p); foundation != nil && (task.BuildingType == model.BuildingTypeFoundation || (foundation.Job != nil && foundation.Job.Type == model.BuildingJobDemolish)) {
