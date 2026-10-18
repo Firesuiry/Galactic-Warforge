@@ -1,0 +1,20 @@
+[
+  {
+    "tick": 100,
+    "text": "比赛开始，双方基地分处地图对角，先补电力赤字。",
+    "audio": "audio/war/seg-01.mp3",
+    "duration_sec": 5.09
+  },
+  {
+    "tick": 4000,
+    "text": "双方几乎同时建成组装机，士兵生产线启动。",
+    "audio": "audio/war/seg-02.mp3",
+    "duration_sec": 4.68
+  },
+  {
+    "tick": 8000,
+    "text": "兵力开始爬坡，侦察执行体已经向对方半场机动。",
+    "audio": "audio/war/seg-03.mp3",
+    "duration_sec": 4.56
+  }
+]
