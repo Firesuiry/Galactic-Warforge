@@ -224,7 +224,8 @@ describe('usePlanetRtsHotkeys 传送带高度（§3.5 PageUp/PageDown）', () =>
     const input = document.createElement('input');
     document.body.appendChild(input);
     keydown('PageUp', {}, input);
-    expect(usePlanetViewStore.getState().interactionMode.elevation ?? 0).toBe(0);
+    const mode = usePlanetViewStore.getState().interactionMode;
+    expect(mode.kind === 'build' ? mode.elevation ?? 0 : -1).toBe(0);
     input.remove();
   });
 });

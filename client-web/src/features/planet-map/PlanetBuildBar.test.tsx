@@ -616,6 +616,12 @@ describe('PlanetBuildBar', () => {
   });
 });
 
+/** 当前建造目标高度（非建造模式返回 -1，避免类型收窄写进每条断言）。 */
+function buildElevation(): number {
+  const mode = usePlanetViewStore.getState().interactionMode;
+  return mode.kind === 'build' ? (mode.elevation ?? 0) : -1;
+}
+
 describe('PlanetBuildBar 传送带目标高度（§3.5）', () => {
   beforeEach(() => {
     resetPlanetViewStore();
@@ -664,7 +670,7 @@ describe('PlanetBuildBar 传送带目标高度（§3.5）', () => {
     expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 4');
 
     for (let index = 0; index < 6; index++) await user.click(down);
-    expect(usePlanetViewStore.getState().interactionMode.elevation ?? 0).toBe(0);
+    expect(buildElevation()).toBe(0);
     expect(down).toBeDisabled();
   });
 
@@ -683,7 +689,7 @@ describe('PlanetBuildBar 传送带目标高度（§3.5）', () => {
       direction: 'auto',
     });
     await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
-    expect(usePlanetViewStore.getState().interactionMode.elevation ?? 0).toBe(0);
+    expect(buildElevation()).toBe(0);
     expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 0');
   });
 });
