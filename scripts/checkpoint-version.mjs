@@ -1,6 +1,7 @@
 // 存档点版本检查：判断 .run/checkpoints/<名> 能否被**当前 worktree 的服务端**读取。
 //
 // 服务端判版本的逻辑（server/internal/gamedir/files.go / server/internal/snapshot/snapshot.go）：
+//   manifest.json  存在且可解析（checkpoint.Store.Read 先读它）
 //   meta.json      format_version === gamedir.CurrentFormatVersion
 //   save.json      format_version === gamedir.CurrentFormatVersion
 //                  snapshot.version === snapshot.CurrentVersion
@@ -12,7 +13,7 @@
 //   node scripts/checkpoint-version.mjs <checkpoint_dir> <name>
 // 输出（stdout 一行）与退出码：
 //   OK                        0  可读
-//   MISSING                   3  目录/文件缺失
+//   MISSING                   3  目录/文件缺失（含 manifest.json）
 //   MISMATCH <原因>           4  版本不符
 //   UNREADABLE <原因>         5  文件损坏/解析失败/缺必需字段/常量解析失败
 import fs from 'node:fs';
@@ -68,9 +69,10 @@ function main() {
   }
 
   const dir = path.join(dirArg, name);
+  const manifestPath = path.join(dir, 'manifest.json');
   const metaPath = path.join(dir, 'meta.json');
   const savePath = path.join(dir, 'save.json');
-  for (const p of [dir, metaPath, savePath]) {
+  for (const p of [dir, manifestPath, metaPath, savePath]) {
     if (!fs.existsSync(p)) {
       console.log('MISSING');
       process.exit(3);
@@ -78,6 +80,9 @@ function main() {
   }
 
   try {
+    // Store.Read 先读 manifest.json；坏 manifest 服务端同样读不了。
+    JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
     if (meta.format_version !== current.format) {
       console.log(`MISMATCH meta.format_version=${meta.format_version} 当前=${current.format}`);
@@ -90,6 +95,10 @@ function main() {
       console.log(`MISMATCH save.format_version=${save.format_version} 当前=${current.format}`);
       process.exit(4);
     }
+    if (!save.snapshot || typeof save.snapshot !== 'object') {
+      console.log('UNREADABLE save.snapshot 缺失');
+      process.exit(5);
+    }
     const snapVer = save.snapshot.version;
     if (snapVer !== current.snapshot) {
       console.log(`MISMATCH save.snapshot.version=${snapVer} 当前=${current.snapshot}`);
@@ -99,6 +108,15 @@ function main() {
     if (save.debug_state?.base_snapshot && baseVer !== current.snapshot) {
       console.log(`MISMATCH save.debug_state.base_snapshot.version=${baseVer} 当前=${current.snapshot}`);
       process.exit(4);
+    }
+    // gamedir.validateSnapshotStrict：world 与 planet_worlds 至少要有一个。
+    const hasPlanetWorlds =
+      save.snapshot.planet_worlds &&
+      typeof save.snapshot.planet_worlds === 'object' &&
+      Object.keys(save.snapshot.planet_worlds).length > 0;
+    if (!save.snapshot.world && !hasPlanetWorlds) {
+      console.log('UNREADABLE save.snapshot 缺少 world 状态（world 与 planet_worlds 均为空）');
+      process.exit(5);
     }
     if (save.tick !== save.snapshot?.tick) {
       console.log(`UNREADABLE save.tick=${save.tick} snapshot.tick=${save.snapshot?.tick}`);
