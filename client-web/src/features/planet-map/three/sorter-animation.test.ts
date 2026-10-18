@@ -31,7 +31,7 @@ function fixture(options: FixtureOptions = {}) {
   // 朝向 0：取货端（背面）在南 +Z，放货端（正面）在北 −Z；朝向 90 时取/放在西/东。
   const eastward = options.rotation === 90;
   const building = {
-    id: 'sorter', type: 'sorter_mk1', position, owner_id: 'p1', rotation: options.rotation ?? 0,
+    id: 'sorter', type: 'sorter_mk1', position, owner_id: 'p1', rotation: String(options.rotation ?? 0) as Building['rotation'],
     runtime: { state: 'running' },
     sorter: {
       cycle_ticks: options.cycleTicks ?? 2, range: options.range ?? 1,
