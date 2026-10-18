@@ -58,6 +58,17 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, interactions }: Use
         return;
       }
 
+      // 第 19 轮 §3.5：PageUp/PageDown 升降传送带建造目标高度（先查过：未被其它快捷键占用）。
+      // 只在传送带建造模式下生效；输入框/下拉框聚焦时上面的守卫已提前返回。
+      if (key === 'PageUp' || key === 'PageDown') {
+        if (store.interactionMode.kind === 'build' && store.interactionMode.buildingType.startsWith('conveyor_belt')) {
+          store.adjustBuildElevation(key === 'PageUp' ? 1 : -1);
+          sfx.uiClick();
+          event.preventDefault();
+        }
+        return;
+      }
+
       // Ctrl+数字：记录编队（当前多选集合，含阵亡过滤前的原始 id 由 prune 兜底）
       if ((event.ctrlKey || event.metaKey) && /^[1-9]$/.test(key)) {
         const index = Number(key);

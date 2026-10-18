@@ -171,3 +171,60 @@ describe('usePlanetRtsHotkeys（C1 快捷键体系）', () => {
     expect(orderNow).not.toHaveBeenCalled();
   });
 });
+
+describe('usePlanetRtsHotkeys 传送带高度（§3.5 PageUp/PageDown）', () => {
+  const orderNow = vi.fn();
+
+  function setup() {
+    resetPlanetViewStore();
+    orderNow.mockClear();
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+    const interactions: PlanetInteractions = {
+      interactTile: vi.fn(),
+      contextTile: vi.fn(() => false),
+      attackMove: vi.fn(() => false),
+      orderNow,
+    };
+    renderHook(() => usePlanetRtsHotkeys({ planet: makePlanet(), interactions }));
+  }
+
+  it('传送带建造模式：PageUp 升、PageDown 降，钳在 0–4', () => {
+    setup();
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' });
+    const event = keydown('PageUp');
+    expect(event.defaultPrevented).toBe(true);
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 1 });
+    keydown('PageUp');
+    keydown('PageUp');
+    keydown('PageUp');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 4 });
+    keydown('PageUp');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 4 });
+    keydown('PageDown');
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 3 });
+  });
+
+  it('非传送带建造模式/其它模式：PageUp/PageDown 不动作', () => {
+    setup();
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' });
+    keydown('PageUp');
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' });
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'inspect' });
+    keydown('PageDown');
+    expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
+  });
+
+  it('输入框聚焦时 PageUp 不触发', () => {
+    setup();
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' });
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    keydown('PageUp', {}, input);
+    expect(usePlanetViewStore.getState().interactionMode.elevation ?? 0).toBe(0);
+    input.remove();
+  });
+});

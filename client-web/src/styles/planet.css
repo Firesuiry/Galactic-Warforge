@@ -1865,6 +1865,43 @@
   background:#5fb0ff1f;
 }
 
+/* 第 19 轮 §3.5：传送带目标高度（高度 N + ▲▼）。 */
+.planet-build-bar__elevation {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--surface-1);
+  padding:1px 4px 1px 8px;
+  white-space:nowrap;
+}
+
+.planet-build-bar__elevation-label {
+  color:var(--accent);
+  font-size:.72rem;
+}
+
+.planet-build-bar__elevation-btn {
+  border:none;
+  border-radius:3px;
+  background:transparent;
+  color:var(--accent-2);
+  font-size:.62rem;
+  line-height:1;
+  cursor:pointer;
+  padding:3px 4px;
+}
+
+.planet-build-bar__elevation-btn:hover:not(:disabled) {
+  background:#5fb0ff1f;
+}
+
+.planet-build-bar__elevation-btn:disabled {
+  color:var(--text-muted, #6b7a90);
+  cursor:default;
+}
+
 .planet-build-bar__select {
   border:1px solid var(--border);
   border-radius:4px;

@@ -37,6 +37,7 @@ import {
 } from '@/features/planet-map/build-workflow';
 import { isSorterBuilding, DIRECTION_NAMES, OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns } from '@/features/planet-map/logistics-direction';
 import { getItemDisplayName, getTechDisplayName, type PlanetRenderView } from '@/features/planet-map/model';
+import { MAX_BELT_ELEVATION } from '@/features/planet-map/logistics-tier';
 import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
@@ -149,6 +150,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
   const activeBuildingType = interactionMode.kind === 'build' ? interactionMode.buildingType : null;
   const buildMode = interactionMode.kind === 'build';
   const beltMode = buildMode && isConveyorBeltBuilding(activeBuildingType ?? '');
+  const buildElevation = interactionMode.kind === 'build' ? (interactionMode.elevation ?? 0) : 0;
   const sorterMode = buildMode && isSorterBuilding({ type: activeBuildingType ?? '' });
   const buildDirection = interactionMode.kind === 'build' ? interactionMode.direction : 'auto';
   const activeRecipeId = interactionMode.kind === 'build' ? interactionMode.recipeId : undefined;
@@ -191,6 +193,11 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       return;
     }
     setInteractionMode({ ...mode, recipeId: recipeId || undefined });
+  };
+
+  /** 传送带目标高度（§3.5）：PageUp/PageDown 与 ▲▼ 按钮共用 store 的升降动作。 */
+  const adjustElevation = (delta: number) => {
+    usePlanetViewStore.getState().adjustBuildElevation(delta);
   };
 
   // R 键循环传送带方向（输入控件聚焦时不抢按键）。
@@ -456,7 +463,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                   if (active) {
                     exitInteractionMode();
                   } else {
-                    setInteractionMode({ kind: 'build', buildingType: entry.id, direction: initialBuildDirection(entry.id) });
+                    // 切换建筑类型 → 目标高度归零（§3.5）；同类型重进也走这里。
+                    usePlanetViewStore.getState().beginBuild({ kind: 'build', buildingType: entry.id, direction: initialBuildDirection(entry.id) });
                   }
                 }}
               >
@@ -570,7 +578,9 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
               <span className="planet-build-bar__hint">
                 {sorterMode
                   ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上的绿色箭头 = 取货端 → 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
-                  : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
+                  : beltMode
+                    ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览，按住左键拖拽连续铺带；PageUp/PageDown 调整目标高度（0–${MAX_BELT_ELEVATION} 层，拖拽中改高度后续格子自动起坡/落坡），右键/Esc 退出`
+                    : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
             <button
@@ -601,6 +611,33 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             >
               重置朝向
             </button>
+            {beltMode ? (
+              // 第 19 轮 §3.5：传送带目标高度。PageUp/PageDown 与 ▲▼ 同一动作；
+              // 拖拽中途改高度，后续格子按每格 ±1 自动起坡/落坡。
+              <span className="planet-build-bar__elevation" data-testid="planet-build-elevation">
+                <span className="planet-build-bar__elevation-label">高度 {buildElevation}</span>
+                <button
+                  aria-label="升高一层"
+                  className="planet-build-bar__elevation-btn"
+                  disabled={buildElevation >= MAX_BELT_ELEVATION}
+                  onClick={() => adjustElevation(1)}
+                  title="升高一层（PageUp）"
+                  type="button"
+                >
+                  ▲
+                </button>
+                <button
+                  aria-label="降低一层"
+                  className="planet-build-bar__elevation-btn"
+                  disabled={buildElevation <= 0}
+                  onClick={() => adjustElevation(-1)}
+                  title="降低一层（PageDown）"
+                  type="button"
+                >
+                  ▼
+                </button>
+              </span>
+            ) : null}
             {availableRecipes.length > 0 ? (
               <select
                 className="planet-build-bar__select"
