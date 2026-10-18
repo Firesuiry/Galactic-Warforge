@@ -26,6 +26,7 @@ const WAR_ONLY_SPECS = [
   '**/cube-surface.spec.ts',
   '**/industrial-development.spec.ts',
   '**/planet-build-workflow.spec.ts',
+  '**/planet-belt-elevated-drag.spec.ts',
   '**/planet-hud-resources.spec.ts',
   '**/planet-produce-units.spec.ts',
   '**/war-workbench-authoritative.spec.ts',

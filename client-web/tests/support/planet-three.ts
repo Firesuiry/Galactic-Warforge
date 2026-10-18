@@ -197,9 +197,11 @@ export function buildCommandPlacements(requests: string[], buildingType: string)
       const target = command.target as { position?: TilePoint } | undefined;
       const payload = command.payload as { building_type?: string } | undefined;
       if (payload?.building_type !== buildingType || !target?.position) continue;
+      // 高度在 **payload.elevation**（shared-client/api.ts 的 cmdBuild），不是 position.z：
+      // position.z 恒为 0（高架带也贴同一地面格，靠 elevation 分层）。
       placements.push({
         position: { x: target.position.x, y: target.position.y },
-        elevation: (target.position as { z?: number }).z,
+        elevation: (payload as { elevation?: number }).elevation,
         direction: (payload as { direction?: string }).direction,
       });
     }
