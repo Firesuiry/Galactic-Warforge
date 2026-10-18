@@ -150,9 +150,17 @@ export function PlanetMapThree(props: Props) {
     store.setSelected({ kind: 'squad', id: squad.id, position: squad.position });
   }
 
+  /** 放弃当前拖拽铺带（Esc / 右键 / 指针被取消）：清预览，不产生任何订单（B2）。 */
+  const cancelBeltDrag = useCallback(() => {
+    beltDrag.current = null;
+    scene.current?.setBeltDragPath(null);
+  }, []);
+
   useEffect(() => {
     const cancelInteraction = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // 拖拽铺带中按 Esc：先丢掉这条预览（否则松手还会按旧路径逐格下单）。
+      cancelBeltDrag();
       const store = usePlanetViewStore.getState();
       if (store.interactionMode.kind !== 'inspect') {
         store.exitInteractionMode();
@@ -166,7 +174,7 @@ export function PlanetMapThree(props: Props) {
     };
     window.addEventListener('keydown', cancelInteraction);
     return () => window.removeEventListener('keydown', cancelInteraction);
-  }, []);
+  }, [cancelBeltDrag]);
 
   /** 多选落库：单选时同步 selected，多选/清空时 selected 置空（与 2D 一致）。 */
   function applyUnitSelection(ids: string[]) {
@@ -428,6 +436,10 @@ export function PlanetMapThree(props: Props) {
   function handleMarqueeUp(event: React.PointerEvent<HTMLDivElement>) {
     if (beltDrag.current) {
       event.stopPropagation();
+      // 拖拽是用**左键**开始的，抬起带的 button 不是 0 说明结束的不是这次拖拽
+      //（真实浏览器里右键按下已由 contextmenu 取消拖拽）。不下单、也不清预览，
+      // 等真正对应的左键抬起再结算（B2：右键抬起不得下单）。
+      if (event.button !== 0) return;
       const drag = beltDrag.current;
       // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
       // 单格点击（没拖拽过）且建造模式朝向外 auto：只带高度，方向交回 interactTile 的
@@ -477,7 +489,7 @@ export function PlanetMapThree(props: Props) {
     onPointerDownCapture={handleMarqueeDown}
     onPointerMoveCapture={handleMarqueeMove}
     onPointerUpCapture={handleMarqueeUp}
-    onPointerCancelCapture={() => { beltDrag.current = null; scene.current?.setBeltDragPath(null); }}
+    onPointerCancelCapture={cancelBeltDrag}
     onDoubleClick={event => {
       // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
@@ -500,6 +512,8 @@ export function PlanetMapThree(props: Props) {
     }}
     onContextMenu={event => {
     event.preventDefault();
+    // 拖拽铺带中按右键 = 取消这条预览（与 Esc 同一口径，B2），不进入情境指令分支。
+    cancelBeltDrag();
     const store = usePlanetViewStore.getState();
     if (store.interactionMode.kind !== 'inspect') {
       store.exitInteractionMode();
