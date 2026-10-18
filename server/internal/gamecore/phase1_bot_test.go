@@ -6,6 +6,10 @@ import (
 )
 
 func TestPhase1BotIndustrialCycle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("bot 产业长链模拟（实测 tick 19379 才产兵并补弹，单跑约 80 秒）；用 -run 单跑")
+	}
+	t.Parallel()
 	core := newBotTestCore(t, "hard")
 	ws := core.World()
 	produced, supplied := false, false

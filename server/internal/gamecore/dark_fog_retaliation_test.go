@@ -296,6 +296,10 @@ func TestDarkFogStopsWavesAfterCalm(t *testing.T) {
 //     自动还手没有把 hostile_until_tick 顺延；
 //   - 中立后不再有新波次。
 func TestDarkFogRaidScenarioPlayerSurvivesAndCalms(t *testing.T) {
+	if testing.Short() {
+		t.Skip("整局黑雾报复场景复现（6000 tick 敌对窗口 + 2000 tick 观察，单跑约 145 秒）；用 -run 单跑")
+	}
+	t.Parallel()
 	core := newBlackFogTestCore(t, "easy")
 	ws := core.World()
 	ws.Tick = 70000

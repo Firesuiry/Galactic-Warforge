@@ -16,6 +16,7 @@ import (
 //     （只有「矿石进了熔炉」才算这条链通了——分拣器朝向错、取货端没接到带子时，
 //     熔炉会一直空转）。
 func TestScriptedOpeningSorterLineDelivers(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	// 与 cp-root 的落点对齐：根层推到 tick 27 存档，脚本从同一 tick 起跑。

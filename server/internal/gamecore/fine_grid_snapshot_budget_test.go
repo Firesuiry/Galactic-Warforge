@@ -68,6 +68,7 @@ func TestFineGridSnapshotStaysWithinBudget(t *testing.T) {
 // 一旦基线重建的口径和 mapgen + bootstrap 注入的不一致，读档就会悄悄少掉整批
 // 资源节点（曾实测 34404 → 3047）或把地形抹平——两个都会让对局静默走样。
 func TestSaveRestoreKeepsWorldEquivalent(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	ws := core.World()
@@ -153,6 +154,7 @@ func TestSaveRestoreKeepsWorldEquivalent(t *testing.T) {
 
 // 存档体积不能随世界推进回涨：跑一段后再存，体积仍要在预算内。
 func TestFineGridSnapshotStaysWithinBudgetMidGame(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	ws := core.World()
@@ -178,6 +180,7 @@ func TestFineGridSnapshotStaysWithinBudgetMidGame(t *testing.T) {
 // ResourceBaseline 标了 json:"-"，JSON 往返后为空，必须由地图模型重新挂上，
 // 否则恢复出来的世界一个资源节点都没有（矿机全部空转）。
 func TestSnapshotFromJSONRestoresResourcesWithAttachedBaseline(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	ws := core.World()

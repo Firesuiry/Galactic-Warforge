@@ -48,6 +48,7 @@ func TestSkirmishFromZeroFullMatch(t *testing.T) {
 // 并让矿机通电运转（矿机通电后才有矿石实物产出，否则整局死锁）。
 // 实测：风机 tick 1413、电塔 1443、第一座矿机 3513（手搓链要走 齿轮/磁线圈/电路板）。
 func TestSkirmishFromZeroOpeningByTick6000(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	op := newZeroOpening(t, core, 6000)
