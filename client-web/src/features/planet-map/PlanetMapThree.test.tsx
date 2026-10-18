@@ -688,6 +688,10 @@ describe('__planetThree 测试接口（R20-A ⑤）', () => {
     for (const name of ['tileScreenPos', 'entityScreenPos', 'clickTile', 'dragTiles']) {
       expect(typeof api![name]).toBe('function');
     }
+    // 场景实例的方法经原型继承保留（对象展开会把类方法全丢掉，试玩 1020 实测）。
+    expect(typeof api!.getCenterTile).toBe('function');
+    expect(typeof api!.focus).toBe('function');
+    expect(typeof api!.zoom).toBe('function');
     // 场景 mock 的 project 返回 null → 接口给 null（而不是抛错）。
     expect((api!.tileScreenPos as (t: { x: number; y: number }) => unknown)({ x: 1, y: 1 })).toBeNull();
   });

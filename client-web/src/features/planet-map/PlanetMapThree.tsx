@@ -636,8 +636,9 @@ export function PlanetMapThree(props: Props) {
       }
       return projected ? toPagePoint(hostRect(), projected) : null;
     };
-    const api = {
-      ...target,
+    // 原型继承场景实例：类方法都在原型上，对象展开（`{...target}`）只会复制自有字段，
+    // `getCenterTile`/`focus`/`zoom` 这些方法会全部丢失（试玩 1020 实测）。
+    const api = Object.assign(Object.create(target) as Record<string, unknown>, {
       // 覆盖场景原方法：场景的 project 是相对画布的，测试接口要求页面坐标。
       project: (tile: TilePoint) => target.project(tile),
       tileScreenPos: pagePos,
@@ -669,7 +670,7 @@ export function PlanetMapThree(props: Props) {
         dispatch('pointerup', end);
         return true;
       },
-    };
+    });
     (window as unknown as { __planetThree?: typeof api }).__planetThree = api;
   }
 
