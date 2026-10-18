@@ -13,9 +13,9 @@ import * as THREE from 'three';
  * 空闲姿态（停在取货角）同一朝向，玩家从 ghost 就能读出「这头取货、那头放货」。
  *
  * 可读性（试玩 1018 实测）：半透明绿机体在绿色地形上会糊成一团亮斑。这里用
- * 「深色反向外壳（BackSide 放大 1.12）+ 真光照半透明机体」两层：外壳给轮廓线，
- * 机体给体积与颜色；再加一块与正片模型 foundation 同口径的 .96 格底板，
- * 远看也认得出「这里要放一台分拣器」。
+ * 「深色反向外壳（BackSide 放大 1.14）+ 真光照半透明机体」两层：外壳给轮廓线，
+ * 机体给体积与颜色。**不再垫底板**——正片分拣器已删掉方形 foundation，
+ * ghost 若还垫一块 .96 格绿板，放下后凭空少一块，反而看不出预览和实物的关系。
  */
 
 /** 半透明机体主色（绿色 = 可放置）。 */
@@ -24,6 +24,12 @@ export const SORTER_GHOST_COLOR = '#7df7b0';
 export const SORTER_GHOST_OPACITY = .42;
 /** 反向外壳的颜色/透明度：只露出一圈深色轮廓，不抢机体主色。 */
 export const SORTER_GHOST_OUTLINE = '#03140d';
+
+/** 场景侧放置缩放：与 `IndustrialModels.building()` 给 1×1 建筑的缩放同口径
+ * （水平 .86 = 格内留缝、Y 压到 .8），ghost 不按这个缩会比实物胖/高一圈，
+ * 放下瞬间「缩一下」很跳（1018 实测）。 */
+export const GHOST_HORIZONTAL_SCALE = .86;
+export const GHOST_VERTICAL_SQUASH = .8;
 
 /** 横臂长度（格）：按 range=1 建（真实模型在动画里拉伸 `sorter-boom.scale.x`）。 */
 const BOOM_LENGTH = .55;
@@ -131,30 +137,28 @@ function addPart(
 export function sorterGhostGroup(): THREE.Group {
   const group = new THREE.Group();
 
-  // 底座：Φ.62 圆盘 + Φ.5 中层 + 铜环（§1.1）。
-  addPart(group, cylinder(.31, .05), [0, .025, 0]);
-  addPart(group, cylinder(.25, .025), [0, .062, 0]);
-  addPart(group, ring(.27, .012), [0, .075, 0], { accent: true, rotation: [Math.PI / 2, 0, 0] });
-  for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
-    addPart(group, box(.09, .05, .09), [sx * .24, .05, sz * .24]);
-  }
+  // 与正片模型（industrial-models.sorter）同一套剖面：深色圆盘压在合金边圈上、窄铜环收在盘内。
+  addPart(group, cylinder(.29, .05), [0, .025, 0]);
+  addPart(group, cylinder(.25, .022), [0, .055, 0]);
+  addPart(group, cylinder(.225, .03), [0, .07, 0]);
+  addPart(group, ring(.2, .012), [0, .088, 0], { accent: true, rotation: [Math.PI / 2, 0, 0] });
 
   // 立柱 + 柱顶铜箍 + 转台。
-  addPart(group, cylinder(.06, .3), [0, .22, 0]);
-  addPart(group, cylinder(.075, .04), [0, .38, 0], { accent: true });
-  addPart(group, cylinder(.1, .05), [0, .40, 0]);
+  addPart(group, cylinder(.06, .26), [0, .21, 0]);
+  addPart(group, cylinder(.0675, .02), [0, .18, 0], { accent: true });
+  addPart(group, cylinder(.075, .04), [0, .345, 0], { accent: true });
+  addPart(group, cylinder(.09, .04), [0, .365, 0]);
 
   // 横臂：整条臂挂在 yaw 组里，旋到取货端（模型 +Z）——真实模型空闲时也停在这一侧。
   const arm = new THREE.Group();
   arm.name = 'sorter-ghost-arm';
   arm.rotation.y = -Math.PI / 2;
-  addPart(arm, box(BOOM_LENGTH, .075, .06), [BOOM_LENGTH / 2, .42, 0]);
-  addPart(arm, box(BOOM_LENGTH, .02, .03), [BOOM_LENGTH / 2, .465, 0], { accent: true });
-  addPart(arm, box(.12, .12, .12), [BOOM_LENGTH, .42, 0]);
-  // 夹爪壳 + 两片指（关节下方）。
-  addPart(arm, box(.14, .1, .16), [BOOM_LENGTH, .34, 0]);
-  addPart(arm, box(.03, .1, .03), [BOOM_LENGTH, .25, -.05], { accent: true });
-  addPart(arm, box(.03, .1, .03), [BOOM_LENGTH, .25, .05], { accent: true });
+  addPart(arm, box(BOOM_LENGTH, .085, .10), [BOOM_LENGTH / 2, .395, 0]);
+  addPart(arm, box(BOOM_LENGTH, .018, .042), [BOOM_LENGTH / 2, .4415, 0], { accent: true });
+  // 臂端关节 + 夹爪壳体 + 两片指（关节下方，与正片模型同高）。
+  addPart(arm, box(.11, .1, .11), [BOOM_LENGTH, .395, 0]);
+  addPart(arm, box(.12, .08, .15), [BOOM_LENGTH, .315, 0]);
+  for (const z of [-.08, .08]) addPart(arm, box(.035, .14, .035), [BOOM_LENGTH, .23, z], { accent: true });
   group.add(arm);
 
   return group;

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import type { Building, SorterTransfer } from '@shared/types';
+import type { Building } from '@shared/types';
 import { getItemColorValue } from '../item-colors';
-import { surfaceTileSize, tileNormal } from './projection';
+import { surfaceStep } from '@shared/surface';
+import { tileNormal } from './projection';
+import { isCardinalDirection, OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns } from '../logistics-direction';
 
 /**
  * 分拣器动画（第 18 轮契约 §1.2，DSP 口径）。
@@ -60,19 +62,57 @@ const RELEASE_AT = .62;
 const CLAW_DROP = .04;
 /** tick/s 兜底：快照里拿不到差值时按 4 tick/s 估 cycle 时长。 */
 const FALLBACK_TICK_RATE = 4;
-/** 空闲姿态：取货端 = 背面 = 局部 +Z；放货端 = 正面 = 局部 −Z（契约 §0）。 */
-const PICKUP_YAW = -Math.PI / 2;
-const DROP_YAW = Math.PI / 2;
 /** 迟到太多 tick 的记录是历史回放，不当成当前活动（沿用旧实现的去重口径）。 */
 const RECENT_TICKS = 20;
 
 const motions = new WeakMap<THREE.Object3D, Motion>();
 
+/**
+ * 取货角 / 放货角（模型局部 yaw）。
+ *
+ * **方向必须由建造朝向推出来，不能用 `last_transfer.source_position` 连线**：服务端记录的是
+ * 端点建筑的 `position`（多格建筑是占地左上角），3×3 熔炉的取货端连线会偏成 ~215° 的斜向，
+ * 横臂就指向建筑角落而不是正前方，近景看起来像「乱指」。服务端本来就是沿朝向轴扫端点
+ * （取货端 = 背面、放货端 = 正面），所以横臂只在同一条轴线上的两个方向之间摆。
+ *
+ * 角度算法：取「本体格 → 正面/背面第 range 格」的**球面切向**，再变换进模型局部坐标求 yaw。
+ * 直接按四向单位向量算 yaw 在立方体接缝/面角附近会偏十几度（tileFrame 的弯曲），
+ * 用切向取角才能让夹爪正对邻格。局部 +X 是横臂的 0 角：yaw θ 把 +X 转到
+ * (cosθ, 0, −sinθ)，与 `+X 东 / +Z 南` 同基底。
+ */
+export function sorterAngles(
+  model: THREE.Object3D,
+  building: Pick<Building, 'position' | 'rotation' | 'sorter'>,
+  faceSize: number,
+): { pickup: number; drop: number } {
+  const facing = ROTATION_FACING[rotationTurns(building.rotation)] ?? 'north';
+  const back = OPPOSITE_DIRECTION[facing];
+  // 多格建筑的分拣器本体仍是 1×1，端点按 range 沿轴取格（抬到带面高度，只取方向）。
+  const reach = Math.max(1, Math.min(3, building.sorter?.range ?? 1));
+  const center = tileNormal({ x: building.position.x, y: building.position.y }, faceSize);
+  model.updateMatrix();
+  const toLocal = new THREE.Matrix4().copy(model.matrix).invert();
+  const yaw = (direction: typeof facing) => {
+    let tile = { x: building.position.x, y: building.position.y };
+    let current = direction;
+    for (let step = 0; step < reach; step++) {
+      const next = surfaceStep(tile, current, faceSize);
+      tile = { x: next.tile.x, y: next.tile.y };
+      current = isCardinalDirection(next.direction) ? next.direction : current;
+    }
+    const world = tileNormal(tile, faceSize).sub(center).normalize();
+    const local = world.transformDirection(toLocal);
+    return Math.atan2(-local.z, local.x);
+  };
+  return { pickup: yaw(back), drop: yaw(facing) };
+}
+
 /** 同步一条权威快照：范围/停机/payload 颜色，新的 `last_transfer` 排队播放一次。 */
-export function syncSorterAnimation(model: THREE.Group, building: Building, tick: number, faceSize: number, radius: number) {
+export function syncSorterAnimation(model: THREE.Group, building: Building, tick: number, faceSize: number) {
   const arm = model.getObjectByName('sorter-arm');
   if (!arm) return;
   let motion = motions.get(arm);
+  const angles = sorterAngles(model, building, faceSize);
   if (!motion) {
     const boom = arm.getObjectByName('sorter-boom');
     const claw = arm.getObjectByName('sorter-claw');
@@ -81,17 +121,24 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
     motion = {
       boom, claw, payload,
       cargo: payload.children.find((child): child is THREE.Mesh => child instanceof THREE.Mesh) ?? null,
-      pickup: PICKUP_YAW, drop: DROP_YAW, nextPickup: PICKUP_YAW, nextDrop: DROP_YAW, startYaw: PICKUP_YAW,
+      pickup: angles.pickup, drop: angles.drop, nextPickup: angles.pickup, nextDrop: angles.drop, startYaw: angles.pickup,
       range: 1, observedSequence: 0, playedSequence: 0,
       elapsed: Number.POSITIVE_INFINITY, cycle: 1, enabled: false,
       tickRate: FALLBACK_TICK_RATE,
     };
     motions.set(arm, motion);
-    pose(arm, motion, PICKUP_YAW, 1, false);
+    pose(arm, motion, angles.pickup, 1, false);
   }
   motion.tickRate = estimateTickRate(motion, tick);
   motion.range = building.sorter?.range ?? motion.range;
   applyRange(motion);
+  // 朝向随建造 rotation 改写（拆除重建/旋转后不许停在旧朝向）；搬运周期中不打断本周期。
+  motion.nextPickup = angles.pickup;
+  motion.nextDrop = angles.drop;
+  if (motion.elapsed >= motion.cycle) {
+    motion.pickup = angles.pickup;
+    motion.drop = angles.drop;
+  }
   const previousTick = motion.snapshotTick;
   motion.snapshotTick = tick;
   motion.enabled = building.runtime?.state === 'running';
@@ -104,16 +151,6 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
   }
   const transfer = building.sorter?.last_transfer;
   if (!transfer || transfer.quantity <= 0 || transfer.sequence <= motion.observedSequence || tick < transfer.tick) return;
-  model.updateMatrix();
-  const inverse = model.matrix.clone().invert();
-  const lift = surfaceTileSize(radius, faceSize) * .25;
-  const angle = (position: SorterTransfer['source_position']) => {
-    const point = tileNormal(position, faceSize).multiplyScalar(radius + lift).applyMatrix4(inverse);
-    // 与旧 `arm.rotation.y = -atan2(end.z, end.x)` 同口径：+X 是臂的 0 角方向。
-    return Math.atan2(-point.z, point.x);
-  };
-  motion.nextPickup = angle(transfer.source_position);
-  motion.nextDrop = angle(transfer.target_position);
   // 历史记录/慢帧漏掉的记录不重放：只把空闲姿态对准真实取货端（不播整段搬运）。
   // 观察过一次活动记录后，两条快照之间发生的新记录仍然有效（慢帧也能播）。
   if (tick - transfer.tick > RECENT_TICKS && (previousTick === undefined || transfer.tick <= previousTick)) {

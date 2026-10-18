@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
+import { IndustrialModels } from './industrial-models';
+
 import {
+  GHOST_HORIZONTAL_SCALE,
+  GHOST_VERTICAL_SQUASH,
   SORTER_GHOST_COLOR,
   SORTER_GHOST_OPACITY,
   SORTER_GHOST_OUTLINE,
@@ -55,27 +59,36 @@ describe('分拣器建造 ghost 机体', () => {
     }
   });
 
-  it('尺寸按 §1.1：总高 ≤ .55 格、机体直径 ≤ .62 格（底板按 foundation 铺满一格）', () => {
+  it('尺寸与正片分拣器模型一致（总高 ≤ .5、本体直径 ≤ .62，不垫方形底板）', () => {
     const group = sorterGhostGroup();
     const { body } = collect(group);
-    const bodyBox = new THREE.Box3();
+    const arm = group.getObjectByName('sorter-ghost-arm')!;
+    const bodyBox = new THREE.Box3(), nonArmBox = new THREE.Box3();
     for (const mesh of body) {
-      if (mesh.geometry.type === 'BoxGeometry' && (mesh.geometry as THREE.BoxGeometry).parameters.width > .9) continue; // foundation 底板
       bodyBox.expandByObject(mesh);
+      if (!arm.getObjectById(mesh.id)) nonArmBox.expandByObject(mesh);
     }
     const size = bodyBox.max.clone().sub(bodyBox.min);
-    expect(size.y).toBeLessThanOrEqual(.55 + 1e-6);
+    expect(size.y).toBeLessThanOrEqual(.5);
     expect(size.y).toBeGreaterThan(.4);
-    // 机体水平范围 = foundation 底板 .96 格（外壳 1.12 倍 ≈ 1.075）；横臂伸向取货端
-    // （会探出格边）是分拣器的特征，所以只量非横臂部件。
-    const nonArmBox = new THREE.Box3();
-    const arm = group.getObjectByName('sorter-ghost-arm')!;
-    for (const mesh of body) if (!arm.getObjectById(mesh.id)) nonArmBox.expandByObject(mesh);
+    // 本体（底座 + 立柱）不铺满一格：正片分拣器已删掉方形 foundation，ghost 也不许垫底板。
     const footprint = nonArmBox.max.clone().sub(nonArmBox.min);
-    expect(Math.max(footprint.x, footprint.z)).toBeLessThanOrEqual(.96 + 1e-6);
+    expect(Math.max(footprint.x, footprint.z)).toBeLessThanOrEqual(.62);
     // 贴地：最低点在 y ≈ 0。
     expect(bodyBox.min.y).toBeGreaterThanOrEqual(-1e-6);
     expect(bodyBox.min.y).toBeLessThanOrEqual(.02);
+
+    // 与正片模型不漂移：高度/底座宽度差 20% 以内（并发重写时最容易在这里对不上）。
+    const real = new IndustrialModels().building('sorter_mk1', .86, .86, true);
+    real.updateMatrixWorld(true);
+    const realBox = new THREE.Box3().setFromObject(real);
+    const realSize = realBox.max.clone().sub(realBox.min);
+    // ghost 的原始几何要按场景侧放置缩放（`GHOST_HORIZONTAL_SCALE` / `GHOST_VERTICAL_SQUASH`）
+    // 换算，才能和正片模型（`building()` 里已经带 .86/.8 缩放）同口径比较。
+    expect(Math.abs(realSize.y - size.y * GHOST_VERTICAL_SQUASH) / realSize.y).toBeLessThan(.02);
+    // 底座直径：ghost 原始几何 .58 × 水平缩放 .86 = .5，与正片模型同口径（差异 1% 内）。
+    expect(GHOST_HORIZONTAL_SCALE).toBeCloseTo(.86, 6);
+    expect(Math.max(footprint.x, footprint.z) * GHOST_HORIZONTAL_SCALE).toBeCloseTo(.58 * GHOST_HORIZONTAL_SCALE, 2);
   });
 
   it('机械臂旋到取货端（模型 +Z = 背面）：ghost 上能读出取货侧', () => {

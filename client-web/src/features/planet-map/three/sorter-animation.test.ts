@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import { getItemColorValue } from '../item-colors';
 import { IndustrialModels } from './industrial-models';
-import { syncSorterAnimation } from './sorter-animation';
+import { sorterAngles, syncSorterAnimation } from './sorter-animation';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 import { StaticBatches } from './static-batches';
 import { DynamicBatches } from './dynamic-batches';
@@ -112,7 +112,7 @@ describe('DSP sorter arm model', () => {
   it('stretches the boom (and moves the claw to the arm end) for longer range sorters', () => {
     for (const range of [1, 2, 3]) {
       const f = fixture({ range });
-      syncSorterAnimation(f.model, f.building, 80, 48, 100);
+      syncSorterAnimation(f.model, f.building, 80, 48);
       const length = .55 + (range - 1) * .42;
       expect(f.boom.scale.x).toBeCloseTo(length / .55, 6);
       expect(f.claw.position.x).toBeCloseTo(length, 6);
@@ -124,7 +124,7 @@ describe('DSP sorter arm model', () => {
 describe('authoritative sorter arm swing', () => {
   it('plays one transfer: swings pickup→drop (≈π) and returns, lifting cargo in between', () => {
     const f = fixture();
-    syncSorterAnimation(f.model, f.building, 51, 48, 100);
+    syncSorterAnimation(f.model, f.building, 51, 48);
     const samples = sample(f, 2.2);
     const yaws = samples.map(item => item.yaw);
     // 横臂在水平面内往复摆动约 180°。
@@ -149,7 +149,7 @@ describe('authoritative sorter arm swing', () => {
     for (const rotation of [0, 90]) {
       const f = fixture({ rotation });
       const transfer = f.building.sorter!.last_transfer!;
-      syncSorterAnimation(f.model, f.building, 51, 48, 100);
+      syncSorterAnimation(f.model, f.building, 51, 48);
       let dropAlignment = -1;
       for (let index = 0; index < 450; index++) {
         f.assets.animate(0, .005);
@@ -162,10 +162,41 @@ describe('authoritative sorter arm swing', () => {
     }
   });
 
+  it('ignores diagonal endpoint positions of multi-tile neighbours (arm stays on the facing axis)', () => {
+    // 服务端 last_transfer 记的是端点建筑 position（多格建筑 = 占地左上角）。3×3 熔炉的
+    // 「左上角」不在分拣器朝向轴上，旧实现按两点连线取角会把横臂指到建筑角落（约 215°）。
+    // 现在角度只由 rotation + 格切向推出，端点坐标再斜也不影响摆幅。
+    const sorterTile = { x: 9, y: 4 };
+    const front: Record<number, { x: number; y: number }> = {
+      0: { x: 9, y: 3 }, 90: { x: 10, y: 4 }, 180: { x: 9, y: 5 }, 270: { x: 8, y: 4 },
+    };
+    const back: Record<number, { x: number; y: number }> = {
+      0: { x: 9, y: 5 }, 90: { x: 8, y: 4 }, 180: { x: 9, y: 3 }, 270: { x: 10, y: 4 },
+    };
+    for (const rotation of [0, 90, 180, 270]) {
+      const f = fixture({ rotation });
+      // 端点故意写成斜角（模拟 3×3 熔炉的占地左上角）。
+      f.building.sorter!.last_transfer!.source_position = { x: sorterTile.x + 1, y: sorterTile.y + 1, z: 0 };
+      f.building.sorter!.last_transfer!.target_position = { x: sorterTile.x + 1, y: sorterTile.y + 1, z: 0 };
+      const angles = sorterAngles(f.model, f.building, 48);
+      expect(Math.abs(Math.abs(angles.drop - angles.pickup) - Math.PI)).toBeLessThan(1e-9);
+      syncSorterAnimation(f.model, f.building, 51, 48);
+      let dropAlignment = -1;
+      for (let index = 0; index < 500; index++) {
+        f.assets.animate(0, .004);
+        dropAlignment = Math.max(dropAlignment, armDirection(f).dot(tileDirection(f, front[rotation])));
+      }
+      expect(dropAlignment, `rotation=${rotation}`).toBeGreaterThan(.999);
+      // 回摆结束停在取货端（背面格），而不是端点记录里的斜角。
+      expect(armDirection(f).dot(tileDirection(f, back[rotation]))).toBeGreaterThan(.999);
+      f.assets.dispose();
+    }
+  });
+
   it('does not replay the initial historical transfer', () => {
     const f = fixture();
     // 历史记录（tick 50 的记录在 tick 80 才首次同步）只用来对准空闲姿态，不当成本次活动。
-    syncSorterAnimation(f.model, f.building, 80, 48, 100);
+    syncSorterAnimation(f.model, f.building, 80, 48);
     const samples = sample(f, 1.2);
     expect(new Set(samples.map(item => item.yaw)).size).toBe(1);
     expect(samples.every(item => item.visible === false)).toBe(true);
@@ -177,7 +208,7 @@ describe('authoritative sorter arm swing', () => {
     for (const [tick, quantity] of [[80, 1], [49, 1], [50, 0]]) {
       const f = fixture();
       f.building.sorter!.last_transfer!.quantity = quantity;
-      syncSorterAnimation(f.model, f.building, tick, 48, 100);
+      syncSorterAnimation(f.model, f.building, tick, 48);
       const samples = sample(f, .8);
       expect(new Set(samples.map(item => item.yaw)).size).toBe(1);
       expect(samples.every(item => item.visible === false)).toBe(true);
@@ -187,11 +218,11 @@ describe('authoritative sorter arm swing', () => {
 
   it('freezes on no_power (payload hidden) and resumes on a later sequence', () => {
     const f = fixture();
-    syncSorterAnimation(f.model, f.building, 50, 48, 100);
+    syncSorterAnimation(f.model, f.building, 50, 48);
     sample(f, .12);
     const frozenYaw = f.arm.rotation.y, frozenClawY = f.claw.position.y;
     f.building.runtime.state = 'no_power';
-    syncSorterAnimation(f.model, f.building, 51, 48, 100);
+    syncSorterAnimation(f.model, f.building, 51, 48);
     expect(f.payload.visible).toBe(false);
     const frozen = sample(f, .6);
     expect(frozen.every(item => item.yaw === frozenYaw)).toBe(true);
@@ -200,7 +231,7 @@ describe('authoritative sorter arm swing', () => {
     f.building.runtime.state = 'running';
     f.building.sorter!.last_transfer!.sequence = 2;
     f.building.sorter!.last_transfer!.tick = 52;
-    syncSorterAnimation(f.model, f.building, 52, 48, 100);
+    syncSorterAnimation(f.model, f.building, 52, 48);
     expect(sample(f, 2.2).some(item => item.visible)).toBe(true);
     f.assets.dispose();
   });
@@ -208,13 +239,13 @@ describe('authoritative sorter arm swing', () => {
   it('colors the carried payload from last_transfer.item_id', () => {
     const f = fixture();
     f.building.sorter!.last_transfer!.item_id = 'iron_ingot';
-    syncSorterAnimation(f.model, f.building, 50, 48, 100);
+    syncSorterAnimation(f.model, f.building, 50, 48);
     const material = f.cargo.material as THREE.MeshStandardMaterial;
     expect(material.color.getHexString()).toBe(getItemColorValue('iron_ingot').slice(1).toLowerCase());
     f.building.sorter!.last_transfer!.sequence = 2;
     f.building.sorter!.last_transfer!.tick = 51;
     f.building.sorter!.last_transfer!.item_id = 'copper_ingot';
-    syncSorterAnimation(f.model, f.building, 51, 48, 100);
+    syncSorterAnimation(f.model, f.building, 51, 48);
     expect(material.color.getHexString()).toBe(getItemColorValue('copper_ingot').slice(1).toLowerCase());
     f.assets.dispose();
   });
@@ -223,7 +254,7 @@ describe('authoritative sorter arm swing', () => {
     const f = fixture(), layer = new THREE.Group(); layer.add(f.model);
     const statics = new StaticBatches(), dynamics = new DynamicBatches();
     const entries = [{ root: f.model, layer, tile: f.building.position }];
-    syncSorterAnimation(f.model, f.building, 51, 48, 100);
+    syncSorterAnimation(f.model, f.building, 51, 48);
     statics.refresh(entries); dynamics.refresh(entries);
     expect(dynamics.stats.anchors).toBe(4);
     // 隐藏的 payload 也保留实例（缩放 0 矩阵），显隐不需要重建批次。

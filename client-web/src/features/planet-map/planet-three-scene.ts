@@ -13,7 +13,7 @@ import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
-import { SORTER_GHOST_COLOR, sorterGhostGroup } from './three/ghost-sorter';
+import { GHOST_HORIZONTAL_SCALE, GHOST_VERTICAL_SQUASH, SORTER_GHOST_COLOR, sorterGhostGroup } from './three/ghost-sorter';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -448,7 +448,7 @@ export class PlanetThreeScene {
     for (const building of Object.values(planet.buildings ?? {})) {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
-      if (model && (building.sorter || /sorter/.test(building.type))) syncSorterAnimation(model, building, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0, planet.surface.face_size, RADIUS);
+      if (model && (building.sorter || /sorter/.test(building.type))) syncSorterAnimation(model, building, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0, planet.surface.face_size);
     }
     // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
     const previousAims = new Map(this.turretAims.map((aim) => [aim.id, aim]));
@@ -1012,7 +1012,7 @@ export class PlanetThreeScene {
     if (sorterRoutes) {
       const size = this.tileScale();
       for (const tile of tiles) {
-        this.ghostMarks.add(this.placeGhost(sorterGhostGroup(), tile, mode.rotation, .02));
+        this.ghostMarks.add(this.placeGhost(sorterGhostGroup(), tile, mode.rotation, .02, GHOST_HORIZONTAL_SCALE, GHOST_VERTICAL_SQUASH));
         // 一条箭头贯穿前后各半格：从取货端指到放货端，绿色（可放置色）。
         this.ghostMarks.add(this.ghostArrowMesh(tile, sorterRoutes.to, sorterGhostArrowGeometry(size), SORTER_GHOST_COLOR, .09, true));
       }
@@ -1191,14 +1191,15 @@ export class PlanetThreeScene {
    * 把 ghost 机体贴到悬停格：与 `place()` 同一套基底（+X 东、+Y 法线、+Z 南），
    * 抬离地面 `lift` 格（分拣器 .02），朝向与放置后一致（含 rotation）。
    */
-  private placeGhost(group: THREE.Group, tile: TilePoint, rotation: number | undefined, lift: number) {
+  private placeGhost(group: THREE.Group, tile: TilePoint, rotation: number | undefined, lift: number, horizontal = 1, vertical = 1) {
     const size = this.tileScale();
     const normal = this.normal(tile.x, tile.y);
     const { east, south } = tileFrame(tile, this.data!.planet.surface.face_size);
     group.position.copy(normal).multiplyScalar(RADIUS + size * lift);
     group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
     group.rotateY(-Number(rotation ?? 0) * Math.PI / 180);
-    group.scale.setScalar(size);
+    // 与 `IndustrialModels.building()` 同口径：1×1 建筑水平 .86、Y 压到 .8。
+    group.scale.set(size * horizontal, size * vertical, size * horizontal);
     return group;
   }
 
