@@ -39,6 +39,8 @@ export interface ThreeTestApi {
   clickTile(tile: TilePoint, button?: 0 | 2): unknown;
   dragTiles(from: TilePoint, to: TilePoint, modifiers?: { shift?: boolean; ctrl?: boolean }): boolean;
   project(tile: TilePoint): { x: number; y: number; visible: boolean } | null;
+  /** 按页面坐标拾取格子（与真实鼠标同一条射线）；拾取落空时为 null。 */
+  pickAt(clientX: number, clientY: number): TilePoint | null;
   getCenterTile(): TilePoint | null;
   getCameraState(): CameraState;
   focus(tile: TilePoint, close?: boolean): void;
