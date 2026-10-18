@@ -7,14 +7,14 @@
  *    - beltDeckTexture：传送带带面贴图（深色带面 + 档位色 chevron），沿 UV 滚动即「流向」；
  *    - directionArrowTexture：透明底琥珀箭头，用于分拣器顶面与建造 ghost；
  *    - filterLabelTexture：过滤物品首字（有 icon_key 时取首字，与 DOM Icon 回退一致）。
- * 2. LogisticsDirectionMarks：把所有分拣器/分流器的顶面箭头合并成 1 个 mesh
+ * 2. LogisticsDirectionMarks：把所有分流器的顶面箭头合并成 1 个 mesh（分拣器流向由 sorter-rig 底板三角表达）
  *    （与 conveyor-geometry 同一套「全网络合并成少数 draw」的做法），签名不变时不重建。
  */
 
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
 
-import { logisticsArrows, directionVector, type CardinalDirection } from '../logistics-direction';
+import { logisticsArrows, directionVector, ROTATION_FACING, rotationTurns, type CardinalDirection } from '../logistics-direction';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 import { TIER_COLOR } from '../logistics-tier';
 import type { TilePoint } from '../model';
@@ -186,7 +186,8 @@ export class LogisticsDirectionMarks {
 
   /** 返回 true 表示签名变化、几何体被重建。 */
   refresh(buildings: readonly Building[], faceSize: number, radius: number): boolean {
-    const sorters = buildings.filter(building => Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type)));
+    // 分拣器的流向由门控 rig 自己的底板三角表达（sorter-rig），这里只画分流器。
+    const sorters = buildings.filter(building => !building.sorter && !/sorter/.test(building.type) && Boolean(building.splitter || /splitter/.test(building.type)));
     const signature = JSON.stringify([faceSize, radius, sorters.map(building => [building.id, building.position,
       building.rotation, building.sorter?.filter?.items,
       building.splitter?.input_directions, building.splitter?.output_directions])]);
@@ -230,8 +231,12 @@ export class LogisticsDirectionMarks {
       if (!resolved) continue;
       const sprite = new THREE.Sprite(this.labelMaterial.clone());
       sprite.material.map = filterLabelTexture(resolved.text, resolved.color);
-      sprite.position.copy(tileNormal(building.position, faceSize)).multiplyScalar(radius + size * .78);
-      sprite.scale.setScalar(size * .62);
+      // 挂在闸座侧面（摆臂所在竖直面之外），摆臂翻过头顶时不会穿过标签。
+      const frame = tileFrame(building.position, faceSize);
+      const facing = directionVector(ROTATION_FACING[rotationTurns(building.rotation)] ?? 'north');
+      const lateral = frame.east.clone().multiplyScalar(-facing.y).addScaledVector(frame.south, facing.x);
+      sprite.position.copy(tileNormal(building.position, faceSize)).multiplyScalar(radius + size * .5).addScaledVector(lateral, size * .42);
+      sprite.scale.setScalar(size * .46);
       sprite.renderOrder = 15;
       this.group.add(sprite);
     }

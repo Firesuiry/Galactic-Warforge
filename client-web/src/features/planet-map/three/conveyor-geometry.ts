@@ -268,8 +268,18 @@ function railCapContour(): [number, number][] {
   return [[BELT_DECK_HALF, BELT_DECK_TOP], [BELT_RAIL_INNER, BELT_RAIL_TOP], [BELT_RAIL_OUTER, BELT_RAIL_TOP], [BELT_RAIL_OUTER, BELT_SKIRT_TOP], [BELT_DECK_HALF, BELT_SKIRT_TOP]];
 }
 
+/** 立柱/底座/横托的 5 个面（底面朝地不画），角点按 (±along, ±up, ±across) 排。 */
+type Corner = [number, number, number];
+const BOX_FACES: [Corner, Corner, Corner, Corner][] = [
+  [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1]], [[1, -1, 1], [-1, -1, 1], [-1, 1, 1], [1, 1, 1]],
+  [[-1, -1, 1], [-1, -1, -1], [-1, 1, -1], [-1, 1, 1]], [[1, -1, -1], [1, -1, 1], [1, 1, 1], [1, 1, -1]],
+  [[-1, 1, -1], [1, 1, -1], [1, 1, 1], [-1, 1, 1]],
+];
+
 /** 档位 → 带面 mesh 序号（每档一张滚动贴图，滚速 1 : 2 : 5）。 */
 const DECK_TIERS = [1, 2, 3] as const;
+/** 建造预览（ghost）色：与分拣器 ghost、可放置描边同一系绿。 */
+export const CONVEYOR_GHOST_COLOR = '#7df7b0';
 
 /** Merged draws for the entire visible network (3 structure + ≤3 tier decks), with triangle-to-tile picking. */
 export class ConveyorGeometry {
@@ -278,25 +288,33 @@ export class ConveyorGeometry {
   private tiles: TilePoint[] = [];
   private ids: string[] = [];
   // 金属度压低：metalness 高的竖面背离太阳时会黑成一条缝（1018 反馈），结构件要颜色稳定可读。
-  private readonly materials = [
-    // 机身/内斜面/底面/端盖：深石墨。
-    new THREE.MeshStandardMaterial({ color: '#2a3338', roughness: .6, metalness: .25, side: THREE.DoubleSide }),
-    // 侧壁 + 支撑柱：中灰金属。
-    new THREE.MeshStandardMaterial({ color: '#6f7d84', roughness: .48, metalness: .32, side: THREE.DoubleSide }),
-    // 侧栏顶边：亮金属（远景的识别线）。
-    new THREE.MeshStandardMaterial({ color: '#c5cfd2', roughness: .32, metalness: .35, side: THREE.DoubleSide }),
-  ];
+  private readonly materials: THREE.MeshStandardMaterial[];
   /** 带面：深色底 + 档位色 chevron（贴图同时作 emissiveMap，箭头微微自发光）。 */
-  private readonly deckMaterials = DECK_TIERS.map(tier => {
-    const map = beltDeckTexture(tier);
-    const material = new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .55, roughness: .58, metalness: .12 });
-    material.polygonOffset = true;
-    material.polygonOffsetFactor = -2;
-    return material;
-  });
+  private readonly deckMaterials: THREE.MeshStandardMaterial[];
 
-  constructor() {
-    this.group.name = 'continuous-conveyors';
+  /** `ghost`：建造预览用的半透明绿色带体（拖拽铺带时整条路径按将要建成的样子画，含坡道/桥墩）。 */
+  constructor(private readonly options: { ghost?: boolean } = {}) {
+    this.group.name = options.ghost ? 'conveyor-ghost' : 'continuous-conveyors';
+    const ghost = (opacity: number) => ({ color: CONVEYOR_GHOST_COLOR, transparent: true, opacity, depthWrite: false, roughness: .5, metalness: .1 });
+    this.materials = options.ghost
+      ? [.28, .36, .55].map(opacity => new THREE.MeshStandardMaterial({ ...ghost(opacity), side: THREE.DoubleSide }))
+      : [
+        // 机身/内斜面/底面/端盖：深石墨。
+        new THREE.MeshStandardMaterial({ color: '#2a3338', roughness: .6, metalness: .25, side: THREE.DoubleSide }),
+        // 侧壁 + 支撑柱：中灰金属。
+        new THREE.MeshStandardMaterial({ color: '#6f7d84', roughness: .48, metalness: .32, side: THREE.DoubleSide }),
+        // 侧栏顶边：亮金属（远景的识别线）。
+        new THREE.MeshStandardMaterial({ color: '#c5cfd2', roughness: .32, metalness: .35, side: THREE.DoubleSide }),
+      ];
+    this.deckMaterials = DECK_TIERS.map(tier => {
+      const map = beltDeckTexture(tier);
+      const material = options.ghost
+        ? new THREE.MeshStandardMaterial({ ...ghost(.6), map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .35 })
+        : new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .55, roughness: .58, metalness: .12 });
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = -2;
+      return material;
+    });
   }
 
   /**
@@ -447,11 +465,7 @@ export class ConveyorGeometry {
         const x = tangent.clone().multiplyScalar(along / 2 * cell), z = mid.side.clone().multiplyScalar(across / 2 * cell);
         const y = mid.up.clone().multiplyScalar(high / 2 * cell);
         const corner = (sx: number, sy: number, sz: number) => center.clone().addScaledVector(x, sx).addScaledVector(y, sy).addScaledVector(z, sz);
-        for (const [a, b, c, d] of [
-          [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1]], [[1, -1, 1], [-1, -1, 1], [-1, 1, 1], [1, 1, 1]],
-          [[-1, -1, 1], [-1, -1, -1], [-1, 1, -1], [-1, 1, 1]], [[1, -1, -1], [1, -1, 1], [1, 1, 1], [1, 1, -1]],
-          [[-1, 1, -1], [1, 1, -1], [1, 1, 1], [-1, 1, 1]],
-        ] as const) append(buffers[material], tile, corner(...a), corner(...b), corner(...c), corner(...d));
+        for (const [a, b, c, d] of BOX_FACES) append(buffers[material], tile, corner(...a), corner(...b), corner(...c), corner(...d));
       };
       const height = top.distanceTo(bottom) / cell;
       // 细立柱 + 地面小底座 + 带体下的横托：DSP 高架带的「T 形支撑」。
@@ -466,7 +480,9 @@ export class ConveyorGeometry {
       geometry.setAttribute('tileIndex', new THREE.Uint32BufferAttribute(buffer.tiles, 1));
       geometry.computeVertexNormals(); geometry.computeBoundingSphere();
       const mesh = new THREE.Mesh(geometry, this.materials[index]);
-      mesh.castShadow = true; mesh.receiveShadow = true; this.group.add(mesh);
+      mesh.castShadow = mesh.receiveShadow = !this.options.ghost;
+      if (this.options.ghost) mesh.renderOrder = 20;
+      this.group.add(mesh);
     });
     decks.forEach((deck, index) => {
       if (!deck.positions.length) return;
@@ -477,8 +493,8 @@ export class ConveyorGeometry {
       geometry.computeVertexNormals(); geometry.computeBoundingSphere();
       const mesh = new THREE.Mesh(geometry, this.deckMaterials[index]);
       mesh.name = `conveyor-deck-mk${DECK_TIERS[index]}`;
-      mesh.receiveShadow = true;
-      mesh.renderOrder = 6;
+      mesh.receiveShadow = !this.options.ghost;
+      mesh.renderOrder = this.options.ghost ? 21 : 6;
       this.group.add(mesh);
     });
     return true;

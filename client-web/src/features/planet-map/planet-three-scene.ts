@@ -13,20 +13,19 @@ import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
-import { GHOST_HORIZONTAL_SCALE, GHOST_VERTICAL_SQUASH, SORTER_GHOST_COLOR, sorterGhostGroup } from './three/ghost-sorter';
+import { SORTER_GHOST_COLOR, SorterRigs } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
-import { ConveyorGeometry } from './three/conveyor-geometry';
+import { BELT_BASE_LIFT, BELT_DECK_TOP, ConveyorGeometry } from './three/conveyor-geometry';
+import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
-import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
 import { beltDeadEnds } from './sorter-filter';
 import { blockedBeltMarks } from './belt-blocked-marks';
 import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isCardinalDirection, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
-import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
 import { PointerPress } from './pointer-press';
 import type { AlertEntry, Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
@@ -56,6 +55,14 @@ export interface PlanetThreeData {
   /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，画红色短杠（试玩 1016 B1）。 */
   alerts?: AlertEntry[];
 }
+/** 拖拽铺带的一格（第 19 轮契约 §3.5）：方向缺省时按相邻格推，高度缺省 0。 */
+export interface BeltDragCell { tile: TilePoint; direction?: CardinalDirection; elevation?: number }
+
+/** 分拣器（含集装分拣器），不含分流器：由 `SorterRigs` 画，不走 IndustrialModels。 */
+function isSorter(building: Pick<Building, 'type' | 'sorter' | 'splitter'>) {
+  return !building.splitter && (Boolean(building.sorter) || /sorter/.test(building.type));
+}
+
 export interface PlanetThreeInteraction {
   selected: SelectedEntity | null;
   /** 多选单位（框选/编队/双击同类）：每个单位画一个选中标记。 */
@@ -80,6 +87,15 @@ const FRONT = new THREE.Vector3(0, 0, 1);
 const GHOST_ARROW_COLOR = '#ffd76a';
 /** 传送带 ghost 箭头相对旧版缩小到 .5 倍：细箭头只作流向提示，不抢带体本身。 */
 const GHOST_BELT_ARROW_SCALE = .5;
+/** 分拣器 ghost 的扫描跨度（契约 §1：所有档位 1–3 格）。 */
+const SORTER_GHOST_RANGE = 3;
+
+/** 相邻两格的行进方向（拖拽路径缺方向时补）。跨面边界上 dx/dy 不是 ±1，按主轴取近似。 */
+function stepDirection(from: TilePoint, to: TilePoint): CardinalDirection | null {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return null;
+  return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : (dy > 0 ? 'south' : 'north');
+}
 /** Presentation only: all entities and terrain are sourced from player-visible server views. */
 export class PlanetThreeScene {
   private readonly scene = new THREE.Scene();
@@ -105,6 +121,11 @@ export class PlanetThreeScene {
   private readonly staticBatches = new StaticBatches();
   private readonly dynamicBatches = new DynamicBatches();
   private readonly conveyors = new ConveyorGeometry();
+  /** 门控式分拣器：全部分拣器共用十几个 InstancedMesh，臂长按真实取/放端点伸展（第 19 轮 §4.1）。 */
+  private readonly sorterRigs = new SorterRigs();
+  /** 建造预览：分拣器 ghost（同一套 rig，半透明，循环演示一次搬运）与铺带 ghost（含坡道/桥墩，按将要建成的样子画）。 */
+  private readonly sorterGhost = new SorterRigs({ ghost: true });
+  private readonly conveyorGhost = new ConveyorGeometry({ ghost: true });
   /** 分拣器/分流器顶面方向箭头（全网络合并 1 draw）+ 过滤物品标签。 */
   private readonly logisticsMarks = new LogisticsDirectionMarks();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
@@ -153,11 +174,14 @@ export class PlanetThreeScene {
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
   /** 建造 ghost 朝向箭头（传送带/分拣器/带旋转的建筑）：跟随悬停格，2D/3D 同一套方向推导。 */
   private readonly ghostMarks = new THREE.Group();
-  /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向，松手清空。 */
-  private beltDragPath: TilePoint[] = [];
+  /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
+  private beltDragPath: BeltDragCell[] = [];
 
-  setBeltDragPath(tiles: readonly TilePoint[] | null) {
-    this.beltDragPath = tiles ? tiles.map(tile => ({ ...tile })) : [];
+  /** 第 19 轮契约 §3.5：每格带方向与高度；旧调用方只传格子时按相邻格推方向、高度 0。 */
+  setBeltDragPath(path: readonly (BeltDragCell | TilePoint)[] | null) {
+    this.beltDragPath = path ? path.map(cell => 'tile' in cell
+      ? { tile: { x: cell.tile.x, y: cell.tile.y }, direction: cell.direction, elevation: cell.elevation }
+      : { tile: { x: cell.x, y: cell.y } }) : [];
     this.updateBuildGhost();
   }
   /** 悬停拾取节流：射线检测较重，指针移动只记录坐标，最多每 HOVER_PICK_MS 拾取一次。 */
@@ -174,7 +198,7 @@ export class PlanetThreeScene {
      * 点选回调。`offscreen` = 这次点击是「按格派发」（`clickTile`）且该格当时不在视野内，
      * 场景已把镜头聚焦过去；调用侧据此给玩家一条可见提示（试玩 1016 B4：不能静默丢弃）。
      */
-    private readonly onPick: (tile: TilePoint, meta: { offscreen: boolean }) => void,
+    private readonly onPick: (tile: TilePoint, meta: { offscreen: boolean; buildingId?: string }) => void,
     private readonly onHover: (tile: TilePoint | null) => void,
     /** 点击处不在星球表面（射线没打中球面）：调用侧给提示，避免「点了没反应」。 */
     private readonly onMiss?: () => void,
@@ -209,7 +233,7 @@ export class PlanetThreeScene {
     this.scene.add(this.world);
     this.world.add(this.content, this.staticMarks, this.marks);
     this.world.add(this.powerAlertMarksGroup);
-    this.world.add(this.logisticsMarks.group, this.ghostMarks, this.haulRoutes);
+    this.world.add(this.logisticsMarks.group, this.ghostMarks, this.haulRoutes, this.sorterGhost.group, this.conveyorGhost.group);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -231,8 +255,9 @@ export class PlanetThreeScene {
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       if (!tap) return;
-      const tile = this.pick(event);
-      if (tile) this.onPick(tile, { offscreen: false });
+      // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
+      const target = this.pickTargetAtCoords(event.clientX, event.clientY);
+      if (target) this.onPick(target.tile, target.buildingId ? { offscreen: false, buildingId: target.buildingId } : { offscreen: false });
       else this.onMiss?.();
     });
     const canvas = this.renderer.domElement;
@@ -323,17 +348,6 @@ export class PlanetThreeScene {
     return p ? surfaceTileSize(RADIUS, p.surface.face_size) : 1;
   }
 
-  /** 可见传送带的代表吞吐（视觉流速近似，与 2D 货物圆点同源）。 */
-  private beltThroughput(): number {
-    const buildings = this.data?.planet.buildings ?? {};
-    let throughput = 0;
-    for (const building of Object.values(buildings)) {
-      if (!building.conveyor) continue;
-      throughput = Math.max(throughput, building.conveyor.throughput ?? 1);
-    }
-    return throughput || 1;
-  }
-
   private known(position: TilePoint) {
     if (!this.data) return false;
     const fog = this.data.fog ?? ('bounds' in this.data.planet ? this.data.planet : undefined);
@@ -420,6 +434,7 @@ export class PlanetThreeScene {
       if (previous) this.removeModel(previous.group);
       this.staticEntities.set(key, { signature, group: create() });
     };
+    const sorters: Building[] = [];
     for (const building of visibleBuildings) {
       const footprint = getBuildingFootprint(building);
       const host = building.distributor ? planet.buildings?.[building.distributor.host_building_id] : undefined;
@@ -431,6 +446,7 @@ export class PlanetThreeScene {
         occupiedTiles.add(`${tile.x}:${tile.y}`);
       }
       if (building.conveyor && building.type.startsWith('conveyor_belt_')) continue;
+      if (isSorter(building)) { sorters.push(building); continue; }
       retain(`building:${building.id}`, [building.type, building.owner_id === playerId, building.position, footprint, building.rotation, building.conveyor?.output, host?.position, placementFootprint], () => {
         const group = this.industrial.building(building.type, footprint.width * .86, footprint.height * .86, building.owner_id === playerId);
         this.place(group, placement.position, 'buildings');
@@ -448,8 +464,9 @@ export class PlanetThreeScene {
     for (const building of Object.values(planet.buildings ?? {})) {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
-      if (model && (building.sorter || /sorter/.test(building.type))) syncSorterAnimation(model, building, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0, planet.surface.face_size);
     }
+    this.sorterRigs.refresh(sorters, visibleBuildings, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
+    this.layer('buildings').add(this.sorterRigs.group);
     // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
     const previousAims = new Map(this.turretAims.map((aim) => [aim.id, aim]));
     this.turretAims = [];
@@ -991,34 +1008,58 @@ export class PlanetThreeScene {
   }
 
   /**
-   * 建造预览（DSP 口径）：**半透明建筑本体 + 贴地细箭头**。
+   * 建造预览（DSP 口径）：**按将要建成的样子画半透明本体**。
    *
-   * - 分拣器：半透明分拣器机体（`three/ghost-sorter`，位置/朝向与放置后一致，含 rotation）
-   *   + 一条从取货端（背面）贯穿到放货端（正面）的绿色细箭头。旧版的「取」「放」两支
-   *   大箭头 + 文字徽章已删除（文字说明在看板底部提示行）。
-   * - 传送带/其它有朝向的建筑：贴地细箭头（缩到 .5 倍），拖拽铺带时逐格画。
+   * - 分拣器：半透明门控 rig（`SorterRigs` ghost 模式，与实物同一套几何），按当前布局找取/放端点、
+   *   臂长伸到真实端点、循环演示一次搬运；端点小座绿 = 接上、红 = 没接上。
+   *   一条从取货端贯穿到放货端的绿色细箭头（看板提示「绿色箭头 = 取货端 → 放货端」）。
+   * - 传送带：半透明带体（`ConveyorGeometry` ghost 模式），拖拽时整条路径按每格方向/高度画，
+   *   坡道、桥墩与实物一致；带面上再压一支细箭头（高架格抬到对应高度）。
+   * - 其它有朝向的建筑：贴地细箭头。
    */
   private updateBuildGhost() {
     this.clearMarks(this.ghostMarks);
     const mode = this.interaction?.interactionMode;
     const hovered = this.interaction?.hoveredTile;
-    if (!this.data || !this.interaction || !mode || mode.kind !== 'build' || !hovered) return;
-    // 分拣器：取（背面）→ 放（正面）方向由 rotation 决定（第 16 轮契约）。
-    const sorterRoutes = sorterGhostDirections(mode.buildingType, mode.rotation);
-    const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
-    if (!direction && !sorterRoutes) return;
-    // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器体积小，只画悬停格）。
-    const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0 ? this.beltDragPath : [hovered];
-    if (sorterRoutes) {
-      const size = this.tileScale();
-      for (const tile of tiles) {
-        this.ghostMarks.add(this.placeGhost(sorterGhostGroup(), tile, mode.rotation, .02, GHOST_HORIZONTAL_SCALE, GHOST_VERTICAL_SQUASH));
-        // 一条箭头贯穿前后各半格：从取货端指到放货端，绿色（可放置色）。
-        this.ghostMarks.add(this.ghostArrowMesh(tile, sorterRoutes.to, sorterGhostArrowGeometry(size), SORTER_GHOST_COLOR, .09, true));
+    const data = this.data;
+    let sorterGhost = false, beltGhost = false;
+    try {
+      if (!data || !this.interaction || !mode || mode.kind !== 'build' || !hovered) return;
+      const faceSize = data.planet.surface.face_size;
+      // 分拣器：取（背面）→ 放（正面）方向由 rotation 决定（第 16 轮契约）。
+      const sorterRoutes = sorterGhostDirections(mode.buildingType, mode.rotation);
+      const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
+      if (!direction && !sorterRoutes) return;
+      const context = Object.values(data.planet.buildings ?? {}).filter(building => building.owner_id === data.playerId || this.visible(building.position));
+      if (sorterRoutes) {
+        const ghost = { id: '__ghost-sorter', type: mode.buildingType, position: { x: hovered.x, y: hovered.y, z: 0 },
+          rotation: mode.rotation, owner_id: data.playerId ?? '', hp: 1, sorter: { range: SORTER_GHOST_RANGE } } as unknown as Building;
+        // 契约 §1：所有档位分拣器跨度 1–3 格。
+        this.sorterGhost.refresh([ghost], context, faceSize, RADIUS, 0, () => SORTER_GHOST_RANGE);
+        sorterGhost = true;
+        const span = this.sorterGhost.inspect(ghost.id)?.span;
+        const size = this.tileScale();
+        const tail = span ? -(span.pickup.steps - .5) : -.5, tip = span ? span.drop.steps - .5 : .5;
+        this.ghostMarks.add(this.ghostArrowMesh(hovered, sorterRoutes.to, sorterGhostArrowGeometry(size, tail, tip), SORTER_GHOST_COLOR, .09, true));
+        return;
       }
-      return;
+      if (!mode.buildingType.startsWith('conveyor_belt')) { this.ghostArrow(hovered, direction!); return; }
+      const target = 'elevation' in mode ? Number(mode.elevation) || 0 : 0;
+      const cells = this.beltDragPath.length > 0 ? this.beltDragPath : [{ tile: hovered, direction: direction!, elevation: target }];
+      const belts = cells.map((cell, index) => {
+        const next = cells[index + 1]?.tile, previous = cells[index - 1]?.tile;
+        const facing = cell.direction ?? (next ? stepDirection(cell.tile, next) : previous ? stepDirection(previous, cell.tile) : null) ?? direction!;
+        const elevation = THREE.MathUtils.clamp(Math.round(cell.elevation ?? 0), 0, MAX_BELT_ELEVATION);
+        return { id: `__ghost-belt-${index}`, type: mode.buildingType, owner_id: data.playerId ?? '', hp: 1, rotation: 0,
+          position: { x: cell.tile.x, y: cell.tile.y, z: 0 }, conveyor: { output: facing, elevation, buffer: [] } } as unknown as Building;
+      });
+      this.conveyorGhost.refresh(belts, faceSize, RADIUS);
+      beltGhost = true;
+      for (const belt of belts) this.ghostArrow(belt.position, belt.conveyor!.output as CardinalDirection, belt.conveyor!.elevation ?? 0);
+    } finally {
+      if (!sorterGhost) this.sorterGhost.refresh([], [], data?.planet.surface.face_size ?? 1, RADIUS);
+      if (!beltGhost) this.conveyorGhost.refresh([], data?.planet.surface.face_size ?? 1, RADIUS);
     }
-    for (const tile of tiles) this.ghostArrow(tile, direction!);
   }
 
   /**
@@ -1155,9 +1196,11 @@ export class PlanetThreeScene {
    * 传送带/朝向建筑的贴地细箭头（缩到 .5 倍）：指示铺带流向。
    * 几何是「细杆 + 三角箭头」（`three/ghost-arrow`），不再有粗 chevron 纹理。
    */
-  private ghostArrow(tile: TilePoint, direction: CardinalDirection) {
+  private ghostArrow(tile: TilePoint, direction: CardinalDirection, beltElevation?: number) {
     const size = this.tileScale();
-    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, .1));
+    // 传送带格压在 ghost 带面上方一点（高架格抬到对应层高）；其它建筑贴地。
+    const lift = beltElevation === undefined ? .1 : BELT_BASE_LIFT + beltElevation * BELT_LEVEL_HEIGHT + BELT_DECK_TOP + .02;
+    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, lift));
   }
 
   /**
@@ -1185,22 +1228,6 @@ export class PlanetThreeScene {
     mesh.quaternion.copy(quaternion);
     mesh.renderOrder = 20;
     return mesh;
-  }
-
-  /**
-   * 把 ghost 机体贴到悬停格：与 `place()` 同一套基底（+X 东、+Y 法线、+Z 南），
-   * 抬离地面 `lift` 格（分拣器 .02），朝向与放置后一致（含 rotation）。
-   */
-  private placeGhost(group: THREE.Group, tile: TilePoint, rotation: number | undefined, lift: number, horizontal = 1, vertical = 1) {
-    const size = this.tileScale();
-    const normal = this.normal(tile.x, tile.y);
-    const { east, south } = tileFrame(tile, this.data!.planet.surface.face_size);
-    group.position.copy(normal).multiplyScalar(RADIUS + size * lift);
-    group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
-    group.rotateY(-Number(rotation ?? 0) * Math.PI / 180);
-    // 与 `IndustrialModels.building()` 同口径：1×1 建筑水平 .86、Y 压到 .8。
-    group.scale.set(size * horizontal, size * vertical, size * horizontal);
-    return group;
   }
 
   focus(tile: TilePoint, close = true) {
@@ -1284,7 +1311,11 @@ export class PlanetThreeScene {
     this.onPick(rounded, { offscreen });
     return { dispatched: true, offscreen };
   }
-  private pickAtCoords(clientX: number, clientY: number) {
+  private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
+    return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
+  }
+  /** 拾取格 + 命中的物流建筑 id（传送带按带子精确到层、分拣器按 rig 实例）。 */
+  private pickTargetAtCoords(clientX: number, clientY: number): { tile: TilePoint; buildingId?: string } | null {
     if (!this.data) return null;
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.camera);
@@ -1293,7 +1324,8 @@ export class PlanetThreeScene {
     const mode = this.interaction?.interactionMode;
     if (mode && (mode.kind === 'build' || mode.kind === 'move' || mode.kind === 'squad_order' || mode.kind === 'theater_zone' || (mode.kind === 'unit_order' && mode.order !== 'guard'))) {
       const point = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
-      return point ? this.tileFromNormal(this.world.worldToLocal(point).normalize()) : null;
+      const tile = point ? this.tileFromNormal(this.world.worldToLocal(point).normalize()) : null;
+      return tile ? { tile } : null;
     }
     const hits = this.raycaster.intersectObjects([this.surface, this.content], true);
     for (const hit of hits) {
@@ -1302,13 +1334,18 @@ export class PlanetThreeScene {
       let hidden = false;
       while (object && object !== this.world) { if (!object.visible) hidden = true; object = object.parent; }
       if (hidden) continue;
-      const batchTile = this.conveyors.resolveHit(hit) ?? this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
-      if (batchTile) return batchTile;
+      const beltTile = this.conveyors.resolveHit(hit);
+      if (beltTile) return { tile: beltTile, buildingId: this.conveyors.resolveBuilding(hit) ?? undefined };
+      const sorter = this.sorterRigs.resolveHit(hit);
+      if (sorter) return { tile: sorter.tile, buildingId: sorter.id };
+      const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
+      if (batchTile) return { tile: batchTile };
       object = hit.object;
-      while (object && object !== this.world) { if (object.userData.tile) return object.userData.tile as TilePoint; object = object.parent; }
+      while (object && object !== this.world) { if (object.userData.tile) return { tile: object.userData.tile as TilePoint }; object = object.parent; }
       if (hit.object === this.surface || hit.object.userData.terrain) {
         const exact = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
-        return this.tileFromNormal(this.world.worldToLocal(exact ?? hit.point.clone()).normalize());
+        const tile = this.tileFromNormal(this.world.worldToLocal(exact ?? hit.point.clone()).normalize());
+        return tile ? { tile } : null;
       }
     }
     return null;
@@ -1354,11 +1391,10 @@ export class PlanetThreeScene {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
-      // 传送带流向箭头沿带滚动：速度与 2D 货物圆点同一口径；无货/冻结时静止。
-      this.conveyors.update(
-        this.frozen || reducedMotion ? 0 : dt,
-        this.frozen || reducedMotion || !(this.interaction?.layers.logistics ?? true) ? 0 : beltItemSpeedTilesPerSec(this.beltThroughput()),
-      );
+      // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
+      this.conveyors.update(this.frozen || reducedMotion ? 0 : dt);
+      this.sorterRigs.animate(dt, !this.frozen && !reducedMotion);
+      this.sorterGhost.animate(dt, !reducedMotion);
       if (!this.frozen) {
         this.combat.update(dt * 1000);
         this.commandMarkers.update(dt * 1000);
@@ -1400,6 +1436,9 @@ export class PlanetThreeScene {
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
     this.conveyors.dispose();
+    this.conveyorGhost.dispose();
+    this.sorterRigs.dispose();
+    this.sorterGhost.dispose();
     this.logisticsMarks.dispose();
     this.clearMarks(this.ghostMarks);
     this.ghostMarks.removeFromParent();

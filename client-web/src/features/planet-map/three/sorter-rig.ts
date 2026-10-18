@@ -40,9 +40,13 @@ const HOVER = .14;
 const GRIP_BELT = BELT_DECK_TOP + SORTER_PAYLOAD / 2;
 const GRIP_BUILDING = .3;
 const GROUND = BELT_BODY_BOTTOM;
-/** 建筑模型按占地 .86 缩放：外壁离占地边界 = 0.07 × 占地格数；夹爪再探进去 .06。 */
+/**
+ * 建筑端点：模型按占地 .86 缩放，外壁离占地边界 ≈ 0.07 × 占地格数；机体本身还会再往里收一点，
+ * 夹爪探进外壁 .12（上限 .35），读起来是「伸进机器口里取/放」，而不是悬在占地边上。
+ */
 const BUILDING_INSET = .07;
-const BUILDING_REACH = .06;
+const BUILDING_REACH = .12;
+const BUILDING_REACH_MAX = .35;
 
 export type SorterEndKind = 'belt' | 'building' | null;
 export interface SorterEnd { steps: number; kind: SorterEndKind; /** 端点建筑沿轴的占地格数。 */ depth: number }
@@ -96,7 +100,7 @@ export function sorterSpan(building: Pick<Building, 'id' | 'position' | 'rotatio
 
 /** 端点 → 取/放点（沿轴距离 + 物品中心高度）。 */
 export function sorterGripPoint(end: SorterEnd): { distance: number; height: number } {
-  if (end.kind === 'building') return { distance: end.steps - .5 + BUILDING_INSET * end.depth + BUILDING_REACH, height: GRIP_BUILDING };
+  if (end.kind === 'building') return { distance: end.steps - .5 + Math.min(BUILDING_REACH_MAX, BUILDING_INSET * end.depth + BUILDING_REACH), height: GRIP_BUILDING };
   if (end.kind === 'belt') return { distance: end.steps, height: GRIP_BELT };
   return { distance: .78, height: GRIP_BELT };
 }
@@ -187,13 +191,14 @@ export class SorterRigs {
     const cylinder = new THREE.CylinderGeometry(.5, .5, 1, 18); cylinder.rotateX(Math.PI / 2);
     this.geometries = { box: new THREE.BoxGeometry(1, 1, 1), cylinder, prism: prismGeometry() };
     const ghost = options.ghost;
-    const solid = (parameters: THREE.MeshStandardMaterialParameters) => ghost
-      ? new THREE.MeshStandardMaterial({ color: SORTER_GHOST_COLOR, roughness: .5, metalness: .1, transparent: true, opacity: .42, depthWrite: false })
+    // ghost 三档明度（深绿杆件 / 中绿合金 / 浅绿闸座）：纯一色半透明绿在绿色地表上会糊成一团（试玩 1018）。
+    const solid = (parameters: THREE.MeshStandardMaterialParameters, ghostColor: string, opacity: number) => ghost
+      ? new THREE.MeshStandardMaterial({ color: ghostColor, roughness: .5, metalness: .1, transparent: true, opacity, depthWrite: false })
       : new THREE.MeshStandardMaterial(parameters);
     this.materials = {
-      graphite: solid({ color: '#2b363c', roughness: .5, metalness: .45 }),
-      ceramic: solid({ color: '#e3e8e1', roughness: .44, metalness: .1 }),
-      alloy: solid({ color: '#8d9da4', roughness: .32, metalness: .68 }),
+      graphite: solid({ color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
+      ceramic: solid({ color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
+      alloy: solid({ color: '#8d9da4', roughness: .32, metalness: .68 }, '#45c987', .7),
       // 档位灯：不受光照，按实例色（档位色）显示，亮度压在 bloom 阈值下。
       light: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, transparent: ghost, opacity: ghost ? .8 : 1, depthWrite: !ghost }),
       // 端点小座：实例色（正常 = 合金灰；ghost = 绿/黄/红表示端点接没接上）。
@@ -324,22 +329,23 @@ export class SorterRigs {
   }
 
   private writeStatic() {
+    if (!this.meshes.size) return;
     this.rigs.forEach((rig, index) => {
       const { pickup, drop } = rig.span;
       const connected = pickup.kind !== null && drop.kind !== null;
       const tier = tierColor(rig.building.type);
       const light = this.options.ghost ? (connected ? SORTER_GHOST_COLOR : GHOST_WARN) : connected ? tier : DIM_LIGHT;
-      // 底板：从取端格边伸到放端格边（最短布局就是本格），两端各留 .03 缝。
-      const start = -(pickup.steps - .5) + .03, end = (drop.steps - .5) - .03, length = end - start, middle = (start + end) / 2;
-      this.put('plate', index, 0, [middle, GROUND + .015, 0], [length, .03, .3]);
-      for (const [slot, z] of [[0, .152], [1, -.152]] as const) {
+      // 底板只占本格（DSP 的分拣器机座就是 1 格，跨 2–3 格时伸长的是摆臂，不是底座）。
+      const start = -.47, end = .47, length = end - start, middle = 0;
+      this.put('plate', index, 0, [middle, GROUND + .015, 0], [length, .03, .34]);
+      for (const [slot, z] of [[0, .172], [1, -.172]] as const) {
         this.put('strip', index, slot, [middle, GROUND + .022, z], [length - .06, .014, .014]);
         this.color('strip', index, slot, light);
       }
-      // 端点小座：ghost 里按端点接没接上分别着色（绿 / 红）。
-      for (const [slot, x, end] of [[0, start + .025, pickup], [1, end - .025, drop]] as const) {
-        this.put('dock', index, slot, [x, GROUND + .03, 0], [.05, .05, .32]);
-        this.color('dock', index, slot, this.options.ghost ? (end.kind ? SORTER_GHOST_COLOR : GHOST_MISSING) : DOCK_COLOR);
+      // 底板两端的小座：ghost 里按这一侧的端点接没接上分别着色（绿 / 红）。
+      for (const [slot, x, side] of [[0, start + .025, pickup], [1, end - .025, drop]] as const) {
+        this.put('dock', index, slot, [x, GROUND + .03, 0], [.05, .05, .36]);
+        this.color('dock', index, slot, this.options.ghost ? (side.kind ? SORTER_GHOST_COLOR : GHOST_MISSING) : DOCK_COLOR);
       }
       // 放货端三角：一眼看出流向（取 → 放）。
       this.put('pointer', index, 0, [end - .13, GROUND + .036, 0], [.12, .012, .17]);
@@ -373,16 +379,15 @@ export class SorterRigs {
       const light = this.options.ghost ? SORTER_GHOST_COLOR : connected ? tierColor(rig.building.type) : DIM_LIGHT;
       // 双平行摆臂：合金套筒（定长）+ 石墨伸缩杆（到腕轴），套筒顶上一道档位色灯条。
       const along = (distance: number): [number, number] => [Math.cos(arm.angle) * distance, SORTER_PIVOT_Y + Math.sin(arm.angle) * distance];
-      const rodStart = .26, rodEnd = Math.max(rodStart + .01, arm.length - .02);
-      for (const [pair, z] of [[0, .045], [1, -.045]] as const) {
-        const [sx, sy] = along(.16);
-        this.put('sleeve', index, pair, [sx, sy, z], [.26, .05, .03], arm.angle);
-        const [tx, ty] = along(.16);
-        const lift = new THREE.Vector2(-Math.sin(arm.angle), Math.cos(arm.angle)).multiplyScalar(.027);
-        this.put('stripe', index, pair, [tx + lift.x, ty + lift.y, z], [.2, .008, .018], arm.angle);
+      const rodStart = .3, rodEnd = Math.max(rodStart + .01, arm.length - .02);
+      for (const [pair, z] of [[0, .05], [1, -.05]] as const) {
+        const [sx, sy] = along(.18);
+        this.put('sleeve', index, pair, [sx, sy, z], [.3, .065, .038], arm.angle);
+        const lift = new THREE.Vector2(-Math.sin(arm.angle), Math.cos(arm.angle)).multiplyScalar(.035);
+        this.put('stripe', index, pair, [sx + lift.x, sy + lift.y, z], [.22, .008, .022], arm.angle);
         this.color('stripe', index, pair, light);
         const [rx, ry] = along((rodStart + rodEnd) / 2);
-        this.put('rod', index, pair, [rx, ry, z], [rodEnd - rodStart, .028, .02], arm.angle);
+        this.put('rod', index, pair, [rx, ry, z], [rodEnd - rodStart, .04, .026], arm.angle);
       }
       // 腕轴 + 始终朝下的夹爪（壳体 + 两指），物品挂在两指之间。
       const { wrist } = arm;

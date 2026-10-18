@@ -103,10 +103,15 @@ export function ghostArrowGeometry(size: number, scale = 1): THREE.BufferGeometr
 }
 
 /**
- * 分拣器贴地箭头：从背面取货端（-0.5 格）贯穿到正面放货端（+0.5 格）。
+ * 分拣器贴地箭头：从背面取货端贯穿到正面放货端（默认 ±.5 格；场景按 rig 实际跨度传 tail/tip，
+ * 跨 2–3 格时箭头与门控底板同长）。
  * 位置永远在格心（不再像旧版分拣器那样把两支箭头 `along` 推到前后半格分开）。
  */
-export function sorterGhostArrowGeometry(size: number): THREE.BufferGeometry {
+export function sorterGhostArrowGeometry(
+  size: number,
+  tail: number = SORTER_GHOST_ARROW_SHAPE.tail,
+  tip: number = SORTER_GHOST_ARROW_SHAPE.tip,
+): THREE.BufferGeometry {
   return arrowGeometry(
     size,
     {
@@ -114,8 +119,8 @@ export function sorterGhostArrowGeometry(size: number): THREE.BufferGeometry {
       headLength: SORTER_GHOST_ARROW_SHAPE.headLength,
       headHalfWidth: SORTER_GHOST_ARROW_SHAPE.headHalfWidth,
     },
-    SORTER_GHOST_ARROW_SHAPE.tail * size,
-    SORTER_GHOST_ARROW_SHAPE.tip * size,
+    tail * size,
+    tip * size,
   );
 }
 
