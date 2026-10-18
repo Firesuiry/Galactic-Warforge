@@ -112,7 +112,8 @@ func (q *ConstructionQueue) GroundReservationConflict(ws *WorldState, task *Cons
 // 占地内任一格有高架施工任务时返回冲突错误（带层号与占用者）。低矮物流地面
 // 任务与高架预留可共存。高架任务自身返回 nil。
 func (q *ConstructionQueue) ElevatedReservationConflict(ws *WorldState, task *ConstructionTask) error {
-	if q == nil || task == nil || task.Elevation > 0 || IsLowLogistics(task.BuildingType) {
+	// 物流配送器挂在宿主上、不占地面格（execBuild / 落成时同样豁免）。
+	if q == nil || task == nil || task.Elevation > 0 || IsLowLogistics(task.BuildingType) || task.BuildingType == BuildingTypeLogisticsDistributor {
 		return nil
 	}
 	tiles, err := ws.ConstructionTiles(task)
@@ -220,9 +221,17 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 	if err != nil {
 		return err
 	}
+	if task.Elevation > 0 {
+		if !SupportsElevation(task.BuildingType) {
+			return fmt.Errorf("只有传送带可以架高")
+		}
+		if task.Elevation > MaxBeltElevation {
+			return fmt.Errorf("高度只能 0–%d 层", MaxBeltElevation)
+		}
+	}
 	// 跨层施工预留互查（契约 §3.2）：高架带下方只能是空地或低矮物流（含施工中）；
 	// 地面非低矮物流建筑的占地内不能有高架施工任务。放在 Enqueue 里，build 命令
-	// 与其它入队入口都走同一套检查。
+	// 与其它入队入口都走同一套检查（层号合法性已在上面先校验）。
 	if task.Elevation > 0 {
 		if err := q.GroundReservationConflict(ws, task); err != nil {
 			return err
@@ -231,12 +240,6 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 		return err
 	}
 	if task.Elevation > 0 {
-		if !SupportsElevation(task.BuildingType) {
-			return fmt.Errorf("只有传送带可以架高")
-		}
-		if task.Elevation > MaxBeltElevation {
-			return fmt.Errorf("高度只能 0–%d 层", MaxBeltElevation)
-		}
 		for _, p := range tiles {
 			if !ws.InBounds(p.X, p.Y) || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
 				return fmt.Errorf("占地地块 %s 不可用", TileKey(p.X, p.Y))
