@@ -47,6 +47,8 @@ function createScene() {
     map_width: 4,
     map_height: 4,
     tick: 220,
+    // 3D 行星页需要 surface（球面拓扑 + 每面格数）；2D 画布不读它。
+    surface: { topology: "cube_sphere", face_size: 4 },
     bounds: { x: 0, y: 0, width: 4, height: 4 },
     terrain: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => "buildable")),
     visible: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => true)),

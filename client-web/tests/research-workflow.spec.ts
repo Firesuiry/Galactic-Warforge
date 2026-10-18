@@ -35,6 +35,8 @@ function createScene() {
     map_width: 4,
     map_height: 4,
     tick: 120,
+    // 3D 行星页需要 surface（球面拓扑 + 每面格数）；2D 画布不读它。
+    surface: { topology: "cube_sphere", face_size: 4 },
     bounds: { x: 0, y: 0, width: 4, height: 4 },
     terrain: [
       ["buildable", "buildable", "buildable", "buildable"],
@@ -291,7 +293,9 @@ async function installPlanetRoutes(
     });
   });
 
-  await page.route("**/state/stats", async (route) => {
+  // 3D 行星页在首屏等待 stats 查询结束才渲染（2D 不等待）：stats 失败会让页面停在
+  // 「服务器连接异常」而不是「工作台/抽屉可点」。同一份 mock 要覆盖带查询串的变体。
+  await page.route("**/state/stats**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(createStats()),
