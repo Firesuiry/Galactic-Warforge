@@ -35,6 +35,8 @@ const fixture = beltDspFixture as unknown as Fixture;
 const INTERSECTION = { x: 53, y: 153 };
 /** 跨格分拣器所在格（背面扫 2 格取 (53,155) 的带尾）。 */
 const SORTER = { x: 53, y: 156 };
+/** 真死端带 (45,156..158)：带尾堆货、前方 (45,159) 空、无分拣器（cp-belt-dsp 补丁）。 */
+const DEAD_END = { x: 45, y: 157 };
 
 type CameraView = {
   /** 镜头聚焦格。 */
@@ -163,3 +165,6 @@ export const BeltDspOblique: Story = storyWith({ focus: INTERSECTION, tilt: 1.0,
 
 /** 跨格分拣器特写：(53,157) 背面扫 2 格取 (53,155) 带尾、正面放进 (52,158)。 */
 export const BeltDspSorter: Story = storyWith({ focus: SORTER, tilt: 0.8, zoom: 1.8 });
+
+/** 真死端带特写：(45,156..158) 向南，带尾堆铜锭、前方 (45,159) 空，无分拣器消化。 */
+export const BeltDspDeadEnd: Story = storyWith({ focus: DEAD_END, tilt: 0.9, zoom: 2 });
