@@ -26,7 +26,8 @@ import {
   getPendingCommandCount,
   usePlanetCommandStore,
 } from "@/features/planet-commands/store";
-import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
+import { PlanetMapPixi } from "@/features/planet-map/PlanetMapPixi";
+import type { PlanetMapCapture } from "@/features/planet-map/planet-map-capture";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { initialBuildDirection } from "@/features/planet-map/build-workflow";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";

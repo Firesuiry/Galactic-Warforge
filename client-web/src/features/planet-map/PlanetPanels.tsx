@@ -101,7 +101,7 @@ import { TrafficMonitorControls } from "./TrafficMonitorControls";
 import { SorterControls } from "./SorterControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
-import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
+import type { PlanetMapCapture } from "@/features/planet-map/planet-map-capture";
 import { unitIsMoving, unitMoveDestination } from '@/features/planet-map/model';
 import { findSquadTaskForceId } from '@/features/planet-map/squad-commands';
 import { UnitCard } from '@/features/war/components/UnitCard';

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Bug, Crosshair, Globe2, House, Layers, Minus, Plus, Settings2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
-import type { PlanetMapCapture } from './PlanetMapPixi';
+import type { PlanetMapCapture } from './planet-map-capture';
 import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
 import { applyBeltStrokeStep, assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, type BeltElevationPlacement } from './belt-stroke';
 import { DEFAULT_BELT_DIRECTION, isConveyorBeltBuilding } from './build-workflow';
