@@ -23,7 +23,7 @@ import { ROTATION_FACING, rotationTurns } from '@/features/planet-map/logistics-
 
 // ---------- 原型（archetype）与类型映射 ----------
 
-export type BuildingArchetype = 'tower' | 'dome' | 'furnace' | 'depot' | 'belt' | 'special';
+export type BuildingArchetype = 'tower' | 'dome' | 'furnace' | 'depot' | 'belt' | 'sorter' | 'special';
 
 /** 受损/故障烘焙变体：normal = 常规；distressed = 暗化 + 警示斜纹。 */
 export type BuildingVisualState = 'normal' | 'distressed';
@@ -107,7 +107,6 @@ const ARCHETYPE_BY_TYPE: Record<string, BuildingArchetype> = {
   miniature_particle_collider: 'furnace',
   spray_coater: 'furnace',
   automatic_piler: 'furnace',
-  pile_sorter: 'furnace',
   geothermal_power_station: 'furnace',
   // depot：箱体 + 顶棚（仓储/物流/蓄电）
   depot_mk1: 'depot',
@@ -124,14 +123,17 @@ const ARCHETYPE_BY_TYPE: Record<string, BuildingArchetype> = {
   conveyor_belt_mk2: 'belt',
   conveyor_belt_mk3: 'belt',
   splitter: 'belt',
-  sorter_mk1: 'belt',
-  sorter_mk2: 'belt',
-  sorter_mk3: 'belt',
   traffic_monitor: 'belt',
+  // sorter：底座圆盘 + 横臂 + 夹爪的独立剪影（第 18 轮契约 §3.2，不再套 belt 原型）
+  sorter_mk1: 'sorter',
+  sorter_mk2: 'sorter',
+  sorter_mk3: 'sorter',
+  pile_sorter: 'sorter',
   // special：solar_panel 等未列名类型走兜底
 };
 
 const ARCHETYPE_KEYWORDS: Array<[string, BuildingArchetype]> = [
+  ['sorter', 'sorter'],
   ['belt', 'belt'],
   ['conveyor', 'belt'],
   ['lab', 'dome'],
@@ -197,6 +199,8 @@ const ARCHETYPE_PALETTE: Record<BuildingArchetype, ArchetypePalette> = {
   furnace: { body: 0x8a7460, bodyDark: 0x54463a, accent: 0xffb26b },
   depot: { body: 0xa08a66, bodyDark: 0x6a5a42, accent: 0xffd43b },
   belt: { body: 0x4a5462, bodyDark: 0x2e3642, accent: 0xffd43b },
+  // sorter：深色石墨底座 + 铜色横臂（DSP 分拣器的铜色机械臂）。
+  sorter: { body: 0x6b5a4b, bodyDark: 0x312a24, accent: 0xd9a05b },
   special: { body: 0x8296ab, bodyDark: 0x54667a, accent: 0x9bd4ff },
 };
 
@@ -253,6 +257,11 @@ const TYPE_ACCENT: Record<string, number> = {
   accumulator: 0xffe066,
   accumulator_full: 0xffe066,
   energy_exchanger: 0xffa94d,
+  // 分拣器：mk1 铜色、mk2 蓝色发光、mk3 橙色（与 3D 模型分层颜色同口径）。
+  sorter_mk1: 0xd9a05b,
+  sorter_mk2: 0x74c0fc,
+  sorter_mk3: 0xffa94d,
+  pile_sorter: 0xffd43b,
 };
 
 export function resolveBuildingAccent(buildingType: string): number {
@@ -300,7 +309,7 @@ export function buildingSpriteCacheKey(
   state: BuildingVisualState,
   direction?: BeltDirection,
 ): string {
-  // 方向段仅 belt 变体携带（其他原型无方向纹，键保持不变）。
+  // 方向段仅 belt / sorter 变体携带（其他原型无方向纹，键保持不变）。
   return `bldg:${archetype}:${tilesWide}x${tilesHigh}:${state}${direction ? `:${direction}` : ''}`;
 }
 
@@ -660,6 +669,21 @@ function drawDepot(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, 
   }
 }
 
+/** 2D 方向 → 格内单位向量（y 向南，与 logistics-direction 同口径）。 */
+const DIRECTION_VECTORS: Record<BeltDirection, { x: number; y: number }> = {
+  north: { x: 0, y: -1 },
+  east: { x: 1, y: 0 },
+  south: { x: 0, y: 1 },
+  west: { x: -1, y: 0 },
+};
+
+/**
+ * 传送带剪影（DSP 口径）：**深色带面 + 两侧浅色护栏 + 很弱的方向纹**。
+ *
+ * 试玩 1017 反馈：旧版是「深色扁带 + 两条细黄边 + 亮黄粗 chevron」，黄边抢眼、流向反而
+ * 只是一块黄斑。现在护栏是浅色金属亮边（带体两侧），带面压暗并加横向 slat 细纹，
+ * 方向纹只剩很淡的 chevron——主流向由 planet-scene 的平铺流动箭头负责，这里不抢戏。
+ */
 function drawBelt(
   ctx: CanvasRenderingContext2D,
   layout: BuildingSpriteLayout,
@@ -669,47 +693,64 @@ function drawBelt(
   const { padX, topExtra, footprintWidth: fw, footprintHeight: fh } = layout;
   const fx = padX;
   const fy = topExtra;
-  // 带体走向：east/west 横带（钢轨在上下），north/south 竖带（钢轨在左右）。
+  // 带体走向：east/west 横带（护栏在上下），north/south 竖带（护栏在左右）。
   const horizontal = direction === 'east' || direction === 'west';
 
   const bx = horizontal ? fx + fw * 0.02 : fx + fw * 0.38;
-  const by = horizontal ? fy + fh * 0.44 : fy + fh * 0.02;
+  const by = horizontal ? fy + fh * 0.4 : fy + fh * 0.02;
   const bw = horizontal ? fw * 0.96 : fw * 0.24;
-  const bh = horizontal ? fh * 0.24 : fh * 0.96;
+  const bh = horizontal ? fh * 0.2 : fh * 0.96;
+  const rail = Math.max(2, (horizontal ? bh : bw) * 0.26);
 
+  // 机身底盘（比带面略宽一点，压暗当侧壁）。
   ctx.beginPath();
   ctx.rect(bx, by, bw, bh);
-  fillVertical(ctx, by, by + bh, numToCss(palette.body), numToCss(palette.bodyDark));
+  fillVertical(ctx, by, by + bh, '#1b242d', '#0d1319');
   ctx.strokeStyle = OUTLINE;
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // 钢轨（贴带体两侧长边）
-  ctx.fillStyle = '#77839a';
-  const rail = Math.max(1.5, (horizontal ? bh : bw) * 0.18);
-  if (horizontal) {
-    ctx.fillRect(bx, by, bw, rail);
-    ctx.fillRect(bx, by + bh - rail, bw, rail);
-  } else {
-    ctx.fillRect(bx, by, rail, bh);
-    ctx.fillRect(bx + bw - rail, by, rail, bh);
+  // 带面：夹在两侧护栏之间的深色 deck。
+  const deckX = horizontal ? bx : bx + rail;
+  const deckY = horizontal ? by + rail : by;
+  const deckW = horizontal ? bw : bw - rail * 2;
+  const deckH = horizontal ? bh - rail * 2 : bh;
+  ctx.beginPath();
+  ctx.rect(deckX, deckY, deckW, deckH);
+  fillVertical(ctx, deckY, deckY + deckH, numToCss(palette.bodyDark), '#151d25');
+
+  // 横向 slat 细纹（每格 2 道、很弱）：带面不是一块纯色。
+  ctx.strokeStyle = 'rgba(198, 216, 235, 0.10)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 2; i += 1) {
+    const t = i / 3;
+    ctx.beginPath();
+    if (horizontal) {
+      const x = deckX + deckW * t;
+      ctx.moveTo(x, deckY + 1);
+      ctx.lineTo(x, deckY + deckH - 1);
+    } else {
+      const y = deckY + deckH * t;
+      ctx.moveTo(deckX + 1, y);
+      ctx.lineTo(deckX + deckW - 1, y);
+    }
+    ctx.stroke();
   }
 
-  // 方向箭头纹（chevron 指向物流输出方向）：2D 战术图另有 logistics-flow-marks 的
-  // 平铺箭头负责「流向」，这里保留烘焙纹是给低缩放档/无平铺时兜底，两者指向一致。
-  ctx.fillStyle = numToCss(palette.accent, 0.85);
-  const span = horizontal ? bw : bh;
-  const thickness = horizontal ? bh : bw;
-  const chevronW = (horizontal ? fw : fh) * 0.12;
-  const count = Math.max(2, Math.round(span / (chevronW * 1.8)));
+  // 很弱的方向纹（chevron 指向物流输出方向）：低对比，只作流向辅助。
+  ctx.fillStyle = numToCss(palette.accent, 0.22);
+  const span = horizontal ? deckW : deckH;
+  const thickness = horizontal ? deckH : deckW;
+  const chevronW = Math.max(3, (horizontal ? fw : fh) * 0.1);
+  const count = Math.max(2, Math.round(span / (chevronW * 2.2)));
   const sign = direction === 'east' || direction === 'south' ? 1 : -1;
   for (let i = 0; i < count; i += 1) {
-    const along = (horizontal ? bx : by) + span * ((i + 0.5) / count);
-    const across = (horizontal ? by : bx) + thickness / 2;
+    const along = (horizontal ? deckX : deckY) + span * ((i + 0.5) / count);
+    const across = (horizontal ? deckY : deckX) + thickness / 2;
     const tip = along + sign * chevronW * 0.4;
     const tail = along - sign * chevronW * 0.4;
     const notch = along - sign * chevronW * 0.1;
-    const half = thickness * 0.26;
+    const half = thickness * 0.24;
     ctx.beginPath();
     if (horizontal) {
       ctx.moveTo(tail, across - half);
@@ -725,6 +766,128 @@ function drawBelt(
     ctx.closePath();
     ctx.fill();
   }
+
+  // 两侧浅色护栏（DSP 的 raised rails）：外沿亮金属、内壁暗一点。
+  const railGradient = (x0: number, y0: number, x1: number, y1: number) => {
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    gradient.addColorStop(0, '#b9c6d6');
+    gradient.addColorStop(1, '#78879a');
+    return gradient;
+  };
+  ctx.fillStyle = horizontal ? railGradient(0, by, 0, by + rail) : railGradient(bx, 0, bx + rail, 0);
+  if (horizontal) {
+    ctx.fillRect(bx, by, bw, rail);
+    ctx.fillRect(bx, by + bh - rail, bw, rail);
+  } else {
+    ctx.fillRect(bx, by, rail, bh);
+    ctx.fillRect(bx + bw - rail, by, rail, bh);
+  }
+  // 护栏高光（外沿一条亮线）。
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+  if (horizontal) {
+    ctx.fillRect(bx, by + 1, bw, 1);
+    ctx.fillRect(bx, by + bh - 2, bw, 1);
+  } else {
+    ctx.fillRect(bx + 1, by, 1, bh);
+    ctx.fillRect(bx + bw - 2, by, 1, bh);
+  }
+}
+
+/**
+ * 分拣器剪影（DSP 口径）：深色圆盘底座（俯视椭圆）+ 从中心指向**放货方向**的铜色横臂 +
+ * 末端小夹爪。4 向变体复用 belt 的方向缓存机制（缓存键追加方向）；`palette.accent` 由
+ * 类型决定，mk2 蓝色发光、mk3 橙色点缀（与 3D 模型分层颜色同口径）。
+ */
+function drawSorter(
+  ctx: CanvasRenderingContext2D,
+  layout: BuildingSpriteLayout,
+  palette: ArchetypePalette,
+  direction: BeltDirection = 'north',
+) {
+  const { padX, topExtra, footprintWidth: fw, footprintHeight: fh } = layout;
+  const fx = padX;
+  const fy = topExtra;
+  const cx = fx + fw * 0.5;
+  const cy = fy + fh * 0.58;
+  const rx = fw * 0.32;
+  const ry = fh * 0.2;
+
+  // 投影。
+  ctx.beginPath();
+  ctx.ellipse(cx + fw * 0.02, cy + fh * 0.08, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(3, 6, 12, 0.4)';
+  ctx.fill();
+
+  // 圆盘底座：上亮下暗的金属盘。
+  const disc = ctx.createLinearGradient(cx, cy - ry, cx, cy + ry);
+  disc.addColorStop(0, '#6a594a');
+  disc.addColorStop(1, numToCss(palette.bodyDark));
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = disc;
+  ctx.fill();
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 铜环（内圈）+ 中央转台。
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 0.64, ry * 0.64, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = numToCss(palette.accent, 0.95);
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - ry * 0.08, rx * 0.24, ry * 0.24, 0, 0, Math.PI * 2);
+  ctx.fillStyle = numToCss(palette.body, 0.95);
+  ctx.fill();
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 横臂：从中心指向放货方向，末端夹爪（两片小指成 V 形）。
+  const vector = DIRECTION_VECTORS[direction];
+  const armLength = fw * 0.34;
+  const tipX = cx + vector.x * armLength;
+  const tipY = cy + vector.y * armLength;
+  const armWidth = Math.max(2, fw * 0.075);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(tipX, tipY);
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = armWidth + 2;
+  ctx.stroke();
+  ctx.strokeStyle = numToCss(palette.accent);
+  ctx.lineWidth = armWidth;
+  ctx.stroke();
+
+  const px = -vector.y;
+  const py = vector.x;
+  const claw = fw * 0.11;
+  for (const sign of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX + vector.x * claw * 0.55 + px * sign * claw * 0.7,
+      tipY + vector.y * claw * 0.55 + py * sign * claw * 0.7);
+    ctx.strokeStyle = numToCss(palette.accent);
+    ctx.lineWidth = Math.max(1.2, fw * 0.035);
+    ctx.stroke();
+  }
+  // 夹爪关节（亮点）。
+  ctx.beginPath();
+  ctx.arc(tipX, tipY, Math.max(1.4, fw * 0.05), 0, Math.PI * 2);
+  ctx.fillStyle = '#e8eef5';
+  ctx.fill();
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 类型点缀灯（mk1 铜 / mk2 蓝 / mk3 橙）：中心一颗发光点，低缩放档也能按颜色分辨型号。
+  const glow = ctx.createRadialGradient(cx, cy - ry * 0.1, 0, cx, cy - ry * 0.1, fw * 0.14);
+  glow.addColorStop(0, numToCss(palette.accent, 0.55));
+  glow.addColorStop(1, numToCss(palette.accent, 0));
+  ctx.fillStyle = glow;
+  ctx.fillRect(cx - fw * 0.14, cy - ry * 0.1 - fw * 0.14, fw * 0.28, fw * 0.28);
 }
 
 function drawSpecial(ctx: CanvasRenderingContext2D, layout: BuildingSpriteLayout, palette: ArchetypePalette) {
@@ -807,6 +970,9 @@ function renderBuildingCanvas(spec: BuildingSpriteSpec): HTMLCanvasElement {
     case 'belt':
       drawBelt(ctx, layout, palette, spec.direction);
       break;
+    case 'sorter':
+      drawSorter(ctx, layout, palette, spec.direction);
+      break;
     case 'special':
       drawSpecial(ctx, layout, palette);
       break;
@@ -819,7 +985,7 @@ function renderBuildingCanvas(spec: BuildingSpriteSpec): HTMLCanvasElement {
 
 /** 建筑结构精灵纹理（全局缓存；纹理生命周期由本模块管理，场景不得 destroy）。 */
 export function getBuildingSpriteTexture(spec: BuildingSpriteSpec): Texture {
-  const direction = spec.archetype === 'belt' ? (spec.direction ?? 'east') : undefined;
+  const direction = spec.archetype === 'belt' || spec.archetype === 'sorter' ? (spec.direction ?? 'east') : undefined;
   const key = buildingSpriteCacheKey(spec.archetype, spec.tilesWide, spec.tilesHigh, spec.state, direction);
   const hit = cache.get(key);
   if (hit) {

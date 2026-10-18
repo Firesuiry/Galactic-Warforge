@@ -60,7 +60,6 @@ import {
   BELT_ITEM_DOT_FRACTION,
   BELT_ITEM_DOT_MIN_PX,
   BELT_ITEM_MAX_DOTS,
-  beltDotInitialProgress,
   beltDotPosition,
   beltFlowVector,
   beltItemColor,
@@ -405,7 +404,8 @@ export interface GhostArrowStroke {
 /**
  * 分拣器幽灵箭头的画法（试玩 1016 U1）：两端必须**形状**可分，不能只靠颜色。
  * 取货端空心虚线描边 + 「取」，放货端实心粗线 + 「放」。
- * 与 3D 的 `three/ghost-arrow-texture`（空心虚线/实心纹理）同一口径。
+ * 3D 的建造 ghost 已改为「半透明机体 + 单条贴地细箭头」（见 three/ghost-sorter），
+ * 2D 这里仍保留两端箭头 + 取/放标签（2D 没有机体预览，文字是唯一的方向说明）。
  *
  * 试玩 1016 复核：旧版取货端只有 1.5px 细线，缩到小格宽后与实心端一样糊成一根线；
  * 现在空心端也加到 2.5px 并画成虚线（`dash`），与实心端的粗杆（4.5px）拉出线型差异。
@@ -489,6 +489,52 @@ export function dashSegments(
     ]);
   }
   return pieces;
+}
+
+/**
+ * 传送带堵塞的视觉判定阈值（tick）：服务端 `blocked_ticks` 统计「带上有货但一件都没动出去」
+ * 的连续 tick，达阈值（300 tick）才发告警。2D 只用来决定圆点是否停在原地堆在输出端，
+ * 取几 tick 即可（正常流动时每个 tick 都会动出去，计数归零）。
+ */
+export const BELT_BLOCKED_VISUAL_TICKS = 2;
+
+/**
+ * 传送带是否堵塞（2D 货流视觉）：带上有货、且连续 `blocked_ticks` 达到视觉阈值。
+ * 堵塞时圆点不再前进、堆在输出端（DSP 口径），贴图流向箭头也停滚。
+ */
+export function beltFlowBlocked(
+  conveyor: { blocked_ticks?: number; buffer?: Array<{ quantity?: number }> } | undefined,
+): boolean {
+  if (!conveyor) return false;
+  const items = (conveyor.buffer ?? []).reduce((sum, stack) => sum + Math.max(stack?.quantity ?? 0, 0), 0);
+  return items > 0 && (conveyor.blocked_ticks ?? 0) >= BELT_BLOCKED_VISUAL_TICKS;
+}
+
+/**
+ * 传送带货物圆点的归一化进度（0 = 输入边，1 = 输出边）：**从输出端往回按格容量收紧间距**。
+ *
+ * buffer 队首 = 即将送出的一端（服务端 `Take` 从队首取），所以第一个圆点永远贴着输出端；
+ * 每格容量 `max_stack` 越小、间距越大（mk1 每格 2 件 → 两点各占半格；mk3 3 件 → 三等分）。
+ * 「间距随 buffer 收紧 + 堵塞时堆在输出端」就是这一条排布：堵塞时相位冻结，圆点停在
+ * 输出端那一串位置上。
+ */
+export function beltItemDotProgress(
+  count: number,
+  maxStack: number | undefined,
+  maxDots = BELT_ITEM_MAX_DOTS,
+): number[] {
+  const dots = Math.min(Math.max(Math.round(count), 0), Math.max(maxDots, 0));
+  if (dots === 0) return [];
+  const capacity = Math.min(Math.max(Math.round(maxStack ?? 1), 1), Math.max(maxDots, 1));
+  const pitch = 1 / capacity;
+  // 兜底：服务端保证 buffer 不超过 max_stack，但数据异常时圆点也不越过输入边。
+  return Array.from({ length: dots }, (_, index) => Math.max(.02, 1 - (index + .5) * pitch));
+}
+
+/** 圆点显示进度 = 排布偏移 + 共享流动相位（回卷到 [0,1)）。 */
+export function beltDotDisplayProgress(offset: number, phase: number): number {
+  const value = (offset + phase) % 1;
+  return value < 0 ? value + 1 : value;
 }
 
 /**
@@ -643,7 +689,7 @@ interface BuildingNode extends SceneNode {
 
 /** 传送带货物流视图：N 个圆点沿输出方向循环流动（progress ∈ [0,1)，输入边 → 输出边）。 */
 interface BeltItemFlow {
-  dots: Array<{ sprite: Sprite; progress: number }>;
+  dots: Array<{ sprite: Sprite; offset: number }>;
   /** footprint 中心（容器坐标）。 */
   cx: number;
   cy: number;
@@ -652,6 +698,10 @@ interface BeltItemFlow {
   ay: number;
   /** 流速（tile/s，throughput 近似）。 */
   speed: number;
+  /** 流动相位（0..1，所有圆点共享；堵塞时冻结）。 */
+  phase: number;
+  /** 堵塞：圆点停在输出端、贴图箭头停滚。 */
+  blocked: boolean;
 }
 
 /** 采集产出脉冲视图：单粒矿周期性从结构基座上抛渐隐（周期由 entityAnimPhase 错相）。 */
@@ -2075,15 +2125,15 @@ export class PlanetScene {
       tilesWide: width,
       tilesHigh: height,
       state: visualState,
-      // 分拣器方向取自建筑 rotation（背面取货/正面放货），传送带取 conveyor.output。
-      direction: archetype === 'belt'
+      // 分拣器方向取自建筑 rotation（正面 = 放货方向），传送带取 conveyor.output。
+      direction: archetype === 'belt' || archetype === 'sorter'
         ? (isSorterBuilding(building) ? resolveSorterDirection(building) : resolveConveyorBeltDirection(building))
         : undefined,
     });
     const scale = this.tileSize / BUILDING_SPRITE_TILE_PX;
     const layout = buildingSpriteLayout(width, height);
-    // 传送带/分拣器的结构剪影只留底座与钢轨（方向纹由 syncLogisticsFlow 的平铺箭头承担），
-    // 避免「烘焙 chevron + 平铺箭头」两层方向纹叠在一起看错。
+    // 传送带剪影是「深色带面 + 浅色护栏 + 很弱方向纹」；分拣器是独立剪影（圆盘 +
+    // 指向放货方向的横臂 + 夹爪）。主流向仍由 syncLogisticsFlow 的平铺箭头承担。
     node.sprite.scale.set(scale);
     node.sprite.position.set(-layout.padX * scale, -layout.topExtra * scale);
     node.sprite.visible = true;
@@ -2239,15 +2289,17 @@ export class PlanetScene {
     const span = size * 0.42;
     const start = { x: size / 2 + from.x * span, y: size / 2 + from.y * span };
     const end = { x: size / 2 + to.x * span, y: size / 2 + to.y * span };
-    const wing = size * 0.11;
+    // 线宽再收细一档、箭头头收成小爪形：分拣器本体精灵已经有铜色横臂，这条线只作
+    // 「取 → 放」的辅助标注，不能比主体剪影更粗。
+    const wing = size * 0.08;
     graphics
       .moveTo(start.x, start.y)
       .lineTo(end.x, end.y)
       .moveTo(end.x, end.y)
-      .lineTo(end.x - to.x * wing - to.y * wing, end.y - to.y * wing - to.x * wing)
+      .lineTo(end.x - to.x * wing - to.y * wing * 0.7, end.y - to.y * wing - to.x * wing * 0.7)
       .moveTo(end.x, end.y)
-      .lineTo(end.x - to.x * wing + to.y * wing, end.y - to.y * wing + to.x * wing)
-      .stroke({ width: Math.max(1.5, size * 0.05), color: SORTER_ROUTE_COLOR, alpha: 0.95 });
+      .lineTo(end.x - to.x * wing + to.y * wing * 0.7, end.y - to.y * wing + to.x * wing * 0.7)
+      .stroke({ width: Math.max(1, size * 0.035), color: SORTER_ROUTE_COLOR, alpha: 0.95 });
     node.container.addChildAt(graphics, 1);
     node.sorterRoute = graphics;
     node.sorterRouteKey = key;
@@ -2283,15 +2335,20 @@ export class PlanetScene {
       ax: 0,
       ay: 0,
       speed: 1,
+      phase: 0,
+      blocked: false,
     };
     flow.cx = pixelWidth / 2;
     flow.cy = pixelHeight / 2;
     flow.ax = vector.x * (pixelWidth / 2);
     flow.ay = vector.y * (pixelHeight / 2);
     flow.speed = beltItemSpeedTilesPerSec(conveyor.throughput);
+    flow.blocked = beltFlowBlocked(conveyor);
 
     const dotSize = Math.max(this.tileSize * BELT_ITEM_DOT_FRACTION, BELT_ITEM_DOT_MIN_PX);
-    // 数量对齐：多余的从尾部回收，缺失的在尾部补上（初始相位均匀铺开）。
+    // 数量对齐：多余的从尾部回收，缺失的在尾部补上；排布从输出端按格容量往回排
+    // （堵塞时相位冻结 → 圆点自然堆在输出端，不再是「平均铺在格中」）。
+    const offsets = beltItemDotProgress(colors.length, conveyor.max_stack, BELT_ITEM_MAX_DOTS);
     while (flow.dots.length > colors.length) {
       const dot = flow.dots.pop();
       dot?.sprite.destroy();
@@ -2299,15 +2356,16 @@ export class PlanetScene {
     while (flow.dots.length < colors.length) {
       const sprite = new Sprite();
       sprite.anchor.set(0.5);
-      const progress = beltDotInitialProgress(flow.dots.length, colors.length);
-      flow.dots.push({ sprite, progress });
+      flow.dots.push({ sprite, offset: 0 });
       node.container.addChildAt(sprite, 2); // 压在结构精灵之上、角标之下
     }
     flow.dots.forEach((dot, index) => {
+      dot.offset = offsets[index];
       dot.sprite.texture = getDiscTexture(colors[index]);
       dot.sprite.width = dotSize;
       dot.sprite.height = dotSize;
-      const pos = beltDotPosition(dot.progress, flow.cx, flow.cy, flow.ax, flow.ay);
+      const progress = beltDotDisplayProgress(dot.offset, flow.phase);
+      const pos = beltDotPosition(progress, flow.cx, flow.cy, flow.ax, flow.ay);
       dot.sprite.position.set(pos.x, pos.y);
       dot.sprite.visible = true;
     });
@@ -3221,18 +3279,19 @@ export class PlanetScene {
         node.glow.alpha = FURNACE_GLOW_BASE_ALPHA
           + FURNACE_GLOW_ALPHA_SWING * Math.sin(this.ambientTime * 2.1 + node.phase);
       }
-      // 传送带货流：圆点沿输出方向匀速循环（到输出边回卷输入边，模拟移交下一段）。
+      // 传送带货流：共享相位匀速推进（到输出边回卷输入边，模拟移交下一段）；
+      // 堵塞时相位冻结——圆点停在被排到输出端的位置上（DSP 的「堆在队首」）。
       if (node.beltFlow) {
         const flow = node.beltFlow;
+        if (!flow.blocked) flow.phase = (flow.phase + dt * flow.speed) % 1;
         for (const dot of flow.dots) {
-          dot.progress = (dot.progress + dt * flow.speed) % 1;
-          const pos = beltDotPosition(dot.progress, flow.cx, flow.cy, flow.ax, flow.ay);
+          const pos = beltDotPosition(beltDotDisplayProgress(dot.offset, flow.phase), flow.cx, flow.cy, flow.ax, flow.ay);
           dot.sprite.position.set(pos.x, pos.y);
         }
       }
-      // 流向箭头：纹理沿带体滚动（速度与货物圆点同口径；无货/停摆时静止）。
+      // 流向箭头：纹理沿带体滚动（速度与货物圆点同口径；无货/停摆/堵塞时静止）。
       if (node.flow) {
-        const moving = node.beltFlow !== null || node.data.runtime?.state === 'running';
+        const moving = !(node.beltFlow?.blocked ?? false) && (node.beltFlow !== null || node.data.runtime?.state === 'running');
         const speed = moving ? beltItemSpeedTilesPerSec(node.data.conveyor?.throughput) : 0;
         advanceLogisticsFlow(node.flow, dt, speed, this.tileSize, node.flow.rotation === 0 ? 'x' : 'y');
       }

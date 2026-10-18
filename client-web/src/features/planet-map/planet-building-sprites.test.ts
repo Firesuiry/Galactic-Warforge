@@ -40,9 +40,14 @@ describe('原型映射 resolveBuildingArchetype', () => {
     }
   });
 
-  it('传送带/分拣 → belt', () => {
+  it('传送带 → belt；分拣器有独立 sorter 原型（不再套 belt）', () => {
     expect(resolveBuildingArchetype('conveyor_belt_mk1')).toBe('belt');
-    expect(resolveBuildingArchetype('sorter_mk2')).toBe('belt');
+    expect(resolveBuildingArchetype('splitter')).toBe('belt');
+    for (const type of ['sorter_mk1', 'sorter_mk2', 'sorter_mk3', 'pile_sorter']) {
+      expect(resolveBuildingArchetype(type)).toBe('sorter');
+    }
+    // 未列名的 sorter_* 也走关键词兜底到 sorter 原型。
+    expect(resolveBuildingArchetype('future_sorter_mk4')).toBe('sorter');
   });
 
   it('未列名类型按关键词兜底，完全不认识走 special', () => {
@@ -61,15 +66,18 @@ describe('烘焙参数与缓存键', () => {
     expect(windBladesCacheKey(1, 1)).toBe('bldg-blades:1x1');
   });
 
-  it('belt 方向纹变体键：方向追加为末段，缺省不带方向段（非 belt 键不变）', () => {
+  it('belt/sorter 方向变体键：方向追加为末段，缺省不带方向段（其他原型键不变）', () => {
     expect(buildingSpriteCacheKey('belt', 1, 1, 'normal', 'east')).toBe('bldg:belt:1x1:normal:east');
     expect(buildingSpriteCacheKey('belt', 1, 1, 'normal', 'north')).toBe('bldg:belt:1x1:normal:north');
     expect(buildingSpriteCacheKey('belt', 1, 1, 'distressed', 'south')).toBe('bldg:belt:1x1:distressed:south');
-    // 四方向键互不相同（烘焙 4 向变体）
+    // 分拣器剪影也有 4 向变体（横臂指向放货方向），缓存键必须分开。
+    expect(buildingSpriteCacheKey('sorter', 1, 1, 'normal', 'west')).toBe('bldg:sorter:1x1:normal:west');
     const keys = (['north', 'east', 'south', 'west'] as const).map(
-      (direction) => buildingSpriteCacheKey('belt', 1, 1, 'normal', direction),
+      (direction) => buildingSpriteCacheKey('sorter', 1, 1, 'normal', direction),
     );
     expect(new Set(keys).size).toBe(4);
+    // 非方向原型（getBuildingSpriteTexture 不传 direction）键里没有方向段。
+    expect(buildingSpriteCacheKey('tower', 1, 1, 'normal')).toBe('bldg:tower:1x1:normal');
   });
 
   it('resolveConveyorBeltDirection：取 conveyor.output 实方向，auto/空/缺失回退 east', () => {
@@ -125,6 +133,11 @@ describe('状态与点缀色', () => {
   it('resolveBuildingAccent：类型级点缀色覆盖原型默认色', () => {
     expect(resolveBuildingAccent('tesla_tower')).toBe(0xffd43b);
     expect(resolveBuildingAccent('wind_turbine')).toBe(0xe8f4ff);
+    // 分拣器 mk1 铜 / mk2 蓝 / mk3 橙：三种型号在地图上按点缀色可辨。
+    expect(resolveBuildingAccent('sorter_mk1')).toBe(0xd9a05b);
+    expect(resolveBuildingAccent('sorter_mk2')).toBe(0x74c0fc);
+    expect(resolveBuildingAccent('sorter_mk3')).toBe(0xffa94d);
+    expect(new Set(['sorter_mk1', 'sorter_mk2', 'sorter_mk3'].map(resolveBuildingAccent)).size).toBe(3);
     // 未列名类型回退到原型默认 accent
     expect(resolveBuildingAccent('solar_panel')).toBe(resolveBuildingAccent('unknown_xyz'));
   });
