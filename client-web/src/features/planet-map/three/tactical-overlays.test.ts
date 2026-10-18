@@ -12,6 +12,7 @@ import {
   circleQuaternion,
   constructionBarProgress,
   detectionPhase,
+  footprintCenterTile,
   rangeCircleAngle,
 } from './tactical-overlays';
 
@@ -55,6 +56,19 @@ describe('3D 战术叠加层纯函数（R20-B）', () => {
       const point = new THREE.Vector3(Math.sin(angle) * Math.cos(a), -Math.sin(angle) * Math.sin(a), Math.cos(angle)).applyQuaternion(q);
       expect(center.angleTo(point)).toBeCloseTo(angle, 6);
     }
+  });
+
+  it('footprintCenterTile：1×1 落回本格，3×3 取占地中心（跨面也不跑偏）', () => {
+    expect(footprintCenterTile({ x: 5, y: 7 }, { width: 1, height: 1 }, FACE_SIZE)).toEqual({ x: 5, y: 7 });
+    // 3×3 从 (5,7) 起：中心就是 (6,8)。
+    expect(footprintCenterTile({ x: 5, y: 7 }, { width: 3, height: 3 }, FACE_SIZE)).toEqual({ x: 6, y: 8 });
+    // 面边界：从最后一行/列起算，中心仍在面上（法线平均落回合法 tile）。
+    const center = footprintCenterTile({ x: 14, y: 15 }, { width: 3, height: 3 }, FACE_SIZE);
+    // 展开图坐标：跨面时落在相邻面（x ∈ [0, 3×faceSize)）。
+    expect(center.x).toBeGreaterThanOrEqual(0);
+    expect(center.x).toBeLessThan(3 * FACE_SIZE);
+    expect(center.y).toBeGreaterThanOrEqual(0);
+    expect(center.y).toBeLessThan(2 * FACE_SIZE);
   });
 
   it('constructionBarProgress：remaining/total 可算时返回比例，缺数据返回 null', () => {

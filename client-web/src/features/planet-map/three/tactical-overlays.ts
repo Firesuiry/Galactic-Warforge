@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 import type { TilePoint } from '../model';
+import { surfaceOffset } from '@shared/surface';
 import type { RangeCircleSpec } from '../range-circles';
 import { RANGE_CIRCLE_COLORS } from '../range-circles';
-import { surfaceTileSize, tileFrame, tileNormal } from './projection';
+import { normalTile, surfaceTileSize, tileFrame, tileNormal } from './projection';
 import { circleLoop, discGeometry, ribbonGeometry } from './surface-ribbon';
 
 /**
@@ -53,6 +54,20 @@ export function circleQuaternion(tile: TilePoint, faceSize: number): THREE.Quate
   const { normal, east, south } = tileFrame(tile, faceSize);
   const basis = new THREE.Matrix4().makeBasis(east, south.clone().negate(), normal);
   return new THREE.Quaternion().setFromRotationMatrix(basis);
+}
+
+/**
+ * 占地中心格：footprint 各格法线取平均再落回 tile。
+ * 不能直接对展开图坐标取平均（跨面时坐标不连续），也不能用 `surfaceOffset` 的分数步进
+ * （它按整数步循环，0.5 会被当成 1 格）。
+ */
+export function footprintCenterTile(origin: TilePoint, footprint: { width: number; height: number }, faceSize: number): TilePoint {
+  const width = Math.max(1, Math.round(footprint.width)), height = Math.max(1, Math.round(footprint.height));
+  const sum = new THREE.Vector3();
+  for (let dy = 0; dy < height; dy++) for (let dx = 0; dx < width; dx++) {
+    sum.add(tileNormal(surfaceOffset(origin, dx, dy, faceSize), faceSize));
+  }
+  return normalTile(sum.normalize(), faceSize);
 }
 
 /** 施工进度（与 2D planet-scene.constructionProgress 同源字段；2D 删除后这是唯一实现）。 */

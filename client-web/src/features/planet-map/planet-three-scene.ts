@@ -37,6 +37,8 @@ import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, tr
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
+import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
+import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
 import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
 
@@ -182,6 +184,13 @@ export class PlanetThreeScene {
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
   /** 建造 ghost 朝向箭头（传送带/分拣器/带旋转的建筑）：跟随悬停格，2D/3D 同一套方向推导。 */
   private readonly ghostMarks = new THREE.Group();
+  /**
+   * 战术叠加（第 20 轮 R20-B，契约 D4）：建造 ghost 射程圈 / 选中防御建筑射程圈、
+   * 侦测点脉冲圆环、施工脚手架上方进度条。几何按半径缓存、mesh 按 key 复用（ghost 移动只改朝向）。
+   */
+  private readonly rangeCircles = new RangeCircleOverlay(RADIUS);
+  private readonly detectionMarks = new DetectionOverlay(RADIUS);
+  private readonly constructionBars = new ConstructionProgressOverlay(RADIUS);
   /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
   private beltDragPath: BeltDragCell[] = [];
 
@@ -242,6 +251,7 @@ export class PlanetThreeScene {
     this.world.add(this.content, this.staticMarks, this.marks);
     this.world.add(this.powerAlertMarksGroup);
     this.world.add(this.logisticsMarks.group, this.ghostMarks, this.haulRoutes, this.sorterGhost.group, this.conveyorGhost.group);
+    this.world.add(this.rangeCircles.group, this.detectionMarks.group, this.constructionBars.group);
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
@@ -1017,6 +1027,52 @@ export class PlanetThreeScene {
       } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
     }
     this.updateBuildGhost();
+    this.syncTacticalOverlays();
+  }
+
+  /**
+   * 射程圈 / 侦测点 / 施工进度（第 20 轮 R20-B）。
+   *
+   * 射程圈：建造模式悬停格 → catalog 的 combat_range/power_range（圆心 = 占地中心）；
+   * 选中防御建筑 → runtime.functions.combat.range（圆心 = 占地中心）。判定纯函数在 range-circles。
+   * 侦测点：runtime.detections[].detected_positions（与 2D 同源），随敌情图层开关。
+   * 施工进度：runtime.construction_tasks 的 remaining/total，画在脚手架上方的 billboard。
+   */
+  private syncTacticalOverlays() {
+    const data = this.data, interaction = this.interaction;
+    if (!data || !interaction) return;
+    const faceSize = data.planet.surface.face_size;
+    const circles: RangeCircleItem[] = [];
+    const mode = interaction.interactionMode;
+    const hovered = interaction.hoveredTile;
+    if (mode.kind === 'build' && hovered && interaction.layers.selection) {
+      const footprint = getBuildingCatalogEntry(data.catalog, mode.buildingType)?.footprint ?? { width: 1, height: 1 };
+      const center = footprintCenterTile(hovered, footprint, faceSize);
+      for (const spec of resolveGhostRangeCircles(data.catalog, mode.buildingType)) {
+        circles.push({ key: `ghost:${spec.kind}`, center, spec });
+      }
+    }
+    if (interaction.layers.selection && interaction.selected?.kind === 'building') {
+      const building = data.planet.buildings?.[interaction.selected.id];
+      const range = resolveSelectedCombatRange(building);
+      if (building && range !== undefined) {
+        const center = footprintCenterTile({ x: Math.round(building.position.x), y: Math.round(building.position.y) }, getBuildingFootprint(building), faceSize);
+        circles.push({ key: `selected:${building.id}`, center, spec: { kind: 'combat', radiusTiles: range } });
+      }
+    }
+    this.rangeCircles.sync(circles, faceSize);
+
+    const detections = interaction.layers.threat
+      ? (data.runtime?.available ? data.runtime.detections ?? [] : []).flatMap(detection => detection.detected_positions ?? [])
+      : [];
+    this.detectionMarks.sync(detections, faceSize);
+
+    const bars = (data.runtime?.available ? data.runtime.construction_tasks ?? [] : []).map(task => ({
+      id: task.id,
+      tile: { x: Math.round(task.position.x), y: Math.round(task.position.y) },
+      progress: constructionBarProgress(task),
+    }));
+    this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
   }
 
   /**
@@ -1412,6 +1468,7 @@ export class PlanetThreeScene {
         this.commandMarkers.update(dt * 1000);
         this.updateTurretAims(dt, time);
       }
+      this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);
       // 补给光环缓慢呼吸（2.4s 周期），减弱运动时保持常亮。
       const breath = this.frozen || reducedMotion ? 1 : .78 + .22 * Math.sin(time / 1000 * 2.6);
       for (const material of this.auraMaterials) material.opacity = material.userData.baseOpacity * breath;
@@ -1454,6 +1511,9 @@ export class PlanetThreeScene {
     this.logisticsMarks.dispose();
     this.clearMarks(this.ghostMarks);
     this.ghostMarks.removeFromParent();
+    this.rangeCircles.dispose();
+    this.detectionMarks.dispose();
+    this.constructionBars.dispose();
     disposeLogisticsTextures();
     this.combat.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
