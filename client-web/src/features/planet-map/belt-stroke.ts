@@ -46,6 +46,14 @@ function isCardinal(direction: string | undefined): direction is SurfaceDirectio
 }
 
 /**
+ * 建造模式给的朝向是不是明确四向（`Direction` 里的 'auto' 不算）。
+ * 拖拽铺带第一格与单格放置都要用它区分「玩家选了方向」与「交给建造模式兜底」。
+ */
+export function isCardinalDirection(direction: string | undefined): direction is SurfaceDirection {
+  return isCardinal(direction);
+}
+
+/**
  * 拖拽铺带第一格的高度（§3.5）：
  * 相邻若有一条现成带子正对着这一格输出（它的 output 方向步进一格 = 本格），
  * 取那条带子的高度（多条取最高，保证接着往上叠而不是往下钻）；否则取目标高度。

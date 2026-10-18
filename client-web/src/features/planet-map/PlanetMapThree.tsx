@@ -4,8 +4,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
-import { assignBeltElevations, resolveBeltStartElevation, traceBeltStroke, type BeltElevationPlacement } from './belt-stroke';
-import { isConveyorBeltBuilding } from './build-workflow';
+import { assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, traceBeltStroke, type BeltElevationPlacement } from './belt-stroke';
+import { DEFAULT_BELT_DIRECTION, isConveyorBeltBuilding } from './build-workflow';
 import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
 import { PlanetLegionLayer } from './PlanetLegionLayer';
@@ -96,6 +96,14 @@ export function PlanetMapThree(props: Props) {
     path: BeltElevationPlacement[];
     /** 第一格高度（接现成上游带时是上游带的高度，否则取拖拽开始时的目标高度）。 */
     startElevation: number;
+    /**
+     * 建造模式没给明确四向朝向（direction === 'auto'）时为 true。
+     * 单格点击（没拖拽过）时方向交回建造模式——interactTile 用 `mode.direction` 兜底，
+     * 与旧的 placeBelt 口径一致（试玩 1015 §6-4：auto 带子不带货，不能偷偷替玩家定方向）。
+     */
+    autoDirection: boolean;
+    /** 是否已经发生过指针移动：第一格的方向要等第一次移动才能按实际笔迹回填。 */
+    moved: boolean;
   } | null>(null);
 
   /** 按当前目标高度重算整条拖拽路径（第一格高度固定，之后直行 ±1、转弯保持）。 */
@@ -353,8 +361,15 @@ export function PlanetMapThree(props: Props) {
           Object.values(latest.current.planet.buildings ?? {}),
           props.planet.surface.face_size,
         );
-        const first: BeltElevationPlacement = { tile, direction: 'east', elevation: startElevation };
-        beltDrag.current = { tile, path: [first], startElevation };
+        const modeDirection = interactionMode.direction;
+        const first: BeltElevationPlacement = {
+          tile,
+          // 第一格方向：建造模式给了明确四向朝向就用它，否则先用默认方向占位——
+          // auto 时真正的走向要等第一次指针移动才能从笔迹回填（见 handleMarqueeMove）。
+          direction: isCardinalDirection(modeDirection) ? modeDirection : DEFAULT_BELT_DIRECTION,
+          elevation: startElevation,
+        };
+        beltDrag.current = { tile, path: [first], startElevation, autoDirection: !isCardinalDirection(modeDirection), moved: false };
         scene.current?.setBeltDragPath([first]);
         event.currentTarget.setPointerCapture(event.pointerId);
         event.stopPropagation(); event.preventDefault();
@@ -377,6 +392,13 @@ export function PlanetMapThree(props: Props) {
         const drag = beltDrag.current;
         const segment = traceBeltStroke(drag.tile, tile, props.planet.surface.face_size);
         if (segment.length > 0) {
+          // 第一格方向：指针按下时的方向只是占位（auto 时是默认方向），第一次移动才知道
+          // 玩家真正的走向——用笔迹首段方向回填第一格。不回填的话第一格会被判成「转弯」，
+          // 高度就按「转弯保持」处理，整条线的高度会推迟一格（验收 B1）。
+          if (!drag.moved) {
+            drag.path[0] = { ...drag.path[0], direction: segment[0].direction };
+            drag.moved = true;
+          }
           // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只接后面新增的格。
           drag.path.push(...segment.slice(1).map(part => ({ ...part, elevation: drag.startElevation })));
           drag.tile = tile;
@@ -408,8 +430,15 @@ export function PlanetMapThree(props: Props) {
       event.stopPropagation();
       const drag = beltDrag.current;
       // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
-      for (const part of resolveBeltDragPath(drag)) {
-        latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
+      // 单格点击（没拖拽过）且建造模式朝向外 auto：只带高度，方向交回 interactTile 的
+      // `mode.direction` 兜底——与旧的单格 placeBelt 口径一致（B1）。
+      const singleClick = drag.path.length === 1 && drag.autoDirection;
+      if (singleClick) {
+        latest.current.onInteractTile?.(drag.path[0].tile, { elevation: drag.path[0].elevation });
+      } else {
+        for (const part of resolveBeltDragPath(drag)) {
+          latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
+        }
       }
       beltDrag.current = null;
       scene.current?.setBeltDragPath(null);

@@ -683,7 +683,8 @@ export const BELT_DIRECTION_CYCLE: Direction[] = ["east", "north", "south", "wes
  * 自动解析只在「相邻带已给出方向」时才成立，玩家第一次铺线必然踩坑（本段踩了两次）。
  * 单格放置默认用建造栏显示的方向（R 旋转），auto 只作显式选项。
  */
-export const DEFAULT_BELT_DIRECTION: Direction = "east";
+// 类型故意用字面量（不用 `Direction`）：拖拽铺带的第一格要把它当 `SurfaceDirection` 用。
+export const DEFAULT_BELT_DIRECTION = "east";
 
 /** 进入建造模式时的初始方向：传送带默认「东」，其他建筑的 direction 无意义（保持 auto）。 */
 export function initialBuildDirection(buildingType: string): Direction {
