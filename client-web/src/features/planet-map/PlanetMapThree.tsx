@@ -377,7 +377,8 @@ export function PlanetMapThree(props: Props) {
         const drag = beltDrag.current;
         const segment = traceBeltStroke(drag.tile, tile, props.planet.surface.face_size);
         if (segment.length > 0) {
-          drag.path.push(...segment.map(part => ({ ...part, elevation: drag.startElevation })));
+          // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只接后面新增的格。
+          drag.path.push(...segment.slice(1).map(part => ({ ...part, elevation: drag.startElevation })));
           drag.tile = tile;
           scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
           const mode = usePlanetViewStore.getState().interactionMode;

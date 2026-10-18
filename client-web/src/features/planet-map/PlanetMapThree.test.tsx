@@ -6,6 +6,9 @@ import { resetPlanetViewStore, usePlanetViewStore } from './store';
 
 // 捕获场景构造时注册的点击回调，让测试能直接喂 tile（jsdom 里没有 WebGL 拾取）。
 let onClick: ((tile: { x: number; y: number }, meta: { offscreen: boolean; buildingId?: string }) => void) | undefined;
+/** 拖拽铺带：测试直接喂 pickAt 的返回值与 setBeltDragPath 的入参。 */
+let pickResult: { x: number; y: number } | null = null;
+let dragPaths: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)[] = [];
 let onHover: ((tile: { x: number; y: number }) => void) | undefined;
 let onMiss: (() => void) | undefined;
 
@@ -28,7 +31,8 @@ vi.mock('./planet-three-scene', () => ({
     orbit() {}
     zoom() {}
     setTilt() {}
-    pickAt() { return null; }
+    pickAt() { return pickResult; }
+    setBeltDragPath(path: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)) { dragPaths.push(path); }
     getCenterTile() { return null; }
     project() { return null; }
     clickTile() { return { dispatched: false, offscreen: false }; }
@@ -44,6 +48,8 @@ afterEach(() => {
   onClick = undefined;
   onHover = undefined;
   onMiss = undefined;
+  pickResult = null;
+  dragPaths = [];
 });
 
 /** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
@@ -210,5 +216,77 @@ describe('3D 地图点选高架带（第 19 轮 §3.5）', () => {
     expect(buildingAtTile({ ...planet, buildings: { 'belt-high': high as never } } as never, tile)).toBeUndefined();
     // 地面建筑 + 高架带：返回地面建筑
     expect(buildingAtTile({ ...planet, buildings: { ...(planet.buildings ?? {}), 'belt-high': high as never } } as never, tile)?.id).toBe(ground.id);
+  });
+});
+
+
+describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
+  // jsdom 没有 PointerEvent：用 MouseEvent 补一个（fireEvent.pointer* 会优先用它，
+  // 否则 button/clientX 都不会写进事件，React 处理器拿到的 button 是 undefined）。
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  }
+  beforeEach(() => {
+    vi.stubGlobal('PointerEvent', PointerEventPolyfill);
+  });
+
+  function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp') {
+    // jsdom 没有 Pointer Events 的捕获 API；拖拽处理器会调用它们。
+    const target = host as HTMLElement & { setPointerCapture?: () => void; releasePointerCapture?: () => void; hasPointerCapture?: () => boolean };
+    target.setPointerCapture = () => {};
+    target.releasePointerCapture = () => {};
+    target.hasPointerCapture = () => true;
+    // jsdom 没有 PointerEvent 构造器：用 MouseEvent 派发 pointer* 事件并带上 pointerId。
+    const fire = (fireEvent as unknown as Record<string, (el: HTMLElement, init: object) => void>)[type];
+    fire(host, { button: 0, pointerId: 1, clientX: 0, clientY: 0 });
+  }
+
+  it('第一格接现成上游带的高度；直行每格 ±1 走向目标；松手逐格带 elevation 下单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // 在 (3,3) 放一条地面带，输出方向 east → 拖拽起点 (4,3) 接 0 层。
+    planet.buildings = {
+      ...(planet.buildings ?? {}),
+      'belt-up': {
+        id: 'belt-up', type: 'conveyor_belt_mk1', owner_id: 'p1',
+        position: { x: 3, y: 3, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+        conveyor: { input: 'west', output: 'east', elevation: 0 },
+      } as never,
+    };
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+
+    pickResult = { x: 4, y: 3 };
+    drag(host, 'pointerDown');
+    expect(dragPaths.at(-1)).toEqual([{ tile: { x: 4, y: 3 }, direction: 'east', elevation: 0 }]);
+
+    // 拖到 (6,3)：中间经过 (5,3)，两格直行 → 0→1→2。
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    const preview = dragPaths.at(-1)!;
+    expect(preview.map(part => part.tile)).toEqual([{ x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }]);
+    expect(preview.map(part => part.elevation)).toEqual([0, 1, 2]);
+
+    // 拖拽中把目标高度降回 0：整条路径重新结算（后续格子自动落坡）。
+    act(() => {
+      const mode = usePlanetViewStore.getState().interactionMode;
+      if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, elevation: 0 });
+    });
+    // 松手时按当前目标高度结算：0, 0（直行每格 -1），第三格仍是 0。
+    drag(host, 'pointerUp');
+    const calls = onInteractTile.mock.calls.map(([tile, placement]) => ({ tile, ...placement }));
+    expect(calls).toEqual([
+      { tile: { x: 4, y: 3 }, direction: 'east', elevation: 0 },
+      { tile: { x: 5, y: 3 }, direction: 'east', elevation: 0 },
+      { tile: { x: 6, y: 3 }, direction: 'east', elevation: 0 },
+    ]);
   });
 });
