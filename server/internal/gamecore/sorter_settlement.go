@@ -337,8 +337,8 @@ func allowsItem(items []string, item string) bool {
 // 两者都按 sorterEndpoints 的确定性顺序生成，所以结果可复现。
 //
 // settleSorters 与停工告警（sorterStallSampleFor）共用这一函数：告警的
-// reason / target 必须针对实际尝试搬运的那条路线，否则 range>1 的分拣器
-// （mk2/mk3）会报出「另一个端点」的停工原因。
+// reason / target 必须针对实际尝试搬运的那条路线，否则 range 3 的分拣器
+// 会报出「另一个端点」的停工原因。
 func sorterBestRoute(ws *model.WorldState, inputs, outputs []sorterLink) (in, out sorterLink, ok bool) {
 	if ws == nil {
 		return sorterLink{}, sorterLink{}, false

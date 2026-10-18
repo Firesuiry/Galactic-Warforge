@@ -19,7 +19,7 @@ import (
 //   - 只统计「本应搬运却连续没搬成」的分拣器，连续 sorterStallWarnTicks 后报警；
 //   - 理由只报根因，按优先级取：no_power > not_running > drop_blocked > pick_empty；
 //   - 选路与 settleSorters 共用 sorterBestRoute（最短的取货端 × 放货端），
-//     保证 reason/target 对应实际尝试搬运的那条路线（range>1 的 mk2/mk3）；
+//     保证 reason/target 对应实际尝试搬运的那条路线（四种分拣器 range 都是 3）；
 //   - 防噪音：pick_empty 只在放货端的生产建筑**确实断料**（input_shortage）时才报；
 //     drop_blocked 只在取货端**确实有货**时才报（取货端空着是 pick_empty，不是堵塞）；
 //   - 恢复搬运（成功转移一件）即解除。
@@ -35,8 +35,9 @@ const (
 
 	// 停工原因（写入 details.reason，客户端据此给中文说明）。
 	//
-	// 分拣器本身不耗电（buildings.yaml 里没有 energy 模块），正常运行时分拣器
-	// 不会被置为 no_power；保留这条分支只为兼容旧存档/未来给分拣器加耗电。
+	// 第 19 轮起四种分拣器都耗电（buildings.yaml 的 energy 模块，mk1/mk2 1、
+	// mk3/pile 2 点/tick），没接电网或供电不足时 runtime.state = no_power，
+	// 这是产线断料最常见的根因。
 	sorterStallReasonNoPower     = "no_power"
 	sorterStallReasonNotRunning  = "not_running"
 	sorterStallReasonPickEmpty   = "pick_empty"

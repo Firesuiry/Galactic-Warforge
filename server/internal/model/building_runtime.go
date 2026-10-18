@@ -140,7 +140,7 @@ type TransportModule struct {
 }
 
 // SorterModule handles sorter reach and cycle time. CycleTicks 是往返周期系数：
-// 往返周期 = CycleTicks × 两端点距离格数（DSP 口径：mk1/mk2/mk3 = 6/3/2）。
+// 往返周期 = CycleTicks × max(1, 取端步数 + 放端步数 − 1)（DSP 口径：mk1/mk2/mk3 = 6/3/2）。
 type SorterModule struct {
 	CycleTicks int `json:"cycle_ticks" yaml:"cycle_ticks,omitempty"`
 	Range      int `json:"range" yaml:"range,omitempty"`
