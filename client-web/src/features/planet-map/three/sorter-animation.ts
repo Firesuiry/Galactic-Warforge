@@ -43,8 +43,9 @@ interface Motion {
   snapshotTick?: number;
   /** 快照 tick 差估算的 tick/s（拿不到时用 FALLBACK_TICK_RATE）。 */
   tickRate: number;
-  syncTick?: number;
-  syncTime: number;
+  /** tickRate 估算窗口的起点（tick 与墙钟），窗口 ≥ .5s 才采一次样。 */
+  rateTick?: number;
+  rateTime?: number;
 }
 
 /** 建模臂长（`sorter-boom` 按 .55 建，动画按 range 拉伸）。 */
@@ -83,7 +84,7 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
       pickup: PICKUP_YAW, drop: DROP_YAW, nextPickup: PICKUP_YAW, nextDrop: DROP_YAW, startYaw: PICKUP_YAW,
       range: 1, observedSequence: 0, playedSequence: 0,
       elapsed: Number.POSITIVE_INFINITY, cycle: 1, enabled: false,
-      tickRate: FALLBACK_TICK_RATE, syncTime: 0,
+      tickRate: FALLBACK_TICK_RATE,
     };
     motions.set(arm, motion);
     pose(arm, motion, PICKUP_YAW, 1, false);
@@ -113,8 +114,8 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
   };
   motion.nextPickup = angle(transfer.source_position);
   motion.nextDrop = angle(transfer.target_position);
-  // 初次同步看到的历史记录不重放，只把空闲姿态对准真实取货端；观察过一次活动记录后，
-  // 慢帧/轮询跳过的记录仍然有效。
+  // 历史记录/慢帧漏掉的记录不重放：只把空闲姿态对准真实取货端（不播整段搬运）。
+  // 观察过一次活动记录后，两条快照之间发生的新记录仍然有效（慢帧也能播）。
   if (tick - transfer.tick > RECENT_TICKS && (previousTick === undefined || transfer.tick <= previousTick)) {
     motion.pickup = motion.nextPickup; motion.drop = motion.nextDrop;
     if (motion.elapsed >= motion.cycle) pose(arm, motion, motion.pickup, 1, false);
@@ -179,15 +180,24 @@ function applyRange(motion: Motion) {
   motion.claw.position.x = length;
 }
 
-/** 用连续两次快照的 tick 差 / 墙钟差估算 tick/s，平滑后用于 cycle 时长。 */
+/**
+ * 用「≥ .5 秒窗口内的 tick 差 / 墙钟差」估算 tick/s，再平滑进 `motion.tickRate`。
+ *
+ * 快照回调可能非常密集（数据层每次更新都会调 sync，实测 ~20 次/秒）：拿相邻两次
+ * 调用的 Δt 算会因 tick 量化（Δtick=1 / .05s = 20 tick/s）严重虚高，cycle 被压到
+ * 下限 .35s、横臂甩得看不清。所以只在窗口跨过 .5s 才采一次样。
+ */
 function estimateTickRate(motion: Motion, tick: number) {
   const now = typeof performance === 'undefined' ? Date.now() : performance.now();
-  const previousTick = motion.syncTick, previousTime = motion.syncTime;
-  motion.syncTick = tick; motion.syncTime = now;
-  if (previousTick === undefined) return motion.tickRate;
-  const seconds = (now - previousTime) / 1000;
-  const ticks = tick - previousTick;
-  if (seconds < .05 || ticks <= 0) return motion.tickRate;
-  const estimate = THREE.MathUtils.clamp(ticks / seconds, .5, 60);
-  return motion.tickRate * .7 + estimate * .3;
+  if (motion.rateTick === undefined || motion.rateTime === undefined) {
+    motion.rateTick = tick; motion.rateTime = now;
+    return motion.tickRate;
+  }
+  const seconds = (now - motion.rateTime) / 1000;
+  if (seconds < .5) return motion.tickRate;
+  const ticks = tick - motion.rateTick;
+  motion.rateTick = tick; motion.rateTime = now;
+  if (ticks <= 0) return motion.tickRate;
+  const estimate = THREE.MathUtils.clamp(ticks / seconds, .5, 30);
+  return motion.tickRate * .5 + estimate * .5;
 }

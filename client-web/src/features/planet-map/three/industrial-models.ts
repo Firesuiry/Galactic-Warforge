@@ -5,7 +5,7 @@ import { createIndustrialFinishes } from './industrial-finishes';
 import { animateSorterArm } from './sorter-animation';
 import type { UnitFaction } from '../rts-commands';
 
-type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
+type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
 /** 单位涂装：己方白蓝、敌方玩家橙、黑雾中立暗紫灰、黑雾敌对暗红。 */
 const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
   own: { armor: 'ceramic', light: 'blue' },
@@ -33,6 +33,8 @@ export class IndustrialModels {
       alloy: { color: 0x798c94, roughness: 0.35, metalness: 0.78 },
       graphite: { color: 0x26363e, roughness: 0.47, metalness: 0.64 },
       copper: { color: 0xbb7842, roughness: 0.34, metalness: 0.78 },
+      // 嵌在深色底座里的窄铜环：比高光铜暗一档，避免在近景里读成 LED 亮圈。
+      copperDark: { color: 0x7d4a24, roughness: 0.55, metalness: 0.62 },
       blue: { color: 0x8befff, emissive: 0x24b7dc, emissiveIntensity: 6, roughness: 0.25, metalness: 0.3 },
       orange: { color: 0xffc97c, emissive: 0xff720d, emissiveIntensity: 6, roughness: 0.38, metalness: 0.3 },
       glass: { color: 0x153c4f, roughness: 0.17, metalness: 0.72, emissive: 0x073341, emissiveIntensity: 0.5 },
@@ -409,19 +411,21 @@ export class IndustrialModels {
    *   `sorter-payload` 挂在夹爪下，按 `last_transfer.item_id` 逐实例上色。
    * - `sorter-boom` 里只放**长度成比例**的部件：臂端关节/夹爪挂回 `sorter-arm`，
    *   由动画同步 `sorter-claw.position.x`，避免 `scale.x` 把夹爪和货物一起拉长。
-   * - 整机压得很矮（总高 ≤ .55，比熔炉矮一截），不做上下浮动、不做两段式举升臂。
+   * - 整机压得很矮（总高 ≤ .5，底座直径 ≤ .58，比熔炉矮一截）；不做上下浮动、
+   *   不做两段式举升臂。底座是**深色**石墨盘 + 窄铜环，不能读成「白色转盘」。
    */
   private sorter(group: THREE.Group, light: Finish) {
     const tier: Finish = /mk3|_3/.test(group.name) ? 'orange' : /mk2|_2/.test(group.name) ? 'blue' : 'copper';
-    // 圆底座直接坐在矿场上（与物流分流器同口径，不铺方形地基）：石墨底盘 + 合金中层 + 铜环 + 四角小脚。
-    this.part(group, 'cylinder', 'graphite', [.62, .05, .62], [0, .025, 0]);
-    this.part(group, 'cylinder', 'alloy', [.5, .03, .5], [0, .062, 0]);
-    this.ring(group, 'copper', .27, .078);
-    for (const x of [-.24, .24]) for (const z of [-.24, .24]) this.box(group, 'ceramic', [.09, .05, .09], [x, .05, z]);
-    // 中央立柱 + 柱顶铜箍；柱身一圈按层级换色的点缀环（mk1 铜 / mk2 蓝 / mk3 橙）。
-    this.part(group, 'cylinder', 'graphite', [.12, .3, .12], [0, .22, 0]);
-    this.part(group, 'cylinder', tier, [.135, .022, .135], [0, .2, 0]);
-    this.part(group, 'cylinder', 'copper', [.15, .04, .15], [0, .375, 0]);
+    // 圆底座直接坐在矿场上（与物流分流器同口径，不铺方形地基）：深色石墨盘压在合金边圈上，
+    // 铜环收窄到 .2 半径、换成更暗的 copperDark 做「金属嵌线」，不再读成 LED 亮圈。
+    this.part(group, 'cylinder', 'graphite', [.58, .05, .58], [0, .025, 0]);
+    this.part(group, 'cylinder', 'alloy', [.5, .022, .5], [0, .055, 0]);
+    this.part(group, 'cylinder', 'graphite', [.45, .03, .45], [0, .07, 0]);
+    this.ring(group, 'copperDark', .2, .088);
+    // 中央立柱（压矮）+ 柱顶铜箍；柱身一圈按层级换色的点缀环（mk1 铜 / mk2 蓝 / mk3 橙）。
+    this.part(group, 'cylinder', 'graphite', [.12, .26, .12], [0, .21, 0]);
+    this.part(group, 'cylinder', tier, [.135, .02, .135], [0, .18, 0]);
+    this.part(group, 'cylinder', 'copper', [.15, .04, .15], [0, .345, 0]);
     const joint = (parent: THREE.Object3D, name: string) => {
       const node = new THREE.Group(); node.name = name; parent.add(node);
       // 会被动画写变换的节点都要登记：batchStatic 跳过整棵子树，DynamicBatches 逐帧复制姿态。
@@ -429,21 +433,22 @@ export class IndustrialModels {
       return node;
     };
     const arm = joint(group, 'sorter-arm');
-    // 转台跟着 yaw 转；横臂从转台沿 +X 生长。
-    this.part(arm, 'cylinder', 'ceramic', [.2, .05, .2], [0, .4, 0]);
+    // 转台（合金，压暗）+ 横臂：臂身加宽加厚（.085 高 × .10 宽）才有 DSP 的机械臂体量。
+    this.part(arm, 'cylinder', 'alloy', [.18, .04, .18], [0, .365, 0]);
     const boom = joint(arm, 'sorter-boom');
-    this.box(boom, 'graphite', [.55, .075, .06], [.275, .4225, 0]);
-    this.box(boom, 'copper', [.55, .02, .03], [.275, .4675, 0]);
+    this.box(boom, 'graphite', [.55, .085, .10], [.275, .395, 0]);
+    this.box(boom, 'copper', [.55, .018, .042], [.275, .4415, 0]);
     // 臂端关节 + 夹爪升降组（x 由动画按 range 同步到 L，和 boom 拉伸后的臂端对齐）。
+    // 夹爪壳体/两指用合金 + 石墨（不要纯白陶瓷），两指在 payload 两侧留出开口。
     const claw = joint(arm, 'sorter-claw');
     claw.position.set(.55, 0, 0);
-    this.box(claw, 'ceramic', [.12, .12, .12], [0, .4225, 0]);
-    this.box(claw, tier, [.03, .03, .02], [0, .4425, .062]);
-    this.box(claw, 'ceramic', [.14, .1, .16], [0, .3375, 0]);
-    for (const z of [-.075, .075]) this.box(claw, 'alloy', [.03, .1, .03], [0, .2775, z]);
-    // 物品占位：默认隐藏，材质在动画里按物品色逐实例写入。
+    this.box(claw, 'alloy', [.11, .1, .11], [0, .395, 0]);
+    this.box(claw, tier, [.026, .026, .02], [0, .405, .058]);
+    this.box(claw, 'graphite', [.12, .08, .15], [0, .315, 0]);
+    for (const z of [-.08, .08]) this.box(claw, 'alloy', [.035, .14, .035], [0, .23, z]);
+    // 物品占位：默认隐藏，材质在动画里按物品色逐实例写入；挂在两指之间、露出指底，携带段一眼可见。
     const payload = joint(claw, 'sorter-payload');
-    payload.position.set(0, .26, 0); payload.visible = false;
+    payload.position.set(0, .215, 0); payload.visible = false;
     const cargo = this.box(payload, 'copper', [.16, .16, .16], [0, 0, 0]);
     cargo.userData.independentMaterial = true;
   }
