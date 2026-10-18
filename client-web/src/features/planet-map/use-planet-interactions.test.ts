@@ -538,3 +538,109 @@ describe('usePlanetInteractions', () => {
     expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('未编入任务群');
   });
 });
+
+describe('usePlanetInteractions 多层传送带（第 19 轮 §3.5）', () => {
+  it('拖拽逐格下单：placement 里的 direction/elevation 覆盖建造模式值并随 build 命令下发', () => {
+    const { interactions } = setup();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'conveyor_belt_mk1',
+      direction: 'east',
+      elevation: 3,
+    });
+
+    interactions.interactTile({ x: 4, y: 4 }, { direction: 'north', elevation: 1 });
+
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 4, y: 4, z: 0 },
+      'conveyor_belt_mk1',
+      { direction: 'north', rotation: 0, autoApproach: true, planetId: 'planet-1-1', elevation: 1 },
+    );
+  });
+
+  it('地面层 elevation 0 不下发 elevation 字段（保持旧 payload 形状）', () => {
+    const { interactions } = setup();
+    usePlanetViewStore.getState().setInteractionMode({
+      kind: 'build',
+      buildingType: 'conveyor_belt_mk1',
+      direction: 'east',
+    });
+
+    interactions.interactTile({ x: 4, y: 4 }, { direction: 'east', elevation: 0 });
+
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 4, y: 4, z: 0 },
+      'conveyor_belt_mk1',
+      { direction: 'east', rotation: 0, autoApproach: true, planetId: 'planet-1-1' },
+    );
+  });
+
+  it('高架带压在地面带/分拣器上不本地拦截；同层同格带子仍拦截', () => {
+    const { interactions, planet } = setup();
+    planet.buildings = {
+      'belt-ground': {
+        id: 'belt-ground',
+        type: 'conveyor_belt_mk1',
+        owner_id: 'p1',
+        position: { x: 4, y: 4, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } } },
+        conveyor: { input: 'west', output: 'east', elevation: 0 },
+      } as never,
+      'belt-high': {
+        id: 'belt-high',
+        type: 'conveyor_belt_mk1',
+        owner_id: 'p1',
+        position: { x: 5, y: 4, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } } },
+        conveyor: { input: 'west', output: 'east', elevation: 2 },
+      } as never,
+    };
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' });
+
+    // 压在地面带（0 层）上方 1 层：允许
+    interactions.interactTile({ x: 4, y: 4 }, { direction: 'east', elevation: 1 });
+    expect(mockClient.cmdBuild).toHaveBeenCalledWith(
+      { x: 4, y: 4, z: 0 },
+      'conveyor_belt_mk1',
+      { direction: 'east', rotation: 0, autoApproach: true, planetId: 'planet-1-1', elevation: 1 },
+    );
+
+    // 同层同格（2 层已有带子）再放 2 层：本地拦截
+    mockClient.cmdBuild.mockClear();
+    interactions.interactTile({ x: 5, y: 4 }, { direction: 'east', elevation: 2 });
+    expect(mockClient.cmdBuild).not.toHaveBeenCalled();
+    expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('无法建造');
+  });
+
+  it('地面放非 LowLogistics 建筑时，该格有高架带则本地拦截（上方有高架传送带）', () => {
+    const { interactions, planet } = setup();
+    planet.buildings = {
+      'belt-high': {
+        id: 'belt-high',
+        type: 'conveyor_belt_mk1',
+        owner_id: 'p1',
+        position: { x: 4, y: 4, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } } },
+        conveyor: { input: 'west', output: 'east', elevation: 1 },
+      } as never,
+    };
+    usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' });
+
+    interactions.interactTile({ x: 4, y: 4 });
+
+    expect(mockClient.cmdBuild).not.toHaveBeenCalled();
+    expect(usePlanetCommandStore.getState().journal[0]?.authoritativeMessage).toContain('上方有高架传送带');
+  });
+});

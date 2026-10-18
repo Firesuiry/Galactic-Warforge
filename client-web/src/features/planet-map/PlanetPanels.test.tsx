@@ -917,3 +917,43 @@ describe("PlanetEntityPanel 建筑库存", () => {
     expect((screen.getByLabelText("个人制造配方") as HTMLSelectElement).value).toBe("smelt_magnet");
   });
 });
+
+describe("传送带详情显示高度层（第 19 轮 §3.5）", () => {
+  beforeEach(() => {
+    usePlanetViewStore.getState().resetForPlanet("planet-1-1");
+    usePlanetCommandStore.getState().resetForPlanet("planet-1-1");
+    useSessionStore.getState().setSession({
+      serverUrl: "http://test.local",
+      playerId: "p1",
+      playerKey: "key",
+    });
+  });
+
+  it("高架带写「高度 N 层（高架）」，地面带写「0 层（地面）」", () => {
+    const planet = createPlanet();
+    (planet.buildings as Record<string, unknown>)["belt-high"] = {
+      id: "belt-high",
+      type: "conveyor_belt_mk1",
+      owner_id: "p1",
+      position: { x: 4, y: 4, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 0,
+      runtime: { params: { footprint: { width: 1, height: 1 } }, state: "running" },
+      conveyor: { input: "west", output: "east", elevation: 2, buffer: [] },
+    };
+    usePlanetViewStore.getState().setSelected({ kind: "building", id: "belt-high", position: { x: 4, y: 4, z: 0 } });
+    render(<PlanetEntityPanel planet={planet as never} />);
+    expect(screen.getByTestId("planet-building-elevation")).toHaveTextContent("2 层（高架）");
+
+    (planet.buildings as Record<string, unknown>)["belt-ground"] = {
+      ...((planet.buildings as Record<string, unknown>)["belt-high"] as Record<string, unknown>),
+      id: "belt-ground",
+      conveyor: { input: "west", output: "east", buffer: [] },
+    };
+    usePlanetViewStore.getState().setSelected({ kind: "building", id: "belt-ground", position: { x: 4, y: 4, z: 0 } });
+    render(<PlanetEntityPanel planet={planet as never} />);
+    expect(screen.getAllByTestId("planet-building-elevation").at(-1)).toHaveTextContent("0 层（地面）");
+  });
+});

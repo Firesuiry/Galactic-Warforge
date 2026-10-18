@@ -4,6 +4,10 @@
  * - 右键情境指令：inspect 模式有己方单位选中时，点敌=批量攻击、点地=批量移动；
  * - 立即指令：S=stop / H=hold（快捷键与多选面板共用）。
  *
+ * 第 19 轮 §3.5：拖拽铺带逐格下单走 `interactTile(tile, { direction, elevation })`——
+ * 方向/高度由 belt-stroke 的纯函数算出，交互中枢只负责预检与下发，不再读建造模式的
+ * 单一 direction（否则拖拽中每次转向都会把前几格的方向覆盖掉）。
+ *
  * C4 增量：选中小队（combat_squads）时右键点地 = 按所属任务群下达 task_force_deploy
  * 到该坐标（未编组小队给出本地预检提示）；与表单共用同一条 submitPlanetCommand 管道。
  *
@@ -22,6 +26,7 @@ import type {
   Unit,
   WarTaskForceView,
 } from '@shared/types';
+import type { Direction } from '@shared/api';
 
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -34,6 +39,7 @@ import {
   usePlanetCommandStore,
 } from '@/features/planet-commands/store';
 import type { PlanetRenderView, TilePoint } from '@/features/planet-map/model';
+import { beltElevation } from '@/features/planet-map/logistics-tier';
 import {
   commandableUnitIds,
   indexUnitsById,
@@ -49,11 +55,15 @@ function reportLocalBlock(commandType: string, planetId: string, message: string
   reportLocalPreflightBlock(commandType, planetId, message, focus);
 }
 
-/** 点到的格子上属于哪个建筑（按 footprint 命中；多占建筑取第一个）。 */
+/**
+ * 点到的格子上属于哪个建筑（按 footprint 命中；多占建筑取第一个）。
+ * §3.5：只认地面层——高架带（elevation > 0）由场景 onPick 的 buildingId 直接选中，
+ * 这里的按格兜底必须忽略它们，否则点高架带下方会选中「上面那条带」。
+ */
 export function buildingAtTile(planet: PlanetRenderView, tile: TilePoint) {
   const faceSize = planet.surface?.face_size ?? planet.map_width / 3;
   return Object.values(planet.buildings ?? {}).find((building) =>
-    tileContainsBuilding(building, tile.x, tile.y, faceSize),
+    beltElevation(building) === 0 && tileContainsBuilding(building, tile.x, tile.y, faceSize),
   );
 }
 
@@ -117,8 +127,11 @@ interface UsePlanetInteractionsInput {
 }
 
 export interface PlanetInteractions {
-  /** build/move/attack/unit_order 模式的左键点击（原 onInteractTile）。 */
-  interactTile: (tile: TilePoint) => void;
+  /**
+   * build/move/attack/unit_order 模式的左键点击（原 onInteractTile）。
+   * 拖拽铺带的每一格带上 `direction` / `elevation`（§3.5）；缺省时用建造模式里的值。
+   */
+  interactTile: (tile: TilePoint, placement?: { direction?: Direction; elevation?: number }) => void;
   /** 右键情境指令：有批量命令下达时返回 true（调用侧据此抑制"取消模式"）。 */
   contextTile: (tile: TilePoint) => boolean;
   /** 攻击移动（A 模式）到该格：缩略图右键在攻击交互模式下走这条路径。 */
@@ -216,7 +229,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
   );
 
   const interactTile = useCallback(
-    (tile: TilePoint) => {
+    (tile: TilePoint, placement?: { direction?: Direction; elevation?: number }) => {
       if (!planet) {
         return;
       }
@@ -252,7 +265,9 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
       }
 
       if (mode.kind === 'build') {
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime);
+        const elevation = placement?.elevation ?? mode.elevation ?? 0;
+        const direction = placement?.direction ?? mode.direction;
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime, elevation);
         // 未探索区（地形 unknown）不本地拦截：客户端没有该格地形，是否可建由服务端判定，
         // 命令照常下发，以回执为准（试玩 1009 F：本地「地形不可建造」把合法建造拦掉了）。
         if (shouldBlockBuildLocally(assessment)) {
@@ -273,10 +288,11 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
           planetId: planet.planet_id,
           focus: { buildingType: mode.buildingType, position },
           execute: () => client.cmdBuild(position, mode.buildingType, {
-            direction: mode.direction,
+            direction,
             rotation: mode.rotation ?? 0,
             autoApproach: true,
             planetId: planet.planet_id,
+            ...(elevation > 0 ? { elevation } : {}),
             ...(mode.recipeId ? { recipeId: mode.recipeId } : {}),
           }),
           fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({

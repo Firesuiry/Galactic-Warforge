@@ -40,6 +40,12 @@ import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon
 import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
 
+/**
+ * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
+ * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
+ */
+export interface PickMeta { offscreen: boolean; buildingId?: string }
+
 export interface PlanetThreeData {
   planet: PlanetRenderView;
   fog?: FogMapView | PlanetSceneView;
@@ -198,7 +204,7 @@ export class PlanetThreeScene {
      * 点选回调。`offscreen` = 这次点击是「按格派发」（`clickTile`）且该格当时不在视野内，
      * 场景已把镜头聚焦过去；调用侧据此给玩家一条可见提示（试玩 1016 B4：不能静默丢弃）。
      */
-    private readonly onPick: (tile: TilePoint, meta: { offscreen: boolean; buildingId?: string }) => void,
+    private readonly onPick: (tile: TilePoint, meta: PickMeta) => void,
     private readonly onHover: (tile: TilePoint | null) => void,
     /** 点击处不在星球表面（射线没打中球面）：调用侧给提示，避免「点了没反应」。 */
     private readonly onMiss?: () => void,
@@ -1044,7 +1050,7 @@ export class PlanetThreeScene {
         return;
       }
       if (!mode.buildingType.startsWith('conveyor_belt')) { this.ghostArrow(hovered, direction!); return; }
-      const target = 'elevation' in mode ? Number(mode.elevation) || 0 : 0;
+      const target = mode.elevation ?? 0;
       const cells = this.beltDragPath.length > 0 ? this.beltDragPath : [{ tile: hovered, direction: direction!, elevation: target }];
       const belts = cells.map((cell, index) => {
         const next = cells[index + 1]?.tile, previous = cells[index - 1]?.tile;

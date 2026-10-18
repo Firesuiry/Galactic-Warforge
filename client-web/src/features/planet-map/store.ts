@@ -6,6 +6,7 @@ import type { SseStatus } from '@shared/sse';
 
 import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/planet-map/model';
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
+import { clampBeltElevation } from '@/features/planet-map/logistics-tier';
 
 /**
  * 需要点选目标的单位指令模式（A 攻击移动 / P 巡逻 / G 守卫）。
@@ -26,7 +27,18 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  */
 export type PlanetInteractionMode =
   | { kind: 'inspect' }
-  | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction; rotation?: 0 | 90 | 180 | 270 }
+  | {
+    kind: 'build';
+    buildingType: string;
+    recipeId?: string;
+    direction: Direction;
+    rotation?: 0 | 90 | 180 | 270;
+    /**
+     * 第 19 轮多层传送带（契约 §3.5）：目标高度 0–4，缺省 0。
+     * 只对 conveyor_belt_* 生效；切换建筑类型时归零（`beginBuild`）。
+     */
+    elevation?: number;
+  }
   | { kind: 'move' }
   | { kind: 'attack' }
   | { kind: 'unit_order'; order: UnitOrderMode }
@@ -471,6 +483,10 @@ interface PlanetViewActions {
   /** 记录一条黑雾袭击预警（按事件 id 去重，超时条目顺带清理）。 */
   recordIncomingWave: (wave: IncomingWave) => void;
   setInteractionMode: (mode: PlanetInteractionMode) => void;
+  /** 进入建造模式：切换建筑类型时高度归零（同类型重进也归零，契约 §3.5）。 */
+  beginBuild: (mode: Extract<PlanetInteractionMode, { kind: 'build' }>) => void;
+  /** 升降建造目标高度（PageUp/PageDown 与建造栏 ▲▼ 共用）；非传送带建造模式忽略。 */
+  adjustBuildElevation: (delta: number) => void;
   /** 退出当前交互模式回到 inspect（Esc/右键）。 */
   exitInteractionMode: () => void;
   setCamera: (camera: Partial<PlanetCameraState>) => void;
@@ -655,6 +671,19 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   setInteractionMode: (interactionMode) => {
     set({ interactionMode });
   },
+  beginBuild: (mode) => {
+    // 切换建筑类型 → 高度归零：缺省字段即 0（不写 elevation:0，保持旧模式对象形状）。
+    set({ interactionMode: { ...mode, elevation: undefined } });
+  },
+  adjustBuildElevation: (delta) => {
+    set((state) => {
+      const mode = state.interactionMode;
+      if (mode.kind !== 'build' || !mode.buildingType.startsWith('conveyor_belt')) return state;
+      const next = clampBeltElevation((mode.elevation ?? 0) + delta);
+      if (next === (mode.elevation ?? 0)) return state;
+      return { interactionMode: { ...mode, elevation: next === 0 ? undefined : next } };
+    });
+  },
   exitInteractionMode: () => {
     set({ interactionMode: INSPECT_MODE });
   },
@@ -811,6 +840,8 @@ export function resetPlanetViewStore() {
     setControlGroup: usePlanetViewStore.getState().setControlGroup,
     recordIncomingWave: usePlanetViewStore.getState().recordIncomingWave,
     setInteractionMode: usePlanetViewStore.getState().setInteractionMode,
+    beginBuild: usePlanetViewStore.getState().beginBuild,
+    adjustBuildElevation: usePlanetViewStore.getState().adjustBuildElevation,
     exitInteractionMode: usePlanetViewStore.getState().exitInteractionMode,
     setCamera: usePlanetViewStore.getState().setCamera,
     setSceneWindow: usePlanetViewStore.getState().setSceneWindow,

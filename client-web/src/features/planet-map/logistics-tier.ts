@@ -44,6 +44,23 @@ export function tierColor(type: string): string {
 /** 传送带所在层（非传送带、旧数据一律 0）。 */
 export function beltElevation(building: Pick<Building, 'type' | 'conveyor'>): number {
   if (!building.type.startsWith('conveyor_belt_')) return 0;
-  const elevation = building.conveyor?.elevation ?? 0;
+  return clampBeltElevation(building.conveyor?.elevation ?? 0);
+}
+
+/** 高度钳到 0–4（服务端 MaxBeltElevation 同口径）。 */
+export function clampBeltElevation(elevation: number): number {
   return Math.max(0, Math.min(MAX_BELT_ELEVATION, Math.round(elevation)));
+}
+
+/**
+ * 第 19 轮 §3.1 的「低矮物流」：高架带可以压在这些地面建筑上方。
+ * 与服务端 LowLogistics 同一份清单（带子、分流器、集装机、流速监测器、分拣器、集装分拣器）。
+ */
+export function isLowLogisticsType(type: string): boolean {
+  return type.startsWith('conveyor_belt_')
+    || type === 'splitter'
+    || type === 'automatic_piler'
+    || type === 'traffic_monitor'
+    || type === 'pile_sorter'
+    || type.startsWith('sorter_');
 }

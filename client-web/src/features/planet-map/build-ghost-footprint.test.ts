@@ -76,3 +76,56 @@ describe('建造幽灵占地评估（§4）', () => {
     expect(assessment.buildable).toBe(true);
   });
 });
+
+describe('多层传送带本地预检（第 19 轮 §3.2）', () => {
+  function belt(id: string, x: number, y: number, elevation: number): Building {
+    return {
+      ...buildingAt(id, 'conveyor_belt_mk1', x, y),
+      conveyor: { input: 'west', output: 'east', elevation },
+    } as unknown as Building;
+  }
+  function sorter(id: string, x: number, y: number): Building {
+    return buildingAt(id, 'sorter_mk1', x, y);
+  }
+
+  it('高架带可以压在地面带/分拣器上（LowLogistics）', () => {
+    const scene = planet();
+    scene.buildings = {
+      'b-ground': belt('b-ground', 6, 6, 0),
+      'b-sorter': sorter('b-sorter', 7, 7),
+    } as never;
+    const overBelt = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined, undefined, 2)!;
+    expect(overBelt.buildable).toBe(true);
+    expect(overBelt.blockedTiles).toEqual([]);
+    const overSorter = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 7, y: 7, z: 0 }, 'p1', 0, undefined, undefined, 1)!;
+    expect(overSorter.buildable).toBe(true);
+  });
+
+  it('同层同格已有带子不可放（同高度冲突；不同高度可放）', () => {
+    const scene = planet();
+    scene.buildings = { 'b-up': belt('b-up', 6, 6, 2) } as never;
+    const same = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined, undefined, 2)!;
+    expect(same.buildable).toBe(false);
+    expect(same.blockedTiles).toEqual([expect.objectContaining({ reason: 'building', buildingId: 'b-up' })]);
+    const other = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined, undefined, 3)!;
+    expect(other.buildable).toBe(true);
+  });
+
+  it('非传送带 elevation>0 不可放（服务端 INVALID_ELEVATION 的本地同口径）', () => {
+    const assessment = assessBuildTiles(catalog, 'wind_turbine', planet() as never, { x: 4, y: 4, z: 0 }, 'p1', 0, undefined, undefined, 2)!;
+    expect(assessment.buildable).toBe(false);
+    expect(describeBuildBlock(assessment, (id) => id, () => '风机')).toBe('只有传送带可以架高');
+  });
+
+  it('地面放非 LowLogistics 建筑时，该格有高架带则不可放（「上方有高架传送带」）', () => {
+    const scene = planet();
+    scene.buildings = { 'b-high': belt('b-high', 6, 6, 2) } as never;
+    const blocked = assessBuildTiles(catalog, 'wind_turbine', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!;
+    expect(blocked.buildable).toBe(false);
+    expect(blocked.blockedTiles).toEqual([expect.objectContaining({ reason: 'overhead_belt', buildingId: 'b-high' })]);
+    expect(describeBuildBlock(blocked, (id) => id, () => '风机')).toBe('上方有高架传送带');
+    // LowLogistics 仍可放回地面带/分拣器（不受高架影响）
+    const sorterOk = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!;
+    expect(sorterOk.buildable).toBe(true);
+  });
+});
