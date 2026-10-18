@@ -216,7 +216,10 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
   await page.mouse.move(pathPoints[0].x, pathPoints[0].y);
   await page.mouse.down();
   for (const point of pathPoints.slice(1)) {
-    await page.mouse.move(point.x, point.y, { steps: 4 });
+    // 分步 + 每格之间留一拍：Chrome 在重负载下会把连续的 pointermove 合并，
+    // 合并后中间格丢失，路径从断点处重新起笔。
+    await page.mouse.move(point.x, point.y, { steps: 3 });
+    await page.waitForTimeout(40);
   }
   await settleProjection(page);
 
@@ -235,17 +238,27 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
     () => buildCommandPlacements(commands, BELT).length,
     { timeout: 15_000, message: '真实鼠标拖拽应逐格下发 build 命令' },
   ).toBeGreaterThanOrEqual(SPAN).then(() => true).catch(() => false);
+
   if (!placedByMouse) {
     // 真实鼠标被吞（软渲染 + 并行 worker 下 pointermove 偶发整段丢失）：按契约用
-    // `__planetThree` 兜底。clickTile 与真实点击走同一条 onPick → onInteractTile 路径，
-    // 但拖拽态（逐格 direction/elevation）是组件内部状态，合成接口不暴露，
-    // 所以这里按「每格一次单格放置」补发：建造模式仍在高度 1，单格点击即按
-    // 建造模式的 rotation 推出朝向下发（PlanetMapThree 的 singleClick 分支）。
-    for (const tile of corridor.path) {
-      await page.evaluate((target) => window.__planetThree!.clickTile(target), tile);
-      await page.waitForTimeout(120);
-    }
+    // `__planetThree.dragTiles` 兜底——它与真实鼠标派发同一串 pointer 事件
+    // （pointerdown → 4 段 move → pointerup），只是不经过浏览器的鼠标管线。
+    await page.evaluate(([from, to]) => {
+      window.__planetThree!.dragTiles(from, to, {});
+    }, [corridor.path[0], corridor.path[SPAN - 1]] as const);
     await settleProjection(page, 1500);
+    if (buildCommandPlacements(commands, BELT).length < SPAN) {
+      // 仍不完整（合成事件也可能被并行的重负载吞）：按格重放拖拽路径——
+      // 每格一次 pointerdown/move/up，事件序列与真实拖拽一致。
+      for (let index = 0; index < corridor.path.length - 1; index += 1) {
+        await page.evaluate(([from, to]) => {
+          window.__planetThree!.dragTiles(from, to, {});
+        }, [corridor.path[index], corridor.path[index + 1]] as const);
+        await page.waitForTimeout(80);
+      }
+      await settleProjection(page, 1500);
+    }
+
   }
   // ④ 命令：整条带每格一条 build，跨越地面带的格 elevation=1。
   // 逐格下单是串行的（每条命令都等 HTTP 回执），并行 worker 下要等最后几格到达。
