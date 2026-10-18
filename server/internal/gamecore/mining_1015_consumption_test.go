@@ -27,6 +27,9 @@ func TestMinerBeltSmelterKeepsVeinConsumptionEqualToOutput(t *testing.T) {
 	feeder := newSorterBuilding("feeder", model.Position{X: 3, Y: 7})
 	feeder.Rotation = model.PlanRotation270
 	feeder.Sorter.Range = 1
+	// 第 19 轮起分拣器耗电：这个夹具不搭电网，显式清零（只测物流，不测供电）。
+	feeder.Runtime.Params.EnergyConsume = 0
+	feeder.Runtime.Functions.Energy.ConsumePerTick = 0
 	attachBuilding(ws, miner)
 	attachBuilding(ws, smelter)
 	for _, b := range belts {

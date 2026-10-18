@@ -4,26 +4,26 @@
  * 试玩 1011 第六轮：玩家看不出传送带朝向（白/黄条纹带没有流向感）。
  * 这里提供两块内容：
  * 1. 纹理工厂（CanvasTexture，按 key 缓存，只创建一次）：
- *    - beltChevronTexture：传送带带面贴图（深色带面 + 横向 slat + 极弱 chevron），沿 UV 滚动即「流向」；
+ *    - beltDeckTexture：传送带带面贴图（深色带面 + 档位色 chevron），沿 UV 滚动即「流向」；
  *    - directionArrowTexture：透明底琥珀箭头，用于分拣器顶面与建造 ghost；
  *    - filterLabelTexture：过滤物品首字（有 icon_key 时取首字，与 DOM Icon 回退一致）。
- * 2. LogisticsDirectionMarks：把所有分拣器/分流器的顶面箭头合并成 1 个 mesh
+ * 2. LogisticsDirectionMarks：把所有分流器的顶面箭头合并成 1 个 mesh（分拣器流向由 sorter-rig 底板三角表达）
  *    （与 conveyor-geometry 同一套「全网络合并成少数 draw」的做法），签名不变时不重建。
  */
 
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
 
-import { logisticsArrows, directionVector, type CardinalDirection } from '../logistics-direction';
+import { logisticsArrows, directionVector, ROTATION_FACING, rotationTurns, type CardinalDirection } from '../logistics-direction';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
+import { TIER_COLOR } from '../logistics-tier';
 import type { TilePoint } from '../model';
 
-/** 带面底色：DSP 传送带的深色带面（比机身石墨深一档，又不会黑成一片）。 */
-const BELT_DECK = '#2a363d';
-/** 横向带条（slat）：中景就能看清的浅灰蓝，滚动起来一条条滚过去。 */
-const SLAT = '#55656d';
-const SLAT_LIGHT = '#7d9199';
-/** 流向强调色（与传送带琥珀色系一致，分拣器箭头仍在用）。 */
+/** 带面底色：DSP 传送带的深色带面（比机身石墨再深一档）。 */
+const BELT_DECK = '#1c2428';
+/** 带面横向细纹：极淡，只让静止帧也看得出「是一条带」，滚动时给一点机械感。 */
+const BELT_GROOVE = '#242e33';
+/** 流向强调色（分拣器/分流器顶面箭头仍在用）。 */
 const CHEVRON = '#ffc76a';
 
 const textures = new Map<string, THREE.CanvasTexture>();
@@ -43,7 +43,7 @@ function toTexture(key: string, element: HTMLCanvasElement, repeat = false): THR
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = true;
-  // 各向异性：带面在斜视角/中景下会把横向 slat 模糊掉，靠 anisotropy 保住带条。
+  // 各向异性：带面在斜视角/中景下会把箭头模糊掉，靠 anisotropy 保住。
   texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   textures.set(key, texture);
@@ -51,48 +51,51 @@ function toTexture(key: string, element: HTMLCanvasElement, repeat = false): THR
 }
 
 /**
- * 传送带带面滚动贴图（DSP 口径）：深色带面 + 每格 2 条横向浅色 slat + 极弱中心 chevron。
+ * 传送带带面滚动贴图（第 19 轮，DSP 口径）：深色带面 + 每格 2 个**档位色** chevron（Mk.I 黄 / II 绿 / III 蓝）。
  *
  * - 纹理按 1 次重复 = 1 格铺设（见 conveyor-geometry 的 UV），滚动 offset 的单位就是「格」；
- * - slat 是横向（垂直流向）的浅色带条，宽度 .04 格、沿流向等距两条——滚动起来就是
- *   「带条连续滚过去」的 DSP 质感，比 chevron 更能读出一整条带在动；
- * - 中心 chevron 只做低对比的流向辅助（远景/静止帧也能判断方向），不能抢过建筑本体。
+ *   每档一张贴图各自滚动，滚速比 1 : 2 : 5（DSP 6 / 12 / 30 件每秒）。
+ * - 贴图同时作 emissiveMap：深色带面几乎不发光，箭头带一点自发光，远景也能读出流向与档位；
+ *   亮度压在 bloom 阈值以下，不能比建筑灯更抢眼。
  */
-export function beltChevronTexture(): THREE.CanvasTexture {
-  const key = 'belt-deck-slats';
+export function beltDeckTexture(tier: 1 | 2 | 3): THREE.CanvasTexture {
+  const key = `belt-deck-mk${tier}`;
   const hit = textures.get(key);
   if (hit) return hit;
-  // 纹理长宽比 ≈ 1 格长 : 带面宽（.47 格）≈ 2.1，避免带条被横向拉伸。
-  const [element, ctx] = canvas(256, 120);
+  // 纹理长宽比 ≈ 1 格长 : 带面宽（.48 格）≈ 2，箭头不被横向拉伸。
+  const [element, ctx] = canvas(256, 128);
   if (!ctx) return toTexture(key, element, true);
+  const color = TIER_COLOR[tier];
   ctx.fillStyle = BELT_DECK;
-  ctx.fillRect(0, 0, 256, 120);
-  // 每格 2 条横向 slat：.04 格宽 = 256 * .04 ≈ 10 px，中心落在 .25 / .75 处（等距）。
-  // 中景（带面只占几十像素）也要看得见，所以 slat 用中灰而不是深灰，并带一条下游受光边。
-  for (const center of [.25, .75]) {
-    const x = 256 * center, half = 256 * .04 / 2;
-    ctx.fillStyle = SLAT;
-    ctx.fillRect(x - half, 0, half * 2, 120);
-    ctx.fillStyle = SLAT_LIGHT;
-    ctx.fillRect(x + half - 2, 0, 2, 120);
-  }
-  // 两侧暗边：带面靠近护栏处的阴影，让带面看起来陷在护栏之间。
-  // （用两档透明矩形而不是渐变：测试环境的 canvas 2D 桩没有 createLinearGradient。）
-  for (const [inset, alpha] of [[0, .42], [3, .18]]) {
+  ctx.fillRect(0, 0, 256, 128);
+  // 横向细纹：每格 8 条。
+  ctx.fillStyle = BELT_GROOVE;
+  for (let i = 0; i < 8; i++) ctx.fillRect(i * 32 + 15, 0, 2, 128);
+  // 两侧暗边：带面靠近侧栏处的阴影，让带面看起来略陷在两侧金属边之间。
+  for (const [inset, alpha] of [[0, .5], [4, .22]]) {
     ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-    ctx.fillRect(0, inset, 256, 3);
-    ctx.fillRect(0, 117 - inset, 256, 3);
+    ctx.fillRect(0, inset, 256, 4);
+    ctx.fillRect(0, 124 - inset, 256, 4);
   }
-  // 极弱中心 chevron（每格一个）：暗琥珀细线，只作流向辅助，不抢横向带条。
-  ctx.strokeStyle = 'rgba(196, 150, 80, .1)';
-  ctx.lineWidth = 2.5;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(110, 42);
-  ctx.lineTo(134, 60);
-  ctx.lineTo(110, 78);
-  ctx.stroke();
+  // 两个档位色 chevron（每格 .25 / .75 处）：外圈半透明晕 + 实心箭身，读起来像带面里嵌的灯条。
+  ctx.lineJoin = 'miter';
+  ctx.lineCap = 'butt';
+  for (const center of [64, 192]) {
+    const chevron = () => {
+      ctx.beginPath();
+      ctx.moveTo(center - 18, 30);
+      ctx.lineTo(center + 12, 64);
+      ctx.lineTo(center - 18, 98);
+    };
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = .22;
+    ctx.lineWidth = 22;
+    chevron(); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 11;
+    chevron(); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
   return toTexture(key, element, true);
 }
 
@@ -183,7 +186,8 @@ export class LogisticsDirectionMarks {
 
   /** 返回 true 表示签名变化、几何体被重建。 */
   refresh(buildings: readonly Building[], faceSize: number, radius: number): boolean {
-    const sorters = buildings.filter(building => Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type)));
+    // 分拣器的流向由门控 rig 自己的底板三角表达（sorter-rig），这里只画分流器。
+    const sorters = buildings.filter(building => !building.sorter && !/sorter/.test(building.type) && Boolean(building.splitter || /splitter/.test(building.type)));
     const signature = JSON.stringify([faceSize, radius, sorters.map(building => [building.id, building.position,
       building.rotation, building.sorter?.filter?.items,
       building.splitter?.input_directions, building.splitter?.output_directions])]);
@@ -218,7 +222,8 @@ export class LogisticsDirectionMarks {
 
   /** 顶面箭头 + 过滤物品标签：标签是 sprite，数量等于「配了过滤物品的分拣器」。 */
   refreshLabels(buildings: readonly Building[], faceSize: number, radius: number, label: (itemId: string) => { text: string; color: string } | null) {
-    for (const child of [...this.group.children]) if (child instanceof THREE.Sprite) child.removeFromParent();
+    // 克隆出来的 SpriteMaterial 要释放（贴图走 filterLabelTexture 的缓存，不在这里 dispose）。
+    for (const child of [...this.group.children]) if (child instanceof THREE.Sprite) { child.material.dispose(); child.removeFromParent(); }
     const size = surfaceTileSize(radius, faceSize);
     for (const building of buildings) {
       const items = building.sorter?.filter?.items ?? [];
@@ -227,8 +232,12 @@ export class LogisticsDirectionMarks {
       if (!resolved) continue;
       const sprite = new THREE.Sprite(this.labelMaterial.clone());
       sprite.material.map = filterLabelTexture(resolved.text, resolved.color);
-      sprite.position.copy(tileNormal(building.position, faceSize)).multiplyScalar(radius + size * .78);
-      sprite.scale.setScalar(size * .62);
+      // 挂在闸座侧面（摆臂所在竖直面之外），摆臂翻过头顶时不会穿过标签。
+      const frame = tileFrame(building.position, faceSize);
+      const facing = directionVector(ROTATION_FACING[rotationTurns(building.rotation)] ?? 'north');
+      const lateral = frame.east.clone().multiplyScalar(-facing.y).addScaledVector(frame.south, facing.x);
+      sprite.position.copy(tileNormal(building.position, faceSize)).multiplyScalar(radius + size * .5).addScaledVector(lateral, size * .42);
+      sprite.scale.setScalar(size * .46);
       sprite.renderOrder = 15;
       this.group.add(sprite);
     }

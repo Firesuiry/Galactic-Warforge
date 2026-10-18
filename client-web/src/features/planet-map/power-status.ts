@@ -23,51 +23,6 @@ export function isPowerAlertType(alertType: string | undefined | null): boolean 
   return Boolean(alertType && POWER_ALERT_TYPES.has(alertType));
 }
 
-export interface UnpoweredBuilding {
-  id: string;
-  type: string;
-  x: number;
-  y: number;
-  /** 服务端给的停机原因（powerCoverage.reason 或 runtime.state_reason）。 */
-  reason?: string;
-}
-
-/**
- * 己方缺电建筑：运行态 `no_power`，或「未接入电网且确实有耗电需求」。
- * 只看己方（敌方建筑不提示）。
- *
- * 只看 `no_power` 不够：建筑刚建成/待机时运行态可能还是 idle，但电网覆盖已经
- * 明确判定未接入——这类「有耗电需求却没接上电」的也算缺电。
- * 反向要求 `demand > 0`：孤立电网里的风机 supply>0/demand=0，它本身运行正常，
- * 只是没并进主网（那是「孤立电网」提示，见 isInIsolatedNetwork），不能标成缺电。
- */
-export function unpoweredBuildings(
-  planet: PlanetRenderView | undefined,
-  playerId: string,
-  networks?: PlanetNetworksView,
-): UnpoweredBuilding[] {
-  if (!planet) {
-    return [];
-  }
-  const coverage = new Map(
-    (networks?.power_coverage ?? []).map((entry) => [entry.building_id, entry]),
-  );
-  return getBuildingList(planet)
-    .filter((building) => building.owner_id === playerId)
-    .filter((building) => {
-      if (building.runtime?.state === 'no_power') return true;
-      const covered = coverage.get(building.id);
-      return Boolean(covered && covered.connected === false && (covered.demand ?? 0) > 0);
-    })
-    .map((building) => ({
-      id: building.id,
-      type: building.type,
-      x: Math.round(building.position.x),
-      y: Math.round(building.position.y),
-      reason: coverage.get(building.id)?.reason || building.runtime?.state_reason,
-    }));
-}
-
 /**
  * 孤立电网：己方电网里「有发电、无用电」的孤岛。
  *

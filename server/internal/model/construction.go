@@ -54,6 +54,82 @@ type ConstructionTask struct {
 	// 下单时算一次、落成时写进建筑，玩家在建造回执/任务视图里就能看到
 	// 「这台矿机会采什么」（试玩 1016 报告 B2）。非采集建筑为空。
 	MiningItem string `json:"mining_item,omitempty"`
+	// Elevation 是传送带施工任务的目标层（第 19 轮契约 §3.2）：0 = 地面，
+	// 1..MaxBeltElevation = 高架。高架任务占的是 BeltLayers 的 `x:y@e` 槽位，
+	// 不占地面 TileBuilding 预留；落成时写进建筑的 conveyor.elevation。
+	Elevation int `json:"elevation,omitempty"`
+}
+
+// ReservationKey 返回该任务要占的施工预留键：高架带是 `x:y@e`，其余是 `x,y`。
+// 高架带只占自己一格（占地 1×1）。
+func (task *ConstructionTask) ReservationKey(p Position) string {
+	if task != nil && task.Elevation > 0 {
+		return BeltLayerKey(p.X, p.Y, task.Elevation)
+	}
+	return TileKey(p.X, p.Y)
+}
+
+// ReservedGroundTaskAt 返回占着地面格 (x,y) 施工预留的任务；没有时返回 nil。
+// 高架任务不占地面键，所以不会命中。
+func (q *ConstructionQueue) ReservedGroundTaskAt(x, y int) *ConstructionTask {
+	if q == nil || q.ReservedTiles == nil {
+		return nil
+	}
+	return q.Tasks[q.ReservedTiles[TileKey(x, y)]]
+}
+
+// ReservedElevatedTaskAt 返回占着高架格 (x,y,e) 施工预留的任务；没有时返回 nil。
+func (q *ConstructionQueue) ReservedElevatedTaskAt(x, y, elevation int) *ConstructionTask {
+	if q == nil || q.ReservedTiles == nil || elevation <= 0 {
+		return nil
+	}
+	return q.Tasks[q.ReservedTiles[BeltLayerKey(x, y, elevation)]]
+}
+
+// GroundReservationConflict 检查高架带任务与地面施工预留的互斥（契约 §3.2）：
+// 高架带下方地面只能是空地或低矮物流（含施工中）。对 task.Elevation > 0 的任务，
+// 逐格看地面预留；命中非低矮物流的地面施工任务时返回冲突错误（带层号）。
+// 非高架任务返回 nil。
+func (q *ConstructionQueue) GroundReservationConflict(ws *WorldState, task *ConstructionTask) error {
+	if q == nil || task == nil || task.Elevation <= 0 {
+		return nil
+	}
+	tiles, err := ws.ConstructionTiles(task)
+	if err != nil {
+		return err
+	}
+	for _, p := range tiles {
+		ground := q.ReservedGroundTaskAt(p.X, p.Y)
+		if ground == nil || ground.ID == task.ID || IsLowLogistics(ground.BuildingType) {
+			continue
+		}
+		return fmt.Errorf("第 %d 层该格下方有地面施工任务：%s", task.Elevation, ground.BuildingType)
+	}
+	return nil
+}
+
+// ElevatedReservationConflict 检查地面（非低矮物流）任务与高架施工预留的互斥：
+// 占地内任一格有高架施工任务时返回冲突错误（带层号与占用者）。低矮物流地面
+// 任务与高架预留可共存。高架任务自身返回 nil。
+func (q *ConstructionQueue) ElevatedReservationConflict(ws *WorldState, task *ConstructionTask) error {
+	// 物流配送器挂在宿主上、不占地面格（execBuild / 落成时同样豁免）。
+	if q == nil || task == nil || task.Elevation > 0 || IsLowLogistics(task.BuildingType) || task.BuildingType == BuildingTypeLogisticsDistributor {
+		return nil
+	}
+	tiles, err := ws.ConstructionTiles(task)
+	if err != nil {
+		return err
+	}
+	for _, p := range tiles {
+		for elevation := 1; elevation <= MaxBeltElevation; elevation++ {
+			over := q.ReservedElevatedTaskAt(p.X, p.Y, elevation)
+			if over == nil || over.ID == task.ID {
+				continue
+			}
+			return fmt.Errorf("该格上方第 %d 层已有传送带施工任务：%s", elevation, over.BuildingType)
+		}
+	}
+	return nil
 }
 
 // ConstructionQueue stores pending and active construction tasks.
@@ -144,6 +220,46 @@ func (q *ConstructionQueue) Enqueue(ws *WorldState, task *ConstructionTask) erro
 	tiles, err := ws.ConstructionTiles(task)
 	if err != nil {
 		return err
+	}
+	if task.Elevation > 0 {
+		if !SupportsElevation(task.BuildingType) {
+			return fmt.Errorf("只有传送带可以架高")
+		}
+		if task.Elevation > MaxBeltElevation {
+			return fmt.Errorf("高度只能 0–%d 层", MaxBeltElevation)
+		}
+	}
+	// 跨层施工预留互查（契约 §3.2）：高架带下方只能是空地或低矮物流（含施工中）；
+	// 地面非低矮物流建筑的占地内不能有高架施工任务。放在 Enqueue 里，build 命令
+	// 与其它入队入口都走同一套检查（层号合法性已在上面先校验）。
+	if task.Elevation > 0 {
+		if err := q.GroundReservationConflict(ws, task); err != nil {
+			return err
+		}
+	} else if err := q.ElevatedReservationConflict(ws, task); err != nil {
+		return err
+	}
+	if task.Elevation > 0 {
+		for _, p := range tiles {
+			if !ws.InBounds(p.X, p.Y) || !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+				return fmt.Errorf("占地地块 %s 不可用", TileKey(p.X, p.Y))
+			}
+			key := task.ReservationKey(p)
+			if existing := q.ReservedTiles[key]; existing != "" && existing != task.ID {
+				return fmt.Errorf("地块 %s 已被 %s 预留", key, existing)
+			}
+			if id := ws.BeltLayerAt(p.X, p.Y, task.Elevation); id != "" {
+				return fmt.Errorf("第 %d 层该格已有传送带", task.Elevation)
+			}
+		}
+		for _, p := range tiles {
+			q.ReservedTiles[task.ReservationKey(p)] = task.ID
+		}
+		q.NextSeq++
+		task.QueueIndex = q.NextSeq
+		q.Tasks[task.ID] = task
+		q.Order = append(q.Order, task.ID)
+		return nil
 	}
 	// Stacked layers (Z>0) sit on the ground building's tile by design; their
 	// placement was validated when the command resolved the stack position.
@@ -241,7 +357,7 @@ func (q *ConstructionQueue) RebuildReservations(ws *WorldState) error {
 			return err
 		}
 		for _, p := range tiles {
-			key := TileKey(p.X, p.Y)
+			key := task.ReservationKey(p)
 			if other := q.ReservedTiles[key]; other != "" && other != id {
 				return fmt.Errorf("overlapping construction footprint")
 			}

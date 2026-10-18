@@ -37,7 +37,7 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
   // 施工任务（服务端权威，含 player_id）由 assessBuildTiles 一并评估：占位文案与服务端
   // constructionReservationMessage 完全同口径（「该格已有你的施工任务：传送带 Mk.I（排队中）」），
   // 不再自造「此格已有你的施工任务（pending）」这类另一套措辞（试玩 1011 E）。
-  const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory, runtime);
+  const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory, runtime, mode.elevation ?? 0);
   const describe = (value: NonNullable<typeof assessment>) => describeBuildBlock(
     value,
     (itemId) => getItemDisplayName(catalog, itemId),

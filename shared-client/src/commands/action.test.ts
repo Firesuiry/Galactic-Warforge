@@ -21,9 +21,24 @@ import {
   cmdConfigureSplitter,
   cmdConfigureTrafficMonitor,
   cmdTaskForceDeploy,
+  cmdBuild,
 } from './action.js';
 
 const ctx = { api: createApiClient({ serverUrl: 'http://127.0.0.1:1' }) };
+
+describe('build elevation boundary', () => {
+  it('rejects out-of-range elevation before hitting the API layer', async () => {
+    const out = await cmdBuild(['10', '10', 'conveyor_belt_mk1', '--elevation', '5'], ctx);
+    assert.match(out, /elevation 必须是 0-4/);
+    const negative = await cmdBuild(['10', '10', 'conveyor_belt_mk1', '--elevation', '-1'], ctx);
+    assert.match(negative, /elevation 必须是 0-4/);
+  });
+
+  it('sends valid elevation to the server (fails only on auth)', async () => {
+    const out = await cmdBuild(['10', '10', 'conveyor_belt_mk1', '--direction', 'east', '--elevation', '2'], ctx);
+    assert.match(out, /missing authenticated player_id/);
+  });
+});
 
 describe('mecha refuel command boundary', () => {
   it('requires a positive integer count when given', async () => {

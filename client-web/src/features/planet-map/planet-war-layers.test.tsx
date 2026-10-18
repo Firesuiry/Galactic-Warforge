@@ -116,7 +116,6 @@ describe('PlanetTheaterControls', () => {
     const user = userEvent.setup();
     render(
       <PlanetTheaterControls
-        dimensional={false}
         planetId="planet-1"
         theaters={[{ id: 'th-1', name: '北线' }]}
       />,
@@ -134,7 +133,6 @@ describe('PlanetTheaterControls', () => {
     const user = userEvent.setup();
     render(
       <PlanetTheaterControls
-        dimensional={false}
         planetId="planet-1"
         theaters={[]}
       />,
@@ -143,17 +141,16 @@ describe('PlanetTheaterControls', () => {
     expect(screen.getByText(/暂无战区/)).toBeInTheDocument();
   });
 
-  it('3D 视图隐藏拖拽按钮', async () => {
+  it('R20-A ③：不再有「切回平面战术」的提示，有战区时直接给拖拽入口（3D 同样支持）', async () => {
     const user = userEvent.setup();
     render(
       <PlanetTheaterControls
-        dimensional
         planetId="planet-1"
         theaters={[{ id: 'th-1' }]}
       />,
     );
     await user.click(screen.getByRole('button', { name: '战区划定' }));
-    expect(screen.queryByRole('button', { name: '开始拖拽划定' })).not.toBeInTheDocument();
-    expect(screen.getByText(/平面战术/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始拖拽划定' })).toBeInTheDocument();
+    expect(screen.queryByText(/平面战术/)).not.toBeInTheDocument();
   });
 });

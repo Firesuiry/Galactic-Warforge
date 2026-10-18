@@ -141,6 +141,7 @@ func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 // （实测第一座熔炉在 tick 6123——手搓链要先走完 齿轮/磁线圈/电路板，再攒熔炉的
 // 4 电路板 + 4 铁块 + 2 磁线圈 + 2 石砖，所以窗口给到 7000。）
 func TestSkirmishPlayerOpensPowerMiningSmeltingBy7000(t *testing.T) {
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	op := newZeroOpening(t, core, 7000)
@@ -174,6 +175,10 @@ func TestSkirmishPlayerOpensPowerMiningSmeltingBy7000(t *testing.T) {
 // （试玩报告 1007 的「玻璃/石砖」死锁就是这条链上的缺口）。
 // 这是「开局链可走通」的最小断言集，与 TestSkirmishFromZeroFullMatch 共用同一套脚本。
 func TestSkirmishFromZeroChainIsWalkable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("从零开局整链模拟（跑到 tick 30000，单跑约 76 秒）；用 -run 单跑")
+	}
+	t.Parallel()
 	core := newSkirmishCoreForSeed(t, "skirmish-seed-001")
 	core.cfg.Battlefield.VictoryRule = model.VictoryRuleSandbox
 	op := newZeroOpening(t, core, 30000)

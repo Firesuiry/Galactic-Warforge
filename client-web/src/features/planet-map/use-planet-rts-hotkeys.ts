@@ -1,7 +1,7 @@
 /**
  * RTS 快捷键体系（C1）：A 攻击移动 / S 停止 / H 坚守 / P 巡逻 / G 守卫，
- * Ctrl+1..9 记录编队、1..9 选取编队。输入框/文本域/下拉框聚焦时不抢按键
- * （沿用 PlanetMapPixi 的输入守卫模式）。2D/3D 共用：挂在 PlanetPage 一次。
+ * Ctrl+1..9 记录编队、1..9 选取编队。输入框/文本域/下拉框聚焦时不抢按键。
+ * 挂在 PlanetPage 一次。
  *
  * Ctrl+Shift+D：调试模式开关（调试面板与左下工具条的「调试」图标默认隐藏，
  * 都由这一个快捷键控制）。放在本 hook 里是因为它已经统一处理输入守卫；
@@ -55,6 +55,20 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, interactions }: Use
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && key.toLowerCase() === 'd') {
         store.toggleDebugMode();
         event.preventDefault();
+        return;
+      }
+
+      // 第 19 轮 §3.5：PageUp/PageDown 升降传送带建造目标高度（先查过：未被其它快捷键占用）。
+      // 只在传送带建造模式下生效，且**只在这种模式下 preventDefault**：非传送带模式
+      //（勘查/其它建造/其它交互）PageUp/PageDown 必须保留浏览器与页面的默认行为
+      //（滚动页面等），不能因为本快捷键把翻页键吞掉（L6 回归断言）。
+      // 输入框/下拉框聚焦时上面的守卫已提前返回。
+      if (key === 'PageUp' || key === 'PageDown') {
+        if (store.interactionMode.kind === 'build' && store.interactionMode.buildingType.startsWith('conveyor_belt')) {
+          store.adjustBuildElevation(key === 'PageUp' ? 1 : -1);
+          sfx.uiClick();
+          event.preventDefault();
+        }
         return;
       }
 

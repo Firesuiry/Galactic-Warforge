@@ -1,242 +1,138 @@
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
-import { getItemColorValue } from '../item-colors';
-import { surfaceStep } from '@shared/surface';
-import { tileNormal } from './projection';
-import { isCardinalDirection, OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns } from '../logistics-direction';
 
 /**
- * 分拣器动画（第 18 轮契约 §1.2，DSP 口径）。
+ * 分拣器搬运节拍（第 19 轮，门控式摆臂的「时间轴」部分，几何由 `sorter-rig` 负责）。
  *
- * 形态是「低矮圆底座 + 立柱 + 一根水平横臂 + 臂端夹爪」，所以动画只有两个自由度：
+ * 一次搬运（cycle）四段，`swing` 是摆臂在竖直面里的进度（0 = 停在取货端，1 = 落到放货端）：
  *
- * - `sorter-arm.rotation.y`：横臂绕立柱在水平面内往复摆动（取货端 ↔ 放货端，约 π）；
- * - `sorter-claw.position.y`：夹爪在取/放时下沉一点点，搬运时抬起；
- * - `sorter-payload`：物品占位，只在「已取货、未放货」的窗口可见，颜色取物品配色表。
+ * | 阶段 | 占比 | 动作 |
+ * | --- | --- | --- |
+ * | 取货 | 0–.10 | 夹爪下探到取货点（`lift` 1→0），物品从 .10 起挂在夹爪下 |
+ * | 携货翻转 | .10–.55 | `swing` 0→1：摆臂从取货端翻过头顶落到放货端 |
+ * | 放货 | .55–.65 | 夹爪下探，物品在 .62 消失 |
+ * | 空载翻回 | .65–1.0 | `swing` 1→0，夹爪抬起 |
  *
- * 一次搬运（cycle）四段，见 `PICKUP_END / CARRY_END / DROP_END`。数据源不变：
- * `building.sorter.last_transfer` 是服务端已完成搬运的权威记录，这里只做一次有限时长的
+ * 数据源：`building.sorter.last_transfer` 是服务端已完成搬运的权威记录，这里只做一次有限时长的
  * 视觉回放，不做物流模拟；历史记录不重放，慢帧/轮询跳过的记录也只播一次。
  */
 
-interface Motion {
-  /** 横臂缩放组：`scale.x = 臂长 / 建模臂长`。 */
-  boom: THREE.Object3D;
-  /** 臂端升降组：`position.y` 做夹爪下沉，`position.x` 跟随臂长。 */
-  claw: THREE.Object3D;
-  /** 物品占位（逐实例材质，按 item_id 上色）。 */
-  payload: THREE.Object3D;
-  cargo: THREE.Mesh | null;
-  /** 本周期取货角 / 放货角（模型局部 yaw）。 */
-  pickup: number;
-  drop: number;
-  /** 下一条权威记录对应的取/放角，等本周期播完再生效。 */
-  nextPickup: number;
-  nextDrop: number;
-  /** 起始 yaw（本周期第一帧的实际角度），换取货端时平滑起摆而不是瞬移。 */
-  startYaw: number;
-  range: number;
-  observedSequence: number;
-  playedSequence: number;
-  /** 本周期已播秒数；`>= cycle` 表示空闲（停在取货角、夹爪抬起）。 */
-  elapsed: number;
-  cycle: number;
-  enabled: boolean;
-  snapshotTick?: number;
-  /** 快照 tick 差估算的 tick/s（拿不到时用 FALLBACK_TICK_RATE）。 */
-  tickRate: number;
-  /** tickRate 估算窗口的起点（tick 与墙钟），窗口 ≥ .5s 才采一次样。 */
-  rateTick?: number;
-  rateTime?: number;
-}
-
-/** 建模臂长（`sorter-boom` 按 .55 建，动画按 range 拉伸）。 */
-const ARM_UNIT = .55;
-/** 阶段边界（cycle 占比）：取货结束 / 携带摆动结束 / 放货结束。 */
-const PICKUP_END = .10;
-const CARRY_END = .55;
-const DROP_END = .65;
-/** 物品在放货段中段消失（claw 还在下沉）。 */
-const RELEASE_AT = .62;
-/** 夹爪下沉量（cell），取/放时才会压到 −.04。 */
-const CLAW_DROP = .04;
+/** 阶段边界（cycle 占比）：取货结束 / 携带翻转结束 / 放货结束。 */
+export const PICKUP_END = .10;
+export const CARRY_END = .55;
+export const DROP_END = .65;
+/** 物品在放货段中段消失（夹爪还在下探）。 */
+export const RELEASE_AT = .62;
 /** tick/s 兜底：快照里拿不到差值时按 4 tick/s 估 cycle 时长。 */
 const FALLBACK_TICK_RATE = 4;
-/** 迟到太多 tick 的记录是历史回放，不当成当前活动（沿用旧实现的去重口径）。 */
+/** 一次往返的播放时长上下限（秒）：再快看不清翻转，再慢（3+3 格 mk1 = 3 s）就是服务端真实节拍。 */
+const MIN_CYCLE = .45;
+const MAX_CYCLE = 4.5;
+/** 迟到太多 tick 的记录是历史回放，不当成当前活动（只对首次观察生效）。 */
 const RECENT_TICKS = 20;
 
-const motions = new WeakMap<THREE.Object3D, Motion>();
-
-/**
- * 取货角 / 放货角（模型局部 yaw）。
- *
- * **方向必须由建造朝向推出来，不能用 `last_transfer.source_position` 连线**：服务端记录的是
- * 端点建筑的 `position`（多格建筑是占地左上角），3×3 熔炉的取货端连线会偏成 ~215° 的斜向，
- * 横臂就指向建筑角落而不是正前方，近景看起来像「乱指」。服务端本来就是沿朝向轴扫端点
- * （取货端 = 背面、放货端 = 正面），所以横臂只在同一条轴线上的两个方向之间摆。
- *
- * 角度算法：取「本体格 → 正面/背面第 range 格」的**球面切向**，再变换进模型局部坐标求 yaw。
- * 直接按四向单位向量算 yaw 在立方体接缝/面角附近会偏十几度（tileFrame 的弯曲），
- * 用切向取角才能让夹爪正对邻格。局部 +X 是横臂的 0 角：yaw θ 把 +X 转到
- * (cosθ, 0, −sinθ)，与 `+X 东 / +Z 南` 同基底。
- */
-export function sorterAngles(
-  model: THREE.Object3D,
-  building: Pick<Building, 'position' | 'rotation' | 'sorter'>,
-  faceSize: number,
-): { pickup: number; drop: number } {
-  const facing = ROTATION_FACING[rotationTurns(building.rotation)] ?? 'north';
-  const back = OPPOSITE_DIRECTION[facing];
-  // 多格建筑的分拣器本体仍是 1×1，端点按 range 沿轴取格（抬到带面高度，只取方向）。
-  const reach = Math.max(1, Math.min(3, building.sorter?.range ?? 1));
-  const center = tileNormal({ x: building.position.x, y: building.position.y }, faceSize);
-  model.updateMatrix();
-  const toLocal = new THREE.Matrix4().copy(model.matrix).invert();
-  const yaw = (direction: typeof facing) => {
-    let tile = { x: building.position.x, y: building.position.y };
-    let current = direction;
-    for (let step = 0; step < reach; step++) {
-      const next = surfaceStep(tile, current, faceSize);
-      tile = { x: next.tile.x, y: next.tile.y };
-      current = isCardinalDirection(next.direction) ? next.direction : current;
-    }
-    const world = tileNormal(tile, faceSize).sub(center).normalize();
-    const local = world.transformDirection(toLocal);
-    return Math.atan2(-local.z, local.x);
-  };
-  return { pickup: yaw(back), drop: yaw(facing) };
+export interface SorterPose {
+  /** 0 = 取货端，1 = 放货端（门控摆臂的翻转进度）。 */
+  swing: number;
+  /** 1 = 夹爪抬起（悬停），0 = 下探到取/放点。 */
+  lift: number;
+  /** 夹爪下是否挂着物品。 */
+  carrying: boolean;
+  /** 本周期搬的物品（配色用）。 */
+  itemId?: string;
 }
 
-/** 同步一条权威快照：范围/停机/payload 颜色，新的 `last_transfer` 排队播放一次。 */
-export function syncSorterAnimation(model: THREE.Group, building: Building, tick: number, faceSize: number) {
-  const arm = model.getObjectByName('sorter-arm');
-  if (!arm) return;
-  let motion = motions.get(arm);
-  const angles = sorterAngles(model, building, faceSize);
-  if (!motion) {
-    const boom = arm.getObjectByName('sorter-boom');
-    const claw = arm.getObjectByName('sorter-claw');
-    const payload = arm.getObjectByName('sorter-payload');
-    if (!boom || !claw || !payload) return;
-    motion = {
-      boom, claw, payload,
-      cargo: payload.children.find((child): child is THREE.Mesh => child instanceof THREE.Mesh) ?? null,
-      pickup: angles.pickup, drop: angles.drop, nextPickup: angles.pickup, nextDrop: angles.drop, startYaw: angles.pickup,
-      range: 1, observedSequence: 0, playedSequence: 0,
-      elapsed: Number.POSITIVE_INFINITY, cycle: 1, enabled: false,
-      tickRate: FALLBACK_TICK_RATE,
-    };
-    motions.set(arm, motion);
-    pose(arm, motion, angles.pickup, 1, false);
-  }
-  motion.tickRate = estimateTickRate(motion, tick);
-  motion.range = building.sorter?.range ?? motion.range;
-  applyRange(motion);
-  // 朝向随建造 rotation 改写（拆除重建/旋转后不许停在旧朝向）；搬运周期中不打断本周期。
-  motion.nextPickup = angles.pickup;
-  motion.nextDrop = angles.drop;
-  if (motion.elapsed >= motion.cycle) {
-    motion.pickup = angles.pickup;
-    motion.drop = angles.drop;
-  }
-  const previousTick = motion.snapshotTick;
-  motion.snapshotTick = tick;
-  motion.enabled = building.runtime?.state === 'running';
-  if (!motion.enabled) {
-    // 停机/无电/停工：整机冻结在原姿态，只把物品藏掉（契约 §1.2）。
-    motion.payload.visible = false;
-    motion.playedSequence = motion.observedSequence;
-    motion.elapsed = Number.POSITIVE_INFINITY;
-    return;
-  }
-  const transfer = building.sorter?.last_transfer;
-  if (!transfer || transfer.quantity <= 0 || transfer.sequence <= motion.observedSequence || tick < transfer.tick) return;
-  // 只有**首次**观察到的历史记录不重放（读档/首次进场时 last_transfer 可能是几十秒前的，
-  // 播出来像「凭空搬一次」）。之后只看 sequence 是否前进：数据层只在 SSE 事件后才刷新场景，
-  // 挂机产线里 last_transfer 可能迟到十几~几十 tick，再按 tick 新旧判历史会导致
-  // **机械臂永远不动**（1018 联调实测）。sequence 单调已经足够防重放。
-  if (motion.observedSequence === 0 && tick - transfer.tick > RECENT_TICKS) {
-    motion.pickup = motion.nextPickup; motion.drop = motion.nextDrop;
-    if (motion.elapsed >= motion.cycle) pose(arm, motion, motion.pickup, 1, false);
-    return;
-  }
-  motion.observedSequence = transfer.sequence;
-  motion.cycle = THREE.MathUtils.clamp((building.sorter?.cycle_ticks ?? 6) / motion.tickRate, .35, 1.6);
-  if (motion.cargo) {
-    const material = motion.cargo.material as THREE.MeshStandardMaterial;
-    material.color.set(getItemColorValue(transfer.item_id));
-  }
-  // 诊断元数据；不影响库存或服务端状态。
-  arm.userData.transfer = { sequence: transfer.sequence, itemId: transfer.item_id, quantity: transfer.quantity };
-}
+export class SorterMotion {
+  private observedSequence = 0;
+  private playedSequence = 0;
+  /** 本周期已播秒数；`>= cycle` 表示空闲（停在取货端、夹爪抬起）。 */
+  private elapsed = Number.POSITIVE_INFINITY;
+  private cycle = 1;
+  private enabled = false;
+  private itemId?: string;
+  private pendingItemId?: string;
+  /** 快照 tick 差估算的 tick/s。 */
+  private tickRate = FALLBACK_TICK_RATE;
+  private rateTick?: number;
+  private rateTime?: number;
+  private current: SorterPose = { swing: 0, lift: 1, carrying: false };
 
-/**
- * 每帧推进摆动/升降（由 `IndustrialModels.animate` 在 `sorter-arm` 上调用）。
- * `active` = 整机通电且在运行；false 时冻结。
- */
-export function animateSorterArm(arm: THREE.Object3D, delta: number, active: boolean) {
-  const motion = motions.get(arm);
-  if (!motion || !motion.enabled || !active) return;
-  if (motion.elapsed >= motion.cycle) {
-    if (motion.playedSequence === motion.observedSequence) {
-      pose(arm, motion, motion.pickup, 1, false);
+  /**
+   * 同步一条权威快照：停机冻结；新的 `last_transfer` 排队播放一次。
+   * `lengthUnits` = 服务端往返周期的长度系数 `max(1, 取端步数 + 放端步数 − 1)`。
+   */
+  sync(building: Building, tick: number, now = clock(), lengthUnits = 1) {
+    this.tickRate = this.estimateTickRate(tick, now);
+    this.enabled = building.runtime?.state === 'running';
+    if (!this.enabled) {
+      // 停机/无电/停工：整机冻结在原姿态，只把物品藏掉。
+      this.current = { ...this.current, carrying: false };
+      this.playedSequence = this.observedSequence;
+      this.elapsed = Number.POSITIVE_INFINITY;
       return;
     }
-    motion.playedSequence = motion.observedSequence;
-    motion.pickup = motion.nextPickup;
-    motion.drop = motion.nextDrop;
-    // 从当前实际姿态起摆：换取货端时第一段是「转过去」，不是瞬移。
-    motion.startYaw = arm.rotation.y;
-    motion.elapsed = 0;
+    const transfer = building.sorter?.last_transfer;
+    if (!transfer || transfer.quantity <= 0 || transfer.sequence <= this.observedSequence || tick < transfer.tick) return;
+    // 只有**首次**观察到的历史记录不重放（读档/首次进场时 last_transfer 可能是几十秒前的）。
+    // 之后只看 sequence 是否前进：挂机产线里 last_transfer 可能迟到十几~几十 tick（1018 联调实测）。
+    if (this.observedSequence === 0 && tick - transfer.tick > RECENT_TICKS) {
+      this.observedSequence = this.playedSequence = transfer.sequence;
+      return;
+    }
+    this.observedSequence = transfer.sequence;
+    this.pendingItemId = transfer.item_id;
+    this.cycle = THREE.MathUtils.clamp((building.sorter?.cycle_ticks ?? 6) * Math.max(1, lengthUnits) / this.tickRate, MIN_CYCLE, MAX_CYCLE);
   }
-  motion.elapsed = Math.min(motion.cycle, motion.elapsed + Math.min(.1, Math.max(0, delta)));
-  const phase = motion.elapsed / motion.cycle;
-  let yaw: number;
-  if (phase < PICKUP_END) yaw = THREE.MathUtils.lerp(motion.startYaw, motion.pickup, THREE.MathUtils.smoothstep(phase, 0, PICKUP_END));
-  else if (phase < CARRY_END) yaw = THREE.MathUtils.lerp(motion.pickup, motion.drop, THREE.MathUtils.smoothstep(phase, PICKUP_END, CARRY_END));
-  else if (phase < DROP_END) yaw = motion.drop;
-  else yaw = THREE.MathUtils.lerp(motion.drop, motion.pickup, THREE.MathUtils.smoothstep(phase, DROP_END, 1));
+
+  /** 每帧推进（`active` = 整机运行且场景不冻结）。 */
+  advance(delta: number, active = true): SorterPose {
+    if (!this.enabled || !active) return this.current;
+    if (this.elapsed >= this.cycle) {
+      if (this.playedSequence === this.observedSequence) return this.current = { swing: 0, lift: 1, carrying: false, itemId: this.itemId };
+      this.playedSequence = this.observedSequence;
+      this.itemId = this.pendingItemId;
+      this.elapsed = 0;
+    }
+    this.elapsed = Math.min(this.cycle, this.elapsed + Math.min(.1, Math.max(0, delta)));
+    return this.current = poseAt(this.elapsed / this.cycle, this.itemId);
+  }
+
+  pose(): SorterPose { return this.current; }
+
+  /**
+   * 用「≥ .5 秒窗口内的 tick 差 / 墙钟差」估算 tick/s，再平滑。
+   * 快照回调很密（~20 次/秒），相邻两次的 Δt 会因 tick 量化严重虚高，所以窗口跨过 .5s 才采样。
+   */
+  private estimateTickRate(tick: number, now: number) {
+    if (this.rateTick === undefined || this.rateTime === undefined) {
+      this.rateTick = tick; this.rateTime = now;
+      return this.tickRate;
+    }
+    const seconds = (now - this.rateTime) / 1000;
+    if (seconds < .5) return this.tickRate;
+    const ticks = tick - this.rateTick;
+    this.rateTick = tick; this.rateTime = now;
+    if (ticks <= 0) return this.tickRate;
+    return this.tickRate * .5 + THREE.MathUtils.clamp(ticks / seconds, .5, 30) * .5;
+  }
+}
+
+/** 周期内某一时刻的姿态（纯函数，测试与 ghost 预览共用）。 */
+export function poseAt(phase: number, itemId?: string): SorterPose {
+  const smooth = THREE.MathUtils.smoothstep;
+  const swing = phase < PICKUP_END ? 0
+    : phase < CARRY_END ? smooth(phase, PICKUP_END, CARRY_END)
+    : phase < DROP_END ? 1
+    : 1 - smooth(phase, DROP_END, 1);
   // 取货段压爪 → 抬起搬运 → 放货段再压爪 → 空载回摆抬起。
-  const lift = phase < PICKUP_END ? 1 - THREE.MathUtils.smoothstep(phase, 0, PICKUP_END)
-    : phase < .18 ? THREE.MathUtils.smoothstep(phase, PICKUP_END, .18)
+  const lift = phase < PICKUP_END ? 1 - smooth(phase, 0, PICKUP_END)
+    : phase < .18 ? smooth(phase, PICKUP_END, .18)
     : phase < CARRY_END ? 1
-    : phase < DROP_END ? 1 - THREE.MathUtils.smoothstep(phase, CARRY_END, DROP_END)
-    : THREE.MathUtils.smoothstep(phase, DROP_END, .8);
-  pose(arm, motion, yaw, lift, phase >= PICKUP_END && phase < RELEASE_AT);
+    : phase < DROP_END ? 1 - smooth(phase, CARRY_END, DROP_END)
+    : smooth(phase, DROP_END, .8);
+  return { swing, lift, carrying: phase >= PICKUP_END && phase < RELEASE_AT, itemId };
 }
 
-/** 写一次姿态（yaw + 夹爪升降 + 物品显隐）。 */
-function pose(arm: THREE.Object3D, motion: Motion, yaw: number, lift: number, carrying: boolean) {
-  arm.rotation.y = yaw;
-  motion.claw.position.y = -CLAW_DROP * (1 - lift);
-  motion.payload.visible = carrying;
-}
-
-/** 臂长：`L = .55 + (range - 1) * .42`（契约 §1.1），boom 拉伸、夹爪同步到臂端。 */
-function applyRange(motion: Motion) {
-  const length = ARM_UNIT + (Math.max(1, motion.range) - 1) * .42;
-  motion.boom.scale.x = length / ARM_UNIT;
-  motion.claw.position.x = length;
-}
-
-/**
- * 用「≥ .5 秒窗口内的 tick 差 / 墙钟差」估算 tick/s，再平滑进 `motion.tickRate`。
- *
- * 快照回调可能非常密集（数据层每次更新都会调 sync，实测 ~20 次/秒）：拿相邻两次
- * 调用的 Δt 算会因 tick 量化（Δtick=1 / .05s = 20 tick/s）严重虚高，cycle 被压到
- * 下限 .35s、横臂甩得看不清。所以只在窗口跨过 .5s 才采一次样。
- */
-function estimateTickRate(motion: Motion, tick: number) {
-  const now = typeof performance === 'undefined' ? Date.now() : performance.now();
-  if (motion.rateTick === undefined || motion.rateTime === undefined) {
-    motion.rateTick = tick; motion.rateTime = now;
-    return motion.tickRate;
-  }
-  const seconds = (now - motion.rateTime) / 1000;
-  if (seconds < .5) return motion.tickRate;
-  const ticks = tick - motion.rateTick;
-  motion.rateTick = tick; motion.rateTime = now;
-  if (ticks <= 0) return motion.tickRate;
-  const estimate = THREE.MathUtils.clamp(ticks / seconds, .5, 30);
-  return motion.tickRate * .5 + estimate * .5;
+function clock() {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
 }

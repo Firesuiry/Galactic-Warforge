@@ -615,3 +615,81 @@ describe('PlanetBuildBar', () => {
     }
   });
 });
+
+/** 当前建造目标高度（非建造模式返回 -1，避免类型收窄写进每条断言）。 */
+function buildElevation(): number {
+  const mode = usePlanetViewStore.getState().interactionMode;
+  return mode.kind === 'build' ? (mode.elevation ?? 0) : -1;
+}
+
+describe('PlanetBuildBar 传送带目标高度（§3.5）', () => {
+  beforeEach(() => {
+    resetPlanetViewStore();
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+  });
+
+  async function enterBeltBuild(user: ReturnType<typeof userEvent.setup>) {
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={summary} planet={makePlanet()} />);
+    await user.click(screen.getByRole('tab', { name: /^\d+\s*运输$/ }));
+    await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
+  }
+
+  it('传送带建造模式显示「高度 0」与 ▲▼；非传送带不显示高度控件', async () => {
+    const user = userEvent.setup();
+    await enterBeltBuild(user);
+    expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 0');
+    expect(screen.getByRole('button', { name: '升高一层' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '降低一层' })).toBeDisabled();
+    // 底部提示行补高度说明
+    expect(screen.getByText(/PageUp\/PageDown 调整目标高度/)).toBeInTheDocument();
+
+    // 切到非传送带：高度控件消失（先切回电力分类，当前分类只渲染自己的卡片）
+    await user.click(screen.getByRole('tab', { name: /^\d+\s*电力$/ }));
+    await user.click(screen.getByRole('button', { name: /风力发电机/ }));
+    expect(screen.queryByTestId('planet-build-elevation')).not.toBeInTheDocument();
+  });
+
+  it('▲▼ 按钮升降目标高度，钳在 0–4（PageUp/PageDown 见 use-planet-rts-hotkeys 测试）', async () => {
+    const user = userEvent.setup();
+    await enterBeltBuild(user);
+    const up = screen.getByRole('button', { name: '升高一层' });
+    const down = screen.getByRole('button', { name: '降低一层' });
+
+    await user.click(up);
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 1 });
+    expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 1');
+
+    for (let index = 0; index < 5; index++) await user.click(up);
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 4 });
+    expect(up).toBeDisabled();
+
+    expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 4');
+
+    for (let index = 0; index < 6; index++) await user.click(down);
+    expect(buildElevation()).toBe(0);
+    expect(down).toBeDisabled();
+  });
+
+  it('切换建筑类型后目标高度归零', async () => {
+    const user = userEvent.setup();
+    await enterBeltBuild(user);
+    await user.click(screen.getByRole('button', { name: '升高一层' }));
+    await user.click(screen.getByRole('button', { name: '升高一层' }));
+    expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 2 });
+
+    // 切到分拣器再切回传送带：高度归零
+    await user.click(screen.getByRole('button', { name: /分拣器 Mk.I/ }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({
+      kind: 'build',
+      buildingType: 'sorter_mk1',
+      direction: 'auto',
+    });
+    await user.click(screen.getByRole('button', { name: /传送带 Mk.I/ }));
+    expect(buildElevation()).toBe(0);
+    expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 0');
+  });
+});

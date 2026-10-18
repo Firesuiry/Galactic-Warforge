@@ -50,6 +50,7 @@ cd client-cli && npm run dev
 命令表里放不下的语义：
 
 - **build**：接受任意服务端 `buildable` 建筑；`--recipe` 设初始配方，`--direction` 用于传送带（含 `auto`），`--rotation 0|90|180|270`，`--approach` 让机甲先走到建造范围再开工。采集建筑必须压在对应资源点上（矿机→矿点，`water_pump`→`water`，`oil_extractor`→`crude_oil`）。`vertical_launching_silo` 默认挂 `small_carrier_rocket` 配方。以 `/catalog` 为准，例如 `satellite_substation` 需 `satellite_power`。
+  - **多层传送带（第 19 轮契约 §3）**：`--elevation <0-4>` 只对 `conveyor_belt_mk1/mk2/mk3` 有效，缺省 0 = 地面。CLI 先本地校验范围（越界回 `elevation 必须是 0-4（0 = 地面，只有传送带能架高）`，不发请求）；服务端另校验：非传送带给 >0 或越界 → `INVALID_ELEVATION`「只有传送带可以架高」/「高度只能 0–4 层」；高架带方向：`--direction` 优先，其次按 `--rotation` 推（90=east、180=south、270=west、0=north），都没给时缺省 `east`；显式 `--direction auto` 仍被拒绝（`INVALID_ELEVATION`）；同格同层已有带子/施工任务、或地面压着非低矮物流建筑/地面施工任务 → `POSITION_OCCUPIED`（提示含层号与占用者）。地面层造非低矮物流建筑时，占地内有高架带或高架施工任务 → `POSITION_OCCUPIED`「上方有高架传送带」/「该格上方第 N 层已有传送带施工任务：<建筑>」。例：`build 10 10 conveyor_belt_mk1 --direction east --elevation 1`。
 - **produce**：只生产 `world_produce` 地表单位（`help produce` 会读 `/catalog.world_units`）。按 `producer` 分工：兵营（工程兵/步兵/侦察车）、战车工厂（机甲/火炮/导弹车/维修车/补给车）、机场（攻击无人机）、战场分析基站 HQ（运输机器人 `transport_robot`，造价铁块×4/齿轮×2/磁线圈×1、300 tick、每玩家上限 20 台）。造价是实物清单，从生产建筑自身库存扣（`transfer` 或皮带供料），缺料返回 `INSUFFICIENT_RESOURCE`；排队有时长，停电暂停。`inspect` 建筑可见 `unit_queue` 与 `rally_point`。
 - **haul**：运输机器人专用（API 仍是 `unit_order`，`order=haul`）。`haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>]` 让机器人在两座己方建筑之间往返搬运单一物品（每趟 4 件）；省略 `--item` 时自动挑「起点可取、终点能收」的第一种。起点无货在起点等、终点收不下在终点等；`order stop` 清空路线。只有 `transport_robot` 能执行，其它单位被中文拒绝。
 - **蓝图单位**：`prototype`/`precision_drone`/`corvette`/`destroyer` 等先做成载荷物品进部署枢纽（默认 `battlefield_analysis_base`，需通电 `running`），再 `deploy_squad` / `commission_fleet`；玩家定型蓝图同样可部署。
@@ -157,7 +158,7 @@ agent_thread agent-war-director
 | `blueprint_set_component` | `blueprint_set_component <blueprint_id> <slot_id> <component_id>` | `blueprint_set_component` | management | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | `blueprint_validate <blueprint_id>` | `blueprint_validate` | management | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | `blueprint_variant <parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv> [--name <name>]` | `blueprint_variant` | management | Create a controlled variant from a preset or player blueprint |
-| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]` | `build` | build | Build any server-side buildable structure |
+| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0\|90\|180\|270] [--elevation 0-4] [--approach]` | `build` | build | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | `build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>` | `build_dyson_frame` | build | Build a Dyson sphere frame |
 | `build_dyson_node` | `build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | `build_dyson_node` | build | Build a Dyson sphere node |
 | `build_dyson_shell` | `build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | `build_dyson_shell` | build | Build a Dyson sphere shell |

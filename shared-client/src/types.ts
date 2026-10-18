@@ -196,6 +196,8 @@ export interface BuildingConveyorState {
    * 清空或动过就归零）。达阈值（300 tick）时服务端另发 `belt_blocked` 告警。
    */
   blocked_ticks?: number;
+  /** 第 19 轮多层传送带：0 = 地面，1–4 = 高架层（服务端 omitempty，缺省 0）。 */
+  elevation?: number;
 }
 
 /** 服务端最近一次实际搬运；空转时保留旧记录，按 tick / sequence 判断工作动画。 */
@@ -218,9 +220,9 @@ export interface SorterTransfer {
  * `model.SorterFacing` 同一张锚点表。
  */
 export interface BuildingSorterState {
-  /** 往返周期系数：往返周期 = cycle_ticks × 两端点距离格数（mk1/mk2/mk3 = 6/3/2）。 */
+  /** 往返周期系数：往返周期 = cycle_ticks × max(1, 取端步数 + 放端步数 − 1)（mk1/mk2/mk3 = 6/3/2）。 */
   cycle_ticks: number;
-  /** 沿朝向轴前后各扫几格找端点（mk1/mk2/mk3 = 1/2/3）。 */
+  /** 沿朝向轴前后各扫几格找端点（第 19 轮起四种分拣器全为 3）。 */
   range: number;
   /** 下一次允许往返的最早 tick（0 = 随时可搬）。 */
   next_trip_tick?: number;
@@ -1395,6 +1397,8 @@ export interface ConstructionTaskView {
   recipe_id?: string;
   cost?: BuildCost;
   state: ConstructionState;
+  /** 传送带施工任务的目标层（第 19 轮契约 §3.2）：0 = 地面（服务端 omitempty 不下发），1–4 = 高架。 */
+  elevation?: number;
   /** 建筑中文名（服务端 building_name）。 */
   building_name?: string;
   /** 未开工 / 落成推迟的原因：insufficient_materials / executor_concurrent_limit / region_concurrent_limit / footprint_occupied。 */

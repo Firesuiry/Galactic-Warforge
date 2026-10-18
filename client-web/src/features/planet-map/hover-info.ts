@@ -17,6 +17,7 @@ import {
   type PlanetRenderView,
   type TilePoint,
 } from '@/features/planet-map/model';
+import { beltElevation } from '@/features/planet-map/logistics-tier';
 import { FACTION_LABEL, unitFaction, type UnitFaction } from '@/features/planet-map/rts-commands';
 import { describeHaul } from '@/features/planet-map/transport-haul';
 
@@ -64,14 +65,20 @@ export function describeHover(context: HoverContext, tile: TilePoint): HoverInfo
       detail: haul ? `${hp(unit.hp, unit.max_hp)} · ${haul}` : hp(unit.hp, unit.max_hp),
     };
   }
-  const building = getBuildingList(planet).find((candidate) => tileContainsBuilding(candidate, tile.x, tile.y, planet.map_width / 3));
+  // §3.5：悬停优先认高架带（场景侧按高度拾取）；这里按层高从高到低找，再兜底地面。
+  const buildingsAtTile = getBuildingList(planet).filter((candidate) => tileContainsBuilding(candidate, tile.x, tile.y, planet.map_width / 3));
+  const building = buildingsAtTile
+    .filter((candidate) => beltElevation(candidate) > 0)
+    .sort((left, right) => beltElevation(right) - beltElevation(left))[0]
+    ?? buildingsAtTile.find((candidate) => beltElevation(candidate) === 0);
   if (building) {
     const faction = unitFaction({ owner_id: building.owner_id, type: building.type as never }, playerId, darkFogHostile);
+    const elevation = beltElevation(building);
     return {
       title: getBuildingDisplayName(catalog, building.type),
       faction,
       ownerLabel: FACTION_LABEL[faction],
-      detail: hp(building.hp, building.max_hp),
+      detail: elevation > 0 ? `${hp(building.hp, building.max_hp)} · 高度 ${elevation} 层` : hp(building.hp, building.max_hp),
     };
   }
   const force = (runtime?.enemy_forces ?? []).find((candidate) => at(candidate.position, tile));

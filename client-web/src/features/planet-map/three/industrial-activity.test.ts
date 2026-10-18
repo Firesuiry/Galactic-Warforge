@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { collectActivity, itemColor, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
-import { conveyorPaths, BELT_DECK_TOP, type ConveyorPath } from './conveyor-geometry';
-import { beltItemSpeedTilesPerSec } from '../planet-logistics-flow';
+import { conveyorPaths, BELT_BASE_LIFT, BELT_DECK_TOP, type ConveyorPath } from './conveyor-geometry';
+import { BELT_LEVEL_HEIGHT, beltVisualSpeed } from '../logistics-tier';
 import { getItemColorValue } from '../item-colors';
 import { tileFrame, tileNormal, surfaceTileSize } from './projection';
 
@@ -23,12 +23,13 @@ function factory(state = 'running'): Building {
 }
 
 const opposite: Record<string, string> = { north: 'south', east: 'west', south: 'north', west: 'east' };
-/** 一格带体：默认朝东、西侧输入，带 2 的吞吐（beltItemSpeedTilesPerSec(2) = 1.8 格/秒）。 */
+/** 一格带体：默认朝东、西侧输入；带上物品流速 = beltVisualSpeed(type)（与带面滚速同源）。 */
 function belt(id: string, x: number, y: number, output = 'east', input = opposite[output],
-    buffer: { item_id: string; quantity: number }[] = [], blockedTicks = 0): Building {
-  return { id, type: 'conveyor_belt_mk1', position: { x, y, z: 0 }, owner_id: 'p1',
+    buffer: { item_id: string; quantity: number }[] = [], blockedTicks = 0,
+    type = 'conveyor_belt_mk1', elevation = 0): Building {
+  return { id, type, position: { x, y, z: 0 }, owner_id: 'p1',
     runtime: { state: 'running' },
-    conveyor: { input, output, throughput: 2, buffer, ...(blockedTicks ? { blocked_ticks: blockedTicks } : {}) },
+    conveyor: { input, output, throughput: 2, buffer, ...(elevation ? { elevation } : {}), ...(blockedTicks ? { blocked_ticks: blockedTicks } : {}) },
   } as unknown as Building;
 }
 function sorter(x: number, y: number, rotation = '90'): Building {
@@ -219,7 +220,7 @@ describe('belt cargo on the DSP conveyor', () => {
       belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }]), belt('b',2,1),
     ]);
     activity.update(data); activity.animate(.1, 0);
-    const mesh = cargo(), size = surfaceTileSize(100,4), base = 100 + size * .19;
+    const mesh = cargo(), size = surfaceTileSize(100,4), base = 100 + size * BELT_BASE_LIFT;
     expect(mesh.count).toBe(4);
     const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
     const lift = size * (BELT_DECK_TOP + BELT_CARGO_CELL / 2);
@@ -267,8 +268,8 @@ describe('belt cargo on the DSP conveyor', () => {
     const before = Array.from({length: mesh.count}, (_, i) => placement(mesh, path, size, i).u);
     activity.animate(.1, .1);
     const after = Array.from({length: mesh.count}, (_, i) => placement(mesh, path, size, i).u);
-    // u 用全局时钟推进，速度口径 = beltItemSpeedTilesPerSec(throughput)（与 2D 圆点/贴图同一份）。
-    const expected = beltItemSpeedTilesPerSec(2) * .1;
+    // u 用全局时钟推进，速度口径 = beltVisualSpeed(带子类型)（与带面箭头滚速同一份）。
+    const expected = beltVisualSpeed('conveyor_belt_mk1') * .1;
     before.forEach((u, i) => expect(((after[i] - u) % 1 + 1) % 1).toBeCloseTo(expected, 2));
     activity.destroy();
   });
@@ -311,7 +312,52 @@ describe('belt cargo on the DSP conveyor', () => {
     const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
     // 拓扑上不连带体，但分拣器会从这条带上取货：物品照常前进，不能堆在输出端。
     for (let i = 0; i < mesh.count; i++) {
-      expect(placement(mesh, path, size, i).u).toBeCloseTo((beltItemSpeedTilesPerSec(2) * .1 + i / 4) % 1, 2);
+      expect(placement(mesh, path, size, i).u).toBeCloseTo((beltVisualSpeed('conveyor_belt_mk1') * .1 + i / 4) % 1, 2);
+    }
+    activity.destroy();
+  });
+
+  it('moves mk3 cargo 5× as far as mk1 cargo for the same dt', () => {
+    // 两条相连的带子（不是死头，物品才前进）。
+    const mk1 = scene([belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 1 }]), belt('b',2,1)]);
+    const mk3 = scene([belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 1 }],0,'conveyor_belt_mk3'), belt('b',2,1)]);
+    const run = ({ data, activity, cargo }: ReturnType<typeof scene>) => {
+      const mesh = cargo(), path = conveyorPaths(Object.values(data.planet.buildings!), 4)[0];
+      activity.update(data); activity.animate(.1, 0);
+      const before = placement(mesh, path, surfaceTileSize(100,4), 0).u;
+      activity.animate(.1, .1);
+      const after = placement(mesh, path, surfaceTileSize(100,4), 0).u;
+      return ((after - before) % 1 + 1) % 1;
+    };
+    const slow = run(mk1), fast = run(mk3);
+    expect(slow).toBeCloseTo(beltVisualSpeed('conveyor_belt_mk1') * .1, 2);
+    expect(fast).toBeCloseTo(beltVisualSpeed('conveyor_belt_mk3') * .1, 2);
+    // DSP 档位比 1 : 2 : 5。
+    expect(fast / slow).toBeCloseTo(5, 1);
+    mk1.activity.destroy(); mk3.activity.destroy();
+  });
+
+  it('counts cargo of two belts stacked on the same tile independently', () => {
+    // 同一格：地面带 2 件 + 2 层高架带 3 件。两条带的货各画各的、计数不互相覆盖。
+    const { data, activity, cargo } = scene([
+      belt('ground',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 2 }]),
+      belt('high',1,1,'east','west',[{ item_id: 'copper_ore', quantity: 3 }],0,'conveyor_belt_mk1',2),
+    ]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4), base = 100 + size * BELT_BASE_LIFT;
+    expect(mesh.count).toBe(5);
+    const heights: number[] = [];
+    for (let i = 0; i < mesh.count; i++) {
+      const matrix = new THREE.Matrix4().fromArray(mesh.instanceMatrix.array, i * 16);
+      heights.push((new THREE.Vector3().setFromMatrixPosition(matrix).length() - base) / size);
+    }
+    // 2 个方块在 .09 带面上，3 个在 2 × .5 层高的带面上。
+    const ground = heights.filter(height => height < BELT_LEVEL_HEIGHT).length;
+    const high = heights.filter(height => height > BELT_LEVEL_HEIGHT).length;
+    expect(ground).toBe(2);
+    expect(high).toBe(3);
+    for (const height of heights.filter(height => height > BELT_LEVEL_HEIGHT)) {
+      expect(height).toBeCloseTo(BELT_DECK_TOP + 2 * BELT_LEVEL_HEIGHT + BELT_CARGO_CELL / 2, 2);
     }
     activity.destroy();
   });

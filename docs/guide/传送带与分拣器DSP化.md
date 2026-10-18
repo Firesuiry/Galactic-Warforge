@@ -14,9 +14,9 @@
    堵塞时物品停在格中而不是堆在队首（DSP 是向后堆到输出端）。
 5. 建造 ghost：分拣器只有两支「取/放」箭头 + 大徽章，**没有分拣器本体预览**；
    DSP 的放置预览是半透明机体 + 贴地细箭头。
-6. 2D 战术图里分拣器直接套用「belt」原型（一块带黄纹的深色方块），没有分拣器剪影。
+6. （历史）2D 战术图里分拣器直接套用「belt」原型，没有分拣器剪影——2D 视图已在第 20 轮删除。
 
-本文是三条并行工作的接口契约：**分拣器 3D／传送带 3D／2D+ghost**。
+本文是两条并行工作的接口契约：**分拣器 3D／传送带 3D（含 ghost）**。
 改动只在 `client-web`，服务端分拣器规则（朝向、range、cycle_ticks、last_transfer）**不动**。
 
 ## 0. 坐标系与单位
@@ -123,7 +123,7 @@
 - 物品边长 `.24` cell（`BELT_CARGO_CELL`），每格最多画 `.24` 间距下不叠的个数：**4 个**
   （`BELT_CARGO_MAX_PER_STACK = 4`）。
 - 位置：沿 `path.point(u)`；`u` 由全局时钟推进，同一网络共享相位（现状的 `this.time*.55` 保留，
-  速度改用 `beltItemSpeedTilesPerSec(throughput)` 口径，和 2D/贴图滚动同一份）；
+  速度沿用 `beltItemSpeedTilesPerSec(throughput)` 的口径（第 20 轮后只保留 3D 实现）；
   **朝向随流向**：用 `path.point(u±ε)` 的切向构造四元数（局部 +X 或 +Z 对齐切向即可，取带子较长轴）。
 - **高度**：物品中心 = 带面顶（.105）+ 半边长，不能陷进带面（现状 `normal * size * .1` 偏低）。
 - **堵塞（`source.active` 为 false 或带子 dead-end）**：物品不前进，并**向输出端堆叠**
@@ -138,7 +138,7 @@
 - `three/industrial-activity.test.ts`：堵塞时物品堆在队首（u 单调）、流动时 u 随时钟推进、
   物品中心高度 = deckTop + 半边长、弯道物品朝向跟随切向。
 
-## 3. 建造 ghost（3D）与 2D 战术图
+## 3. 建造 ghost（3D）
 
 ### 3.1 3D ghost（`planet-three-scene.ts` 的 `updateBuildGhost` 一带）
 
@@ -152,16 +152,10 @@
   （细箭头 + 箭头头即可），拖拽铺带时仍逐格画。
 - ghost 每次 hover 重建（现状每帧重建），不要缓存过期网格。
 
-### 3.2 2D 战术图（`planet-building-sprites.ts` + `planet-scene.ts`）
+### 3.2 2D 战术图
 
-- 新增 `sorter` 原型（`resolveBuildingArchetype` 里把 `sorter_*` / `pile_sorter` 映射到 `'sorter'`，
-  不再用 `'belt'`）：深色圆盘底座 + 从中心指向**放货方向**的铜色横臂 + 末端夹爪，
-  烘焙 4 向变体（缓存键追加方向，现有 belt 的方向机制复用）；mk2/mk3 用不同点缀色。
-- 传送带 `drawBelt`：改为「深色带面 + 两侧浅色护栏 + 弱方向纹」，把现有的粗黄 chevron 压到很弱
-  （平铺流动箭头 `createLogisticsFlowSprite` 仍是主流向提示，保留）。
-- 2D 分拣器「取→放」有向线保留（`syncSorterRoute`）：线宽再细一点、箭头改成小爪形可选；
-  取/放标签字号维持 1017 K4b 口径（`sorterGhostLabelPlacement` 的测试不许放宽）。
-- 2D 带上物品圆点（`syncBeltItemFlow`）：间距随 buffer 数量收紧，堵塞时堆在输出端。
+已随 2D 视图删除（第 20 轮）：`planet-building-sprites.ts` / `planet-scene.ts` 与 2D 带面方向纹、
+带上物品圆点一并下线，画面只保留 3D（见 §3.1）。
 
 ## 4. 不做的事
 
@@ -172,14 +166,14 @@
 ## 5. 验证方式（每个代理都要跑）
 
 1. 起环境：`GO_BIN_DIR=/home/firesuiry/sdk/go1.25.0/bin bash scripts/playtest-up.sh <N> --tick-rate 4`
-   （N 每个代理独占：分拣器 218 / 传送带 219 / 2D+ghost 220）。
+   （N 每个代理独占：分拣器 218 / 传送带 219 / ghost 220）。
 2. 造演示产线：`python3 /tmp/setup-belt-line.py --port <N*100>`（矿机→带→分拣器→熔炉→分拣器→带；
    幂等，可重复跑）。脚本会推进 tick 到产线真正流动。
 3. **驱动里必须先 `await page.emulateMedia({ reducedMotion: 'no-preference' })`**，否则
    `prefers-reduced-motion: reduce` 会让 3D 冻结，截图上完全看不出动画。
 4. 截图用 `L.focus(page, tile)` + `3D 放大` 按钮，近景一张、中景一张、带 move 的两帧动图对比；
-   2D 用「平面战术」按钮。截图放 `tmp/playtest-1018-<主题>/shots/`。
-5. `cd client-web && npx vitest run <相关测试文件>`；改了 ghost/2D 的跑
+   截图放 `tmp/playtest-1018-<主题>/shots/`。
+5. `cd client-web && npx vitest run <相关测试文件>`；改了 ghost 的跑
    `npx vitest run src/features/planet-map`；`npx tsc --noEmit` 或 `npm run build`。
 
 ## 6. 分工（互不重叠的写域）
@@ -188,7 +182,7 @@
 | --- | --- |
 | A 分拣器 | `three/industrial-models.ts`（只 `sorter()` 与 palette 若需要）、`three/sorter-animation.ts`(+test) |
 | B 传送带 | `three/conveyor-geometry.ts`(+test)、`three/logistics-marks.ts`（带面贴图）、`three/industrial-activity.ts`(+test) |
-| C 2D+ghost | `planet-three-scene.ts`（只 `updateBuildGhost`/`ghostArrow` 一带 + ghost 相关新文件）、`three/ghost-arrow*.ts`、`planet-building-sprites.ts`(+test)、`planet-scene.ts`（2D belt/sorter 视觉 + 2D ghost） |
+| C ghost | `planet-three-scene.ts`（只 `updateBuildGhost`/`ghostArrow` 一带 + ghost 相关新文件）、`three/ghost-arrow*.ts`（2D 源文件已在第 20 轮删除） |
 
 冲突纪律：A/B 不要碰 `planet-three-scene.ts`；C 不要碰 A/B 的文件；谁需要对方的导出常量，
 先在任务里发消息约定（如带面高度 `BELT_DECK_TOP` 由 B 导出）。

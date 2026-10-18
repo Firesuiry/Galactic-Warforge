@@ -39,9 +39,8 @@
 .planet-three__quality select { width:140px; min-width:0; padding:4px 8px; border-radius:3px; }
 .planet-map-shell--3d .planet-view-switch { border-radius:4px; right:24px; top:64px; background:#10212ce8; border-color:#809da02b; z-index:16; }
 .planet-map-shell--3d .planet-view-switch button { border-radius:3px; padding:6px 12px; }
-.planet-map-shell--3d .planet-view-switch button[aria-pressed=true] { background:#e4c1831c; color:#ecd1a1; border-color:#ebc68250; }
-/* §3.2 复核：调试面板与 2D 同一口径——浮在左下竖排图标栏上方（PlanetMapToolbar 的
-   --planet-hud-rail-top 实测值），不再在右上角挂一个「展开调试」文字按钮。 */
+/* §3.2 复核：调试面板浮在左下竖排图标栏上方（--planet-hud-rail-top 由 3D 导航列
+   实测写入），不在右上角挂一个「展开调试」文字按钮。 */
 .planet-map-shell--3d .debug-panel { left:24px; bottom:calc(var(--planet-hud-rail-top, 150px) + 8px); z-index:16; }
 .planet-map-shell--3d .planet-drawer { top:164px; }
 .planet-map-shell--3d .planet-drawer__body { border-radius:5px 0 0 5px; box-shadow:-8px 6px 30px #0004; border-color:#9bb3ba30; background:#11212af5; }
@@ -105,3 +104,9 @@
 /* 未解锁卡（试玩 1017 K4-01）：3D 卡是 86×78，两行科技名更宽裕；小锁仍贴右上角。 */
 .planet-map-shell--3d .planet-build-card__unlock { font-size:9px; line-height:1.25; padding:2px 3px; }
 .planet-map-shell--3d .planet-build-card__lock { right:2px; top:2px; }
+/* 状态行语义色（R20-A ②）：攻击模式暖红、战区模式青色。 */
+.planet-three__nav-status-line--attack { color:#ff9a8a; }
+.planet-three__nav-status-line--zone { color:#5ef7a1; }
+/* 战区拖拽预览（R20-A ⑥）：地面圆投影成 SVG 多边形（不是屏幕矩形）。 */
+.planet-three__zone-ring { position:absolute; inset:0; z-index:5; width:100%; height:100%; pointer-events:none; overflow:hidden; }
+.planet-three__zone-ring-label { font-size:12px; font-weight:600; paint-order:stroke; stroke:rgba(8,14,28,.9); stroke-width:3px; }

@@ -52,15 +52,10 @@ test('真实恒星系 3D 星体点击、镜头、行星往返与战术调兵入�
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
   await page.getByRole('link', { name: '恒星系 ↗', exact: true }).click();
   await expect(canvas).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('link', { name: '平面战术与调兵', exact: true }).click();
-  await expect(page).toHaveURL(/\/system\/sys-1\?view=2d/);
-  await expect(page.getByRole('link', { name: '3D 恒星系', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: '3D 恒星系', exact: true }).click();
-  await expect(canvas).toBeVisible({ timeout: 30_000 });
   expect(errors).toEqual([]);
 });
 
-test('390px 恒星系显示与星体卡、战术入口可操作', async ({ page }) => {
+test('390px 恒星系显示与星体卡可操作', async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
   const errors: string[] = [];
@@ -73,8 +68,6 @@ test('390px 恒星系显示与星体卡、战术入口可操作', async ({ page 
   await page.locator('.system-orbit__body').first().click();
   await expect(page.getByRole('link', { name: '进入行星', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '关闭星体详情', exact: true }).click();
-  await page.getByRole('link', { name: '平面战术与调兵', exact: true }).click();
-  await page.getByRole('link', { name: '3D 恒星系', exact: true }).click();
   await expect(page.locator('.system-orbit__canvas canvas')).toBeVisible({ timeout: 30_000 });
   expect(errors).toEqual([]);
 });

@@ -107,8 +107,8 @@ func newUnreachableHaulFixture(t *testing.T) unreachableHaulFixture {
 	return unreachableHaulFixture{core: core, ws: ws, depot: depot, blocked: blocked, open: open, robot: robot}
 }
 
-// 1) 到不了的终点：连续几次规划失败后放弃，释放认领、记冷却、改服务另一台熔炉，
-//    并发出 haul_unreachable 告警（details 带 unit_id / building_id / position）。
+//  1. 到不了的终点：连续几次规划失败后放弃，释放认领、记冷却、改服务另一台熔炉，
+//     并发出 haul_unreachable 告警（details 带 unit_id / building_id / position）。
 func TestAutoHaulGivesUpUnreachableTargetAndServesAnother(t *testing.T) {
 	f := newUnreachableHaulFixture(t)
 	// 夹具自检：被围死的熔炉外圈确实没有落点。
@@ -248,8 +248,8 @@ func TestRouteModeHaulStillWaitsWhenUnreachable(t *testing.T) {
 	}
 }
 
-// 5) 车上有货、唯一能收货的仓储也被围死：fallback 必须跳过冷却中的建筑，
-//    否则「放弃 → 改派回原目标 → 再放弃」会无限循环（每 ~15 tick 一条放弃事件）。
+//  5. 车上有货、唯一能收货的仓储也被围死：fallback 必须跳过冷却中的建筑，
+//     否则「放弃 → 改派回原目标 → 再放弃」会无限循环（每 ~15 tick 一条放弃事件）。
 func TestAutoHaulFallbackSkipsCooldownNoGiveUpLoop(t *testing.T) {
 	core, ws := haulTestCoreWithFace(t, 48)
 	depot := placeAutoBuilding(t, ws, "b-depot", model.BuildingTypeDepotMk1, model.Position{X: 20, Y: 20})

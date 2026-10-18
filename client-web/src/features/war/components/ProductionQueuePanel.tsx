@@ -301,7 +301,7 @@ export function ProductionQueuePanel({
       section: 'industry',
       invalidateKeys: [
         ['planet', scope.serverUrl, scope.playerId, activePlanetId],
-        ['planet-scene', scope.serverUrl, scope.playerId, activePlanetId],
+        ['planet-view', scope.serverUrl, scope.playerId, activePlanetId],
         ['summary', scope.serverUrl, scope.playerId],
       ],
       execute: () => client.cmdProduce(producer.id, selectedWorldUnit.id),

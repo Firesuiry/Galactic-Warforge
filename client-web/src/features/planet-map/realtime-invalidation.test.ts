@@ -26,7 +26,7 @@ describe('planet event refresh scheduling', () => {
     vi.useRealTimers();
   });
 
-  function observe(kind = 'planet-scene', planet = scope.planetId, delay = 450) {
+  function observe(kind = 'planet-view', planet = scope.planetId, delay = 450) {
     const key = [kind, scope.serverUrl, scope.playerId, planet];
     let server = 0;
     let requests = 0;

@@ -6,6 +6,7 @@ import type { SseStatus } from '@shared/sse';
 
 import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/planet-map/model';
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
+import { clampBeltElevation } from '@/features/planet-map/logistics-tier';
 
 /**
  * 需要点选目标的单位指令模式（A 攻击移动 / P 巡逻 / G 守卫）。
@@ -26,7 +27,18 @@ export type UnitOrderMode = 'attack_move' | 'patrol' | 'guard';
  */
 export type PlanetInteractionMode =
   | { kind: 'inspect' }
-  | { kind: 'build'; buildingType: string; recipeId?: string; direction: Direction; rotation?: 0 | 90 | 180 | 270 }
+  | {
+    kind: 'build';
+    buildingType: string;
+    recipeId?: string;
+    direction: Direction;
+    rotation?: 0 | 90 | 180 | 270;
+    /**
+     * 第 19 轮多层传送带（契约 §3.5）：目标高度 0–4，缺省 0。
+     * 只对 conveyor_belt_* 生效；切换建筑类型时归零（`beginBuild`）。
+     */
+    elevation?: number;
+  }
   | { kind: 'move' }
   | { kind: 'attack' }
   | { kind: 'unit_order'; order: UnitOrderMode }
@@ -36,264 +48,36 @@ export type PlanetInteractionMode =
 
 export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };
 
-export interface PlanetZoomLevel {
-  label: string;
-  mode: 'overview' | 'scene';
-  scale: number;
-  overviewStep?: number;
-  tileSize?: number;
-}
-
 /**
- * 缩放档（§4 细分网格后按 **cell** 重排）。
+ * 3D 行星页的总览请求口径（R20-D：2D 缩放档退役后只剩这一档）。
  *
- * 服务端 1 格 = 3×3 cell，因此同一视觉尺寸下 px/cell 只有旧 px/tile 的 1/3：
- * 旧默认 48px/tile 的观感 = 16px/cell。档位整体重排后：
- * - 概览档标签按 cell 记（1px/300cell ≈ 旧 1px/100tile）；
- * - scene 档从 1px/cell（远景）到 32px/cell（近景，1 cell = 32px，3×3 建筑 96px）。
- * 默认/回家档 = 16px/cell（建筑约 48px，传送带一格 16px，接近戴森球计划比例）。
+ * 固定按 1px/12cell 请求总览；大图把步长抬高到「单轴不超过 MAX_PLANET_OVERVIEW_CELLS_PER_AXIS」，
+ * 避免 288×288 的行星一次拉回 82944 个点。
  */
-export const PLANET_ZOOM_LEVELS: PlanetZoomLevel[] = [
-  {
-    label: '1px/300cell',
-    mode: 'overview',
-    scale: 0.01,
-    overviewStep: 300,
-  },
-  {
-    label: '1px/60cell',
-    mode: 'overview',
-    scale: 0.05,
-    overviewStep: 60,
-  },
-  {
-    label: '1px/12cell',
-    mode: 'overview',
-    scale: 0.25,
-    overviewStep: 12,
-  },
-  {
-    label: '1px',
-    mode: 'scene',
-    scale: 1,
-    tileSize: 1,
-  },
-  {
-    label: '2px',
-    mode: 'scene',
-    scale: 2,
-    tileSize: 2,
-  },
-  {
-    label: '4px',
-    mode: 'scene',
-    scale: 4,
-    tileSize: 4,
-  },
-  {
-    label: '8px',
-    mode: 'scene',
-    scale: 8,
-    tileSize: 8,
-  },
-  {
-    label: '16px',
-    mode: 'scene',
-    scale: 16,
-    tileSize: 16,
-  },
-  {
-    label: '24px',
-    mode: 'scene',
-    scale: 24,
-    tileSize: 24,
-  },
-  {
-    label: '32px',
-    mode: 'scene',
-    scale: 32,
-    tileSize: 32,
-  },
-];
-/**
- * 默认缩放档：PLANET_ZOOM_LEVELS[7] = 16px/cell。
- * 1 cell 是传送带/单位的最小件，16px 时 3×3 熔炉 48px、5×5 HQ 80px，
- * 与旧「48px/tile」的观感一致（旧 1 tile = 新 3 cell）。
- */
-export const DEFAULT_PLANET_ZOOM_INDEX = 7;
-/** 概览双击进入 scene 的落点档：与回家档一致（16px/cell）。 */
-export const DEFAULT_PLANET_OVERVIEW_FOCUS_ZOOM_INDEX = DEFAULT_PLANET_ZOOM_INDEX;
-/** "回家"视角缩放档：PLANET_ZOOM_LEVELS[7] = 16px/cell，大行星首次进入/⌂ 聚焦基地时使用。 */
-export const PLANET_HOME_ZOOM_INDEX = 7;
-/**
- * requestFocus 缩放哨兵：由渲染侧按"视口 × 地图尺寸"自适应选档（resolvePlanetFitZoomIndex）。
- * 小行星整图放大到 60-80% 占屏，大行星回落"回家"档（行为不变）。
- */
-export const PLANET_FOCUS_FIT_ZOOM = -1;
-/** 自适应选档的目标占屏比：地图内容占视口短边 ~70%（可接受区间 60-80%）。 */
-export const PLANET_FIT_TARGET_OCCUPANCY = 0.7;
-/**
- * 首次进入时的「能看清产线」下限（px/cell）。
- *
- * 试玩 1015 §6-7：288×288 的遭遇战行星在 16px/cell 回家档下整图 4608px，
- * 远超视口，只能看到基地附近十几格；整图缩到 70% 占屏要 ~3px/cell，
- * 那时 3×3 建筑只有 9px，看不清是什么。首次进入的取景目标是「基地 + 周围
- * 一屏产线」，所以选档优先保证每格至少这么多像素。
- */
-export const MIN_PLANET_HOME_FOCUS_TILE_SIZE = 16;
-/** scene 档缺省 cell 边长（px/cell），与默认缩放档一致。 */
-export const DEFAULT_PLANET_SCENE_TILE_SIZE = 16;
+export const PLANET_OVERVIEW_STEP = 12;
 export const MAX_PLANET_OVERVIEW_CELLS_PER_AXIS = 128;
-/**
- * scene 档单轴可见 cell 上限。
- *
- * 细网格下面宽 288 cell（旧 96 tile），视口 1440px 时 16px/cell 正好 90 cell 全宽入画；
- * 再放大一档（24/32px）就要靠 /scene 窗口取景，窗口越小边缘实体越晚出现。
- * 320 保留「整面铺满 + 少量余量」的余量，同时把低分辨率档（1px/cell）的 /scene 请求
- * 限制在 320×320（服务端 maxSceneWindowSize=257 会自行再钳一次）。
- */
-export const MAX_PLANET_SCENE_TILES_PER_AXIS = 320;
-
-export function getPlanetZoomLevel(zoomIndex: number) {
-  return PLANET_ZOOM_LEVELS[Math.min(Math.max(zoomIndex, 0), PLANET_ZOOM_LEVELS.length - 1)] ?? PLANET_ZOOM_LEVELS[DEFAULT_PLANET_ZOOM_INDEX];
-}
-
-export function getPlanetZoomScale(zoomIndex: number) {
-  return getPlanetZoomLevel(zoomIndex).scale;
-}
-
-export function getPlanetZoomLabel(zoomIndex: number) {
-  return getPlanetZoomLevel(zoomIndex).label;
-}
 
 export function getPlanetOverviewRequestStep(
-  zoomIndex: number,
   mapWidth: number,
   mapHeight: number,
-) {
-  const zoomLevel = getPlanetZoomLevel(zoomIndex);
-  if (zoomLevel.mode !== 'overview') {
-    return undefined;
-  }
-
-  const requestedStep = Math.max(zoomLevel.overviewStep ?? 100, 1);
+): number {
   if (mapWidth <= 0 || mapHeight <= 0) {
-    return requestedStep;
+    return PLANET_OVERVIEW_STEP;
   }
-
   const protectedStep = Math.max(
     Math.ceil(mapWidth / MAX_PLANET_OVERVIEW_CELLS_PER_AXIS),
     Math.ceil(mapHeight / MAX_PLANET_OVERVIEW_CELLS_PER_AXIS),
     1,
   );
-  return Math.max(requestedStep, protectedStep);
+  return Math.max(PLANET_OVERVIEW_STEP, protectedStep);
 }
 
-export function getPlanetZoomStatusLabel(
-  zoomIndex: number,
-  mapWidth: number,
-  mapHeight: number,
-) {
-  const zoomLevel = getPlanetZoomLevel(zoomIndex);
-  if (zoomLevel.mode !== 'overview') {
-    return zoomLevel.label;
-  }
-
-  const actualStep = getPlanetOverviewRequestStep(zoomIndex, mapWidth, mapHeight);
-  if (!actualStep || actualStep === zoomLevel.overviewStep) {
-    return zoomLevel.label;
-  }
-  return `${zoomLevel.label} (实际 1px/${actualStep}cell)`;
-}
-
-export function isPlanetOverviewZoom(zoomIndex: number) {
-  return getPlanetZoomLevel(zoomIndex).mode === 'overview';
-}
-
-export function getPlanetRenderTileSize(
-  zoomIndex: number,
-  viewportWidth: number,
-  viewportHeight: number,
-  mapWidth: number,
-  mapHeight: number,
-) {
-  const zoomLevel = getPlanetZoomLevel(zoomIndex);
-  if (zoomLevel.mode === 'overview') {
-    return Math.max(
-      Math.min(
-        viewportWidth / Math.max(mapWidth, 1),
-        viewportHeight / Math.max(mapHeight, 1),
-      ),
-      0.01,
-    );
-  }
-
-  const requestedTileSize = zoomLevel.tileSize ?? DEFAULT_PLANET_SCENE_TILE_SIZE;
-  const protectedTileSize = Math.max(
-    Math.ceil(viewportWidth / MAX_PLANET_SCENE_TILES_PER_AXIS),
-    Math.ceil(viewportHeight / MAX_PLANET_SCENE_TILES_PER_AXIS),
-    1,
-  );
-  return Math.max(requestedTileSize, protectedTileSize);
-}
-
-export function resolvePlanetZoomIndex(scale: number) {
-  return PLANET_ZOOM_LEVELS.reduce((bestIndex, currentZoom, index) => (
-    Math.abs(currentZoom.scale - scale) < Math.abs(PLANET_ZOOM_LEVELS[bestIndex].scale - scale)
-      ? index
-      : bestIndex
-  ), DEFAULT_PLANET_ZOOM_INDEX);
-}
-
-/**
- * 小行星初始相机自适应选档（PLANET_FOCUS_FIT_ZOOM 的结算）：
- * - 大行星（整图放不进视口）行为不变，直接返回 fallback（回家档 16px/cell）；
- * - 小图在"整图可入视口、且每格 ≥ MIN_PLANET_HOME_FOCUS_TILE_SIZE"的 scene 档中，
- *   挑选占屏比（max(世界宽/视口宽, 世界高/视口高)）最接近 70% 的一档——
- *   离散翻倍档位无法精确命中 60-80% 区间时取最近可行解；
- * - 视口/地图尺寸异常时返回 fallback。
- */
-export function resolvePlanetFitZoomIndex(
-  viewportWidth: number,
-  viewportHeight: number,
-  mapWidth: number,
-  mapHeight: number,
-  fallbackZoomIndex = PLANET_HOME_ZOOM_INDEX,
-) {
-  if (viewportWidth <= 0 || viewportHeight <= 0 || mapWidth <= 0 || mapHeight <= 0) {
-    return fallbackZoomIndex;
-  }
-  let bestIndex = -1;
-  let bestScore = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < PLANET_ZOOM_LEVELS.length; index += 1) {
-    if (PLANET_ZOOM_LEVELS[index].mode !== 'scene') {
-      continue;
-    }
-    const tileSize = getPlanetRenderTileSize(index, viewportWidth, viewportHeight, mapWidth, mapHeight);
-    const worldWidth = mapWidth * tileSize;
-    const worldHeight = mapHeight * tileSize;
-    // 必须整图入视口（不触发环绕/裁切）；低于可读下限的档一律不选——整图缩到
-    // 70% 占屏的档在 288×288 行星上是 3px/cell，3×3 建筑只有 9px，看不清（1015 §6-7）。
-    if (worldWidth > viewportWidth || worldHeight > viewportHeight) {
-      continue;
-    }
-    if (tileSize < MIN_PLANET_HOME_FOCUS_TILE_SIZE) {
-      continue;
-    }
-    const occupancy = Math.max(worldWidth / viewportWidth, worldHeight / viewportHeight);
-    const score = Math.abs(occupancy - PLANET_FIT_TARGET_OCCUPANCY);
-    if (score < bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
-  }
-  // 小图：选「整图入视口且每格 ≥ 16px」里最接近 70% 占屏的一档。
-  if (bestIndex >= 0) {
-    return bestIndex;
-  }
-  // 大行星（回家档下整图已超视口）：固定回家档，取景交给 base 聚焦 + 围绕视口的场景窗口
-  // （16px/cell：3×3 熔炉 48px、5×5 HQ 80px，与旧「48px/tile」观感一致）。
-  return fallbackZoomIndex;
+/** 总览步长的展示文案（步长被抬高时追加「实际 1px/Ncell」）。 */
+export function getPlanetOverviewStepLabel(mapWidth: number, mapHeight: number): string {
+  const actualStep = getPlanetOverviewRequestStep(mapWidth, mapHeight);
+  return actualStep === PLANET_OVERVIEW_STEP
+    ? '1px/12cell'
+    : `1px/12cell (实际 1px/${actualStep}cell)`;
 }
 
 export interface PlanetSceneWindow {
@@ -301,17 +85,6 @@ export interface PlanetSceneWindow {
   y: number;
   width: number;
   height: number;
-}
-
-/**
- * 主地图画布的像素视口与当前 tile 边长。
- * 由 PlanetMapPixi 写入（仅在 resize/zoom 时变更），供 minimap 等页级组件
- * 计算视口矩形而不必嵌进 PlanetMapPixi 内部（保持拖拽热路径隔离）。
- */
-export interface PlanetMapProjection {
-  viewportWidth: number;
-  viewportHeight: number;
-  tileSize: number;
 }
 
 export interface PlanetLayerState {
@@ -329,18 +102,9 @@ export interface PlanetLayerState {
   threat: boolean;
 }
 
-export interface PlanetCameraState {
-  offsetX: number;
-  offsetY: number;
-  zoomIndex: number;
-  ready: boolean;
-}
-
 interface FocusRequest {
   nonce: number;
   position: TilePoint;
-  /** 聚焦时一并切到的缩放档（PLANET_FOCUS_FIT_ZOOM = 小行星自适应占屏）；缺省保持当前档。 */
-  zoomIndex?: number;
 }
 
 /** 黑雾袭击预警（enemy_wave_incoming，E3）：小地图红线/主图标记/警报跳转共用。 */
@@ -384,21 +148,9 @@ function writeDockedPreference(docked: boolean): void {
   }
 }
 
-/**
- * 缩放请求：所有缩放入口（滚轮/±按钮/档位按钮/快捷键）的统一通道。
- * anchor 为视口内像素坐标（zoom-to-cursor 锚点）；null = 视口中心。
- * 数据层档位仍是离散的（zoomIndex 立即落库），渲染层由 Pixi 场景做补间。
- */
-interface ZoomRequest {
-  nonce: number;
-  zoomIndex: number;
-  anchor: TilePoint | null;
-}
-
 interface PlanetViewState {
   planetId: string;
   layers: PlanetLayerState;
-  camera: PlanetCameraState;
   sceneWindow: PlanetSceneWindow;
   hoveredTile: TilePoint | null;
   selected: SelectedEntity | null;
@@ -440,8 +192,6 @@ interface PlanetViewState {
    */
   craftRecipeId: string;
   focusRequest: FocusRequest | null;
-  zoomRequest: ZoomRequest | null;
-  mapProjection: PlanetMapProjection;
   /**
    * 玩家的「家」（HQ 优先，见 resolveHomeTile），由行星页按**跨窗口累积**的己方实体算出。
    * 场景查询只返回镜头窗口内的实体：镜头在荒郊时窗口里没有基地，「聚焦基地/回到基地」
@@ -452,7 +202,6 @@ interface PlanetViewState {
 
 interface PlanetViewActions {
   resetForPlanet: (planetId: string) => void;
-  resetCamera: () => void;
   toggleLayer: (layer: PlanetLayerKey) => void;
   setHoveredTile: (tile: TilePoint | null) => void;
   /** 收起/展开底部快捷栏（收起后只留一行把手）。 */
@@ -471,12 +220,14 @@ interface PlanetViewActions {
   /** 记录一条黑雾袭击预警（按事件 id 去重，超时条目顺带清理）。 */
   recordIncomingWave: (wave: IncomingWave) => void;
   setInteractionMode: (mode: PlanetInteractionMode) => void;
+  /** 进入建造模式：切换建筑类型时高度归零（同类型重进也归零，契约 §3.5）。 */
+  beginBuild: (mode: Extract<PlanetInteractionMode, { kind: 'build' }>) => void;
+  /** 升降建造目标高度（PageUp/PageDown 与建造栏 ▲▼ 共用）；非传送带建造模式忽略。 */
+  adjustBuildElevation: (delta: number) => void;
   /** 退出当前交互模式回到 inspect（Esc/右键）。 */
   exitInteractionMode: () => void;
-  setCamera: (camera: Partial<PlanetCameraState>) => void;
   setSceneWindow: (sceneWindow: PlanetSceneWindow) => void;
   setLayers: (layers: Partial<PlanetLayerState>) => void;
-  setZoomIndex: (zoomIndex: number) => void;
   setSseStatus: (status: SseStatus) => void;
   setLastEventId: (eventId: string) => void;
   markFullSync: () => void;
@@ -487,13 +238,9 @@ interface PlanetViewActions {
   toggleDebugOpen: () => void;
   /** 调试模式开关（Ctrl+Shift+D）：开启时同时展开调试面板。 */
   toggleDebugMode: () => void;
-  requestFocus: (position: TilePoint, zoomIndex?: number) => void;
+  requestFocus: (position: TilePoint) => void;
   consumeFocusRequest: (nonce: number) => void;
   setHomeTile: (tile: TilePoint | null) => void;
-  /** 请求切到指定缩放档（anchor=null 时以视口中心为锚）。 */
-  requestZoom: (zoomIndex: number, anchor?: TilePoint | null) => void;
-  consumeZoomRequest: (nonce: number) => void;
-  setMapProjection: (projection: PlanetMapProjection) => void;
 }
 
 export type PlanetViewStore = PlanetViewState & PlanetViewActions;
@@ -512,15 +259,6 @@ function createDefaultLayers(): PlanetLayerState {
     pipelines: false,
     construction: true,
     threat: false,
-  };
-}
-
-function createDefaultCamera(): PlanetCameraState {
-  return {
-    offsetX: 0,
-    offsetY: 0,
-    zoomIndex: DEFAULT_PLANET_ZOOM_INDEX,
-    ready: false,
   };
 }
 
@@ -552,7 +290,6 @@ function createInitialState(planetId = ''): PlanetViewState {
   return {
     planetId,
     layers: createDefaultLayers(),
-    camera: createDefaultCamera(),
     sceneWindow: createDefaultSceneWindow(),
     hoveredTile: null,
     selected: null,
@@ -572,8 +309,6 @@ function createInitialState(planetId = ''): PlanetViewState {
     buildBarCategoriesOpen: true,
     craftRecipeId: '',
     focusRequest: null,
-    zoomRequest: null,
-    mapProjection: { viewportWidth: 0, viewportHeight: 0, tileSize: 0 },
     homeTile: null,
   };
 }
@@ -582,14 +317,6 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   ...createInitialState(),
   resetForPlanet: (planetId) => {
     set(resetKeepingPreferences(planetId));
-  },
-  resetCamera: () => {
-    set((state) => ({
-      camera: {
-        ...createDefaultCamera(),
-        zoomIndex: state.camera.zoomIndex,
-      },
-    }));
   },
   toggleLayer: (layer) => {
     set((state) => ({
@@ -655,16 +382,21 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
   setInteractionMode: (interactionMode) => {
     set({ interactionMode });
   },
+  beginBuild: (mode) => {
+    // 切换建筑类型 → 高度归零：缺省字段即 0（不写 elevation:0，保持旧模式对象形状）。
+    set({ interactionMode: { ...mode, elevation: undefined } });
+  },
+  adjustBuildElevation: (delta) => {
+    set((state) => {
+      const mode = state.interactionMode;
+      if (mode.kind !== 'build' || !mode.buildingType.startsWith('conveyor_belt')) return state;
+      const next = clampBeltElevation((mode.elevation ?? 0) + delta);
+      if (next === (mode.elevation ?? 0)) return state;
+      return { interactionMode: { ...mode, elevation: next === 0 ? undefined : next } };
+    });
+  },
   exitInteractionMode: () => {
     set({ interactionMode: INSPECT_MODE });
-  },
-  setCamera: (camera) => {
-    set((state) => ({
-      camera: {
-        ...state.camera,
-        ...camera,
-      },
-    }));
   },
   setSceneWindow: (sceneWindow) => {
     set((state) => (
@@ -681,14 +413,6 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       layers: {
         ...state.layers,
         ...layers,
-      },
-    }));
-  },
-  setZoomIndex: (zoomIndex) => {
-    set((state) => ({
-      camera: {
-        ...state.camera,
-        zoomIndex,
       },
     }));
   },
@@ -732,22 +456,11 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       return { debugMode, debugOpen: debugMode };
     });
   },
-  requestFocus: (position, zoomIndex) => {
+  requestFocus: (position) => {
     set(() => ({
       focusRequest: {
         nonce: Date.now(),
         position,
-        ...(zoomIndex === undefined
-          ? {}
-          : {
-            // PLANET_FOCUS_FIT_ZOOM 哨兵原样透传（渲染侧结算），其余档位钳到合法区间。
-            zoomIndex: zoomIndex === PLANET_FOCUS_FIT_ZOOM
-              ? PLANET_FOCUS_FIT_ZOOM
-              : Math.min(
-                Math.max(zoomIndex, 0),
-                PLANET_ZOOM_LEVELS.length - 1,
-              ),
-          }),
       },
     }));
   },
@@ -763,34 +476,6 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
       state.homeTile?.x === tile?.x && state.homeTile?.y === tile?.y ? {} : { homeTile: tile }
     ));
   },
-  requestZoom: (zoomIndex, anchor = null) => {
-    set(() => ({
-      zoomRequest: {
-        nonce: Date.now(),
-        zoomIndex: Math.min(Math.max(zoomIndex, 0), PLANET_ZOOM_LEVELS.length - 1),
-        anchor,
-      },
-    }));
-  },
-  consumeZoomRequest: (nonce) => {
-    set((state) => (
-      state.zoomRequest?.nonce === nonce
-        ? { zoomRequest: null }
-        : {}
-    ));
-  },
-  setMapProjection: (projection) => {
-    set((state) => {
-      if (
-        state.mapProjection.viewportWidth === projection.viewportWidth
-        && state.mapProjection.viewportHeight === projection.viewportHeight
-        && state.mapProjection.tileSize === projection.tileSize
-      ) {
-        return state;
-      }
-      return { mapProjection: projection };
-    });
-  },
 }));
 
 export function resetPlanetViewStore() {
@@ -799,7 +484,6 @@ export function resetPlanetViewStore() {
     ...createInitialState(),
     buildBarDocked: false,
     resetForPlanet: usePlanetViewStore.getState().resetForPlanet,
-    resetCamera: usePlanetViewStore.getState().resetCamera,
     toggleLayer: usePlanetViewStore.getState().toggleLayer,
     setHoveredTile: usePlanetViewStore.getState().setHoveredTile,
     setBuildBarDocked: usePlanetViewStore.getState().setBuildBarDocked,
@@ -811,11 +495,11 @@ export function resetPlanetViewStore() {
     setControlGroup: usePlanetViewStore.getState().setControlGroup,
     recordIncomingWave: usePlanetViewStore.getState().recordIncomingWave,
     setInteractionMode: usePlanetViewStore.getState().setInteractionMode,
+    beginBuild: usePlanetViewStore.getState().beginBuild,
+    adjustBuildElevation: usePlanetViewStore.getState().adjustBuildElevation,
     exitInteractionMode: usePlanetViewStore.getState().exitInteractionMode,
-    setCamera: usePlanetViewStore.getState().setCamera,
     setSceneWindow: usePlanetViewStore.getState().setSceneWindow,
     setLayers: usePlanetViewStore.getState().setLayers,
-    setZoomIndex: usePlanetViewStore.getState().setZoomIndex,
     setSseStatus: usePlanetViewStore.getState().setSseStatus,
     setLastEventId: usePlanetViewStore.getState().setLastEventId,
     markFullSync: usePlanetViewStore.getState().markFullSync,
@@ -828,8 +512,5 @@ export function resetPlanetViewStore() {
     requestFocus: usePlanetViewStore.getState().requestFocus,
     consumeFocusRequest: usePlanetViewStore.getState().consumeFocusRequest,
     setHomeTile: usePlanetViewStore.getState().setHomeTile,
-    requestZoom: usePlanetViewStore.getState().requestZoom,
-    consumeZoomRequest: usePlanetViewStore.getState().consumeZoomRequest,
-    setMapProjection: usePlanetViewStore.getState().setMapProjection,
   });
 }

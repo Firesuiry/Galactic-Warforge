@@ -282,6 +282,7 @@ func TestMechaCraftJobSnapshotCloneRestoreAndDeathRefund(t *testing.T) {
 }
 
 func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T) {
+	t.Parallel()
 	cfg, err := config.Load("../../config.yaml")
 	if err != nil {
 		t.Fatal(err)

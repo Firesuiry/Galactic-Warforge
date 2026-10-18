@@ -2,9 +2,9 @@
  * 战区划定控件（C4）：行星地图左下角工具条旁的「战区」按钮 + 浮层。
  *
  * 浮层内选战区 + 区域类型后进入 theater_zone 拖拽模式（地图上左键拖矩形）；
- * 无战区时内联创建（theater_create）。拖拽落点由 PlanetMapPixi 回调 PlanetPage 提交
- * theater_define_zone（planet_id + position + radius 由拖拽几何换算）。
- * 仅 2D 平面战术视图支持拖拽；3D 下提示切换。
+ * 无战区时内联创建（theater_create）。拖拽落点由 PlanetMapThree（R20-A ③）
+ * 回调 PlanetPage 提交 theater_define_zone（planet_id + position + radius
+ * 由拖拽几何换算）。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,15 +33,13 @@ const ZONE_TYPES: WarTheaterZoneType[] = [
 interface PlanetTheaterControlsProps {
   planetId: string;
   theaters: WarTheaterView[];
-  /** 3D 球面视图：拖拽划定只在 2D 平面战术视图可用（浮层给切换提示）。 */
-  dimensional: boolean;
-  onChanged?: () => void;
+  /** 命令已拿到服务端回执：参数是该条命令的 `response.request_id`，调用方据此等结算后刷新。 */
+  onChanged?: (requestId: string) => void;
 }
 
 export function PlanetTheaterControls({
   planetId,
   theaters,
-  dimensional,
   onChanged,
 }: PlanetTheaterControlsProps) {
   const client = useApiClient();
@@ -89,7 +87,9 @@ export function PlanetTheaterControls({
         event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
         limit: 50,
       }),
-    }).then(() => onChanged?.());
+    }).then((response) => {
+      if (response) onChanged?.(response.request_id);
+    });
     setCreateId('');
     setCreateName('');
   }
@@ -155,13 +155,9 @@ export function PlanetTheaterControls({
                   ))}
                 </Select>
               </label>
-              {dimensional ? (
-                <p className="subtle-text">拖拽划定需切到「平面战术」视图（右上视图开关）。</p>
-              ) : (
-                <button className="secondary-button" type="button" onClick={handleStartZone}>
-                  开始拖拽划定
-                </button>
-              )}
+              <button className="secondary-button" type="button" onClick={handleStartZone}>
+                开始拖拽划定
+              </button>
               <details className="planet-theater-controls__more">
                 <summary>新建战区</summary>
                 <div className="planet-theater-controls__create">
@@ -199,8 +195,8 @@ export function PlanetTheaterControls({
         aria-label="战区划定"
         className={
           zoneModeActive
-            ? 'secondary-button planet-map-toolbar__button planet-theater-controls__button--active'
-            : 'secondary-button planet-map-toolbar__button'
+            ? 'secondary-button planet-three__nav-btn planet-theater-controls__button--active'
+            : 'secondary-button planet-three__nav-btn'
         }
         onClick={() => setPanelOpen((open) => !open)}
         title="战区划定"

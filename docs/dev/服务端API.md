@@ -147,7 +147,9 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 结果码
 
-`OK`、`INVALID_TARGET`、`NOT_OWNER`、`OUT_OF_RANGE`、`INSUFFICIENT_RESOURCE`、`DUPLICATE`、`VALIDATION_FAILED`、`ENTITY_NOT_FOUND`、`POSITION_OCCUPIED`、`UNAUTHORIZED`、`EXECUTOR_UNAVAILABLE`、`EXECUTOR_BUSY`、`GAME_FINISHED`。
+`OK`、`INVALID_TARGET`、`NOT_OWNER`、`OUT_OF_RANGE`、`INSUFFICIENT_RESOURCE`、`DUPLICATE`、`VALIDATION_FAILED`、`ENTITY_NOT_FOUND`、`POSITION_OCCUPIED`、`INVALID_ELEVATION`、`UNAUTHORIZED`、`EXECUTOR_UNAVAILABLE`、`EXECUTOR_BUSY`、`GAME_FINISHED`。
+
+`INVALID_ELEVATION`：`build` 的 `elevation` 参数不合法（第 19 轮契约 §3.2）——非传送带给 >0（「只有传送带可以架高」）、越界（「高度只能 0–4 层」）、高架带没给明确方向（「高架传送带必须有明确的输出方向（不能是 auto）」）。`POSITION_OCCUPIED`：同格同层已有带子/施工任务，或高架带下面压着非低矮物流建筑，或地面建筑占地内有高架带；提示会写明层号与占用者。
 
 `GAME_FINISHED`：胜利宣判后对局进入 `finished`，所有常规游戏命令在网关阶段以 `accepted=false` + 该码拒绝，已入队的存量命令执行时也以该码拒绝；管理面（`/save`、`/rollback`、`/games/*`）与查询不受限。
 
@@ -181,7 +183,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `blueprint_set_component` | planet | — | `blueprint_id`, `slot_id`, `component_id` | `blueprint_set_component` | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | planet | — | `blueprint_id` | `blueprint_validate` | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | planet | — | `parent_blueprint_id`, `blueprint_id`, `allowed_slot_ids`, `name?` | `blueprint_variant` | Create a controlled variant from a preset or player blueprint |
-| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?` | `build` | Build any server-side buildable structure |
+| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?`, `elevation?` | `build` | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | system | — | `system_id`, `layer_index`, `node_a_id`, `node_b_id` | `build_dyson_frame` | Build a Dyson sphere frame |
 | `build_dyson_node` | system | — | `system_id`, `layer_index`, `latitude`, `longitude`, `orbit_radius?` | `build_dyson_node` | Build a Dyson sphere node |
 | `build_dyson_shell` | system | — | `system_id`, `layer_index`, `latitude_min`, `latitude_max`, `coverage` | `build_dyson_shell` | Build a Dyson sphere shell |
@@ -243,7 +245,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
-- `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。
+- `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。 elevation 只对 conveyor_belt_mk1/2/3 有效（0–4，缺省 0 = 地面）；高架带必须有明确 direction（不能 auto），地面占用只能是空地或低矮物流建筑。
 - `configure_sorter`：只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
@@ -265,6 +267,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 并发上限按玩家跨全部行星聚合：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
+  - **多层传送带（第 19 轮契约 §3）**：`elevation`（0–4，缺省 0 = 地面）只对 `conveyor_belt_mk1/mk2/mk3` 有效；其它建筑给 >0 → `INVALID_ELEVATION`「只有传送带可以架高」，越界同码「高度只能 0–4 层」。高架带方向：`direction` 优先，其次按 `rotation` 推（90=east、180=south、270=west、0=north），都没给时缺省 `east`；显式 `auto` 仍被拒绝（`INVALID_ELEVATION`）。高架格的地面占用只能是空地或低矮物流建筑（`conveyor_belt_*`、`splitter`、`automatic_piler`、`traffic_monitor`、`sorter_*`、`pile_sorter`，含施工中），否则 `POSITION_OCCUPIED`「高架传送带不能架在建筑上方」/「第 N 层该格下方有地面施工任务：<建筑>」；反过来，地面层造非低矮物流建筑时占地内不能有高架带或高架施工任务 → `POSITION_OCCUPIED`「上方有高架传送带」/「该格上方第 N 层已有传送带施工任务：<建筑>」。高架带不占 `TileBuilding`（地面单位可从下面走过，分拣器与建筑直连 IO 只接地面层），建筑 JSON 的 `conveyor.elevation` 表示所在层。连接规则：同层优先；同层没连上时看邻格 `a±1` 层的**纯传送带**，且必须是直行延续（`output == d'`），坡道不许转弯/侧汇；否则死头。
   - **占地（细分网格）**：`position` 是占地原点（左上 cell）。建筑按 `buildings.yaml` 的 `footprint {width, height}` 真实占 1×1 / 2×2 / 3×3 / 5×5 个 cell，旋转 90/270 交换宽高；占地内每一格都必须在界内、可建造（`foundation` 例外，它自己铺地形）且空闲，否则 `INVALID_TARGET`（「占地地块 (x,y) 不可建造」）或 `POSITION_OCCUPIED`。`TileBuilding` 与 `Grid[].BuildingID` 为占地每一格登记，拆除时整块释放；垂直叠层仍按原点 `position.z` 递增。
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
   - **采集建筑只采一种矿**（DSP 口径，试玩 1016 报告 B2）：下单时按覆盖框里**数量最多的矿种**定死这一台采什么（平票取物品 ID 较小者，结果确定），写进施工任务的 `mining_item`，落成时写进建筑的 `mining_item`（`build` 回执也会写明「施工任务已排队（位置 x,y），将开采「铁矿石」」）。覆盖框里混了别的矿种时那些矿脉一格都不采——不会出现「铜矿先攒满输出缓冲、把整条产线堵死」。校验仍只要求覆盖框里有允许的矿（`INVALID_TARGET`：「<建筑> 占地及外圈没有可开采的资源节点」/「<建筑> 无法开采资源 <kind>」）。
@@ -346,10 +349,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.6 物流
 
-- 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。
-- 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（`sorter_mk1/2/3` 的 `range` = 1/2/3，`pile_sorter` = 3）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
+- 传送带：`conveyor.buffer` 为带内物品堆（队首为即将送出端）。`conveyor.elevation`（omitempty，缺省 0 = 地面）是所在层（第 19 轮契约 §3）：0 写 `TileBuilding`，1–4 只写 `BeltLayers`（`x:y@e` 索引），地面单位从下面走过、分拣器与建筑直连 IO 只接地面层。施工任务的 `elevation`（omitempty）是目标层，客户端本地预检用它判断高架格能否放置。
+- 分拣器（第 16 轮契约 §2，DSP 口径）：**有朝向，跟随建造时的 `rotation`**——背面是取货端、正面是放货端，沿该朝向轴前后各扫 `range` 格（第 19 轮起四种分拣器的 `range` 全为 3）。分拣器耗电（`sorter_mk1/2` 1、`sorter_mk3`/`pile_sorter` 2 点/tick，需接入电网），没电时 `runtime.state = no_power`、不搬运；往返周期 = `cycle_ticks × max(1, 取端步数 + 放端步数 − 1)`（最短布局「带|分拣器|机器」算 1 个长度单位）。取货端是传送带时可以从任意路过的带格上取（不要求带尾正对分拣器）；放货端是传送带时从侧面插入；端点是建筑时接占地内任意一格。
 - **取货端是传送带时扫描整段带子**（试玩 1016 报告 B1）：按顺序取第一个「过滤允许 + 放货端收得下」的栈，跳过被过滤掉或目标不收的物品，其余货的顺序不变。旧实现只看队首那一栈——队首是下游不要的矿种时后面的货永远取不到，配上「带尾对着分拣器、下游不收」的布局就是整线死锁（带满 → 上游矿机输出缓冲满 → 矿机停采）。带子长期堵死时另发 `belt_blocked` 告警（见 §6.7）。
-- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × 两端点距离格数`，`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
+- 节拍：**一次往返搬 1 件**（`sorter_cargo_stacking` 每级 +1 每趟栈数，`pile_sorter` 整堆抬），往返周期 = `cycle_ticks × max(1, 取端步数 + 放端步数 − 1)`（最短布局「带|分拣器|机器」算 1 个长度单位），`sorter_mk1/2/3` 的 `cycle_ticks` = 6/3/2、`pile_sorter` = 2。没搬动就不推进周期（`sorter.next_trip_tick` 不变），下一 tick 再试。只往机器里放**当前配方需要、且输入缓冲还没满**的物品（`applyProductionInputLimit`）。仅 `running` 时搬运。
 - **从生产建筑取货只拿产物**（试玩 1016 报告 B-2，DSP 口径）：分拣器 / 传送带直连 / 管道 / 运输机器人对带 `production` 功能的建筑（熔炉、制造台、研究站、精炼厂、化工厂……）只导出**输出缓冲**里的成品；主库存 / 输入缓冲里尚未加工的原料不会被抽走（否则输出端分拣器会把刚到货的铁矿搬上产物带，机器永远吃不饱）。仓储类建筑（储物仓、储液罐、补给站、物流站、战场分析基站等无 `production` 功能的建筑）主库存整仓可导出。循环配方的反馈料同样只算输出缓冲里的产物份额。玩家手工取货（`transfer_item` `direction=to_player`）不受此限，仍可取出机器里的原料。
 - `configure_sorter` 只配过滤（`allow|deny` + 物品 ID 全量替换，省略即 `allow` + 空清单），失败原子拒绝、不部分生效；传方向字段（`input_directions` / `output_directions`）一律 `VALIDATION_FAILED`——改方向要拆除后按新朝向重建（客户端用 R 旋转）。`sorter.last_transfer`（`tick`、`sequence`、源/目标 ID 与位置、`item_id`、`quantity`）只在实际搬运后更新，客户端不能把 `running` 当成正在搬货。
 - 目标建筑收不下（输入缓冲满、容量不足）时跳过本次搬运、不记 `last_transfer`、不消耗往返周期；预览与提交万一不一致，跳过本次搬运、把货退回来源并写日志，不 panic。
@@ -500,7 +503,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `logistics_stations[]`：`building_id` / `building_type` / `position` / `state`（含唯一站库 `inventory`、`slot_capacity` / `item_capacity` / `energy` / `energy_capacity` / `charge_per_tick` / `belt_ports`）/ `drone_ids` / `ship_ids`。
 - `logistics_drones[]` / `logistics_ships[]`：`station_id`（归属站）/ `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `cargo` / `trip_kind` / `pickup_item_id` / `pickup_quantity` / `home_pos` / `returning` / `state_reason` / `energy_cost`；船另有 `current_planet_id`、`warp_*`、`warped`、`warp_item_spent`。
 - `logistics_distributors[]`（`bot_ids` / `host_available` / `inventory`）与 `logistics_bots[]`（`position` / `home_pos` / `target_pos` / `target_kind` / `trip_kind` / `cargo` / `status` / `returning` / `energy_remaining`）。
-- `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `mining_item`（采集任务排产时定下的唯一开采矿种）/ `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）、`footprint_occupied`（施工已走完，但占地里还站着让不开的地面单位——占地外找不到可站立的空位，落成被推迟到它走开为止，此时任务仍是 `in_progress`）；开工后清空。排队不是失败——`build` 命令本身返回成功。
+- `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `mining_item`（采集任务排产时定下的唯一开采矿种）/ `elevation`（传送带施工任务的目标层，0–4，omitempty；0 = 地面）/ `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）、`footprint_occupied`（施工已走完，但占地里还站着让不开的地面单位——占地外找不到可站立的空位，落成被推迟到它走开为止，此时任务仍是 `in_progress`）；开工后清空。排队不是失败——`build` 命令本身返回成功。
 - `contacts[]`（同 system contacts）、`enemy_forces[]`（至少 `confirmed_type` 的接触：`id` / `type` / `position` / `strength` / `level` / `threat_level`；`id` 是 `fleet_attack` 与自动交战使用的目标 ID；hive 遗址见 `nest_ruins[]`）、`detections[]`（由 contacts 聚合的摘要）。行星传感器源 = 己方建筑（视野 / 雷达 / 信号塔）**加己方单位（含机甲）的车载传感器**（光学 + 红外 + 被动电磁，半径 = 单位 `vision_range`）——把机甲开到黑雾巢穴视野内即可让巢穴升到 `confirmed_type` 并出现在 `enemy_forces` 里（试玩报告 1010 阻断 C：此前只收集建筑传感器，`enemy_forces` 恒为空、黑雾不可见不可打）。
 
 **`GET /world/planets/{planet_id}/networks`**：电网与管网，整体来自同一 tick 的 `PowerSettlementSnapshot`。
@@ -564,12 +567,12 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
   | reason | 含义 |
   | --- | --- |
-  | `no_power` | 分拣器断电。分拣器本身不耗电（`buildings.yaml` 没有 energy 模块），正常运行时分拣器不会被置为 `no_power`，这条分支实际很少出现，只为兼容旧存档/未来给分拣器加耗电保留 |
+  | `no_power` | 分拣器断电。第 19 轮起四种分拣器都耗电（`sorter_mk1/2` 1、`sorter_mk3`/`pile_sorter` 2 点/tick），没接电网或电网供电不足时 `runtime.state = no_power`、不搬运，这是产线断料最常见的根因 |
   | `not_running` | 分拣器未运行（暂停、故障 `error`、拆除作业中）。旧存档里的 `paused` 含义相同，客户端按同一文案显示 |
   | `pick_empty` | 取货端没有本分拣器认的货；**只在目标建筑确实因缺料停工**（`input_shortage` 判据）时才报，目标还够料时不刷噪音 |
   | `drop_blocked` | 放货端收不下（目标输入缓冲/主库存满、带子满）；**只在取货端确实有货时才报** |
 
-  选路与 `settleSorters` 共用 `sorterBestRoute`：一次往返只走「取货端距离 + 放货端距离」最短的那一对端点，`reason` / `target_position` 对应实际尝试搬运的那条路线（range>1 的 mk2/mk3 有多个候选端点）。停工计数存在分拣器自己的 `sorter.stall.stalled_ticks`（随快照落盘，读档后继续累计），不复用产线监控的采样计数。
+  选路与 `settleSorters` 共用 `sorterBestRoute`：一次往返只走「取货端步数 + 放货端步数」最短的那一对端点，`reason` / `target_position` 对应实际尝试搬运的那条路线（四种分拣器的 `range` 都是 3，每个方向可能有多个候选端点）。停工计数存在分拣器自己的 `sorter.stall.stalled_ticks`（随快照落盘，读档后继续累计），不复用产线监控的采样计数。
 
   存在意义：自动运输机器人会跳过「已有分拣器喂料」的建筑（见 §5.6），分拣器一停那台机器就静默断料——机器人不会来救，告警条也不会有任何条目。分拣器**成功转移一件**（`sorter.last_transfer.tick` 前进到当前 tick）即解除；分拣器被拆除/摧毁时与其它告警一样随建筑解除。往返周期内正常的等待（`next_trip_tick` 未到）不累计停工时长；端点缺失（刚放下还没接好）也不累计。
 

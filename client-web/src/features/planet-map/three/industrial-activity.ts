@@ -4,7 +4,7 @@ import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
 import { getItemColorValue } from '../item-colors';
-import { beltItemSpeedTilesPerSec } from '../planet-logistics-flow';
+import { beltVisualSpeed, logisticsTier } from '../logistics-tier';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
 import { conveyorPaths, BELT_DECK_TOP, type ConveyorPath } from './conveyor-geometry';
 import { logisticsFlightNormal } from './logistics-flight';
@@ -28,7 +28,7 @@ export interface ActivitySource {
   color: string;
   normal?: THREE.Vector3;
   altitude?: number;
-  /** 该建的吞吐（带上物品流速口径，与 2D 货物圆点 / 带面贴图滚动共用 beltItemSpeedTilesPerSec）。 */
+  /** 该建的吞吐（服务端口径，诊断用；带上物品流速按档位走 beltVisualSpeed）。 */
   throughput?: number;
   /**
    * 带上有货但连续多少 tick 没动出去（服务端 conveyor.blocked_ticks 直出）。
@@ -129,6 +129,11 @@ const LIMIT = 4096;
  * 一格内密排 4 个、朝流动方向、坐在带面上。
  */
 export const BELT_CARGO_CELL = .24;
+
+function beltTier(type: string): 1 | 2 | 3 {
+  const tier = logisticsTier(type);
+  return tier === 'pile' ? 1 : tier;
+}
 /** 单堆最多画几个方块：一格 1 cell 的行程里 0.24 cell 的方块按 .25 间距密排，正好 4 个。 */
 export const BELT_CARGO_MAX_PER_STACK = 4;
 /** 物品中心离带体中心线的高度 = 带面顶 + 半边长（坐在带面上，不能陷进带面）。 */
@@ -155,9 +160,12 @@ export class IndustrialActivity {
   private entries: SourcePosition[] = [];
   private observations = new Map<string, THREE.Vector3>();
   private time = 0;
-  /** 全网络共享的带面行程（格）：所有可见带子同一相位，直段上物品才连成一条密排的流。 */
-  private beltTravel = 0;
-  private beltSpeed = 0;
+  /**
+   * 每档一条共享的带面行程（格）：同档带子同一相位，直段上物品才连成一条密排的流；
+   * 速度与带面箭头滚速同源（`beltVisualSpeed`，1 : 2 : 5），物品看起来是「贴在带面上走」。
+   */
+  private readonly beltTravel: Record<1 | 2 | 3, number> = { 1: 0, 2: 0, 3: 0 };
+  private readonly slopeUp = new THREE.Vector3();
   private snapshotAge = 0;
   private lastTick: number | undefined;
 
@@ -198,13 +206,11 @@ export class IndustrialActivity {
     for (const path of conveyorPaths(buildings, faceSize, this.radius)) if (!paths.has(path.building.id)) paths.set(path.building.id, path);
     // 每格带子上画出的方块总数（堵住时按这个总数排队，队首贴输出端）。
     const cubeTotals = new Map<string, number>();
-    let throughput = 0;
     for (const source of sources) if (source.kind === 'cargo') {
-      const key = `${source.position.x}:${source.position.y}`;
+      // 同一格可能叠着地面带与高架带：按建筑 id 分开计数。
+      const key = source.buildingId ?? `${source.position.x}:${source.position.y}`;
       cubeTotals.set(key, (cubeTotals.get(key) ?? 0) + Math.max(1, Math.min(source.quantity ?? 1, BELT_CARGO_MAX_PER_STACK)));
-      throughput = Math.max(throughput, source.throughput ?? 1);
     }
-    this.beltSpeed = beltItemSpeedTilesPerSec(throughput || 1);
     const ordinals = new Map<string, number>();
     const entries: SourcePosition[] = [];
     for (const source of sources) {
@@ -213,7 +219,8 @@ export class IndustrialActivity {
       const tangent = source.direction === 'north' ? south.negate() : source.direction === 'south' ? south
         : source.direction === 'west' ? east.negate() : east;
       const size = surfaceTileSize(this.radius, faceSize);
-      const key = `${source.position.x}:${source.position.y}`;
+      // 同一格可能叠着地面带与高架带：按建筑 id 分开计数。
+      const key = source.buildingId ?? `${source.position.x}:${source.position.y}`;
       const prior = this.observations.get(source.id);
       if (source.kind === 'flight') nextObservations.set(source.id, normal.clone());
       const path = source.buildingId ? paths.get(source.buildingId) : undefined;
@@ -239,7 +246,10 @@ export class IndustrialActivity {
 
   animate(dt: number, _time: number, options: ActivityOptions = {}) {
     const step = Math.min(Math.max(dt, 0), .1);
-    if (!options.paused && !options.reducedMotion) { this.time += step; this.beltTravel += step * this.beltSpeed; }
+    if (!options.paused && !options.reducedMotion) {
+      this.time += step;
+      for (const tier of [1, 2, 3] as const) this.beltTravel[tier] = (this.beltTravel[tier] + step * beltVisualSpeed(`conveyor_belt_mk${tier}`)) % 1;
+    }
     if (!options.paused) this.snapshotAge += Math.max(0, dt);
     let cargoCount = 0, particleCount = 0;
     const point = (position: THREE.Vector3, color: THREE.Color, size: number) => {
@@ -256,21 +266,21 @@ export class IndustrialActivity {
         const total = Math.max(1, entry.beltCargoCount);
         // 堵塞：不前进，向后堆到输出端：队首（ordinal 0）离输出端口最近。
         const phase = entry.blocked ? 1 - (entry.cargoOrdinal + .5) / total
-          : (this.beltTravel + entry.cargoOrdinal / total) % 1;
+          : (this.beltTravel[beltTier(entry.path?.building.type ?? '')] + entry.cargoOrdinal / total) % 1;
         if (entry.path) {
           const u = phase, p = entry.path.point(u);
           const up = p.clone().normalize();
-          this.position.copy(p).addScaledVector(up, size * BELT_CARGO_LIFT);
           // 朝向随流向：弯道上用 u±ε 的切向，物品不能还是正南正北的方盒。
           const before = entry.path.point(Math.max(0, u - .002));
           const after = entry.path.point(Math.min(1, u + .002));
           this.flowTangent.copy(after).sub(before);
           if (this.flowTangent.lengthSq() < 1e-12) this.flowTangent.copy(entry.path.point(1)).sub(entry.path.point(0));
           this.flowTangent.normalize();
-          // 切向里可能混进一点径向分量，正交化后再拼基（局部 +X 沿流向、+Y 朝上）。
-          this.flowTangent.addScaledVector(up, -this.flowTangent.dot(up)).normalize();
+          // 坡道上切向带径向分量：物品跟着带面倾斜（局部 +X 沿流向、+Y 垂直带面），平段上退化成水平。
           this.flowSide.crossVectors(this.flowTangent, up).normalize();
-          this.frame.makeBasis(this.flowTangent, up, this.flowSide);
+          this.slopeUp.crossVectors(this.flowSide, this.flowTangent).normalize();
+          this.position.copy(p).addScaledVector(this.slopeUp, size * BELT_CARGO_LIFT);
+          this.frame.makeBasis(this.flowTangent, this.slopeUp, this.flowSide);
           this.rotation.setFromRotationMatrix(this.frame);
         } else {
           // 非带体建筑（conveyor buffer）：沿输出方向在地面上排开，堵住时同样堆到放货端。

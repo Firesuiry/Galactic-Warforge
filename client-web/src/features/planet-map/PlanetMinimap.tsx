@@ -7,11 +7,8 @@ import {
   getBuildingFootprint,
   getFogState,
   getTerrainTile,
-  getViewportTileBounds,
   type PlanetRenderView,
   type TilePoint,
-  type ViewportTileBounds,
-  wrapMod,
 } from "@/features/planet-map/model";
 import { isDarkFogUnit } from "@/features/planet-map/rts-commands";
 import { INCOMING_WAVE_TTL_MS, usePlanetViewStore } from "@/features/planet-map/store";
@@ -25,14 +22,14 @@ import { MINI_CSS, computeLayout, miniTileAt, type MinimapLayout } from "./minim
  * 数据来源：
  * - 地形/迷雾：复用主场景 planet/fog 的全图 terrain/visible/explored（始终可用）。
  * - 密度热力：当 overview（overviewQuery）存在时叠加资源/建筑/单位密度点。
- * - 视口矩形：由 store 的 mapProjection（主画布像素视口 + tile 边长）+ camera 计算。
  *
  * 交互：点击缩略图 → requestFocus(tile)，相机居中到该 tile（scene 模式保持缩放，overview 模式放大进入）。
  *
- * 隔离：本组件渲染在 PlanetPage（.planet-map-shell 内），独立 canvas，
- * 不参与 PlanetMapPixi 的拖拽热路径。
+ * 隔离：本组件渲染在 PlanetPage（.planet-map-shell 内），独立 canvas。
  * 底图（地形+迷雾）缓存到离屏 canvas，仅在 planet/fog/overview 变化时重建；
- * 相机移动只触发"清屏 + 贴底图 + 画视口框"（3 次调用），极轻量。
+ * 其它变化只触发"清屏 + 贴底图 + 画标记"，极轻量。
+ *
+ * 2D 视图退役后不再画主图视口框（3D 相机没有可直接映射到小地图的矩形视口）。
  */
 
 interface PlanetMinimapProps {
@@ -104,10 +101,8 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     && new URLSearchParams(window.location.search).has("freeze");
   const [blinkOn, setBlinkOn] = useState(true);
 
-  const { camera, mapProjection, requestFocus, incomingWaves } = usePlanetViewStore(
+  const { requestFocus, incomingWaves } = usePlanetViewStore(
     useShallow((state) => ({
-      camera: state.camera,
-      mapProjection: state.mapProjection,
       requestFocus: state.requestFocus,
       incomingWaves: state.incomingWaves,
     })),
@@ -139,25 +134,6 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     () => computeLayout(mapWidth, mapHeight),
     [mapWidth, mapHeight],
   );
-
-  // 视口矩形（tile 范围）；主画布尚未上报投影时不绘制。
-  const viewportBounds: ViewportTileBounds | null = useMemo(() => {
-    if (
-      !camera.ready
-      || mapProjection.tileSize <= 0
-      || mapProjection.viewportWidth <= 0
-      || mapProjection.viewportHeight <= 0
-    ) {
-      return null;
-    }
-    return getViewportTileBounds(
-      planet,
-      camera,
-      mapProjection.tileSize,
-      mapProjection.viewportWidth,
-      mapProjection.viewportHeight,
-    );
-  }, [camera, mapProjection, planet]);
 
   // 底图（地形 + 迷雾 + overview 密度）缓存：仅在 planet/fog/overview 变化时重建。
   useEffect(() => {
@@ -245,7 +221,7 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
     context.strokeRect(offsetX + 0.5, offsetY + 0.5, layout.drawWidth - 1, layout.drawHeight - 1);
   }, [fog, layout, mapHeight, mapWidth, overview, planet]);
 
-  // 主层：清屏 → 贴底图 → 敌我标记（C3）→ 来袭波次 → 画当前视口框。相机/实体/波次变化时触发（轻量）。
+  // 主层：清屏 → 贴底图 → 敌我标记（C3）→ 来袭波次。实体/波次变化时触发（轻量）。
   useEffect(() => {
     const canvas = canvasRef.current;
     const base = baseCanvasRef.current;
@@ -332,40 +308,7 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
         context.fill();
       }
     }
-
-    if (!viewportBounds) {
-      return;
-    }
-    // 环绕轴上可见范围可能跨接缝（minX<0 或 maxX≥map），拆成轴向上的 1~2 段，
-    // 两轴组合出最多 4 个矩形，保证视口框在小地图上形状正确。
-    const axisSegments = (min: number, max: number, mapSize: number, wrap: boolean) => {
-      if (!wrap || mapSize <= 0) {
-        return [[Math.max(min, 0), Math.min(max, mapSize - 1)] as const];
-      }
-      const start = wrapMod(min, mapSize);
-      const span = max - min;
-      const first: readonly [number, number] = [start, Math.min(start + span, mapSize - 1)];
-      const remainder = span - (first[1] - start);
-      return remainder > 0 ? [first, [0, remainder - 1] as const] : [first];
-    };
-    const segmentsX = axisSegments(viewportBounds.minX, viewportBounds.maxX, mapWidth, viewportBounds.wrapX ?? false);
-    const segmentsY = axisSegments(viewportBounds.minY, viewportBounds.maxY, mapHeight, viewportBounds.wrapY ?? false);
-
-    // 视口框：半透明填充 + accent 描边 + 四角直角强调
-    for (const [minX, maxX] of segmentsX) {
-      for (const [minY, maxY] of segmentsY) {
-        const rectX = offsetX + minX * scale;
-        const rectY = offsetY + minY * scale;
-        const rectW = Math.max((maxX - minX + 1) * scale, 2);
-        const rectH = Math.max((maxY - minY + 1) * scale, 2);
-        context.fillStyle = "rgba(57, 230, 208, 0.12)";
-        context.fillRect(rectX, rectY, rectW, rectH);
-        context.strokeStyle = "#39e6d0";
-        context.lineWidth = 1.25;
-        context.strokeRect(rectX + 0.5, rectY + 0.5, rectW - 1, rectH - 1);
-      }
-    }
-  }, [blinkOn, fog, layout, liveWaves, mapHeight, mapWidth, planet, runtime, session.playerId, viewportBounds]);
+  }, [blinkOn, fog, layout, liveWaves, mapHeight, mapWidth, planet, runtime, session.playerId]);
 
   /** 缩略图 CSS 坐标 → tile；越界返回 null（换算逻辑见 minimap-geometry，单测覆盖）。 */
   function tileAt(event: React.MouseEvent<HTMLCanvasElement>): TilePoint | null {
@@ -469,7 +412,6 @@ export function PlanetMinimap({ planet, fog, overview, runtime, onContextTile, o
       className="planet-minimap"
       aria-hidden={false}
       ref={rootRef}
-      data-camera-zoom-index={camera.zoomIndex}
       /* 供样式层判定「小地图在场」：右下角 toast 栈据此抬高，避免盖住小地图
          并吞掉右键移动令（试玩 1014 层 14 问题 1 / 层 13 问题 2）。 */
       data-planet-minimap

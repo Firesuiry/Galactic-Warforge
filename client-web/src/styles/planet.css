@@ -44,105 +44,6 @@
      定义在 .planet-map-shell 上时 toast 栈（在 .app-body 之外）拿不到。 */
 }
 
-.planet-map-canvas {
-  display:grid;
-  grid-template-rows:minmax(0,1fr);
-  min-height:0;
-  height:100%;
-}
-
-.planet-map-canvas__viewport {
-  position:relative;
-  min-height:0;
-}
-
-.planet-map-canvas__surface {
-  width:100%;
-  height:100%;
-  display:block;
-  border-radius:0;
-  background:radial-gradient(circle at 20% 20%,rgba(48,128,255,.18),transparent 22%),linear-gradient(180deg,#08111f,#050811);
-  outline:1px solid rgba(255,255,255,.08);
-  overflow:hidden;
-}
-
-.planet-map-canvas__pixi,.planet-map-canvas__pixi canvas {
-  position:absolute;
-  top:0;
-  right:0;
-  bottom:0;
-  left:0;
-  width:100%;
-  height:100%;
-  display:block;
-}
-
-.entity-layer--ghost {
-  opacity:0;
-}
-
-.entity-layer {
-  position:absolute;
-  top:0;
-  right:0;
-  bottom:0;
-  left:0;
-  border-radius:18px;
-  overflow:hidden;
-  pointer-events:none;
-  transform:translate(0);
-  --tile: 12px;
-  z-index:1;
-  transition:transform var(--dur-fast) var(--ease);
-}
-
-.entity-layer__svg {
-  position:absolute;
-  top:0;
-  right:0;
-  bottom:0;
-  left:0;
-  width:100%;
-  height:100%;
-  overflow:visible;
-  pointer-events:none;
-}
-
-.entity-node {
-  position:absolute;
-  pointer-events:none;
-  box-sizing:border-box;
-}
-
-.entity-node__label {
-  position:absolute;
-  left:4px;
-  top:1px;
-  color:#edf6ff;
-  font-size:11px;
-  line-height:14px;
-  white-space:nowrap;
-  pointer-events:none;
-  -webkit-user-select:none;
-  user-select:none;
-}
-
-.entity-node--resource {
-  z-index:1;
-}
-
-.entity-node--construction {
-  z-index:2;
-}
-
-.entity-node--building,.entity-node--pipeline-node,.entity-node--power-coverage {
-  z-index:3;
-}
-
-.entity-node--unit,.entity-node--drone,.entity-node--ship,.entity-node--enemy,.entity-node--detection {
-  z-index:4;
-}
-
 .sw-icon {
   display:inline-flex;
   align-items:center;
@@ -162,59 +63,6 @@
   display:block;
   flex:0 0 auto;
 }
-
-.entity-node__icon {
-  position:absolute;
-  top:0;
-  right:0;
-  bottom:0;
-  left:0;
-  width:100%;
-  height:100%;
-  border-radius:inherit;
-  font-size:.7em;
-}
-
-.entity-node--unit .entity-node__icon,.entity-node--drone .entity-node__icon,.entity-node--resource .entity-node__icon {
-  border-radius:50%;
-}
-
-/* 运输机器人车顶货物点（§4）：有货才渲染，颜色 = 物品配色（与 2D 圆点/3D 方块同色） */
-.entity-node__cargo {
-  position:absolute;
-  left:50%;
-  top:50%;
-  width:46%;
-  height:46%;
-  transform:translate(-50%,-50%);
-  border-radius:2px;
-  border:1px solid rgba(6,10,14,.75);
-  box-shadow:0 0 0 1px rgba(255,255,255,.12) inset;
-  pointer-events:none;
-}
-
-/* 2D 底部状态行（§3.2 复核）：过去它是画布网格的第二行、被快捷栏整条压住。
-   现在浮在左下工具条列**上方**（--planet-hud-rail-top 由 PlanetMapToolbar 的
-   ResizeObserver 实测写入），与工具条同一列：不与底部居中的快捷栏抢位置，
-   也不吃地图高度。调试面板展开时整块让位（面板就在同一位置）。 */
-.planet-map-canvas__status {
-  position:absolute;
-  left:60px;
-  /* 与工具条列**右对齐到同一基线**：状态行贴在这一列的右上方，
-     既不压住列本身，也不与底部居中的快捷栏抢位置。 */
-  bottom:calc(var(--planet-hud-rail-top, 150px) + 2px);
-  max-width:min(560px,calc(100% - 96px));
-  z-index:3;
-  display:flex;
-  flex-wrap:wrap;
-  gap:2px 12px;
-  color:#b6c7ec;
-  font-size:.76rem;
-  line-height:1.45;
-  pointer-events:none;
-  text-shadow:0 1px 3px #000c;
-}
-
 
 .toggle-grid {
   display:grid;
@@ -240,16 +88,6 @@
   display:flex;
   flex-wrap:wrap;
   gap:8px;
-}
-
-.zoom-button {
-  min-width:0;
-  padding-inline:12px;
-}
-
-.zoom-button--active {
-  border-color:#59e3ce66;
-  background:#2cc1b029;
 }
 
 .planet-kv-list {
@@ -1099,15 +937,6 @@
   opacity:.82;
 }
 
-@media(min-width:1101px) {
-  /* 小地图在右下角：底部两行浮层让出它占的走廊宽度。 */
-  .planet-map-canvas__status,
-  .planet-map-canvas__modes {
-    padding-right:calc(var(--planet-hud-right-reserve, 0px) + 8px);
-  }
-
-}
-
 @media(max-width:1100px) {
   .planet-minimap {
     display:none;
@@ -1259,46 +1088,6 @@
   font-size:.7rem;
 }
 
-.planet-map-toolbar {
-  position:absolute;
-  left:16px;
-  bottom:16px;
-  z-index:6;
-}
-
-.planet-map-toolbar__rail {
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  padding:6px;
-  border-radius:var(--radius);
-  border:1px solid var(--border-glow);
-  background:#080e1cb8;
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  box-shadow:var(--shadow-hud);
-}
-
-.planet-map-toolbar__button {
-  display:grid;
-  place-items:center;
-  width:34px;
-  height:34px;
-  padding:0;
-  font-size:1rem;
-}
-
-.planet-map-toolbar__popover {
-  position:absolute;
-  left:0;
-  bottom:calc(100% + 8px);
-  width:288px;
-  max-width:calc(100vw - 48px);
-  max-height:min(62vh,580px);
-  overflow:auto;
-  padding:14px;
-}
-
 .planet-drawer {
   position:absolute;
   top:var(--planet-top-inset, 56px);
@@ -1407,19 +1196,6 @@
   transform:translate(0);
   visibility:visible;
   transition-delay:0s;
-}
-
-.planet-map-canvas__surface--build,.planet-map-canvas__surface--move,.planet-map-canvas__surface--attack {
-  cursor:crosshair;
-}
-
-.planet-map-canvas__mode {
-  color:var(--good);
-  font-weight:600;
-}
-
-.planet-map-canvas__mode--attack {
-  color:var(--danger);
 }
 
 .planet-map-shell__overlay {
@@ -1865,6 +1641,43 @@
   background:#5fb0ff1f;
 }
 
+/* 第 19 轮 §3.5：传送带目标高度（高度 N + ▲▼）。 */
+.planet-build-bar__elevation {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  border:1px solid var(--border);
+  border-radius:4px;
+  background:var(--surface-1);
+  padding:1px 4px 1px 8px;
+  white-space:nowrap;
+}
+
+.planet-build-bar__elevation-label {
+  color:var(--accent);
+  font-size:.72rem;
+}
+
+.planet-build-bar__elevation-btn {
+  border:none;
+  border-radius:3px;
+  background:transparent;
+  color:var(--accent-2);
+  font-size:.62rem;
+  line-height:1;
+  cursor:pointer;
+  padding:3px 4px;
+}
+
+.planet-build-bar__elevation-btn:hover:not(:disabled) {
+  background:#5fb0ff1f;
+}
+
+.planet-build-bar__elevation-btn:disabled {
+  color:var(--text-muted, #6b7a90);
+  cursor:default;
+}
+
 .planet-build-bar__select {
   border:1px solid var(--border);
   border-radius:4px;
@@ -1936,7 +1749,6 @@
 .planet-three__uncharted .secondary-button { padding:3px 12px; border-radius:999px; font-size:12px; }
 .planet-view-switch { position:absolute; z-index:5; top:var(--planet-top-inset, 56px); right:70px; display:flex; padding:4px; gap:4px; background:#06131ed9; border:1px solid #7cbcc333; border-radius:10px; }
 .planet-view-switch button { font-size:12px; }
-.planet-view-switch button[aria-pressed=true] { color:#94f7e5; border-color:#66d9c966; background:#267a7138; }
 @media(max-width:900px) {
   /* 窄屏基线（--planet-top-inset）随顶栏实测高度变化：这里不能写死 top，
      否则基线抬高后视图切换仍留在旧位置、被顶栏压住（点不到）。 */
@@ -1988,32 +1800,6 @@
 .distributor-controls input[type="checkbox"] { width: auto; }
 .distributor-controls select, .distributor-controls input[type="number"] { width: 100%; }
 .mecha-logistics-row { display: grid; gap: 6px; border-bottom: 1px solid var(--border); padding: 8px 0; }
-
-/* C1 框选矩形（inspect 模式左键拖动）；指针穿透 */
-.planet-map-canvas__marquee {
-  position: absolute;
-  border: 1.5px solid #5ef7a1;
-  background: rgba(94, 247, 161, 0.12);
-  pointer-events: none;
-  z-index: 6;
-}
-
-/* C3 来袭方向指示：黑雾波次 from→target 红线 + 目标闪烁标记（指针穿透） */
-.planet-map-canvas__waves { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
-.planet-map-canvas__waves-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.planet-map-canvas__wave-line { stroke: rgba(255, 23, 68, 0.85); stroke-width: 2; stroke-dasharray: 8 6; animation: planet-wave-dash 1.2s linear infinite; }
-@keyframes planet-wave-dash { to { stroke-dashoffset: -14; } }
-.planet-map-canvas__wave-marker {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border: 2.5px solid #ff1744;
-  border-radius: 50%;
-  background: rgba(255, 23, 68, 0.25);
-  animation: planet-wave-blink 0.9s ease-in-out infinite;
-}
-@keyframes planet-wave-blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.35); } }
 
 /* ============================================================
  * C4 军事 UI 地图化：小队标记 / 战区圆圈 / 战区划定控件
@@ -2129,14 +1915,6 @@
 .planet-theater-zone--alerted { animation: planet-theater-alert 1s ease-in-out infinite; }
 @keyframes planet-theater-alert { 0%, 100% { stroke-opacity: 1; } 50% { stroke-opacity: 0.3; } }
 .planet-theater-zone__label { font-size: 12px; font-weight: 600; paint-order: stroke; stroke: rgba(8, 14, 28, 0.9); stroke-width: 3px; }
-
-/* 战区划定拖拽矩形（语义区别于单位框选的绿色） */
-.planet-map-canvas__marquee--zone {
-  border-color: #39e6d0;
-  background: rgba(57, 230, 208, 0.1);
-}
-.planet-map-canvas__surface--theater_zone { cursor: crosshair; }
-.planet-map-canvas__mode--zone { color: #39e6d0; }
 
 /* 战区划定控件：作为左下工具条列的最后一格（PlanetMapToolbar 的 children），
    不再是紧贴右侧的第二列；浮层从整条列上方展开。 */

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"siliconworld/internal/config"
-	"siliconworld/internal/gamedir"
 	"siliconworld/internal/gamecore"
+	"siliconworld/internal/gamedir"
 	"siliconworld/internal/mapconfig"
 	"siliconworld/internal/mapgen"
 	"siliconworld/internal/queue"

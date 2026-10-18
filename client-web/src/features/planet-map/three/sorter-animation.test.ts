@@ -1,300 +1,198 @@
 import { describe, expect, it } from 'vitest';
-import * as THREE from 'three';
 import type { Building } from '@shared/types';
-import { getItemColorValue } from '../item-colors';
-import { IndustrialModels } from './industrial-models';
-import { sorterAngles, syncSorterAnimation } from './sorter-animation';
-import { surfaceTileSize, tileFrame, tileNormal } from './projection';
-import { StaticBatches } from './static-batches';
-import { DynamicBatches } from './dynamic-batches';
+import { CARRY_END, DROP_END, PICKUP_END, RELEASE_AT, SorterMotion, poseAt } from './sorter-animation';
 
-const PICKUP = { x: 9, y: 5, z: 0 };
-const DROP = { x: 9, y: 3, z: 0 };
-
-interface FixtureOptions {
-  /** 建造朝向（rotation=0 时正面/放货端朝北）。 */
-  rotation?: number;
-  range?: number;
-  cycleTicks?: number;
-}
-
-function fixture(options: FixtureOptions = {}) {
-  const assets = new IndustrialModels();
-  const model = assets.building('sorter_mk1', .86, .86, true);
-  const size = surfaceTileSize(100, 48);
-  const position = { x: 9, y: 4, z: 0 };
-  const { normal, east, south } = tileFrame(position, 48);
-  model.position.copy(normal).multiplyScalar(100 + size * .025);
-  model.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
-  model.rotateY(-(options.rotation ?? 0) * Math.PI / 180);
-  model.scale.multiplyScalar(size);
-  // 朝向 0：取货端（背面）在南 +Z，放货端（正面）在北 −Z；朝向 90 时取/放在西/东。
-  const eastward = options.rotation === 90;
-  const building = {
-    id: 'sorter', type: 'sorter_mk1', position, owner_id: 'p1', rotation: String(options.rotation ?? 0) as Building['rotation'],
-    runtime: { state: 'running' },
+/** 一台正在运行的分拣器；last_transfer 按需覆写。 */
+function sorter(overrides: {
+  state?: string; tick?: number; sequence?: number; quantity?: number; itemId?: string; cycleTicks?: number;
+} = {}): Building {
+  return {
+    id: 'sorter', type: 'sorter_mk1', position: { x: 9, y: 4, z: 0 }, owner_id: 'p1', rotation: '90',
+    runtime: { state: overrides.state ?? 'running' },
     sorter: {
-      cycle_ticks: options.cycleTicks ?? 2, range: options.range ?? 1,
+      cycle_ticks: overrides.cycleTicks ?? 6, range: 3,
       last_transfer: {
-        tick: 50, sequence: 1, source_id: 'source', target_id: 'target',
-        source_position: eastward ? { x: 8, y: 4, z: 0 } : { ...PICKUP },
-        target_position: eastward ? { x: 10, y: 4, z: 0 } : { ...DROP },
-        item_id: 'iron_ore', quantity: 1,
+        tick: overrides.tick ?? 50, sequence: overrides.sequence ?? 1,
+        source_id: 'source', target_id: 'target',
+        source_position: { x: 8, y: 4, z: 0 }, target_position: { x: 10, y: 4, z: 0 },
+        item_id: overrides.itemId ?? 'iron_ore', quantity: overrides.quantity ?? 1,
       },
     },
-  } as Building;
-  const arm = model.getObjectByName('sorter-arm')!;
-  const boom = model.getObjectByName('sorter-boom')!;
-  const claw = model.getObjectByName('sorter-claw')!;
-  const payload = model.getObjectByName('sorter-payload')!;
-  const cargo = payload.children[0] as THREE.Mesh;
-  return { assets, model, building, arm, boom, claw, payload, cargo, size };
+  } as unknown as Building;
 }
 
-/** 以固定步长推进动画，返回逐帧采样（断言不依赖具体 cycle 时长）。 */
-function sample(f: ReturnType<typeof fixture>, seconds: number, step = .005) {
-  const samples: { yaw: number; clawY: number; visible: boolean }[] = [];
-  for (let time = 0; time < seconds; time += step) {
-    f.assets.animate(0, step);
-    samples.push({ yaw: f.arm.rotation.y, clawY: f.claw.position.y, visible: f.payload.visible });
-  }
-  return samples;
+/** 以固定步长推进，返回逐帧姿态。 */
+function sample(motion: SorterMotion, seconds: number, step = .005, active = true) {
+  const poses = [];
+  for (let time = 0; time < seconds; time += step) poses.push(motion.advance(step, active));
+  return poses;
 }
 
-/** 模型贴着球面的「水平方向」：去掉法线分量后的归一化方向。 */
-function horizontal(f: ReturnType<typeof fixture>, point: THREE.Vector3) {
-  f.model.updateMatrixWorld(true);
-  const origin = f.model.getWorldPosition(new THREE.Vector3());
-  const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(f.model.getWorldQuaternion(new THREE.Quaternion()));
-  const direction = point.clone().sub(origin);
-  direction.addScaledVector(normal, -direction.dot(normal));
-  return direction.normalize();
-}
-
-/** 夹爪在水平面上相对立柱的指向。 */
-function armDirection(f: ReturnType<typeof fixture>) {
-  f.model.updateMatrixWorld(true);
-  return horizontal(f, f.claw.getWorldPosition(new THREE.Vector3()));
-}
-
-/** 格心相对分拣器中心的水平方向。 */
-function tileDirection(f: ReturnType<typeof fixture>, tile: { x: number; y: number }) {
-  const point = tileNormal(tile, 48).multiplyScalar(100 + f.size * .25);
-  return horizontal(f, point);
-}
-
-describe('DSP sorter arm model', () => {
-  it('is a low round-base + column + horizontal boom + claw assembly, all animated nodes marked dynamic', () => {
-    const f = fixture();
-    for (const name of ['sorter-arm', 'sorter-boom', 'sorter-claw', 'sorter-payload']) {
-      const node = f.model.getObjectByName(name);
-      expect(node, name).toBeTruthy();
-      expect(node!.userData.industrialRotation, name).toEqual({ axis: 'y', speed: 0 });
-    }
-    // payload 默认隐藏，且材质逐实例独立（动画按物品色写入）。
-    expect(f.payload.visible).toBe(false);
-    expect(f.cargo.userData.independentMaterial).toBe(true);
-    const other = f.assets.building('sorter_mk1', .86, .86, true);
-    const otherCargo = other.getObjectByName('sorter-payload')!.children[0] as THREE.Mesh;
-    (f.cargo.material as THREE.MeshStandardMaterial).color.set('#123456');
-    expect((otherCargo.material as THREE.MeshStandardMaterial).color.getHexString()).not.toBe('123456');
-
-    // 整机很矮（DSP 分拣器远低于熔炉）：局部总高 ≤ .55，且不是两段臂。
-    const raw = f.assets.building('sorter_mk1', .86, .86, true);
-    raw.position.set(0, 0, 0); raw.quaternion.identity(); raw.scale.set(1, 1, 1); raw.updateMatrixWorld(true);
-    expect(new THREE.Box3().setFromObject(raw).max.y).toBeLessThanOrEqual(.55);
-    expect(raw.getObjectByName('sorter-shoulder')).toBeUndefined();
-    expect(raw.getObjectByName('sorter-wrist')).toBeUndefined();
-
-    f.assets.dispose();
+describe('poseAt (gate arm timeline)', () => {
+  it('parks at the pickup end and lifts the claw before pickup', () => {
+    const pose = poseAt(0);
+    expect(pose.swing).toBe(0);
+    expect(pose.lift).toBe(1);
+    expect(pose.carrying).toBe(false);
   });
 
-  it('stretches the boom (and moves the claw to the arm end) for longer range sorters', () => {
-    for (const range of [1, 2, 3]) {
-      const f = fixture({ range });
-      syncSorterAnimation(f.model, f.building, 80, 48);
-      const length = .55 + (range - 1) * .42;
-      expect(f.boom.scale.x).toBeCloseTo(length / .55, 6);
-      expect(f.claw.position.x).toBeCloseTo(length, 6);
-      f.assets.dispose();
+  it('dips at the pickup end, then carries and swings over the top to the drop end', () => {
+    // 取货段末：夹爪下探到底（lift 0），物品开始挂在夹爪下。
+    const pick = poseAt(PICKUP_END);
+    expect(pick.swing).toBe(0);
+    expect(pick.lift).toBeCloseTo(0, 6);
+    expect(pick.carrying).toBe(true);
+    // 携货中段：摆臂在取/放之间（swing ≈ .5），夹爪抬起、物品在爪上。
+    const middle = poseAt((PICKUP_END + CARRY_END) / 2);
+    expect(middle.swing).toBeGreaterThan(.4);
+    expect(middle.swing).toBeLessThan(.6);
+    expect(middle.lift).toBe(1);
+    expect(middle.carrying).toBe(true);
+    // 到达放货端：swing = 1。
+    expect(poseAt(CARRY_END).swing).toBeCloseTo(1, 6);
+  });
+
+  it('releases the item mid-drop and returns empty with the claw lifted', () => {
+    expect(poseAt(CARRY_END).carrying).toBe(true);
+    expect(poseAt(RELEASE_AT).carrying).toBe(false);
+    // 放货段：夹爪下探。
+    const drop = poseAt((CARRY_END + DROP_END) / 2);
+    expect(drop.swing).toBe(1);
+    expect(drop.lift).toBeLessThan(.6);
+    // 空载翻回：swing 从 1 回到 0，夹爪抬起。
+    const back = poseAt((DROP_END + 1) / 2);
+    expect(back.swing).toBeGreaterThan(0);
+    expect(back.swing).toBeLessThan(1);
+    expect(back.carrying).toBe(false);
+    expect(poseAt(1).swing).toBeCloseTo(0, 6);
+    expect(poseAt(1).lift).toBeCloseTo(1, 6);
+  });
+
+  it('is monotone in swing through the carry segment and keeps itemId', () => {
+    let previous = -1;
+    for (let phase = PICKUP_END; phase <= CARRY_END; phase += .01) {
+      const swing = poseAt(phase, 'gear').swing;
+      expect(swing).toBeGreaterThanOrEqual(previous);
+      previous = swing;
     }
+    expect(poseAt(.3, 'gear').itemId).toBe('gear');
   });
 });
 
-describe('authoritative sorter arm swing', () => {
-  it('plays one transfer: swings pickup→drop (≈π) and returns, lifting cargo in between', () => {
-    const f = fixture();
-    syncSorterAnimation(f.model, f.building, 51, 48);
-    const samples = sample(f, 2.2);
-    const yaws = samples.map(item => item.yaw);
-    // 横臂在水平面内往复摆动约 180°。
-    expect(Math.abs(Math.max(...yaws) - Math.min(...yaws) - Math.PI)).toBeLessThan(.02);
-    // 一个周期后回到取货角（空闲姿态），且指向真实取货端。
-    expect(yaws[yaws.length - 1]).toBeCloseTo(Math.min(...yaws), 6);
-    expect(armDirection(f).dot(tileDirection(f, PICKUP))).toBeGreaterThan(.999);
-    // 同一周期里物品从隐藏 → 夹在爪上 → 放货消失。
-    const visible = samples.map(item => item.visible);
-    const first = visible.indexOf(true);
-    expect(first).toBeGreaterThan(0);
-    expect(visible.slice(first, visible.indexOf(false, first)).every(Boolean)).toBe(true);
-    expect(visible[visible.length - 1]).toBe(false);
-    // 夹爪取/放时下沉 .04，搬运时抬起；yaw 组本身没有位移（整机不上下浮动）。
-    expect(Math.min(...samples.map(item => item.clawY))).toBeCloseTo(-.04, 6);
-    expect(Math.max(...samples.map(item => item.clawY))).toBeCloseTo(0, 6);
-    expect(f.arm.position.y).toBe(0);
-    f.assets.dispose();
+describe('SorterMotion (authoritative playback)', () => {
+  it('does not replay the first observed historical transfer', () => {
+    const motion = new SorterMotion();
+    // 读档/首次进场：last_transfer 是 30 tick 前的历史记录，只用来对准空闲姿态。
+    motion.sync(sorter({ tick: 50, sequence: 1 }), 80);
+    const poses = sample(motion, 1.2);
+    expect(poses.every(pose => pose.swing === 0 && pose.lift === 1 && !pose.carrying)).toBe(true);
   });
 
-  it('points at the drop end mid-swing, including a 90° rotated sorter', () => {
-    for (const rotation of [0, 90]) {
-      const f = fixture({ rotation });
-      const transfer = f.building.sorter!.last_transfer!;
-      syncSorterAnimation(f.model, f.building, 51, 48);
-      let dropAlignment = -1;
-      for (let index = 0; index < 450; index++) {
-        f.assets.animate(0, .005);
-        dropAlignment = Math.max(dropAlignment, armDirection(f).dot(tileDirection(f, transfer.target_position)));
+  it('plays a transfer that arrives late but advances the sequence', () => {
+    const motion = new SorterMotion();
+    motion.sync(sorter({ tick: 50, sequence: 1 }), 80);
+    // 先观察过历史记录，之后 sequence 前进、但 tick 已经迟到 50 tick：仍然要播。
+    motion.sync(sorter({ tick: 150, sequence: 2 }), 200);
+    const poses = sample(motion, 2);
+    expect(poses.some(pose => pose.carrying)).toBe(true);
+    expect(Math.max(...poses.map(pose => pose.swing))).toBeCloseTo(1, 3);
+    // 播完回到空闲（取货端、夹爪抬起、无货）。
+    const end = motion.pose();
+    expect(end.swing).toBe(0);
+    expect(end.carrying).toBe(false);
+  });
+
+  it('plays only once per sequence (no replay while polling repeats the same record)', () => {
+    const motion = new SorterMotion();
+    motion.sync(sorter({ tick: 50, sequence: 1 }), 50);
+    sample(motion, 2);
+    const idle = motion.pose();
+    for (const tick of [60, 70, 80, 90]) motion.sync(sorter({ tick: 50, sequence: 1 }), tick);
+    expect(sample(motion, 1.2).every(pose => pose.swing === 0 && !pose.carrying)).toBe(true);
+    expect(motion.pose()).toEqual(idle);
+  });
+
+  it('ignores stale, future and zero-quantity records', () => {
+    // 初始是一条历史记录（tick 50 / 快照 80）：只对准空闲姿态，不播。
+    for (const record of [
+      { tick: 90, sequence: 2, quantity: 1 },   // tick 比快照还新（未来记录）
+      { tick: 60, sequence: 1, quantity: 1 },   // sequence 没有前进（过期记录）
+      { tick: 60, sequence: 2, quantity: 0 },   // 数量 0
+    ]) {
+      const motion = new SorterMotion();
+      motion.sync(sorter({ tick: 50, sequence: 1 }), 80);
+      motion.sync(sorter(record), 80);
+      expect(sample(motion, 1).some(pose => pose.carrying), JSON.stringify(record)).toBe(false);
+    }
+  });
+
+  it('freezes on stop and hides the carried item, resuming on a later sequence', () => {
+    const motion = new SorterMotion();
+    motion.sync(sorter({ tick: 50, sequence: 1 }), 50);
+    // 推进到携货中段（物品挂在夹爪下）。
+    const carrying = sample(motion, 2).find(pose => pose.carrying)!;
+    expect(carrying).toBeTruthy();
+    const frozenPose = motion.pose();
+    // 停机：姿态冻结、物品藏掉。
+    motion.sync(sorter({ state: 'no_power', tick: 50, sequence: 1 }), 51);
+    expect(motion.pose()).toMatchObject({ swing: frozenPose.swing, lift: frozenPose.lift, carrying: false });
+    expect(sample(motion, .6).every(pose => pose.swing === frozenPose.swing && pose.lift === frozenPose.lift && !pose.carrying)).toBe(true);
+    // 恢复供电 + 新记录：继续播。
+    motion.sync(sorter({ tick: 52, sequence: 2 }), 52);
+    expect(sample(motion, 2).some(pose => pose.carrying)).toBe(true);
+  });
+
+  it('stays still when the scene is frozen (active=false)', () => {
+    const motion = new SorterMotion();
+    motion.sync(sorter({ tick: 50, sequence: 1 }), 50);
+    const before = motion.pose();
+    expect(sample(motion, .5, .01, false).every(pose => pose === before)).toBe(true);
+  });
+
+  it('carries the item id of the played transfer', () => {
+    const motion = new SorterMotion();
+    motion.sync(sorter({ tick: 50, sequence: 1, itemId: 'iron_ingot' }), 50);
+    const carrying = sample(motion, 2).find(pose => pose.carrying)!;
+    expect(carrying.itemId).toBe('iron_ingot');
+    motion.sync(sorter({ tick: 51, sequence: 2, itemId: 'copper_ingot' }), 51);
+    // 新记录排队，播到携货段时换成新物品。
+    const next = sample(motion, 3).filter(pose => pose.carrying);
+    expect(next[next.length - 1].itemId).toBe('copper_ingot');
+  });
+
+  it('keeps the cycle inside a sane range for every tier cycle_ticks', () => {
+    for (const cycleTicks of [6, 3, 2]) {
+      const motion = new SorterMotion();
+      motion.sync(sorter({ tick: 50, sequence: 1, cycleTicks }), 50);
+      let carryingAt = -1;
+      for (let index = 0; index < 600; index++) {
+        if (motion.advance(.005).carrying) { carryingAt = index * .005; break; }
       }
-      expect(dropAlignment, `rotation=${rotation}`).toBeGreaterThan(.999);
-      // 回摆结束回到取货端。
-      expect(armDirection(f).dot(tileDirection(f, transfer.source_position))).toBeGreaterThan(.999);
-      f.assets.dispose();
+      // 物品在取货段末出现（.1 × cycle），cycle 夹在 [.45, 4.5] 秒。
+      expect(carryingAt).toBeGreaterThan(0);
+      expect(carryingAt).toBeLessThanOrEqual(.1 * 4.5 + .01);
     }
   });
 
-  it('ignores diagonal endpoint positions of multi-tile neighbours (arm stays on the facing axis)', () => {
-    // 服务端 last_transfer 记的是端点建筑 position（多格建筑 = 占地左上角）。3×3 熔炉的
-    // 「左上角」不在分拣器朝向轴上，旧实现按两点连线取角会把横臂指到建筑角落（约 215°）。
-    // 现在角度只由 rotation + 格切向推出，端点坐标再斜也不影响摆幅。
-    const sorterTile = { x: 9, y: 4 };
-    const front: Record<number, { x: number; y: number }> = {
-      0: { x: 9, y: 3 }, 90: { x: 10, y: 4 }, 180: { x: 9, y: 5 }, 270: { x: 8, y: 4 },
-    };
-    const back: Record<number, { x: number; y: number }> = {
-      0: { x: 9, y: 5 }, 90: { x: 8, y: 4 }, 180: { x: 9, y: 3 }, 270: { x: 10, y: 4 },
-    };
-    for (const rotation of [0, 90, 180, 270]) {
-      const f = fixture({ rotation });
-      // 端点故意写成斜角（模拟 3×3 熔炉的占地左上角）。
-      f.building.sorter!.last_transfer!.source_position = { x: sorterTile.x + 1, y: sorterTile.y + 1, z: 0 };
-      f.building.sorter!.last_transfer!.target_position = { x: sorterTile.x + 1, y: sorterTile.y + 1, z: 0 };
-      const angles = sorterAngles(f.model, f.building, 48);
-      expect(Math.abs(Math.abs(angles.drop - angles.pickup) - Math.PI)).toBeLessThan(1e-9);
-      syncSorterAnimation(f.model, f.building, 51, 48);
-      let dropAlignment = -1;
-      for (let index = 0; index < 500; index++) {
-        f.assets.animate(0, .004);
-        dropAlignment = Math.max(dropAlignment, armDirection(f).dot(tileDirection(f, front[rotation])));
+  it('stretches the cycle with the span like the server round trip (cycle_ticks × max(1, in+out−1))', () => {
+    const cycleOf = (lengthUnits: number) => {
+      const motion = new SorterMotion();
+      // 首个 sync 只建立 tick/s 估计窗口（兜底 4 tick/s）。
+      motion.sync(sorter({ tick: 50, sequence: 1, cycleTicks: 3 }), 50, 0, lengthUnits);
+      // 物品在 RELEASE_AT（.62 × cycle）落下：量「携货 → 放下」的时刻反推周期。
+      let elapsed = 0, carried = false;
+      while (elapsed < 10) {
+        const pose = motion.advance(.005); elapsed += .005;
+        if (pose.carrying) carried = true;
+        else if (carried) break;
       }
-      expect(dropAlignment, `rotation=${rotation}`).toBeGreaterThan(.999);
-      // 回摆结束停在取货端（背面格），而不是端点记录里的斜角。
-      expect(armDirection(f).dot(tileDirection(f, back[rotation]))).toBeGreaterThan(.999);
-      f.assets.dispose();
-    }
-  });
-
-  it('does not replay the initial historical transfer', () => {
-    const f = fixture();
-    // 历史记录（tick 50 的记录在 tick 80 才首次同步）只用来对准空闲姿态，不当成本次活动。
-    syncSorterAnimation(f.model, f.building, 80, 48);
-    const samples = sample(f, 1.2);
-    expect(new Set(samples.map(item => item.yaw)).size).toBe(1);
-    expect(samples.every(item => item.visible === false)).toBe(true);
-    expect(armDirection(f).dot(tileDirection(f, PICKUP))).toBeGreaterThan(.999);
-    f.assets.dispose();
-  });
-
-  it('plays a late-but-new transfer (scene data refreshes on SSE events, may lag dozens of ticks)', () => {
-    // 1018 联调：数据层只在 SSE 事件后刷新场景，挂机产线里 last_transfer 迟到几十 tick 很常见。
-    // 旧实现把「tick 差 > 20」当历史记录跳过 → 机械臂永远不动。
-    const f = fixture();
-    f.building.sorter!.last_transfer!.tick = 99;
-    syncSorterAnimation(f.model, f.building, 100, 48);
-    expect(sample(f, 1.6).some(item => item.visible)).toBe(true);
-    // 中间若干次没有新记录的刷新（sequence 不变，提前返回但 snapshotTick 前进）。
-    for (const tick of [140, 160, 180]) syncSorterAnimation(f.model, f.building, tick, 48);
-    // 新记录迟到 50 tick 才到客户端：仍然要播一次。
-    f.building.sorter!.last_transfer!.sequence = 2;
-    f.building.sorter!.last_transfer!.tick = 150;
-    syncSorterAnimation(f.model, f.building, 200, 48);
-    expect(sample(f, 1.6).some(item => item.visible)).toBe(true);
-    f.assets.dispose();
-  });
-
-  it('rejects stale/future/zero-quantity records like the previous implementation', () => {
-    for (const [tick, quantity] of [[80, 1], [49, 1], [50, 0]]) {
-      const f = fixture();
-      f.building.sorter!.last_transfer!.quantity = quantity;
-      syncSorterAnimation(f.model, f.building, tick, 48);
-      const samples = sample(f, .8);
-      expect(new Set(samples.map(item => item.yaw)).size).toBe(1);
-      expect(samples.every(item => item.visible === false)).toBe(true);
-      f.assets.dispose();
-    }
-  });
-
-  it('freezes on no_power (payload hidden) and resumes on a later sequence', () => {
-    const f = fixture();
-    syncSorterAnimation(f.model, f.building, 50, 48);
-    sample(f, .12);
-    const frozenYaw = f.arm.rotation.y, frozenClawY = f.claw.position.y;
-    f.building.runtime.state = 'no_power';
-    syncSorterAnimation(f.model, f.building, 51, 48);
-    expect(f.payload.visible).toBe(false);
-    const frozen = sample(f, .6);
-    expect(frozen.every(item => item.yaw === frozenYaw)).toBe(true);
-    expect(frozen.every(item => item.clawY === frozenClawY)).toBe(true);
-    expect(frozen.every(item => item.visible === false)).toBe(true);
-    f.building.runtime.state = 'running';
-    f.building.sorter!.last_transfer!.sequence = 2;
-    f.building.sorter!.last_transfer!.tick = 52;
-    syncSorterAnimation(f.model, f.building, 52, 48);
-    expect(sample(f, 2.2).some(item => item.visible)).toBe(true);
-    f.assets.dispose();
-  });
-
-  it('colors the carried payload from last_transfer.item_id', () => {
-    const f = fixture();
-    f.building.sorter!.last_transfer!.item_id = 'iron_ingot';
-    syncSorterAnimation(f.model, f.building, 50, 48);
-    const material = f.cargo.material as THREE.MeshStandardMaterial;
-    expect(material.color.getHexString()).toBe(getItemColorValue('iron_ingot').slice(1).toLowerCase());
-    f.building.sorter!.last_transfer!.sequence = 2;
-    f.building.sorter!.last_transfer!.tick = 51;
-    f.building.sorter!.last_transfer!.item_id = 'copper_ingot';
-    syncSorterAnimation(f.model, f.building, 51, 48);
-    expect(material.color.getHexString()).toBe(getItemColorValue('copper_ingot').slice(1).toLowerCase());
-    f.assets.dispose();
-  });
-
-  it('uploads moving joints and newly visible cargo through dynamic batches', () => {
-    const f = fixture(), layer = new THREE.Group(); layer.add(f.model);
-    const statics = new StaticBatches(), dynamics = new DynamicBatches();
-    const entries = [{ root: f.model, layer, tile: f.building.position }];
-    syncSorterAnimation(f.model, f.building, 51, 48);
-    statics.refresh(entries); dynamics.refresh(entries);
-    expect(dynamics.stats.anchors).toBe(4);
-    // 隐藏的 payload 也保留实例（缩放 0 矩阵），显隐不需要重建批次。
-    const instancesFor = (source: THREE.Mesh) => layer.children
-      .filter((object): object is THREE.InstancedMesh => object instanceof THREE.InstancedMesh
-        && object.geometry === source.geometry && object.material === source.material)
-      .flatMap(mesh => Array.from({ length: mesh.count }, (_, index) => {
-        const matrix = new THREE.Matrix4(); mesh.getMatrixAt(index, matrix); return matrix;
-      }));
-    expect(instancesFor(f.cargo).filter(matrix => matrix.determinant() === 0).length).toBeGreaterThan(0);
-    // 推进到搬运中段：横臂/夹爪/物品的姿态进入 InstancedMesh。
-    for (let index = 0; index < 400 && !f.payload.visible; index++) f.assets.animate(0, .005);
-    expect(f.payload.visible).toBe(true);
-    expect(dynamics.update()).toBeGreaterThan(0);
-    layer.updateMatrixWorld(true);
-    for (const name of ['sorter-boom', 'sorter-claw', 'sorter-payload']) {
-      const source = f.model.getObjectByName(name)!.children[0] as THREE.Mesh;
-      expect(instancesFor(source).some(matrix => matrix.elements.every((value, index) =>
-        Math.abs(value - source.matrixWorld.elements[index]) < 0.00001)), name).toBe(true);
-    }
-    // 放货后物品实例重新缩成 0（隐藏），不残留半空中的货物。
-    for (let index = 0; index < 400 && f.payload.visible; index++) f.assets.animate(0, .005);
-    expect(f.payload.visible).toBe(false);
-    dynamics.dispose(); statics.dispose(); f.assets.dispose();
+      return elapsed / .62;
+    };
+    // 3 tick × 1 / 4 tick/s = .75 s；3+3 格 → 5 单位 = 3.75 s。
+    expect(cycleOf(1)).toBeCloseTo(.75, 1);
+    expect(cycleOf(5)).toBeCloseTo(3.75, 1);
+    // 上限 4.5 s。
+    expect(cycleOf(20)).toBeCloseTo(4.5, 1);
+    expect(cycleOf(5) / cycleOf(1)).toBeCloseTo(5, 0);
   });
 });

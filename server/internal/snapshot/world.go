@@ -328,6 +328,7 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 
 	// Rebuild tile occupancy and link tiles.
 	ws.TileBuilding = make(map[string]string)
+	ws.BeltLayers = make(map[string]string)
 	ws.TileUnits = make(map[string][]string)
 
 	for id, building := range ws.Buildings {

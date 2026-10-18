@@ -43,7 +43,6 @@ import {
   getRecipeDisplayName,
   getResourceList,
   getTerrainTile,
-  getViewportTileBounds,
   getTechDisplayName,
   initialBuildingLoadSelection,
   listTransferItemOptions,
@@ -58,9 +57,12 @@ import {
   selectionLabel,
   summarizeEvent,
   toTilePoint,
+  type PlanetLayerVisibility,
   type PlanetRenderView,
+  type SelectedEntity,
 } from "@/features/planet-map/model";
 import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
+import { beltElevation } from "@/features/planet-map/logistics-tier";
 import { beltBufferSummary } from "@/features/planet-map/planet-logistics-flow";
 import { getItemColorValue } from "@/features/planet-map/item-colors";
 import { HAUL_MODE_LABELS, describeHaul, isTransportRobot, transportHaulMode, transportHaulTask } from "@/features/planet-map/transport-haul";
@@ -83,14 +85,7 @@ import {
   translateUi,
   translateUnitType,
 } from "@/i18n/translate";
-import {
-  getPlanetRenderTileSize,
-  getPlanetZoomScale,
-  getPlanetZoomStatusLabel,
-  PLANET_FOCUS_FIT_ZOOM,
-  PLANET_ZOOM_LEVELS,
-  usePlanetViewStore,
-} from "@/features/planet-map/store";
+import { usePlanetViewStore } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
 import { isInIsolatedNetwork } from "./power-status";
@@ -100,7 +95,7 @@ import { TrafficMonitorControls } from "./TrafficMonitorControls";
 import { SorterControls } from "./SorterControls";
 import { SplitterControls } from "./SplitterControls";
 import { ProcessingStatus } from "./ProcessingStatus";
-import type { PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
+import type { PlanetMapCapture } from "@/features/planet-map/planet-map-capture";
 import { unitIsMoving, unitMoveDestination } from '@/features/planet-map/model';
 import { findSquadTaskForceId } from '@/features/planet-map/squad-commands';
 import { UnitCard } from '@/features/war/components/UnitCard';
@@ -750,22 +745,16 @@ export function PlanetLayerPanel({
   runtime,
 }: PlanetLayerPanelProps) {
   const {
-    camera,
     hoveredTile,
     layers,
     requestFocus,
-    requestZoom,
-    resetCamera,
     selected,
     toggleLayer,
   } = usePlanetViewStore(
     useShallow((state) => ({
-      camera: state.camera,
       hoveredTile: state.hoveredTile,
       layers: state.layers,
       requestFocus: state.requestFocus,
-      requestZoom: state.requestZoom,
-      resetCamera: state.resetCamera,
       selected: state.selected,
       toggleLayer: state.toggleLayer,
     })),
@@ -775,9 +764,7 @@ export function PlanetLayerPanel({
   const handleHome = () => {
     const home = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(planet, session.playerId);
     if (home) {
-      requestFocus(home, PLANET_FOCUS_FIT_ZOOM);
-    } else {
-      resetCamera();
+      requestFocus(home);
     }
   };
 
@@ -793,7 +780,11 @@ export function PlanetLayerPanel({
       <section className="planet-side-section">
         <div className="section-title">图层与视角</div>
         <div className="toggle-grid">
-          {Object.entries(layers).map(([key, enabled]) => (
+          {/* `layers.terrain` 在 3D 里不是独立图层（地形与测绘面纱在同一张贴图上），
+              勾掉它只会让开关与画面不一致——不渲染。 */}
+          {Object.entries(layers)
+            .filter(([key]) => key !== "terrain")
+            .map(([key, enabled]) => (
             <label className="toggle-pill" key={key}>
               <input
                 checked={enabled}
@@ -807,20 +798,7 @@ export function PlanetLayerPanel({
           ))}
         </div>
         <div className="zoom-actions">
-          {PLANET_ZOOM_LEVELS.map((zoomLevel, index) => (
-            <button
-              className={
-                index === camera.zoomIndex
-                  ? "secondary-button zoom-button zoom-button--active"
-                  : "secondary-button zoom-button"
-              }
-              key={zoomLevel.label}
-              onClick={() => requestZoom(index)}
-              type="button"
-            >
-              {zoomLevel.label}
-            </button>
-          ))}
+          {/* 2D 视图退役后这里只保留「回到基地」：缩放由 3D 相机（滚轮/±按钮）负责。 */}
           <button
             className="secondary-button zoom-button"
             onClick={handleHome}
@@ -1182,6 +1160,12 @@ export function PlanetEntityPanel({
               <dt>坐标</dt>
               <dd>{formatPosition(building.position)}</dd>
             </div>
+            {building.conveyor ? (
+              <div>
+                <dt>高度</dt>
+                <dd data-testid="planet-building-elevation">{beltElevation(building)} 层{beltElevation(building) === 0 ? '（地面）' : '（高架）'}</dd>
+              </div>
+            ) : null}
             {building.conveyor || isSorterBuilding(building) ? (
               <div>
                 <dt>流向</dt>
@@ -1865,9 +1849,16 @@ export function PlanetActivityPanel({
   );
 }
 
+/**
+ * 3D 相机视口快照：调试面板的分享链接/视口 JSON 在 3D 下按
+ * 「中心格 + zoom + tilt」导出，不再用 2D 的 tileSize/offset 视口矩形。
+ * 类型定义在 `planet-map-capture.ts`（与 capture.getViewport 同处）。
+ */
+import type { PlanetThreeViewportSnapshot } from "./planet-map-capture";
+
 interface PlanetDebugPanelProps {
   catalog?: CatalogView;
-  /** 行星地图截图捕获句柄（Pixi extract）；Pixi 尚未就绪时为 null。 */
+  /** 行星地图截图捕获句柄（Pixi extract / 3D 画布）；尚未就绪时为 null。 */
   capture: PlanetMapCapture | null;
   currentTick: number;
   /** 本局概要（GET /games/current）：判断 admin 身份与多人门禁提示。 */
@@ -1878,6 +1869,70 @@ interface PlanetDebugPanelProps {
   onRefreshPlanet: () => Promise<unknown>;
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
+}
+
+/**
+ * 3D 视口导出（R20-A ④）：分享链接与视口 JSON 的 3D 口径，抽成纯函数便于单测。
+ * 2D 的 offset/tileSize 视口矩形在 3D 下不适用——相机状态是「中心格 + 高度(zoom) + 俯仰」。
+ */
+export function buildThreeShareUrl(options: {
+  href: string;
+  selected: SelectedEntity | null;
+  layers: PlanetLayerVisibility;
+  viewport: PlanetThreeViewportSnapshot;
+}): string {
+  const params = buildViewLinkSearchParams(
+    options.selected,
+    options.layers,
+    {
+      minX: options.viewport.center?.x ?? 0,
+      minY: options.viewport.center?.y ?? 0,
+      maxX: options.viewport.center?.x ?? 0,
+      maxY: options.viewport.center?.y ?? 0,
+      centerX: options.viewport.center?.x ?? 0,
+      centerY: options.viewport.center?.y ?? 0,
+    },
+    options.viewport.altitude,
+  );
+  params.set("view", "3d");
+  params.set("tilt", String(Number(options.viewport.tilt.toFixed(3))));
+  const url = new URL(options.href);
+  url.search = params.toString();
+  return url.toString();
+}
+
+/**
+ * 3D 视口快照按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时调用 `capture.getViewport()`，
+ * 不在挂载时上报一次。capture 未就绪时返回 null。
+ */
+export function readThreeViewport(capture: PlanetMapCapture | null | undefined): PlanetThreeViewportSnapshot | null {
+  if (!capture?.getViewport) return null;
+  try {
+    return capture.getViewport();
+  } catch {
+    return null;
+  }
+}
+
+/** 分享链接的 3D 深链参数（单测用：生成的链接再解析回来要得到同一中心格与 tilt）。 */
+export interface ThreeViewLinkParams {
+  center: { x: number; y: number } | null;
+  zoom: number;
+  tilt: number;
+}
+
+/** 从分享链接解析 3D 相机参数（与 buildThreeShareUrl 互逆）。 */
+export function parseThreeViewLink(href: string): ThreeViewLinkParams {
+  const params = new URL(href).searchParams;
+  const x = Number(params.get("x"));
+  const y = Number(params.get("y"));
+  const zoom = Number(params.get("zoom"));
+  const tilt = Number(params.get("tilt"));
+  return {
+    center: Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null,
+    zoom: Number.isFinite(zoom) ? zoom : 0,
+    tilt: Number.isFinite(tilt) ? tilt : 0,
+  };
 }
 
 export function PlanetDebugPanel({
@@ -1892,8 +1947,10 @@ export function PlanetDebugPanel({
   planet,
   runtime,
 }: PlanetDebugPanelProps) {
+  // 3D 视口快照**不**在渲染期读取：只在面板打开/点「复制链接」/导出 JSON 时现拉
+  // （R20-A ⑥，旧实现挂载时上报一次，scene 没就绪时快照永远不可用）。
+  const readViewportNow = () => readThreeViewport(capture);
   const {
-    camera,
     debugOpen,
     hoveredTile,
     lastEventId,
@@ -1904,7 +1961,6 @@ export function PlanetDebugPanel({
     sseStatus,
   } = usePlanetViewStore(
     useShallow((state) => ({
-      camera: state.camera,
       debugOpen: state.debugOpen,
       hoveredTile: state.hoveredTile,
       lastEventId: state.lastEventId,
@@ -1991,28 +2047,19 @@ export function PlanetDebugPanel({
     if (typeof window === "undefined") {
       return "";
     }
-    const tileSize = getPlanetRenderTileSize(
-      camera.zoomIndex,
-      capture?.clientWidth || planet.map_width,
-      capture?.clientHeight || planet.map_height,
-      planet.map_width,
-      planet.map_height,
-    );
-    const viewportWidth = capture?.clientWidth || planet.map_width * tileSize;
-    const viewportHeight = capture?.clientHeight || planet.map_height * tileSize;
-    const bounds = getViewportTileBounds(
-      planet,
-      camera,
-      tileSize,
-      viewportWidth,
-      viewportHeight,
-    );
-    const params = buildViewLinkSearchParams(
-      selected,
-      layers,
-      bounds,
-      getPlanetZoomScale(camera.zoomIndex),
-    );
+    // 3D（R20-A ④⑥）：视口 = 中心格 + zoom（相机高度）+ tilt，2D 的 offset/tileSize 不适用。
+    // 点「复制链接」时**现拉** scene.getCameraState()，拿到的是此刻的相机，不是挂载时的。
+    const viewport = readViewportNow();
+    if (viewport) {
+      return buildThreeShareUrl({ href: window.location.href, selected, layers, viewport });
+    }
+    // 3D 但场景还没就绪（没有相机状态）：链接里只带 view=3d 与图层/选中，
+    // 不带相机位置（否则链接会回到错误的位置）。
+    const params = buildViewLinkSearchParams(selected, layers, {
+      minX: 0, minY: 0, maxX: 0, maxY: 0, centerX: 0, centerY: 0,
+      wrapX: false, wrapY: false, mapWidth: planet.map_width, mapHeight: planet.map_height,
+    }, 0);
+    params.set("view", "3d");
     const url = new URL(window.location.href);
     url.search = params.toString();
     return url.toString();
@@ -2029,15 +2076,24 @@ export function PlanetDebugPanel({
   }
 
   function exportViewportJson() {
-    const tileSize = getPlanetRenderTileSize(
-      camera.zoomIndex,
-      capture?.clientWidth || planet.map_width,
-      capture?.clientHeight || planet.map_height,
-      planet.map_width,
-      planet.map_height,
-    );
-    const viewportWidth = capture?.clientWidth || planet.map_width * tileSize;
-    const viewportHeight = capture?.clientHeight || planet.map_height * tileSize;
+    // 3D（R20-A ⑥）：导出时**现拉**相机状态，并按 scene 当前场景窗口（store.sceneWindow）
+    // 裁剪可见集合；拿不到场景窗口时不裁剪，JSON 里标 `bounds: null`。
+    const viewport = readViewportNow();
+    const sceneWindow = usePlanetViewStore.getState().sceneWindow;
+    const bounds = sceneWindow
+      ? {
+        minX: sceneWindow.x,
+        minY: sceneWindow.y,
+        maxX: sceneWindow.x + sceneWindow.width - 1,
+        maxY: sceneWindow.y + sceneWindow.height - 1,
+        centerX: sceneWindow.x + sceneWindow.width / 2,
+        centerY: sceneWindow.y + sceneWindow.height / 2,
+        wrapX: false,
+        wrapY: false,
+        mapWidth: planet.map_width,
+        mapHeight: planet.map_height,
+      }
+      : null;
     const payload = buildViewportExport({
       planet,
       runtime,
@@ -2045,15 +2101,28 @@ export function PlanetDebugPanel({
       catalog,
       selection: selected,
       layers,
-      camera,
-      tileSize,
-      viewportWidth,
-      viewportHeight,
+      tileSize: 1,
+      viewportWidth: viewport?.width || capture?.clientWidth || 1,
+      viewportHeight: viewport?.height || capture?.clientHeight || 1,
       shareUrl: buildShareUrl(),
+      bounds,
     });
+    const withCamera = {
+      ...payload,
+      viewport: {
+        ...payload.viewport,
+        mode: "3d" as const,
+        bounds,
+        center: viewport?.center ?? null,
+        zoom: viewport?.altitude ?? 0,
+        tilt: viewport?.tilt ?? 0,
+        width: viewport?.width ?? capture?.clientWidth ?? 0,
+        height: viewport?.height ?? capture?.clientHeight ?? 0,
+      },
+    };
     downloadData(
       `${planet.planet_id}-viewport.json`,
-      JSON.stringify(payload, null, 2),
+      JSON.stringify(withCamera, null, 2),
       "application/json",
     );
   }
@@ -2195,20 +2264,24 @@ export function PlanetDebugPanel({
               <dt>最近全量同步</dt>
               <dd>{formatTimestamp(lastFullSyncAt)}</dd>
             </div>
+            {/* 相机是「中心格 + 高度 + 俯仰」（R20-A ⑥）。 */}
             <div>
               <dt>相机</dt>
               <dd>
-                {Math.round(camera.offsetX)}, {Math.round(camera.offsetY)}
+                {(() => {
+                  const view = readThreeViewport(capture);
+                  return view?.center ? `${view.center.x}, ${view.center.y}` : "-";
+                })()}
               </dd>
             </div>
             <div>
-              <dt>缩放</dt>
+              <dt>缩放 / 俯仰</dt>
               <dd>
-                {getPlanetZoomStatusLabel(
-                  camera.zoomIndex,
-                  planet.map_width,
-                  planet.map_height,
-                )}
+                {(() => {
+                  const view = readThreeViewport(capture);
+                  if (!view) return "-";
+                  return `${view.altitude > 0 ? view.altitude.toFixed(1) : "-"} / ${view.tilt.toFixed(2)}`;
+                })()}
               </dd>
             </div>
             <div>

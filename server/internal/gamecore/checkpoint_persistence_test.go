@@ -37,6 +37,7 @@ func restoreCore(t *testing.T, cfg *config.Config, mapCfg *mapconfig.Config, sav
 // 7a：bot 首攻前存档 → 读档 → bot 仍按 bot_first_attack_tick 发起进攻，
 // 且读档后的首攻时刻与不读档的连续模拟完全一致。
 func TestCheckpointKeepsBotFirstAttackSchedule(t *testing.T) {
+	t.Parallel()
 	cfg, err := config.Load("../../config-skirmish.yaml")
 	if err != nil {
 		t.Fatal(err)
