@@ -19,7 +19,7 @@ import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
-import { BELT_BASE_LIFT, BELT_DECK_TOP, ConveyorGeometry } from './three/conveyor-geometry';
+import { ConveyorGeometry } from './three/conveyor-geometry';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltDeadEnds } from './sorter-filter';
@@ -1032,7 +1032,9 @@ export class PlanetThreeScene {
   private updateBuildGhost() {
     this.clearMarks(this.ghostMarks);
     const mode = this.interaction?.interactionMode;
-    const hovered = this.interaction?.hoveredTile;
+    // 拖拽铺带时叠加层捕获了指针，画布会收到 pointerleave、悬停格被清空；
+    // 有拖拽路径就以路径末格为准，ghost 不能依赖悬停格（1019 操作测试 A/B）。
+    const hovered = this.beltDragPath.at(-1)?.tile ?? this.interaction?.hoveredTile;
     const data = this.data;
     let sorterGhost = false, beltGhost = false;
     try {
@@ -1066,8 +1068,8 @@ export class PlanetThreeScene {
           position: { x: cell.tile.x, y: cell.tile.y, z: 0 }, conveyor: { output: facing, elevation, buffer: [] } } as unknown as Building;
       });
       this.conveyorGhost.refresh(belts, faceSize, RADIUS);
+      // 方向只靠 ghost 带面自带的滚动 chevron 表达；不再逐格叠细箭头（双重箭头显乱）。
       beltGhost = true;
-      for (const belt of belts) this.ghostArrow(belt.position, belt.conveyor!.output as CardinalDirection, belt.conveyor!.elevation ?? 0);
     } finally {
       if (!sorterGhost) this.sorterGhost.refresh([], [], data?.planet.surface.face_size ?? 1, RADIUS);
       if (!beltGhost) this.conveyorGhost.refresh([], data?.planet.surface.face_size ?? 1, RADIUS);
@@ -1208,11 +1210,9 @@ export class PlanetThreeScene {
    * 传送带/朝向建筑的贴地细箭头（缩到 .5 倍）：指示铺带流向。
    * 几何是「细杆 + 三角箭头」（`three/ghost-arrow`），不再有粗 chevron 纹理。
    */
-  private ghostArrow(tile: TilePoint, direction: CardinalDirection, beltElevation?: number) {
-    const size = this.tileScale();
-    // 传送带格压在 ghost 带面上方一点（高架格抬到对应层高）；其它建筑贴地。
-    const lift = beltElevation === undefined ? .1 : BELT_BASE_LIFT + beltElevation * BELT_LEVEL_HEIGHT + BELT_DECK_TOP + .02;
-    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, lift));
+  private ghostArrow(tile: TilePoint, direction: CardinalDirection) {
+    // 朝向类建筑（非传送带）的贴地箭头；传送带 ghost 的方向由带面 chevron 表达。
+    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(this.tileScale(), GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, .1));
   }
 
   /**
