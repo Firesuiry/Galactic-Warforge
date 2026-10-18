@@ -1002,7 +1002,9 @@ export class PlanetThreeScene {
     if (this.interaction.hoveredTile) {
       const tile = this.interaction.hoveredTile;
       if (this.interaction.interactionMode.kind === 'build') {
-        const assessment = assessBuildTiles(this.data.catalog, this.interaction.interactionMode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId, this.interaction.interactionMode.rotation, this.data.inventory);
+        const mode = this.interaction.interactionMode;
+        // 高架带按目标高度预检（压低矮物流可放、压机器不可放），描边与服务端同口径（契约 §3.2）。
+        const assessment = assessBuildTiles(this.data.catalog, mode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId, mode.rotation, this.data.inventory, undefined, mode.elevation ?? 0);
         const footprint = assessment?.footprint ?? { width: 1, height: 1 };
         for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);
