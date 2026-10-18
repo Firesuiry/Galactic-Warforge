@@ -9,7 +9,7 @@ function sorter(overrides: Partial<Building> = {}): Building {
   return {
     id: 'sorter-1', type: 'sorter_mk1', owner_id: 'p1', position: { x: 5, y: 5, z: 0 }, rotation: '90',
     runtime: { params: { energy_consume: 1, energy_generate: 0, capacity: 0, footprint: { width: 1, height: 1 } }, state: 'running' },
-    sorter: { cycle_ticks: 6, range: 1 },
+    sorter: { cycle_ticks: 6, range: 3 },
     ...overrides,
   } as Building;
 }
@@ -124,9 +124,9 @@ describe('分拣器端点连通性提示（试玩 1016 U8）', () => {
     const statuses = sorterEndpointStatuses(unit, [unit], 16, { x: 0, y: 0, width: 32, height: 32 });
     expect(statuses[0].problem).toContain('没有可取的物品');
     expect(statuses[1].problem).toContain('不接收');
-    // 端点格仍报出来（玩家据此知道分拣器在看哪一格）。
-    expect(statuses[0].tile).toEqual({ x: 4, y: 5 });
-    expect(statuses[1].tile).toEqual({ x: 6, y: 5 });
+    // 端点格仍报出来（玩家据此知道分拣器扫到了哪一格）：range=3 时扫到最远那一格。
+    expect(statuses[0].tile).toEqual({ x: 2, y: 5 });
+    expect(statuses[1].tile).toEqual({ x: 8, y: 5 });
   });
 
   it('端点格不在本机场景窗口内时不下结论：ok=null（不误报「接不上」）', () => {
@@ -144,8 +144,8 @@ describe('分拣器端点连通性提示（试玩 1016 U8）', () => {
     expect(statuses[1]).toMatchObject({ ok: null, buildingId: 'm-east' });
   });
 
-  it('mk2 的 range=2：端点取朝向轴上最近的非空格，中间空格继续扫', () => {
-    const unit = sorter({ sorter: { cycle_ticks: 3, range: 2 } as never });
+  it('range 内的端点取朝向轴上最近的非空格，中间空格继续扫（第 19 轮起所有档位 range=3）', () => {
+    const unit = sorter({ sorter: { cycle_ticks: 6, range: 3 } as never });
     const statuses = sorterEndpointStatuses(unit, [unit, machine('m-far', 3, 5, [{ id: 'out', direction: 'output' }])], 16);
     expect(statuses[0]).toMatchObject({ ok: true, buildingId: 'm-far', tile: { x: 3, y: 5 } });
   });

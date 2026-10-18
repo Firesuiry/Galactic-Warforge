@@ -56,15 +56,16 @@ func TestSorterFeedsThreeSmeltersOnOneBelt(t *testing.T) {
 	}
 }
 
-// 三级分拣器的 cycle_ticks / range 与目录一致，且吞吐与 cycle_ticks 成反比。
+// 三级分拣器的 cycle_ticks / range 与目录一致（第 19 轮起所有档位都能跨 3 格），
+// 且吞吐与 cycle_ticks 成反比。
 func TestSorterTierCycleTicksMatchCatalog(t *testing.T) {
 	for _, tc := range []struct {
 		btype      model.BuildingType
 		cycleTicks int
 		reach      int
 	}{
-		{model.BuildingTypeSorterMk1, 6, 1},
-		{model.BuildingTypeSorterMk2, 3, 2},
+		{model.BuildingTypeSorterMk1, 6, 3},
+		{model.BuildingTypeSorterMk2, 3, 3},
 		{model.BuildingTypeSorterMk3, 2, 3},
 		{model.BuildingTypePileSorter, 2, 3},
 	} {
@@ -80,7 +81,7 @@ func TestSorterTierCycleTicksMatchCatalog(t *testing.T) {
 		})
 	}
 
-	// 同一布局（两端点各距 1 格 → 距离 2）：mk1 周期 12 tick，mk2 周期 6 tick，
+	// 同一布局（两端点各距 1 格 → 往返长度 1）：mk1 周期 6 tick，mk2 周期 3 tick，
 	// 120 tick 窗口里 mk2 的搬运次数正好是 mk1 的两倍。
 	trips := func(btype model.BuildingType) int {
 		ws := model.NewWorldState("planet-1", 6)
@@ -107,10 +108,10 @@ func TestSorterTierCycleTicksMatchCatalog(t *testing.T) {
 		}
 		return moved
 	}
-	// tick 0 起可搬：mk1 周期 12 → tick 0/12/…/120 共 11 次；mk2 周期 6 → 21 次。
+	// tick 0 起可搬：mk1 周期 6 → tick 0/6/…/120 共 21 次；mk2 周期 3 → 41 次。
 	mk1, mk2 := trips(model.BuildingTypeSorterMk1), trips(model.BuildingTypeSorterMk2)
-	if mk1 != 11 || mk2 != 21 {
-		t.Fatalf("120 tick 内 mk1 搬运 %d 次、mk2 搬运 %d 次，want 11 / 21（周期 12 / 6）", mk1, mk2)
+	if mk1 != 21 || mk2 != 41 {
+		t.Fatalf("120 tick 内 mk1 搬运 %d 次、mk2 搬运 %d 次，want 21 / 41（周期 6 / 3）", mk1, mk2)
 	}
 }
 
