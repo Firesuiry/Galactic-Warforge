@@ -43,33 +43,46 @@ async function storybookReachable(): Promise<boolean> {
   }
 }
 
-test.beforeAll(async () => {
-  if (await storybookReachable()) {
-    return;
-  }
-  const { spawn } = await import('node:child_process');
-  storybookProcess = spawn(
-    'npx',
-    ['storybook', 'dev', '-p', String(STORYBOOK_PORT), '--ci', '--no-open'],
-    { cwd: process.cwd(), stdio: 'ignore', detached: true },
-  );
-  storybookProcess.unref();
-  startedStorybook = true;
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
-    if (await storybookReachable()) return;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  throw new Error(`Storybook 未在 120s 内就绪（${STORYBOOK_ENTRY}）；先手工跑 npm run storybook 看日志`);
-});
-
-test.afterAll(async () => {
+function stopOwnStorybook() {
   if (!startedStorybook || !storybookProcess?.pid) return;
   try {
     process.kill(-storybookProcess.pid, 'SIGTERM');
   } catch {
     // 已退出
   }
+  startedStorybook = false;
+}
+
+test.beforeAll(async () => {
+  test.setTimeout(150_000);
+  if (await storybookReachable()) {
+    return;
+  }
+  const { spawn } = await import('node:child_process');
+  storybookProcess = spawn(
+    'npx',
+    // --exact-port：端口被别的服务占着时直接失败，不悄悄退到下一个端口（否则探测永远等不到）。
+    ['storybook', 'dev', '-p', String(STORYBOOK_PORT), '--exact-port', '--ci', '--no-open'],
+    { cwd: process.cwd(), stdio: 'ignore', detached: true },
+  );
+  let spawnError: Error | null = null;
+  storybookProcess.on('error', (error) => { spawnError = error; });
+  storybookProcess.unref();
+  startedStorybook = true;
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    if (await storybookReachable()) return;
+    if (spawnError || storybookProcess.exitCode !== null) break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  stopOwnStorybook();
+  throw new Error(spawnError
+    ? `起 Storybook 失败：${(spawnError as Error).message}`
+    : `Storybook 未在 ${STORYBOOK_ENTRY} 就绪（端口 ${STORYBOOK_PORT} 可能被非 Storybook 服务占用；可设 SW_STORYBOOK_PORT 换端口，或先手工跑 npm run storybook 看日志）`);
+});
+
+test.afterAll(() => {
+  stopOwnStorybook();
 });
 
 /**
