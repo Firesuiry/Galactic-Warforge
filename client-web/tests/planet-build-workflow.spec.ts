@@ -1,21 +1,31 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { backendEntry, webEntry } from './support/scenario';
+import { backendEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
 import { enterBuildMode, openBuildShortageNotice, revealBuildCard } from './support/build-bar';
 import { buildingCells, footprintFits, occupiedCells } from './support/footprint';
+import {
+  captureCommandRequests,
+  clickTileAt,
+  entityScreenPos,
+  focusTile,
+  hoveredTile,
+  settleProjection,
+  statusText,
+  waitPlanetThree,
+} from './support/planet-three';
 
 requireScenario('war', '需要官方战争场景（预置战场分析基站/重组制造台），默认遭遇战场景跳过。');
 
 /**
- * 群星式建造闭环验收（真实 Go 战争服）：
- * 登录 → 行星页底部建造栏点选建筑卡片（.planet-build-card）→ 在 canvas 上点击放置
+ * 群星式建造闭环验收（真实 Go 战争服，3D 视图）：
+ * 登录 → 行星页底部建造栏点选建筑卡片（.planet-build-card）→ 在 3D 星球上点格放置
  * → 命令回执出现在工作台（journal 最近结果）。
  *
- * 空地不硬编码：先通过 scene API 找到 p1 执行体，再在其操作范围内挑一块
- * 可建造、无建筑/单位/资源占用的 tile，最后用 canvas 的
- * data-camera-offset-x/y 与 data-tile-size 换算成屏幕坐标点击。
+ * R20-C1：2D 视图删除后（docs/guide/删除2D视图.md D1）不再有 DOM 实体层与
+ * `.planet-map-canvas__surface`，落点一律用 `window.__planetThree.tileScreenPos`
+ * 投影成页面像素，再用真实鼠标点击。
  */
 
 const PLANET_ID = 'planet-1-1';
@@ -91,17 +101,6 @@ async function installSession(page: Page) {
   });
 }
 
-/** 记录发往 /commands 的 POST 请求体，用于断言「命令真的发到了服务端」。 */
-function captureCommandRequests(page: Page): string[] {
-  const requests: string[] = [];
-  page.on('request', (request) => {
-    if (request.method() === 'POST' && request.url().endsWith('/commands')) {
-      requests.push(request.postData() ?? '');
-    }
-  });
-  return requests;
-}
-
 /**
  * 识别「前端本地预检拦截」（LOCAL_PREFLIGHT）：命令根本没发到服务端。
  *
@@ -120,37 +119,6 @@ async function localPreflightBlock(page: Page): Promise<string | null> {
   const isFailure = /失败|未生效/.test(text);
   const isPreflightBlock = /无法建造|无法开采|缺少|LOCAL_PREFLIGHT/.test(text);
   return isFailure && isPreflightBlock ? text : null;
-}
-
-/**
- * 与前端环绕渲染一致的 tile→视口坐标换算：
- * 世界像素 > 视口像素的轴启用环面环绕（相机 offset 已归一化），
- * tile 的屏幕位置要取规范（unwrapped）坐标，而不是 raw 坐标。
- */
-async function tileToScreenPosition(
-  page: Page,
-  surface: ReturnType<Page['locator']>,
-  tile: { x: number; y: number },
-  mapWidth: number,
-  mapHeight: number,
-) {
-  const offsetX = Number(await surface.getAttribute('data-camera-offset-x'));
-  const offsetY = Number(await surface.getAttribute('data-camera-offset-y'));
-  const tileSize = Number(await surface.getAttribute('data-tile-size'));
-  const box = await surface.boundingBox();
-  if (!box) {
-    throw new Error('交互面不可见');
-  }
-  const wrapMod = (value: number, size: number) => ((value % size) + size) % size;
-  const canonAxis = (t: number, offset: number, mapTiles: number, viewportPx: number) => (
-    mapTiles * tileSize > viewportPx
-      ? Math.floor(-offset / tileSize) + wrapMod(t - Math.floor(-offset / tileSize), mapTiles)
-      : t
-  );
-  return {
-    x: offsetX + (canonAxis(tile.x, offsetX, mapWidth, box.width) + 0.5) * tileSize,
-    y: offsetY + (canonAxis(tile.y, offsetY, mapHeight, box.height) + 0.5) * tileSize,
-  };
 }
 
 /**
@@ -185,8 +153,6 @@ function pickBuildTile(scene: ScenePayload): { x: number; y: number } {
   if (!executor) {
     throw new Error('战争服中应存在 p1 的执行体单位');
   }
-
-  const occupied = occupiedCells(scene);
 
   const origin = executor.position;
   for (let distance = 1; distance <= OPERATE_RANGE; distance += 1) {
@@ -231,17 +197,15 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
 
   const commandRequests = captureCommandRequests(page);
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`/planet/${PLANET_ID}`);
 
   // 底部建造栏就绪后点选 wind_turbine 卡片，进入建造模式（幽灵预览提示出现）。
   // §3.2 快捷栏按分类页签分页，卡片未必在第一页：helper 会切到它所在的分类并等模式激活。
   await enterBuildMode(page, BUILDING_ID, '放置 风力涡轮机');
+  await waitPlanetThree(page);
 
-  // 用 canvas 上的相机参数把 tile 坐标换算成元素内点击坐标（环面规范坐标）。
-  const surface = page.locator('.planet-map-canvas__surface');
-  await surface.click({
-    position: await tileToScreenPosition(page, surface, tile, scene.map_width, scene.map_height),
-  });
+  // 3D 投影：tile → 页面坐标（不在视野内时接口会先聚焦）。
+  await clickTileAt(page, tile);
 
   // 工作台最近结果：要么是本地预检拦下（战争服资源枯竭，合法场景状态），
   // 要么真的发出 build 命令并被服务端受理（有资源时校验真实闭环）。
@@ -259,9 +223,7 @@ test('建造栏点选建筑卡片后在地图点击放置，命令回执出现�
           `/world/planets/${PLANET_ID}/scene?x=0&y=0&width=48&height=48`,
         );
         const nextTile = pickBuildTile(fresh);
-        await surface.click({
-          position: await tileToScreenPosition(page, surface, nextTile, fresh.map_width, fresh.map_height),
-        });
+        await clickTileAt(page, nextTile);
         await expect(firstEntry).toContainText('建造', { timeout: 10_000 });
         const again = await localPreflightBlock(page);
         if (!again) {
@@ -367,7 +329,7 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
 
   const commandRequests = captureCommandRequests(page);
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`/planet/${PLANET_ID}`);
 
   const buildCard = page.locator('.planet-build-card[data-building-id="mining_machine"]');
   // §3.2 DSP 快捷栏一次只显示一个分类页签：采矿机在「采集」下，先切过去再点。
@@ -381,11 +343,11 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
     return;
   }
   await expect(page.locator('.planet-build-bar__hint')).toContainText('放置 采矿机');
+  await waitPlanetThree(page);
 
   // 与前端 assessBuildTiles 同口径的候选排序：按到机甲的距离由近及远逐个尝试——「被资源点占用」
   // 是采矿机的合法目标，但服务端还会因「围死单位」「超出作业范围」拒收，且并行规格可能刚占了
   // 最近的格子。逐个点到服务端受理（accepted）为止，保证这条真实闭环断言每次都真的跑起来。
-  const surface = page.locator('.planet-map-canvas__surface');
   const byDistance = [...usableCandidates].sort((left, right) => (
     surfaceDistance(left.position, executor.position) - surfaceDistance(right.position, executor.position)
   ));
@@ -395,9 +357,7 @@ test('采集建筑可直接放置在资源格上（前端不再本地拦截）',
   // 只重试「被服务端规则拒绝」的回执（围死/超范围/资源不足/并发上限等）：命令确实发出去了，
   // 换一格继续试；本地预检拦截（LOCAL_PREFLIGHT）说明前端根本没发命令，直接跳出。
   for (const candidate of byDistance) {
-    await surface.click({
-      position: await tileToScreenPosition(page, surface, candidate.position, scene.map_width, scene.map_height),
-    });
+    await clickTileAt(page, candidate.position);
     await expect
       .poll(async () => (await page.locator('.planet-command-history li').count()) > 0, { timeout: 5_000 })
       .toBe(true);
@@ -448,47 +408,38 @@ test('首次进入行星页视角聚焦基地，基地不被信息片遮挡且�
   const [homeId, homeBuilding] = home;
 
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`/planet/${PLANET_ID}`);
 
-  const surface = page.locator('.planet-map-canvas__surface');
-  await expect(surface).toBeVisible({ timeout: 30_000 });
+  await waitPlanetThree(page);
 
-  // 回家视角：细分网格后是 16px/**cell**（旧 48px/tile 的观感，1 tile = 3 cell），
-  // 基地落在视口内且不压在左上行星胶囊区域。
-  // §3.2 把胶囊默认收成一行（名称 · 电力 · 研究），可点区域比旧的四芯片版小得多，
-  // 这里按收起态实测盒子判定，不再用写死的 456×150。
-  await expect
-    .poll(async () => Number(await surface.getAttribute('data-tile-size')), { timeout: 10_000 })
-    .toBe(16);
-  const surfaceBox = await surface.boundingBox();
-  if (!surfaceBox) {
-    throw new Error('交互面不可见');
+  // 回家视角：3D 地面视角聚焦基地，基地投影落在画布内且不压在左上行星胶囊区域。
+  const canvas = page.locator('.planet-three__surface canvas');
+  const canvasBox = await canvas.boundingBox();
+  if (!canvasBox) {
+    throw new Error('3D 画布不可见');
   }
-  const screenPos = await tileToScreenPosition(
-    page,
-    surface,
-    homeBuilding.position,
-    scene.map_width,
-    scene.map_height,
-  );
-  const screenX = screenPos.x;
-  const screenY = screenPos.y;
-  expect(screenX).toBeGreaterThan(0);
-  expect(screenX).toBeLessThan(surfaceBox.width);
-  expect(screenY).toBeGreaterThan(0);
-  expect(screenY).toBeLessThan(surfaceBox.height);
+  const screenPos = await entityScreenPos(page, homeId);
+  // 页面坐标 → 画布内坐标（base 建筑 5×5，entityScreenPos 取占地中心）。
+  const localX = screenPos.x - canvasBox.x;
+  const localY = screenPos.y - canvasBox.y;
+  expect(localX).toBeGreaterThan(0);
+  expect(localX).toBeLessThan(canvasBox.width);
+  expect(localY).toBeGreaterThan(0);
+  expect(localY).toBeLessThan(canvasBox.height);
   const chip = await page.locator('.planet-title-chip').boundingBox();
   if (!chip) {
     throw new Error('行星胶囊不可见');
   }
   const underTitleChip =
-    screenX >= chip.x && screenX <= chip.x + chip.width
-    && screenY >= chip.y && screenY <= chip.y + chip.height;
+    screenPos.x >= chip.x && screenPos.x <= chip.x + chip.width
+    && screenPos.y >= chip.y && screenPos.y <= chip.y + chip.height;
   expect(underTitleChip, `基地落在行星胶囊 ${JSON.stringify(chip)} 下（点不到）`).toBe(false);
 
-  // 直接点击基地所在格 → 选中该建筑（信息片不阻断画布命中）。
-  await surface.click({ position: { x: screenX, y: screenY } });
-  await expect(page.locator('.planet-map-canvas__status')).toContainText(`建筑 ${homeId}`);
+  // 直接点击基地（占地中心）→ 选中该建筑（信息片不阻断画布命中）。
+  await page.mouse.click(screenPos.x, screenPos.y);
+  await expect(page.locator('.planet-three__nav-status')).toContainText(`建筑 ${homeId}`);
+  // 底部选择条与状态行是同一份选中状态的两种呈现。
+  await expect(page.getByTestId('planet-selection-bar')).toBeVisible();
 
   // §3.2：胶囊默认收起（一行），可展开成资源芯片 + 「生产规划」，再折回收起态。
   await expect(page.locator('.planet-title-chip__chips')).toHaveCount(0);
@@ -512,7 +463,7 @@ for (const viewport of [
   test(`工作台抽屉打开时建造栏自动收起，展开后不与抽屉重叠（${viewport.label}）`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await installSession(page);
-    await page.goto(`/planet/${PLANET_ID}?view=2d`);
+    await page.goto(`/planet/${PLANET_ID}`);
     await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole('button', { name: '工作台' }).first().click();
