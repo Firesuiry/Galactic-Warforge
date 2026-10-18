@@ -178,9 +178,7 @@ test('390px 生产与发展入口可操作，配方检索和画质设置不溢�
   await openViewSettings(page);
   await page.getByRole('combobox', { name: '画面质量' }).selectOption('balanced');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __planetThree: DebugScene }).__planetThree.getQuality())).toBe('balanced');
-  await page.getByRole('button', { name: '平面战术', exact: true }).click();
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible();
-  await page.getByRole('button', { name: '3D 星球', exact: true }).click();
+  // R20：2D 视图已下线，不再做 3D⇄2D 往返；窄屏下 3D 画布保持可见。
   await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 30_000 });
   expect(errors).toEqual([]);
 });

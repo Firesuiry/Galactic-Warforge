@@ -78,9 +78,7 @@ for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_p
       if(await workbench.getAttribute('aria-expanded')==='true')await workbench.click();
       await page.setViewportSize({width:390,height:844});
       expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
-      await page.getByRole('button',{name:'平面战术',exact:true}).click();
-      await expect(page.locator('.planet-map-canvas__surface')).toBeVisible();
-      await page.getByRole('button',{name:'3D 星球',exact:true}).click();
+      // R20：2D 视图已下线，不再做 3D⇄2D 往返；窄屏下 3D 画布保持可见。
       await expect(page.locator('.planet-three__surface canvas')).toBeVisible({timeout:30_000});
       await page.screenshot({path:`/tmp/siliconworld-cube-mobile-${n}.png`,fullPage:true});
     }

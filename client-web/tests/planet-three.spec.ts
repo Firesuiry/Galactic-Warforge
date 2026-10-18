@@ -258,7 +258,7 @@ async function clickTileExpectingCommand(
   throw new Error(`no ${commandType} command issued after ${attempts} tile click attempts`);
 }
 
-test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切换平面战术', async ({ page }) => {
+test('3D 星球可旋转缩放、查看建筑、真实建造和移动', async ({ page }) => {
   // Software WebGL needs extra time for MSAA renders and the two full-scene captures.
   test.setTimeout(300_000);
   const errors: string[] = [];
@@ -383,12 +383,7 @@ test('3D 星球可旋转缩放、查看建筑、真实建造和移动，并切�
   }
 
   await page.getByRole('button', { name: '工作台', exact: true }).click();
-  await page.getByRole('button', { name: '平面战术', exact: true }).click();
-  // 切到 2D 要等 Pixi 视图挂载；并行跑时别的规格的软件渲染会把这一步拖到 5s 以上
-  // （实测 ~5.5s），默认 5s 的断言超时会假红，这里给足余量。
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 30_000 });
-  await expect(canvas).toHaveCount(0);
-  await page.getByRole('button', { name: '3D 星球', exact: true }).click();
+  // R20：2D「平面战术」视图已下线，不再做 3D⇄2D 往返；3D 画布保持可见。
   await expect(canvas).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: '聚焦基地', exact: true }).click();
   await page.screenshot({ path: '/tmp/3d-quality-before.png', fullPage: true });
