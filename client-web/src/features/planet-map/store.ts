@@ -6,7 +6,7 @@ import type { SseStatus } from '@shared/sse';
 
 import type { PlanetLayerKey, SelectedEntity, TilePoint } from '@/features/planet-map/model';
 import { mergeRecentAlerts, mergeRecentEvents } from '@/features/planet-map/model';
-import { MAX_BELT_ELEVATION } from '@/features/planet-map/logistics-tier';
+import { clampBeltElevation } from '@/features/planet-map/logistics-tier';
 
 /**
  * 需要点选目标的单位指令模式（A 攻击移动 / P 巡逻 / G 守卫）。
@@ -47,11 +47,6 @@ export type PlanetInteractionMode =
   | { kind: 'theater_zone'; theaterId: string; zoneType: WarTheaterZoneType };
 
 export const INSPECT_MODE: PlanetInteractionMode = { kind: 'inspect' };
-
-/** 建造目标高度钳到 0–4（服务端 MaxBeltElevation 同口径）。 */
-export function clampBuildElevation(elevation: number): number {
-  return Math.max(0, Math.min(MAX_BELT_ELEVATION, Math.round(elevation)));
-}
 
 export interface PlanetZoomLevel {
   label: string;
@@ -684,7 +679,7 @@ export const usePlanetViewStore = create<PlanetViewStore>()((set) => ({
     set((state) => {
       const mode = state.interactionMode;
       if (mode.kind !== 'build' || !mode.buildingType.startsWith('conveyor_belt')) return state;
-      const next = clampBuildElevation((mode.elevation ?? 0) + delta);
+      const next = clampBeltElevation((mode.elevation ?? 0) + delta);
       if (next === (mode.elevation ?? 0)) return state;
       return { interactionMode: { ...mode, elevation: next === 0 ? undefined : next } };
     });

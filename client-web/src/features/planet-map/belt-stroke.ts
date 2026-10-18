@@ -1,6 +1,6 @@
 import { surfaceNormal, surfaceStep, type SurfaceDirection, type SurfacePoint } from '@shared/surface';
 
-import { MAX_BELT_ELEVATION } from './logistics-tier';
+import { clampBeltElevation } from './logistics-tier';
 
 export interface BeltPlacement { tile: SurfacePoint; direction: SurfaceDirection }
 
@@ -39,10 +39,6 @@ export function traceBeltStroke(from: SurfacePoint, to: SurfacePoint, size: numb
     }
   }
   return [];
-}
-
-export function clampBeltElevation(elevation: number): number {
-  return Math.max(0, Math.min(MAX_BELT_ELEVATION, Math.round(elevation)));
 }
 
 function isCardinal(direction: string | undefined): direction is SurfaceDirection {

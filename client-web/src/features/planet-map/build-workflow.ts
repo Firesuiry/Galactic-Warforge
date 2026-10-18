@@ -14,7 +14,10 @@ import type {
   StateSummary,
 } from "@shared/types";
 
+import type { Building } from "@shared/types";
+
 import type { PlanetRenderView } from "@/features/planet-map/model";
+import { beltElevation, clampBeltElevation, isLowLogisticsType } from "@/features/planet-map/logistics-tier";
 import {
   getResourceList,
   getTerrainTile,
@@ -83,7 +86,7 @@ export interface BuildBlockedTile {
   x: number;
   y: number;
   terrain: string;
-  reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host" | "unexplored";
+  reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host" | "unexplored" | "overhead_belt" | "invalid_elevation";
   buildingId?: string;
   resourceId?: string;
   /**
@@ -128,12 +131,14 @@ export interface BuildTileAssessment {
  * 排序：锚点格优先 > 原因优先级 > 坐标，结果完全确定。
  */
 const BLOCK_REASON_ORDER: Record<BuildBlockedTile["reason"], number> = {
-  building: 0,
-  resource: 1,
-  missing_host: 2,
-  terrain: 3,
-  missing_resource: 4,
-  unexplored: 5,
+  invalid_elevation: 0,
+  building: 1,
+  overhead_belt: 2,
+  resource: 3,
+  missing_host: 4,
+  terrain: 5,
+  missing_resource: 6,
+  unexplored: 7,
 };
 
 /** 提示要报的那一格阻挡：锚点格优先，其次按原因优先级 + 坐标，保证确定性。 */
@@ -202,6 +207,8 @@ export function describeBuildBlock(
     case 'building': return describeTileOccupant(blocked, buildingName);
     case 'resource': return '被资源点占用';
     case 'missing_host': return '需要建在己方仓库上';
+    case 'overhead_belt': return '上方有高架传送带';
+    case 'invalid_elevation': return '只有传送带可以架高';
     case 'unexplored': return '未探索区域，是否可建由服务器判定';
     default: return '需要建在资源点上';
   }
@@ -376,6 +383,8 @@ function buildTileAssessment(input: {
   planet: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   selectedPosition?: Position;
+  /** 第 19 轮多层传送带：目标高度 0–4（缺省 0）。 */
+  elevation?: number;
 }) {
   if (!input.selectedPosition) {
     return undefined;
@@ -449,14 +458,32 @@ function buildTileAssessment(input: {
     }
   }
   const footprintCellKeys = new Set(footprintCells.map((cell) => `${cell.x},${cell.y}`));
+  const isBelt = input.buildingType?.startsWith('conveyor_belt') === true;
+  // 非传送带给 elevation>0：服务端直接拒（INVALID_ELEVATION「只有传送带可以架高」），本地同口径。
+  const invalidElevation = !isBelt && (input.elevation ?? 0) > 0;
+  const targetElevation = isBelt ? clampBeltElevation(input.elevation ?? 0) : 0;
+  // 高架带只压 LowLogistics；地面层带子/其它建筑照旧占格。
+  const occupiesLayer = (building: Building) => targetElevation > 0
+    ? beltElevation(building) === targetElevation
+    : beltElevation(building) === 0;
+  const buildings = Object.values(input.planet.buildings ?? {});
 
   for (let dy = 0; dy < footprint.height; dy += 1) {
     for (let dx = 0; dx < footprint.width; dx += 1) {
       const {x,y} = surfaceOffset(input.selectedPosition, dx, dy, input.planet.map_width / 3);
       const terrain = getTerrainTile(input.planet, x, y);
-      const blockingBuilding = Object.values(input.planet.buildings ?? {}).find((building) => (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
+      const sameLayerBuilding = buildings.find((building) => occupiesLayer(building) && (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
+      // 高架带（elevation>0）只看同层占用：地面带/分拣器等 LowLogistics 允许压在下面。
+      const blockingBuilding = sameLayerBuilding;
       const blockingResource = findBlockingResource(resources, x, y);
       const blockingTask = constructionAt(x, y);
+      if (invalidElevation) {
+        blockedTiles.push({ x, y, terrain, reason: "invalid_elevation" });
+      }
+      // 地面建筑（非 LowLogistics）不能建在有高架带的格子上：任一占地格有高架带即拒。
+      const overheadBelt = !invalidElevation && targetElevation === 0 && input.buildingType && !isLowLogisticsType(input.buildingType)
+        ? buildings.find((building) => beltElevation(building) > 0 && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
+        : undefined;
 
       // 未探索格：客户端没有该格地形（unknown），是否可建只有服务端知道——
       // 记为 unexplored（不拦截），让 build 命令照常下发，以服务端回执为准。
@@ -486,6 +513,15 @@ function buildTileAssessment(input: {
           terrain,
           reason: "building",
           blockingConstruction: constructionBlocker(blockingTask),
+        });
+      }
+      if (overheadBelt) {
+        blockedTiles.push({
+          x,
+          y,
+          terrain,
+          reason: "overhead_belt",
+          buildingId: overheadBelt.id,
         });
       }
       if (blockingResource && !requiresResourceNode) {
@@ -627,8 +663,9 @@ export function assessBuildTiles(
   rotation?: number,
   inventory?: ItemInventory,
   runtime?: PlanetRuntimeView,
+  elevation?: number,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, runtime, selectedPosition: position, playerId, rotation, inventory });
+  return buildTileAssessment({ catalog, buildingType, planet, runtime, selectedPosition: position, playerId, rotation, inventory, elevation });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */
