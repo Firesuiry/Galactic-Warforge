@@ -1397,6 +1397,8 @@ export interface ConstructionTaskView {
   recipe_id?: string;
   cost?: BuildCost;
   state: ConstructionState;
+  /** 传送带施工任务的目标层（第 19 轮契约 §3.2）：0 = 地面（服务端 omitempty 不下发），1–4 = 高架。 */
+  elevation?: number;
   /** 建筑中文名（服务端 building_name）。 */
   building_name?: string;
   /** 未开工 / 落成推迟的原因：insufficient_materials / executor_concurrent_limit / region_concurrent_limit / footprint_occupied。 */
