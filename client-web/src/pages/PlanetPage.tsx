@@ -26,12 +26,14 @@ import {
   getPendingCommandCount,
   usePlanetCommandStore,
 } from "@/features/planet-commands/store";
-import { PlanetMapPixi, type PlanetMapCapture } from "@/features/planet-map/PlanetMapPixi";
+import { PlanetMapPixi } from "@/features/planet-map/PlanetMapPixi";
+import type { PlanetMapCapture } from "@/features/planet-map/planet-map-capture";
 import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { initialBuildDirection } from "@/features/planet-map/build-workflow";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
 import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
 import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
+import { parseTiltParam } from "@/features/planet-map/planet-three-status";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -43,6 +45,7 @@ import { useMechaJobProgress } from "@/features/planet-map/mecha-job-progress";
 import { PlanetLegionPanel } from "@/features/planet-map/PlanetLegionPanel";
 import { PlanetTheaterControls } from "@/features/planet-map/PlanetTheaterControls";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { refetchAfterCommandSettles } from "@/features/planet-commands/settled-refetch";
 import { reportLocalPreflightBlock } from "@/features/planet-commands/local-preflight";
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from "@/features/planet-commands/store";
 import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
@@ -139,6 +142,17 @@ export function PlanetPage() {
   );
   const { planetId = "" } = useParams();
   const captureRef = useRef<PlanetMapCapture | null>(null);
+  // 3D 深链（R20-A ⑥）：分享链接里的 `tilt` / `zoom` 在 3D 视图打开时还原相机。
+  // 3D 相机状态按需读取（调试面板打开/复制链接时经 capture.getViewport 拉），
+  // 不再维护挂载时上报一次的快照 state。
+  const [captureVersion, setCaptureVersion] = useState(0);
+  const threeInitialTilt = parseTiltParam(searchParams.get("tilt"), 0.65);
+  const threeInitialZoom = (() => {
+    const raw = searchParams.get("zoom");
+    if (raw === null || raw.trim() === "") return undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  })();
   // 跨场景窗口的己方实体累积（只增不减）：新手引导是「有没有建过」的历史推导，
   // 不能用只覆盖相机窗口的 sceneQuery 数据——镜头一平移，窗口外的基地就从响应里
   // 消失，引导会从 4/8 回退到 1/8（试玩报告 2026-10-07 阻断级 4）。
@@ -395,12 +409,42 @@ export function PlanetPage() {
     }, { replace: true });
   }
 
+  const theatersQueryKey = ["war-theaters", session.serverUrl, session.playerId] as const;
+
+  /**
+   * 战区类命令（划定/新建）结算后刷新战区列表。
+   *
+   * 不能 `.then(() => refetch())`：HTTP 202 只表示命令入队，服务端在**下一个 tick**
+   * 才结算；立刻重取拿到的是旧战区（试玩 1020 A2：(54,144) r6 改成 (48,139) r4 后
+   * 画面 3.5s 仍是旧圆，要等 15s 兜底轮询）。改为等 journal 条目拿到权威回写
+   * （SSE command_result / 快照补拉）再刷新，另带一次延迟兜底（见 settled-refetch.ts）。
+   */
+  function refetchTheatersAfterCommand(commandType: string) {
+    refetchAfterCommandSettles(queryClient, {
+      commandType,
+      queryKey: theatersQueryKey,
+    });
+  }
+
+  /**
+   * PlanetTheaterControls 的 onChanged（theater_create 提交返回后才触发）：
+   * 同样等它结算，否则新建的战区要等 15s 兜底轮询才出现在地图上。
+   */
+  function refetchTheatersAfterCreate() {
+    refetchAfterCommandSettles(queryClient, {
+      commandType: "theater_create",
+      queryKey: theatersQueryKey,
+      trackLatestExisting: true,
+    });
+  }
+
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
   function handleDefineZone(zone: TheaterZoneGeometry) {
     const mode = usePlanetViewStore.getState().interactionMode;
     if (mode.kind !== "theater_zone" || !planetId) {
       return;
     }
+    refetchTheatersAfterCommand("theater_define_zone");
     void submitPlanetCommand({
       commandType: "theater_define_zone",
       planetId,
@@ -415,8 +459,6 @@ export function PlanetPage() {
         event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
         limit: 50,
       }),
-    }).then(() => {
-      void theatersQuery.refetch();
     });
     // 保持划定模式，便于连续画多个区域（右键/Esc 退出，对齐建造模式）
   }
@@ -912,8 +954,13 @@ export function PlanetPage() {
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
-          onCanvasReady={(capture) => { captureRef.current = capture; }}
+          onCanvasReady={(capture) => {
+            captureRef.current = capture;
+            // 3D capture 就绪后让调试面板重渲染，拿到 getViewport 句柄（R20-A ⑥）。
+            setCaptureVersion(version => version + 1);
+          }}
           onContextTile={interactions.contextTile}
+          onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
           onSelectEntity={() => {
             setActiveDetailPanel("selection");
@@ -922,10 +969,19 @@ export function PlanetPage() {
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
+          initialTilt={threeInitialTilt}
+          initialZoom={threeInitialZoom}
           theaters={theatersQuery.data?.theaters}
           /* 3D 左下那一列的「图层与视角」与 2D 工具条是**同一份**面板：
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
-          layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} />}
+          layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} threeDimensional />}
+          theaterControls={(
+            <PlanetTheaterControls
+              onChanged={refetchTheatersAfterCreate}
+              planetId={planet.planet_id}
+              theaters={theatersQuery.data?.theaters ?? []}
+            />
+          )}
         /> : <PlanetMapPixi
           alerts={liveAlerts}
           catalog={catalog}
@@ -1084,6 +1140,8 @@ export function PlanetPage() {
         />
         <PlanetDebugPanel
           capture={captureRef.current}
+          captureVersion={captureVersion}
+          threeDimensional={isThree}
           catalog={catalog}
           currentTick={planet.tick}
           game={currentGameQuery.data}
@@ -1109,7 +1167,8 @@ export function PlanetPage() {
         {/* 工具条（C3）：2D 的左下图标列；3D 由 PlanetMapThree 自带的同构列渲染
             （dimensional 时整条返回 null，避免左下出现两列重复图标）。
             战区划定（C4）作为这一列的最后一格：2D 拖矩形建 zone；
-            3D 不渲染——球面拖拽是旋转，划不出矩形（§3.2 复核）。 */}
+            R20-A ③ 起 3D 也有战区拖拽，但按钮渲染在 PlanetMapThree 自己的图标列里
+            （这条 2D 工具条在 3D 下整条返回 null）。 */}
         <PlanetMapToolbar
           dimensional={isThree}
           networks={networks}
@@ -1120,14 +1179,11 @@ export function PlanetPage() {
           planet={planet}
           runtime={runtime}
         >
-          {isThree ? null : (
-            <PlanetTheaterControls
-              dimensional={false}
-              onChanged={() => { void theatersQuery.refetch(); }}
-              planetId={planet.planet_id}
-              theaters={theatersQuery.data?.theaters ?? []}
-            />
-          )}
+          <PlanetTheaterControls
+            onChanged={refetchTheatersAfterCreate}
+            planetId={planet.planet_id}
+            theaters={theatersQuery.data?.theaters ?? []}
+          />
         </PlanetMapToolbar>
         {countOutOfAmmoUnits(planet.units, session.playerId) > 0 ? (
           <div className="planet-ammo-alert" role="alert" data-testid="planet-ammo-alert">

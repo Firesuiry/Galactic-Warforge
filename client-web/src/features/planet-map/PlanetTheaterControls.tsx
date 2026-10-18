@@ -2,9 +2,10 @@
  * 战区划定控件（C4）：行星地图左下角工具条旁的「战区」按钮 + 浮层。
  *
  * 浮层内选战区 + 区域类型后进入 theater_zone 拖拽模式（地图上左键拖矩形）；
- * 无战区时内联创建（theater_create）。拖拽落点由 PlanetMapPixi 回调 PlanetPage 提交
- * theater_define_zone（planet_id + position + radius 由拖拽几何换算）。
- * 仅 2D 平面战术视图支持拖拽；3D 下提示切换。
+ * 无战区时内联创建（theater_create）。拖拽落点由地图视图（2D 的 PlanetMapPixi /
+ * 3D 的 PlanetMapThree，R20-A ③）回调 PlanetPage 提交 theater_define_zone
+ * （planet_id + position + radius 由拖拽几何换算）。
+ * 3D 球面拖拽与 2D 同一套屏幕矩形判定，不再需要「请切回 2D」的提示。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,15 +34,12 @@ const ZONE_TYPES: WarTheaterZoneType[] = [
 interface PlanetTheaterControlsProps {
   planetId: string;
   theaters: WarTheaterView[];
-  /** 3D 球面视图：拖拽划定只在 2D 平面战术视图可用（浮层给切换提示）。 */
-  dimensional: boolean;
   onChanged?: () => void;
 }
 
 export function PlanetTheaterControls({
   planetId,
   theaters,
-  dimensional,
   onChanged,
 }: PlanetTheaterControlsProps) {
   const client = useApiClient();
@@ -155,13 +153,9 @@ export function PlanetTheaterControls({
                   ))}
                 </Select>
               </label>
-              {dimensional ? (
-                <p className="subtle-text">拖拽划定需切到「平面战术」视图（右上视图开关）。</p>
-              ) : (
-                <button className="secondary-button" type="button" onClick={handleStartZone}>
-                  开始拖拽划定
-                </button>
-              )}
+              <button className="secondary-button" type="button" onClick={handleStartZone}>
+                开始拖拽划定
+              </button>
               <details className="planet-theater-controls__more">
                 <summary>新建战区</summary>
                 <div className="planet-theater-controls__create">

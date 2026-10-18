@@ -61,17 +61,10 @@ import {
   usePlanetViewStore,
 } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import type { PlanetMapCapture } from '@/features/planet-map/planet-map-capture';
 
-/**
- * 行星地图截图捕获句柄：替代旧 PlanetMapCanvas 透出的 HTMLCanvasElement。
- * - clientWidth/clientHeight：分享链接/视口 JSON 的视口换算（等价旧 canvas.clientWidth）。
- * - captureScreenshot：用 Pixi extract 把当前舞台（底图+实体+交互叠加）抓成 canvas 供 PNG 导出。
- */
-export interface PlanetMapCapture {
-  clientWidth: number;
-  clientHeight: number;
-  captureScreenshot: () => HTMLCanvasElement | null;
-}
+export type { PlanetMapCapture } from '@/features/planet-map/planet-map-capture';
+
 
 interface PlanetMapPixiProps {
   catalog?: CatalogView;

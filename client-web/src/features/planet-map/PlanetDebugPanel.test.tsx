@@ -38,10 +38,18 @@ function adminGame(): GameSummary {
   };
 }
 
-function renderPanel(overrides: { game?: GameSummary; currentTick?: number } = {}) {
+function renderPanel(overrides: {
+  game?: GameSummary;
+  currentTick?: number;
+  /** 3D capture：提供 getViewport 时面板按需读取相机状态。 */
+  capture?: Parameters<typeof PlanetDebugPanel>[0]["capture"];
+  threeDimensional?: boolean;
+} = {}) {
   return render(
     <PlanetDebugPanel
-      capture={null}
+      capture={overrides.capture ?? null}
+      captureVersion={overrides.capture ? 1 : 0}
+      threeDimensional={overrides.threeDimensional ?? Boolean(overrides.capture)}
       currentTick={overrides.currentTick ?? 120}
       game={overrides.game ?? adminGame()}
       onPullEvents={vi.fn().mockResolvedValue(undefined)}
@@ -177,5 +185,59 @@ describe("PlanetDebugPanel 快进控件布局", () => {
     expect(screen.getByText(/快进需要 admin 身份/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "开始快进" })).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
+  });
+});
+
+describe("PlanetDebugPanel 3D 视口（R20-A ④）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useSessionStore.getState().setSession({ serverUrl: "http://server", playerId: "p1", playerKey: "key_player_1" });
+    usePlanetViewStore.getState().toggleDebugOpen();
+  });
+
+  it("分享链接按 3D 中心格 + zoom(相机高度) + tilt 生成，不再带 2D 的 offset 视口", async () => {
+    const { buildThreeShareUrl, parseThreeViewLink } = await import("./PlanetPanels");
+    const url = new URL(buildThreeShareUrl({
+      href: "http://localhost/planet/planet-1-1",
+      selected: { kind: "building", id: "b-1", position: { x: 42, y: 17, z: 0 } },
+      layers: { terrain: true, buildings: true, units: true, resources: true, fog: true, logistics: false, power: true, selection: true, grid: true, alerts: true, routes: true, zones: true } as never,
+      viewport: { center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.6549, width: 1200, height: 800 },
+    }));
+    expect(url.searchParams.get("x")).toBe("42");
+    expect(url.searchParams.get("y")).toBe("17");
+    expect(url.searchParams.get("zoom")).toBe("3.5");
+    expect(url.searchParams.get("tilt")).toBe("0.655");
+    expect(url.searchParams.get("view")).toBe("3d");
+    expect(url.searchParams.get("select")).toContain("b-1");
+    // 生成的链接再解析回来：同一中心格与 tilt（深链能回到同一视角）。
+    expect(parseThreeViewLink(url.toString())).toEqual({
+      center: { x: 42, y: 17 },
+      zoom: 3.5,
+      tilt: 0.655,
+    });
+  });
+
+  it("按需读取：点「复制链接」时现拉 capture.getViewport()，不是挂载时的快照", async () => {
+    const getViewport = vi.fn(() => ({ center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.65, width: 1200, height: 800 }));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    // 面板打开时渲染会读一次（相机行）；「复制链接」再按需拉一次当前状态。
+    renderPanel({ capture: { clientWidth: 1200, clientHeight: 800, captureScreenshot: () => null, getViewport } });
+    getViewport.mockClear();
+    fireEvent.click(screen.getByText("复制视角链接"));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    // 复制时至少拉一次（相机行渲染 + 复制各拉一次；关键是没有用挂载时的旧快照）。
+    expect(getViewport).toHaveBeenCalled();
+    const copied = new URL(writeText.mock.calls[0][0] as string);
+    expect(copied.searchParams.get("x")).toBe("42");
+    expect(copied.searchParams.get("y")).toBe("17");
+    expect(copied.searchParams.get("zoom")).toBe("3.5");
+    expect(copied.searchParams.get("tilt")).toBe("0.65");
+  });
+
+  it("面板在 3D 快照下渲染（分享/导出入口存在）", () => {
+    renderPanel({ capture: { clientWidth: 1200, clientHeight: 800, captureScreenshot: () => null, getViewport: () => ({ center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.65, width: 1200, height: 800 }) } });
+    expect(screen.getByText("复制视角链接")).toBeInTheDocument();
+    expect(screen.getByText("导出视角 JSON")).toBeInTheDocument();
   });
 });

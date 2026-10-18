@@ -1044,7 +1044,9 @@ export function getViewportTileBounds(
   };
 }
 
-function isInsideBounds(position: Position, bounds: ViewportTileBounds) {
+function isInsideBounds(position: Position, bounds: ViewportTileBounds | null | undefined) {
+  // 3D 拿不到场景窗口时（bounds=null）不裁剪：全部实体都算「可见」。
+  if (!bounds) return true;
   const point = toTilePoint(position);
   const inX = bounds.wrapX && bounds.mapWidth
     ? wrapMod(point.x - bounds.minX, bounds.mapWidth) <= bounds.maxX - bounds.minX
@@ -1487,14 +1489,18 @@ export function buildViewportExport(options: {
   viewportWidth: number;
   viewportHeight: number;
   shareUrl: string;
+  /** 3D：按 scene 当前场景窗口裁剪（R20-A ⑥）；null = 不裁剪，导出整张行星。 */
+  bounds?: ViewportTileBounds | null;
 }) {
-  const bounds = getViewportTileBounds(
-    options.planet,
-    options.camera,
-    options.tileSize,
-    options.viewportWidth,
-    options.viewportHeight,
-  );
+  const bounds = options.bounds !== undefined
+    ? options.bounds
+    : getViewportTileBounds(
+      options.planet,
+      options.camera,
+      options.tileSize,
+      options.viewportWidth,
+      options.viewportHeight,
+    );
 
   const buildings = getBuildingList(options.planet)
     .filter((building) => isInsideBounds(building.position, bounds))
@@ -1544,7 +1550,8 @@ export function buildViewportExport(options: {
     planet_id: options.planet.planet_id,
     share_url: options.shareUrl,
     viewport: {
-      ...bounds,
+      // 3D 拿不到场景窗口时 bounds 为 null：不裁剪，导出整张行星（R20-A ⑥）。
+      ...(bounds ?? {}),
       zoom: options.tileSize,
       width: options.viewportWidth,
       height: options.viewportHeight,

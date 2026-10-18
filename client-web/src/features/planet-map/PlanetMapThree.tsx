@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Bug, Crosshair, Globe2, House, Layers, Minus, Plus, Settings2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
-import type { PlanetMapCapture } from './PlanetMapPixi';
-import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
+import type { PlanetMapCapture, PlanetThreeViewportSnapshot } from './planet-map-capture';
+import { getFogState, getBuildingFootprint, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, toTilePoint, type PlanetRenderView, type TilePoint } from './model';
 import { applyBeltStrokeStep, assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, type BeltElevationPlacement } from './belt-stroke';
 import { DEFAULT_BELT_DIRECTION, isConveyorBeltBuilding } from './build-workflow';
 import { ROTATION_FACING, rotationTurns } from './logistics-direction';
@@ -14,7 +14,10 @@ import { legionAliveMemberIds } from './legion-model';
 import { PlanetSquadLayer } from './PlanetSquadLayer';
 import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene, type PickMeta } from './planet-three-scene';
+import { theaterZoneColor, theaterZoneFromDragRect, type TheaterZoneGeometry } from './squad-commands';
 import { describePickNotice, offscreenPickNotice, PICK_MISS_NOTICE, type PickNotice } from './pick-feedback';
+import { bindSceneMethods, buildPlanetThreeStatus, cameraZoomLabel, isTypingTarget, readPlanetThreeCameraState, sceneLayerVisibility, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
+import { projectTheaterZoneRing, theaterZoneContainsTile } from './planet-three-zone-ring';
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
@@ -54,13 +57,22 @@ interface Props {
   onInteractTile?: (tile: TilePoint, placement?: { direction?: 'north' | 'east' | 'south' | 'west'; elevation?: number }) => void;
   /** inspect 模式右键情境指令（有批量命令下达时返回 true）。 */
   onContextTile?: (tile: TilePoint) => boolean;
+  /** C4 / R20-A ③：theater_zone 模式拖拽矩形松手 → 战区圆几何（圆心+半径）。 */
+  onDefineZone?: (zone: TheaterZoneGeometry) => void;
   /** 打开右侧抽屉的「选中对象」页签（与 2D 工具条的同一入口）。 */
   onSelectEntity?: () => void;
   /** 图层与视角浮层的内容（由 PlanetPage 复用 PlanetLayerPanel：与 2D 同一份勾选项）。
       传 `null` = 本视图不提供「图层与视角」入口（例如战争图之外的简化场景）。 */
   layerPanel?: ReactNode;
+  /** 战区划定控件（PlanetTheaterControls）：2D 工具条在 3D 下整条不渲染，
+      这个按钮改挂在 3D 自己的图标列末尾（R20-A ③，与 2D 工具条同一视觉位置）。 */
+  theaterControls?: ReactNode;
   /** 黑雾是否对当前玩家敌对（summary 玩家 dark_fog.hostile）。 */
   darkFogHostile?: boolean;
+  /** 深链 `?tilt=`（R20-A ⑥）：初始俯仰；后续仍由「视角设置」滑杆控制。 */
+  initialTilt?: number;
+  /** 深链 `?zoom=`（R20-A ⑥）：初始相机高度；scene 有 `getCameraState` 时按相对倍率落到该高度。 */
+  initialZoom?: number;
 }
 
 export function PlanetMapThree(props: Props) {
@@ -71,7 +83,11 @@ export function PlanetMapThree(props: Props) {
   const session = useSessionSnapshot();
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const [tilt, setTilt] = useState(0.65);
+  const [tilt, setTilt] = useState(() => Math.min(1.1, Math.max(0, props.initialTilt ?? 0.65)));
+  const tiltRef = useRef(tilt);
+  tiltRef.current = tilt;
+  /** 最近一次读到的相机高度（R20-A ⑥：scene 没有 getCameraState 时省略 zoomLabel）。 */
+  const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
@@ -114,9 +130,19 @@ export function PlanetMapThree(props: Props) {
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen } = usePlanetViewStore(useShallow(s => ({
+  // D2 战区划定：theater_zone 模式下左键在球面拖动，按两角格子实时换算圆心+半径，
+  // 预览画**地面圆投影**（不是屏幕矩形——倾斜球面上屏幕矩形与服务端战区圆对不上）。
+  const zoneDragRef = useRef<{
+    startX: number; startY: number; active: boolean;
+    startTile: TilePoint | null; endTile: TilePoint | null;
+  } | null>(null);
+  /** 拖拽预览的地面圆几何（圆心 + 半径），null = 没有预览。 */
+  const [zoneDragGeometry, setZoneDragGeometry] = useState<{ x: number; y: number; radius: number } | null>(null);
+  /** 投影刷新帧（R20-A ⑥）：相机转动/缩放时重算地面圆的多边形。 */
+  const [projectionFrame, setProjectionFrame] = useState(0);
+  const { selected, selectedUnits, selectedSquads, hoveredTile, interactionMode, layers, focusRequest, debugMode, debugOpen, sceneWindow } = usePlanetViewStore(useShallow(s => ({
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
-    layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen,
+    layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen, sceneWindow: s.sceneWindow,
   })));
   // 拖拽中按 PageUp/PageDown 改目标高度：整条路径立刻按新目标重算（后面的格子自动起坡/落坡，
   // §3.5 的「拖带时调高度」手感）。结算仍然只在松手时发生，这里只刷新预览。
@@ -134,8 +160,31 @@ export function PlanetMapThree(props: Props) {
       : null
   ), [hoveredTile, interactionMode.kind, props.planet, props.runtime, props.catalog, props.darkFogHostile, session.playerId]);
   const root = useRef<HTMLDivElement>(null);
+  /** 按需读取相机状态的句柄（R20-A ⑥）：挂到 capture 上供调试面板调用。 */
+  const viewportReader = useRef<(() => PlanetThreeViewportSnapshot) | null>(null);
+
+  /**
+   * 指针捕获包 try/catch（R20-A ③）：合成 pointerId（测试接口 / 驱动派发）在真实浏览器里
+   * 会抛 `NotFoundError`，不能让它打断拖拽状态初始化。
+   */
+  function capturePointer(element: Element, pointerId: number) {
+    try { element.setPointerCapture(pointerId); } catch { /* 合成指针没有活动 pointer 时忽略。 */ }
+  }
+  function releasePointer(element: Element, pointerId: number) {
+    try { if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId); } catch { /* 同上。 */ }
+  }
   const projectTile = useCallback((tile: { x: number; y: number }) => {
     return scene.current?.project({ x: Math.round(tile.x), y: Math.round(tile.y) }) ?? null;
+  }, []);
+  /**
+   * 战区地面圆用的**不取整**投影（R20-A 试玩 1020 A3）：
+   * 圆周 48 个采样点是浮点格坐标，取整会全部吸到格心，贴地视角下轮廓变成锯齿台阶。
+   * `tileNormal` 里整数格坐标 = 格心（`(x + .5)`，见 shared-client surface.ts），
+   * 所以浮点格坐标直接投影即与服务端「中心格 + 半径」同一口径，不需要额外偏移。
+   * 小队/军团标记等按格心画的东西仍走 projectTile（取整），避免吸附变化。
+   */
+  const projectTileExact = useCallback((tile: { x: number; y: number }) => {
+    return scene.current?.project(tile) ?? null;
   }, []);
   function handleSelectSquad(squad: CombatSquad, additive: boolean) {
     const store = usePlanetViewStore.getState();
@@ -165,25 +214,77 @@ export function PlanetMapThree(props: Props) {
     scene.current?.setBeltDragPath(null);
   }, []);
 
+  /** 放弃战区拖拽（Esc / 右键 / 指针取消 / 切换模式 / 窗口失焦）：只清预览，不定义战区。 */
+  const cancelZoneDrag = useCallback(() => {
+    zoneDragRef.current = null;
+    setZoneDragGeometry(null);
+  }, []);
+
   useEffect(() => {
     const cancelInteraction = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       // 拖拽铺带中按 Esc：先丢掉这条预览（否则松手还会按旧路径逐格下单）。
       cancelBeltDrag();
+      // 战区拖拽中按 Esc：丢掉矩形预览（模式本身由下面的 exitInteractionMode 退出）。
+      cancelZoneDrag();
       const store = usePlanetViewStore.getState();
       if (store.interactionMode.kind !== 'inspect') {
         store.exitInteractionMode();
         return;
       }
-      // inspect 模式 Esc = 清空选择
-      if (store.selectedUnits.length > 0 || store.selected) {
+      // inspect 模式 Esc = 清空选择（R20-A ④：小队选择也一起清，2D 退役后不再有两套口径）
+      if (store.selectedUnits.length > 0 || store.selected || store.selectedSquads.length > 0) {
         store.setSelectedUnits([]);
+        store.setSelectedSquads([]);
         store.setSelected(null);
       }
     };
     window.addEventListener('keydown', cancelInteraction);
     return () => window.removeEventListener('keydown', cancelInteraction);
-  }, [cancelBeltDrag]);
+  }, [cancelBeltDrag, cancelZoneDrag]);
+
+  // 缩放快捷键（R20-A ④）：+/- 走场景已有的 zoom 入口（以画面中心为锚），
+  // 与导航列的 3D 放大/缩小按钮同一口径。输入框聚焦时不抢按键（与 2D 一致）；
+  // Ctrl/Meta/Alt 组合键留给浏览器/系统（页面缩放等）。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      const factor = zoomFactorForKey(event.key, event);
+      if (factor !== null) scene.current?.zoom(factor);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // 战区拖拽中切换交互模式 / 窗口失焦：清掉拖拽状态与预览（R20-A 低项）。
+  // 否则松手时还会按旧几何提交一次战区，或者预览圈永远留在画面上。
+  useEffect(() => {
+    if (interactionMode.kind !== 'theater_zone') cancelZoneDrag();
+  }, [interactionMode.kind, cancelZoneDrag]);
+  useEffect(() => {
+    const onBlur = () => {
+      cancelZoneDrag();
+      cancelBeltDrag();
+      marqueeRef.current = null;
+      setMarqueeRect(null);
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [cancelBeltDrag, cancelZoneDrag]);
+
+  // 相机状态轮询（R20-A ⑥）：scene 有 getCameraState 时把相机高度同步到状态行
+  // （zoomLabel），并在转动/缩放后触发地面圆重新投影。没有该方法时高度为 null，
+  // 状态行省略缩放档（不伪造数字）。
+  useEffect(() => {
+    if (!ready) return undefined;
+    const timer = window.setInterval(() => {
+      if (document.hidden || !scene.current) return;
+      const state = readPlanetThreeCameraState(scene.current, tiltRef.current);
+      setCameraAltitude(state.altitude);
+      setProjectionFrame(value => value + 1);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [ready]);
 
   /** 多选落库：单选时同步 selected，多选/清空时 selected 置空（与 2D 一致）。 */
   function applyUnitSelection(ids: string[]) {
@@ -272,9 +373,33 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
+    // 深链 `?tilt=`：scene 的初始俯仰固定 0.65，深链值要在场景就绪后补一次。
+    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
+    // 相机状态按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时经 capture.getViewport 拉，
+    // 不再在挂载时上报一次。scene 有 getCameraState 就用它（中心格 + 高度 + 俯仰），
+    // 没有时退化到 getCenterTile() + 本组件的 tilt（高度记 0，界面标为不可用）。
+    const readViewport = (): PlanetThreeViewportSnapshot => {
+      const state = readPlanetThreeCameraState(renderer, tiltRef.current);
+      return {
+        center: state.center,
+        altitude: state.altitude ?? 0,
+        tilt: state.tilt,
+        width: host.current?.clientWidth ?? 0,
+        height: host.current?.clientHeight ?? 0,
+      };
+    };
+    viewportReader.current = readViewport;
+    // 深链 `?zoom=`（R20-A ⑥）：分享链接里的相机高度 → 按相对倍率落到该高度。
+    // 只在 scene 提供高度读取时做（否则无法换算倍率，保持默认聚焦高度）。
+    if (typeof props.initialZoom === 'number' && Number.isFinite(props.initialZoom) && props.initialZoom > 0) {
+      const current = readPlanetThreeCameraState(renderer, tiltRef.current).altitude;
+      if (current && current > 0) renderer.zoom(current / props.initialZoom);
+    }
+    // 场景初始俯仰固定 0.65：用户改过滑杆（tiltRef 与默认不同）时补设一次。
+    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
-    if (exposeHook) (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree = renderer;
+    if (exposeHook) installTestApi(renderer);
     // 战斗事件总线 → 3D 战斗演出（弹道/命中/爆炸/残骸）；卸载退订防重复演出
     const unsubscribeBattle = subscribeBattleEvents((event) => renderer.handleBattleEvent(event));
     const timer = window.setInterval(() => {
@@ -295,11 +420,12 @@ export function PlanetMapThree(props: Props) {
     }, 500);
     return () => {
       clearInterval(timer);
+      viewportReader.current = null;
       unsubscribeBattle();
       renderer.destroy();
       scene.current = null;
       latest.current.onCanvasReady?.(null);
-      if (exposeHook) delete (window as unknown as { __planetThree?: PlanetThreeScene }).__planetThree;
+      if (exposeHook) delete (window as unknown as { __planetThree?: unknown }).__planetThree;
     };
   }, []);
 
@@ -319,11 +445,13 @@ export function PlanetMapThree(props: Props) {
       get clientWidth() { return element.clientWidth; },
       get clientHeight() { return element.clientHeight; },
       captureScreenshot: () => scene.current?.capture() ?? null,
+      // R20-A ⑥：调试面板按需拉相机状态（打开面板 / 点「复制链接」时）。
+      getViewport: () => viewportReader.current?.() ?? null,
     });
   }, [ready, props.onCanvasReady]);
 
   useEffect(() => {
-    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers });
+    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers: sceneLayerVisibility(layers) });
   }, [ready, selected, selectedUnits, hoveredTile, interactionMode, layers]);
 
   const initiallyFocused = useRef(false);
@@ -389,15 +517,27 @@ export function PlanetMapThree(props: Props) {
         };
         beltDrag.current = { tile, path: [first], startElevation, autoDirection: !isCardinalDirection(modeDirection) };
         scene.current?.setBeltDragPath([first]);
-        event.currentTarget.setPointerCapture(event.pointerId);
+        capturePointer(event.currentTarget, event.pointerId);
         event.stopPropagation(); event.preventDefault();
       }
+      return;
+    }
+    // D2 战区划定：theater_zone 模式下左键拖动（优先于 Shift 框选与球面旋转）。
+    if (event.button === 0 && interactionMode.kind === 'theater_zone') {
+      zoneDragRef.current = {
+        startX: event.clientX, startY: event.clientY, active: false,
+        startTile: scene.current?.pickAt(event.clientX, event.clientY) ?? null,
+        endTile: null,
+      };
+      capturePointer(event.currentTarget, event.pointerId);
+      event.stopPropagation();
+      event.preventDefault();
       return;
     }
     if (event.button !== 0 || !event.shiftKey || interactionMode.kind !== 'inspect') return;
     marqueeRef.current = { startX: event.clientX, startY: event.clientY, active: false };
     // 捕获指针：松开时光标即使落在建造栏等 HUD 上，抬起事件也归框选，选框不会卡住。
-    event.currentTarget.setPointerCapture(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
     event.stopPropagation();
     event.preventDefault();
   }
@@ -420,6 +560,26 @@ export function PlanetMapThree(props: Props) {
           const tail = drag.path.at(-1)!;
           const mode = usePlanetViewStore.getState().interactionMode;
           if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: tail.direction });
+        }
+      }
+      return;
+    }
+    const zoneDrag = zoneDragRef.current;
+    if (zoneDrag) {
+      event.stopPropagation();
+      zoneDrag.endTile = scene.current?.pickAt(event.clientX, event.clientY) ?? zoneDrag.endTile;
+      if (!zoneDrag.active && Math.abs(event.clientX - zoneDrag.startX) + Math.abs(event.clientY - zoneDrag.startY) > 4) {
+        zoneDrag.active = true;
+      }
+      if (zoneDrag.active) {
+        // 地面圆预览（R20-A ⑥）：两角格子 → 圆心 + 半径（与服务端同一几何），
+        // 不再画屏幕正矩形——倾斜球面上屏幕矩形与服务端战区圆对不上。
+        if (zoneDrag.startTile && zoneDrag.endTile) {
+          const zone = theaterZoneFromDragRect(
+            { x: zoneDrag.startTile.x, y: zoneDrag.startTile.y },
+            { x: zoneDrag.endTile.x, y: zoneDrag.endTile.y },
+          );
+          setZoneDragGeometry({ x: zone.position.x, y: zone.position.y, radius: zone.radius });
         }
       }
       return;
@@ -474,14 +634,31 @@ export function PlanetMapThree(props: Props) {
       }
       beltDrag.current = null;
       scene.current?.setBeltDragPath(null);
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      releasePointer(event.currentTarget, event.pointerId);
+      return;
+    }
+    const zoneDrag = zoneDragRef.current;
+    if (zoneDrag) {
+      event.stopPropagation();
+      zoneDragRef.current = null;
+      setZoneDragGeometry(null);
+      releasePointer(event.currentTarget, event.pointerId);
+      if (!zoneDrag.active) return;
+      // 两个角点都拾取成格子（指针离开球面时沿用上一次命中的格子）。
+      const start = zoneDrag.startTile ?? scene.current?.pickAt(zoneDrag.startX, zoneDrag.startY);
+      const end = zoneDrag.endTile ?? scene.current?.pickAt(event.clientX, event.clientY);
+      if (!start || !end) return;
+      latest.current.onDefineZone?.(theaterZoneFromDragRect(
+        { x: start.x, y: start.y },
+        { x: end.x, y: end.y },
+      ));
       return;
     }
     const marquee = marqueeRef.current;
     marqueeRef.current = null;
     if (!marquee) return;
     event.stopPropagation();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    releasePointer(event.currentTarget, event.pointerId);
     setMarqueeRect(null);
     if (!marquee.active || !scene.current) return;
     const rect = {
@@ -492,24 +669,185 @@ export function PlanetMapThree(props: Props) {
     };
     const hostRect = host.current?.getBoundingClientRect();
     if (!hostRect) return;
-    const ids: string[] = [];
-    for (const unit of Object.values(latest.current.planet.units ?? {})) {
-      if (unit.owner_id !== session.playerId) continue;
-      const projected = scene.current.project({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) });
-      if (!projected?.visible) continue;
-      const sx = hostRect.left + projected.x;
-      const sy = hostRect.top + projected.y;
-      if (sx >= rect.minX && sx <= rect.maxX && sy >= rect.minY && sy <= rect.maxY) ids.push(unit.id);
-    }
-    ids.sort();
-    applyUnitSelection(ids);
+    // 屏幕矩形 → 单位集合：与测试接口 dragTiles(…, {shift:true}) 同一套判定（纯函数）。
+    const projectedUnits = Object.values(latest.current.planet.units ?? {})
+      .filter(unit => unit.owner_id === session.playerId)
+      .map(unit => {
+        const projected = scene.current?.project({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) });
+        return {
+          id: unit.id,
+          ownerId: unit.owner_id,
+          screen: projected?.visible ? { x: hostRect.left + projected.x, y: hostRect.top + projected.y } : null,
+        };
+      });
+    applyUnitSelection(unitsInScreenRect(projectedUnits, rect));
   }
 
+  /**
+   * 浏览器测试接口（R20-A ⑤）：D1 决定不重建 DOM 实体层，Playwright 改为经
+   * `window.__planetThree` 用投影 + 派发。返回值一律是**页面 CSS 像素**（相对页面左上角），
+   * 供 `page.mouse.*` 直接使用；`locator.click` 用 `tileScreenPos` 减去画布位置即可。
+   *
+   * 全部内部调用场景已有方法（project/focus/pickAt/clickTile），不复制拾取逻辑：
+   * - tileScreenPos(tile)：不在视野内先聚焦，再返回投影点；
+   * - entityScreenPos(id)：建筑/单位按位置投影；多格建筑取**占地中心**；
+   * - clickTile(tile, button?)：button=2 走右键情境指令（scene 支持 `{button}` 就透传，
+   *   否则合成一次真实右键 pointer 事件序列走组件已有的右键路径）；
+   * - dragTiles(from, to, modifiers?)：两个格子的屏幕点之间拖一次（Shift=框选，Ctrl=加选）。
+   */
+  function installTestApi(target: PlanetThreeScene) {
+    const hostRect = () => host.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const pagePos = (tile: TilePoint) => {
+      const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
+      let projected = target.project(rounded);
+      if (!projected?.visible) {
+        target.focus(rounded);
+        projected = target.project(rounded);
+      }
+      return projected ? toPagePoint(hostRect(), projected) : null;
+    };
+    /**
+     * 显式绑定场景原型链上的方法（R20-A ①）：`Object.create(target)` 的 this 指向包装对象，
+     * 外部调用 `focus()/zoom()/setTilt()` 时写的是包装对象的字段，真实场景状态不变。
+     */
+    const api: Record<string, unknown> = {
+      ...bindSceneMethods(target),
+      // 场景的 project 是相对画布的，测试接口要求页面坐标（覆盖绑定后的原方法）。
+      project: (tile: TilePoint) => target.project(tile),
+      tileScreenPos: pagePos,
+      entityScreenPos: (id: string) => {
+        const current = latest.current;
+        const building = current.planet.buildings?.[id];
+        if (building) {
+          // 多格建筑：占地中心（position 是占地原点，直接投影会偏到左上角）。
+          const footprint = getBuildingFootprint(building);
+          const origin = toTilePoint(building.position);
+          return pagePos({ x: origin.x + (footprint.width - 1) / 2, y: origin.y + (footprint.height - 1) / 2 });
+        }
+        const unit = current.planet.units?.[id];
+        return unit ? pagePos(unit.position) : null;
+      },
+      clickTile: (tile: TilePoint, button: 0 | 2 = 0) => {
+        const scene = target as unknown as { clickTile: (tile: TilePoint, options?: { button?: 0 | 2 }) => unknown };
+        if (button === 2) {
+          // scene 支持 `{button}` 透传就用它（R20-B 接口）；返回值形状不对（旧版只认 focus）
+          // 或抛错时退回合成右键事件。
+          try {
+            const result = scene.clickTile(tile, { button });
+            if (result && typeof result === 'object') return result;
+          } catch { /* 旧版 scene 不认 button 选项：走下面的合成右键。 */ }
+          const point = pagePos(tile);
+          if (!point) return { dispatched: false, offscreen: true };
+          dispatchPointer('pointerdown', point, { button: 2, buttons: 2 });
+          // 合成一次真实右键序列，走组件已有的 onContextMenu 右键路径（情境指令/退出模式）。
+          host.current?.dispatchEvent(new MouseEvent('contextmenu', {
+            bubbles: true, cancelable: true, button: 2, clientX: point.x, clientY: point.y,
+          }));
+          dispatchPointer('pointerup', point, { button: 2 });
+          return { dispatched: true, offscreen: false };
+        }
+        return scene.clickTile(tile);
+      },
+      dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
+        const start = pagePos(from);
+        const end = pagePos(to);
+        if (!start || !end) return false;
+        dispatchPointer('pointerdown', start, { button: 0, shiftKey: Boolean(modifiers.shift), ctrlKey: Boolean(modifiers.ctrl), metaKey: Boolean(modifiers.ctrl) });
+        // 分几步移动：框选阈值是 4px，一次跳到终点也算拖动，但分段更接近真实指针轨迹。
+        for (let step = 1; step <= 4; step++) {
+          dispatchPointer('pointermove', { x: start.x + (end.x - start.x) * step / 4, y: start.y + (end.y - start.y) * step / 4 }, { button: 0, shiftKey: Boolean(modifiers.shift), ctrlKey: Boolean(modifiers.ctrl), metaKey: Boolean(modifiers.ctrl) });
+        }
+        dispatchPointer('pointerup', end, { button: 0, shiftKey: Boolean(modifiers.shift), ctrlKey: Boolean(modifiers.ctrl), metaKey: Boolean(modifiers.ctrl) });
+        return true;
+      },
+    };
+    /**
+     * 派发一次指针事件（R20-A ③）：`clientX/clientY` 必须是**页面坐标**（与真实鼠标一致）。
+     * 旧实现把页面点再减去画布偏移，坐标被二次换算，拖拽落点整体偏左上。
+     */
+    function dispatchPointer(type: string, page: { x: number; y: number }, options: PointerEventInit & { button?: number } = {}) {
+      const element = host.current;
+      if (!element) return;
+      element.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0,
+        ...options,
+        clientX: page.x, clientY: page.y,
+      }));
+    }
+    (window as unknown as { __planetThree?: typeof api }).__planetThree = api;
+  }
+
+  const statusLines = buildPlanetThreeStatus({
+    hoveredTile,
+    selected,
+    selectedUnits,
+    selectedSquads,
+    interactionMode,
+    zoomLabel: cameraZoomLabel(cameraAltitude) ?? undefined,
+  });
+
+  /**
+   * 战区拖拽预览（R20-A ⑥）：按实时几何（圆心 + 半径）把**地面圆**投影成 SVG 多边形。
+   * 沿圆周 48 个格坐标逐点 project，与服务端存下来的战区同一套几何；
+   * 中心画十字、旁边标「半径 N 格」。屏幕正矩形不再画。
+   */
+  const zonePreview = useMemo(() => {
+    // 不依赖 ready：jsdom/测试环境里场景可能没有画布尺寸，但 project 仍可喂；
+    // 场景不存在时 project 返回 null → ring 为 null，自然不画。
+    if (!zoneDragGeometry) return null;
+    const ring = projectTheaterZoneRing(projectTileExact, { x: zoneDragGeometry.x, y: zoneDragGeometry.y }, zoneDragGeometry.radius);
+    if (!ring) return null;
+    const color = theaterZoneColor(interactionMode.kind === 'theater_zone' ? interactionMode.zoneType : 'primary');
+    return { ring, color };
+    // projectionFrame 让相机转动/缩放后重算多边形。
+  }, [zoneDragGeometry, projectionFrame, interactionMode, projectTileExact]);
+
+  /**
+   * 悬停高亮（R20-A ⑦）：hoveredTile 落在哪个已建成战区圆内。
+   * 3D 的悬停没有 DOM 命中，按格心距离判定（与画圈同一口径）。
+   */
+  const hoveredTheaterId = useMemo(() => {
+    if (!hoveredTile) return null;
+    for (const theater of props.theaters ?? []) {
+      for (const zone of theater.zones ?? []) {
+        if (zone.planet_id !== props.planet.planet_id || !zone.position) continue;
+        if (theaterZoneContainsTile({ x: zone.position.x, y: zone.position.y }, zone.radius ?? 1, hoveredTile)) {
+          return theater.id;
+        }
+      }
+    }
+    return null;
+  }, [hoveredTile, props.theaters, props.planet.planet_id]);
+  const selectedTheaterId = interactionMode.kind === 'theater_zone' ? interactionMode.theaterId : undefined;
+
+  /**
+   * theater_zone 模式下根节点在 capture 阶段拦截指针：只拦**落在画布上**的指针，
+   * HUD（左下导航列、战区浮层、滑杆、select）照常可用（R20-A ④）。
+   */
+  const isSurfaceTarget = (target: EventTarget | null) => {
+    const element = target as HTMLElement | null;
+    const surface = host.current;
+    if (!surface || !element) return false;
+    // 指针捕获设在根节点（capture 阶段 currentTarget）：捕获后 move/up 的 target 是根节点本身，
+    // 不能把它当成 HUD 拦掉——否则战区拖拽松手永远结算不了（试玩 1020 真机复现）。
+    if (element === root.current) return true;
+    return element === surface || surface.contains(element);
+  };
+
   return <div className="planet-three" ref={root}
-    onPointerDownCapture={handleMarqueeDown}
-    onPointerMoveCapture={handleMarqueeMove}
-    onPointerUpCapture={handleMarqueeUp}
-    onPointerCancelCapture={cancelBeltDrag}
+    onPointerDownCapture={event => {
+      if (interactionMode.kind === 'theater_zone' && !isSurfaceTarget(event.target)) return;
+      handleMarqueeDown(event);
+    }}
+    onPointerMoveCapture={event => {
+      if (interactionMode.kind === 'theater_zone' && !isSurfaceTarget(event.target)) return;
+      handleMarqueeMove(event);
+    }}
+    onPointerUpCapture={event => {
+      if (interactionMode.kind === 'theater_zone' && !isSurfaceTarget(event.target)) return;
+      handleMarqueeUp(event);
+    }}
+    onPointerCancelCapture={() => { cancelBeltDrag(); cancelZoneDrag(); }}
     onDoubleClick={event => {
       // 双击单位 = 选中屏幕内全部同类己方单位（投影可见即"同屏"）
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
@@ -534,6 +872,8 @@ export function PlanetMapThree(props: Props) {
     event.preventDefault();
     // 拖拽铺带中按右键 = 取消这条预览（与 Esc 同一口径，B2），不进入情境指令分支。
     cancelBeltDrag();
+    // D2：战区划定模式右键 = 退出模式（拖拽中的矩形一并丢弃）。
+    cancelZoneDrag();
     const store = usePlanetViewStore.getState();
     if (store.interactionMode.kind !== 'inspect') {
       store.exitInteractionMode();
@@ -548,9 +888,12 @@ export function PlanetMapThree(props: Props) {
       offsetX={0}
       offsetY={0}
       planetId={props.planet.planet_id}
-      projectTile={projectTile}
+      projectTile={projectTileExact}
       theaters={props.theaters}
       tileSize={1}
+      selectedTheaterId={selectedTheaterId}
+      hoveredTheaterId={hoveredTheaterId}
+      zIndex={5}
     />
     <PlanetLegionLayer
       offsetX={0}
@@ -583,6 +926,35 @@ export function PlanetMapThree(props: Props) {
           height: marqueeRect.y1 - marqueeRect.y0,
         }}
       />
+    ) : null}
+    {zonePreview ? (
+      // 地面圆预览（R20-A ⑥）：与服务端战区同一几何——圆周采样格点投影成多边形。
+      <svg aria-hidden="true" className="planet-three__zone-ring" data-testid="planet-three-zone-ring">
+        <path
+          d={zonePreview.ring.path}
+          fill={zonePreview.color}
+          fillOpacity={0.12}
+          stroke={zonePreview.color}
+          strokeWidth={2}
+        />
+        {zonePreview.ring.center ? (
+          <g stroke={zonePreview.color} strokeWidth={1.5}>
+            <line x1={zonePreview.ring.center.x - 7} x2={zonePreview.ring.center.x + 7} y1={zonePreview.ring.center.y} y2={zonePreview.ring.center.y} />
+            <line x1={zonePreview.ring.center.x} x2={zonePreview.ring.center.x} y1={zonePreview.ring.center.y - 7} y2={zonePreview.ring.center.y + 7} />
+          </g>
+        ) : null}
+        {zonePreview.ring.center ? (
+          <text
+            className="planet-three__zone-ring-label"
+            fill={zonePreview.color}
+            textAnchor="middle"
+            x={zonePreview.ring.center.x}
+            y={zonePreview.ring.center.y - 16}
+          >
+            {zonePreview.ring.label}
+          </text>
+        ) : null}
+      </svg>
     ) : null}
     {!marqueeRect && <PlanetHoverTip containerRef={root} info={hoverInfo} />}
     {error && <div role="alert" className="planet-three__error">{error}</div>}
@@ -689,6 +1061,7 @@ export function PlanetMapThree(props: Props) {
         {/* 调试入口（§3.2 复核）：2D 的那条工具条在 3D 下整条不渲染，
             所以 3D 的调试开关放在这一列的最后，面板同样浮在列上方。
             默认隐藏（debugMode 关闭时不渲染），Ctrl+Shift+D 与 2D 同口径。 */}
+        {props.theaterControls}
         {debugMode ? (
           <button
             aria-expanded={debugOpen}
@@ -711,9 +1084,18 @@ export function PlanetMapThree(props: Props) {
             取消{interactionMode.kind === 'build' ? '建造' : interactionMode.kind === 'move' ? '移动' : interactionMode.kind === 'attack' ? '攻击' : interactionMode.kind === 'haul' ? '运输设置' : '指令'} · Esc
           </button>
         ) : null}
+        {/* 状态行（R20-A ②）：文案与 2D 的 .planet-map-canvas__status 逐字对齐——
+            悬停坐标、选中文案（selectionLabel）、模式提示、框选数、小队数。
+            2D 退役后这些是玩家判断「当前模式/选了什么」的唯一可见反馈。 */}
         <div className="planet-three__nav-status">
-          {hoveredTile && <small>{hoveredTile.x}, {hoveredTile.y}</small>}
-          {selectedUnits.length > 1 && <small>已框选 {selectedUnits.length} 个单位 · Shift+拖动框选 · 右键移动/攻击</small>}
+          {statusLines.map(line => (
+            <small
+              className={line.tone ? `planet-three__nav-status-line planet-three__nav-status-line--${line.tone}` : 'planet-three__nav-status-line'}
+              key={line.key}
+            >
+              {line.text}
+            </small>
+          ))}
         </div>
       </div>
     </div>
