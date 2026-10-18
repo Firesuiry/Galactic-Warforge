@@ -200,7 +200,7 @@ export function WarPage() {
   });
 
   const planetSceneQuery = useQuery({
-    queryKey: ['war-planet-scene', session.serverUrl, session.playerId, activePlanetId],
+    queryKey: ['war-planet-view', session.serverUrl, session.playerId, activePlanetId],
     queryFn: () => client.fetchPlanetScene(activePlanetId, {
       x: 0,
       y: 0,

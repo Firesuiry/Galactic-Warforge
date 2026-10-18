@@ -2,7 +2,6 @@ import { surfaceOffset } from '@shared/surface';
 import type { PlanetView } from '@shared/types';
 
 import {
-  buildSceneWindow,
   canReceiveTransferItems,
   canonicalTileIndex,
   constructionTaskLabel,
@@ -10,7 +9,6 @@ import {
   getBuildingDisplayName,
   getFogState,
   getTerrainTile,
-  getViewportTileBounds,
   isTileUncharted,
   mergeRecentEvents,
   resolveHomeTile,
@@ -20,7 +18,7 @@ import {
   summarizeEvent,
   wrapMod,
 } from '@/features/planet-map/model';
-import { getPlanetOverviewRequestStep as getOverviewStep, getPlanetZoomStatusLabel as getZoomStatusLabel } from '@/features/planet-map/store';
+import { getPlanetOverviewRequestStep as getOverviewStep, getPlanetOverviewStepLabel as getOverviewStepLabel } from '@/features/planet-map/store';
 
 function createPlanetFixture(): PlanetView {
   return {
@@ -374,77 +372,6 @@ describe('六面展开图边界', () => {
     expect(canonicalTileIndex(0, 996, 1000)).toBe(1000);
   });
 
-  it('getViewportTileBounds：环绕轴保留 unwrapped 范围，中心取模回真实 tile', () => {
-    const bigPlanet = {
-      ...createPlanetFixture(),
-      surface: { topology: 'cube_sphere' as const, face_size: 1000 }, map_width: 3000,
-      bounds: {x:0,y:0,width:12,height:8},
-      map_height: 2000,
-    };
-    const bounds = getViewportTileBounds(
-      bigPlanet,
-      { offsetX: 32, offsetY: -15992, zoomIndex: 6 },
-      8,
-      960,
-      640,
-    );
-    expect(bounds.wrapX).toBe(false);
-    expect(bounds.wrapY).toBe(false);
-    expect(bounds.minX).toBe(0); // floor(-32/8)，不再钳到 0
-    expect(bounds.maxX).toBe(115);
-    expect(bounds.minY).toBe(1999); // floor(7992/8)
-    expect(bounds.maxY).toBe(1999);
-    expect(bounds.centerX).toBeCloseTo(57.5);
-    expect(bounds.centerY).toBeCloseTo(1999); // (999+1078)/2=1038.5 → mod 1000
-    expect(bounds.mapWidth).toBe(3000);
-  });
-
-  it('getViewportTileBounds：小地图（世界<视口）不启用环绕，维持钳位', () => {
-    const bounds = getViewportTileBounds(
-      createPlanetFixture(), // 4×4
-      { offsetX: 400, offsetY: 400, zoomIndex: 6 },
-      8,
-      960,
-      640,
-    );
-    expect(bounds.wrapX).toBe(false);
-    expect(bounds.wrapY).toBe(false);
-    expect(bounds.minX).toBe(0);
-    expect(bounds.maxX).toBe(11);
-  });
-
-  it('buildSceneWindow：环绕轴跨接缝时整轴拉取，未跨接缝维持原窗口', () => {
-    const bigPlanet = {
-      ...createPlanetFixture(),
-      surface: { topology: 'cube_sphere' as const, face_size: 1000 }, map_width: 3000,
-      bounds: {x:0,y:0,width:12,height:8},
-      map_height: 2000,
-    };
-    // offsetX=32 → 可见范围 [-4, 115]，左侧跨接缝
-    const crossing = buildSceneWindow(
-      bigPlanet,
-      { offsetX: 32, offsetY: -4000, zoomIndex: 6 },
-      8,
-      960,
-      640,
-    );
-    expect(crossing.x).toBe(0);
-    expect(crossing.width).toBeLessThan(1000);
-    expect(crossing.y).toBeGreaterThanOrEqual(0);
-    expect(crossing.height).toBeLessThan(1000);
-
-    // 视口完全在地图内部 → 不跨接缝，窗口走原有 padding/对齐逻辑
-    const inside = buildSceneWindow(
-      bigPlanet,
-      { offsetX: -4000, offsetY: -4000, zoomIndex: 6 },
-      8,
-      960,
-      640,
-    );
-    expect(inside.width).toBeLessThan(1000);
-    expect(inside.x).toBeGreaterThan(0);
-    expect(inside.x + inside.width).toBeLessThanOrEqual(1000);
-  });
 });
 
 it('selects transported building footprint across a cube cut and reads neighbor patch fog',()=>{
@@ -612,20 +539,16 @@ describe('shouldFullRefresh：快进结束触发全量刷新', () => {
 });
 
 describe('总览步长（3D 行星页的 overview 请求口径）', () => {
-  // 3D 行星页固定按 PLANET_ZOOM_LEVELS[2]（1px/12cell）请求总览；2D 缩放档按钮已随
-  // 「平面战术」视图下线，这组纯函数直接守住请求步长的钳制逻辑。
-  it('小图按缩放档请求 step，大图抬高到单轴不超过上限的步长', () => {
-    expect(getOverviewStep(2, 48, 32)).toBe(12);
-    expect(getOverviewStep(2, 2000, 2000)).toBe(16);
-    expect(getOverviewStep(2, 0, 0)).toBe(12);
-  });
-
-  it('非总览档返回 undefined（不请求总览）', () => {
-    expect(getOverviewStep(7, 48, 32)).toBeUndefined();
+  // 3D 行星页固定按 1px/12cell 请求总览（2D 缩放档已随「平面战术」视图下线），
+  // 这组纯函数直接守住请求步长的钳制逻辑。
+  it('小图按 1px/12cell 请求 step，大图抬高到单轴不超过上限的步长', () => {
+    expect(getOverviewStep(48, 32)).toBe(12);
+    expect(getOverviewStep(2000, 2000)).toBe(16);
+    expect(getOverviewStep(0, 0)).toBe(12);
   });
 
   it('状态文案只在步长被抬高时追加「实际 1px/Ncell」', () => {
-    expect(getZoomStatusLabel(2, 48, 32)).toBe('1px/12cell');
-    expect(getZoomStatusLabel(2, 2000, 2000)).toBe('1px/12cell (实际 1px/16cell)');
+    expect(getOverviewStepLabel(48, 32)).toBe('1px/12cell');
+    expect(getOverviewStepLabel(2000, 2000)).toBe('1px/12cell (实际 1px/16cell)');
   });
 });

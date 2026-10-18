@@ -8,7 +8,7 @@ import {
   resolveSelectedCombatRange,
 } from '@/features/planet-map/range-circles';
 
-// 射程判定从 2D planet-scene 抽出（第 20 轮 R20-B）：2D 与 3D 共用同一套纯函数。
+// 射程判定（第 20 轮 R20-B 抽成纯函数）：建造 ghost 与选中防御建筑共用同一套。
 describe('范围圈纯函数', () => {
   const catalog = {
     buildings: [
@@ -82,7 +82,7 @@ describe('范围圈纯函数', () => {
     expect(resolveSelectedCombatRange(smelter)).toBeUndefined();
   });
 
-  it('配色：攻击射程暖红、供电覆盖青色（2D/3D 同口径）', () => {
+  it('配色：攻击射程暖红、供电覆盖青色', () => {
     expect(RANGE_CIRCLE_COLORS.combat).toBe('#ff7a59');
     expect(RANGE_CIRCLE_COLORS.power).toBe('#5fd4e8');
   });

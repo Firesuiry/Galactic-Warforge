@@ -161,7 +161,7 @@ export class PlanetThreeScene {
   private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
   /** C2 战斗演出：弹道/枪口/命中/飘字/护盾波纹/爆炸/残骸（挂 world 随星球旋转）。 */
   private readonly combat = new CombatEffects(this.world, () => this.tileScale());
-  /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次，同 2D planet-scene）。 */
+  /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次）。 */
   private lastBattleSeq = 0;
   /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
   private turretAims: { id: string; group: THREE.Group; barrel: THREE.Object3D; yaw: number; targetYaw: number }[] = [];
@@ -969,13 +969,18 @@ export class PlanetThreeScene {
     if (this.interaction.layers.logistics) {
       const faceSize = this.data.planet.surface.face_size;
       for (const deadEnd of beltDeadEnds(Object.values(this.data.planet.buildings ?? {}), faceSize)) {
-        const { east, south } = tileFrame(deadEnd.aheadTile, faceSize);
-        const normal = tileNormal(deadEnd.aheadTile, faceSize);
+        const { east, south } = tileFrame(deadEnd.tile, faceSize);
         const vector = directionVector(deadEnd.direction);
         // 短杠垂直于流向：在格平面内沿 (east, south) 基底的 (-v.y, v.x) 方向铺一条细带。
         // 注意 loop 是**单位法线**，偏移量是弧度 = 世界长度 / RADIUS（写 0.3 会得到 30 格长的线）。
         const ts = this.tileScale();
         const half = (ts * .3) / RADIUS;
+        // 紧挨带尾端口（格边外推 .2 格，避开端盖遮挡），像一道挡板；画在前方格中心会和带子脱开半格。
+        const reach = (ts * .7) / RADIUS;
+        const normal = tileNormal(deadEnd.tile, faceSize)
+          .addScaledVector(east, reach * vector.x)
+          .addScaledVector(south, reach * vector.y)
+          .normalize();
         const loop = [-half, 0, half].map(offset => normal.clone()
           .addScaledVector(south, offset * vector.x)
           .addScaledVector(east, -offset * vector.y)

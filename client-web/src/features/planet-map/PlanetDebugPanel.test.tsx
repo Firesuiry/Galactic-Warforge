@@ -43,12 +43,10 @@ function renderPanel(overrides: {
   currentTick?: number;
   /** 3D capture：提供 getViewport 时面板按需读取相机状态。 */
   capture?: Parameters<typeof PlanetDebugPanel>[0]["capture"];
-  threeDimensional?: boolean;
 } = {}) {
   return render(
     <PlanetDebugPanel
       capture={overrides.capture ?? null}
-      threeDimensional={overrides.threeDimensional ?? Boolean(overrides.capture)}
       currentTick={overrides.currentTick ?? 120}
       game={overrides.game ?? adminGame()}
       onPullEvents={vi.fn().mockResolvedValue(undefined)}

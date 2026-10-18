@@ -2,10 +2,9 @@
  * 战区划定控件（C4）：行星地图左下角工具条旁的「战区」按钮 + 浮层。
  *
  * 浮层内选战区 + 区域类型后进入 theater_zone 拖拽模式（地图上左键拖矩形）；
- * 无战区时内联创建（theater_create）。拖拽落点由地图视图（2D 的 PlanetMapPixi /
- * 3D 的 PlanetMapThree，R20-A ③）回调 PlanetPage 提交 theater_define_zone
- * （planet_id + position + radius 由拖拽几何换算）。
- * 3D 球面拖拽与 2D 同一套屏幕矩形判定，不再需要「请切回 2D」的提示。
+ * 无战区时内联创建（theater_create）。拖拽落点由 PlanetMapThree（R20-A ③）
+ * 回调 PlanetPage 提交 theater_define_zone（planet_id + position + radius
+ * 由拖拽几何换算）。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -196,8 +195,8 @@ export function PlanetTheaterControls({
         aria-label="战区划定"
         className={
           zoneModeActive
-            ? 'secondary-button planet-map-toolbar__button planet-theater-controls__button--active'
-            : 'secondary-button planet-map-toolbar__button'
+            ? 'secondary-button planet-three__nav-btn planet-theater-controls__button--active'
+            : 'secondary-button planet-three__nav-btn'
         }
         onClick={() => setPanelOpen((open) => !open)}
         title="战区划定"

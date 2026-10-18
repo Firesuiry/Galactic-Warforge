@@ -33,6 +33,10 @@ const STORIES = [
   { name: 'belt-dsp-dead-end', snapshot: 'belt-dsp-dead-end.png' },
 ] as const;
 
+// 整个文件只用一个 worker：beforeAll/afterAll 起停的是同一个 Storybook 端口，
+// fullyParallel 下多个 worker 会抢着起第二个（--exact-port 直接失败）或在别人用着时把它停掉。
+test.describe.configure({ mode: 'default' });
+
 let startedStorybook = false;
 let storybookProcess: import('node:child_process').ChildProcess | null = null;
 

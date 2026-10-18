@@ -92,30 +92,6 @@ export function indexUnitsById(units: readonly Unit[] | undefined): Map<string, 
   return new Map((units ?? []).map((unit) => [unit.id, unit]));
 }
 
-export interface TileRect {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
-
-/** 框选：tile 矩形内的己方单位（按 id 排序保证稳定）。 */
-export function ownUnitsInTileRect(
-  planet: PlanetRenderView,
-  playerId: string,
-  rect: TileRect,
-): string[] {
-  return getUnitList(planet)
-    .filter((unit) => {
-      if (unit.owner_id !== playerId) {
-        return false;
-      }
-      const pos = toTilePoint(unit.position);
-      return pos.x >= rect.minX && pos.x <= rect.maxX && pos.y >= rect.minY && pos.y <= rect.maxY;
-    })
-    .map((unit) => unit.id);
-}
-
 /** 双击选同类：视口内与目标单位同 type 的全部己方单位。 */
 export function sameTypeOwnUnitsInView(
   planet: PlanetRenderView,

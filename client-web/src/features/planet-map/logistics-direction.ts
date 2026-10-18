@@ -5,8 +5,7 @@
  * 分拣器往哪搬。这里把「方向从哪来、往哪去」收敛成一份事实来源，供：
  * - 3D 流向箭头（three/conveyor-geometry）、
  * - 3D 分拣器顶面箭头（planet-three-scene）、
- * - 3D/2D 建造 ghost 朝向箭头、
- * - 2D 平面战术图方向纹（planet-building-sprites）、
+ * - 3D 建造 ghost 朝向箭头、
  * - 选中详情「流向」行（PlanetPanels）
  * 共用，避免多套实现各自猜方向。
  *
@@ -124,17 +123,6 @@ export function beltOutputDirection(building: Pick<Building, 'conveyor'>): Cardi
 /** 物流建筑是否是分拣器/分流器（走「顶面箭头 + 过滤物品」渲染路径）。 */
 export function isSorterBuilding(building: Pick<Building, 'type' | 'sorter' | 'splitter'>): boolean {
   return Boolean(building.sorter || building.splitter || /sorter|splitter/.test(building.type));
-}
-
-/**
- * 2D 方向纹朝向：单一方向的物流建筑取输出侧；四向皆可返回 null（改画枢纽标记）。
- * 与 planet-logistics-flow.beltFlowVector 的「auto 回退 east」不同——那里是货物流向的近似，
- * 这里要的是真实方向，未配置就不画箭头。
- */
-export function resolveLogisticsDirection(building: Pick<Building, 'type' | 'conveyor' | 'sorter' | 'splitter' | 'rotation'>): CardinalDirection | null {
-  const { arrows, omnidirectional } = logisticsArrows(building);
-  if (omnidirectional) return null;
-  return arrows[0]?.to ?? null;
 }
 
 /** 物流建筑是否四向皆可（分拣器/分流器默认配置）：2D 画枢纽、3D 画枢纽标记。 */
