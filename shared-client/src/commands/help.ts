@@ -31,7 +31,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   scan_galaxy: { usage: '[galaxy_id]', desc: '登记星系到星图（不改地表迷雾）' },
   scan_system: { usage: '<system_id>', desc: '登记恒星系到星图（不改地表迷雾）' },
   scan_planet: { usage: '<planet_id>', desc: '登记星球到星图（不改地表迷雾）' },
-  build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]', desc: 'Build any server-side buildable structure' },
+  build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0|90|180|270] [--elevation 0-4] [--approach]', desc: 'Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0）' },
   move: { usage: '<entity_id> <x> <y> [--z <z>]', desc: 'Move entity to position' },
   attack: { usage: '<entity_id> <target_id>', desc: 'Attack target entity' },
   order: { usage: '<entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>] [--planet <planet_id>]', desc: 'R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧）' },

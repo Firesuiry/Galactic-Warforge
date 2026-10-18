@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // ConveyorDirection represents a belt direction on the grid.
 type ConveyorDirection string
@@ -93,6 +96,29 @@ func (d ConveyorDirection) Right() ConveyorDirection {
 	}
 }
 
+// MaxBeltElevation 是传送带可以架到的最高层（第 19 轮契约 §3.1）。
+// 0 = 地面；1..MaxBeltElevation 是高架层。只有 conveyor_belt_mk1/2/3 可以 >0。
+const MaxBeltElevation = 4
+
+// BeltLayerKey 是高架层占格索引的键：`x:y@e`（e ≥ 1）。
+// 地面层（e=0）不写这个索引，仍由 WorldState.TileBuilding 表示。
+func BeltLayerKey(x, y, elevation int) string {
+	if elevation <= 0 {
+		return ""
+	}
+	return strconv.Itoa(x) + ":" + strconv.Itoa(y) + "@" + strconv.Itoa(elevation)
+}
+
+// SupportsElevation 判断建筑类型能否架到高架层。
+func SupportsElevation(btype BuildingType) bool {
+	switch btype {
+	case BuildingTypeConveyorBeltMk1, BuildingTypeConveyorBeltMk2, BuildingTypeConveyorBeltMk3:
+		return true
+	default:
+		return false
+	}
+}
+
 // ConveyorState tracks items moving along a conveyor segment.
 type ConveyorState struct {
 	Input      ConveyorDirection `json:"input"`
@@ -100,6 +126,9 @@ type ConveyorState struct {
 	Buffer     []ItemStack       `json:"buffer,omitempty"`
 	MaxStack   int               `json:"max_stack"`
 	Throughput int               `json:"throughput"`
+	// Elevation 是传送带所在层：0 = 地面，1..MaxBeltElevation = 高架层。
+	// 只有 conveyor_belt_mk1/2/3 可以 >0（第 19 轮契约 §3.1）。
+	Elevation int `json:"elevation,omitempty"`
 	// BlockedTicks 是「带上有货、但连续多少 tick 一件都没动出去」的计数
 	// （见 gamecore.settleBeltBlockAlerts）。用于给玩家报「带被堵」，
 	// 而不是让他盯着上游矿机的「产物阻塞」猜。清空或动过就归零。

@@ -121,6 +121,9 @@ const (
 	CodeValidationFailed     ResultCode = "VALIDATION_FAILED"
 	CodeEntityNotFound       ResultCode = "ENTITY_NOT_FOUND"
 	CodePositionOccupied     ResultCode = "POSITION_OCCUPIED"
+	// CodeInvalidElevation 高架层参数不合法（第 19 轮契约 §3.2）：非传送带给了
+	// elevation > 0、超出 0–4、高架带没有明确方向、同层占格冲突等。
+	CodeInvalidElevation ResultCode = "INVALID_ELEVATION"
 	CodeUnauthorized         ResultCode = "UNAUTHORIZED"
 	CodeExecutorUnavailable  ResultCode = "EXECUTOR_UNAVAILABLE"
 	CodeExecutorBusy         ResultCode = "EXECUTOR_BUSY"

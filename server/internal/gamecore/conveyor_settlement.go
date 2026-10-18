@@ -240,7 +240,7 @@ func settleConveyors(ws *model.WorldState) {
 	}
 	links := make(map[string][]conveyorLink, len(ids))
 	for _, id := range ids {
-		links[id] = conveyorOutputTargets(ws, conveyors, conveyors[id], conveyorIncomingDirs(ws, conveyors, conveyors[id]), allowedInputs)
+		links[id] = conveyorDownstreamTargets(ws, conveyors, conveyors[id], allowedInputs)
 	}
 	remaining := make(map[string]*model.ConveyorState, len(ids))
 	offers := make(map[string]int, len(ids))
@@ -456,40 +456,200 @@ var conveyorDirOrder = []model.ConveyorDirection{
 	model.ConveyorWest,
 }
 
+// conveyorIncomingDirs 返回「哪些方向上的运输建筑把货送进本格」（世界方向，
+// 即邻居在本格的方向）。第 19 轮起上游完全由下游链接反推（契约 §3.3）：
+// 对四个方向逐个问「那个邻居会不会连到我」，不再单独按 TileBuilding 扫。
+// 这样高架带/坡道/同层优先只有一套算法。
 func conveyorIncomingDirs(ws *model.WorldState, conveyors map[string]*model.Building, building *model.Building) []model.ConveyorDirection {
 	if ws == nil || building == nil {
 		return nil
 	}
 	var incoming []model.ConveyorDirection
 	for _, dir := range conveyorDirOrder {
-		next, nextDir := ws.SurfaceStep(building.Position, dir)
-		nx, ny := next.X, next.Y
-		neighborID := ws.TileBuilding[model.TileKey(nx, ny)]
-		if neighborID == "" {
+		next, _ := ws.SurfaceStep(building.Position, dir)
+		neighbor := conveyorAt(ws, conveyors, next, building.OwnerID)
+		if neighbor == nil || neighbor.ID == building.ID {
 			continue
 		}
-		neighbor := conveyors[neighborID]
-		if neighbor == nil || neighbor.Conveyor == nil {
-			continue
-		}
-		if neighbor.OwnerID != building.OwnerID {
-			continue
-		}
-		if neighbor.Splitter != nil {
-			if neighbor.Splitter.IsOutput(nextDir.Opposite()) {
-				incoming = append(incoming, dir)
-			}
-			continue
-		}
-		neighborOut := neighbor.Conveyor.Output
-		if !neighborOut.Valid() || neighborOut == model.ConveyorAuto {
-			continue
-		}
-		if neighborOut == nextDir.Opposite() {
+		if conveyorLinksTo(ws, conveyors, neighbor, building) {
 			incoming = append(incoming, dir)
 		}
 	}
 	return incoming
+}
+
+// conveyorLinksTo 回答「A 的下游算法会不会连到 B」。只展开 A 自己的候选方向，
+// 不再递归求 A 的上游（那样 A、B 互指会无限递归）。
+func conveyorLinksTo(ws *model.WorldState, conveyors map[string]*model.Building, from, to *model.Building) bool {
+	if from == nil || to == nil || from.Conveyor == nil {
+		return false
+	}
+	output := from.Conveyor.Output
+	dirs := []model.ConveyorDirection{output}
+	if from.Splitter != nil {
+		dirs = from.Splitter.OutputDirections
+	} else if !output.Valid() || output == model.ConveyorAuto {
+		// auto 输出：候选方向 = 四向里非上游的那些（与 conveyorOutputPriority 同口径），
+		// 只是这里不需要知道具体哪个方向是上游——任何能连上的都算。
+		dirs = conveyorDirOrder
+	}
+	accepts := func(targetID string, dir model.ConveyorDirection) bool {
+		return allowsInput(conveyorAllowedInputs(conveyors[targetID]), dir)
+	}
+	level := from.BeltElevation()
+	for _, dir := range dirs {
+		if !dir.Valid() || dir == model.ConveyorAuto {
+			continue
+		}
+		if from.Splitter == nil && output.Valid() && output != model.ConveyorAuto && dir != output {
+			continue
+		}
+		next, nextDir := ws.SurfaceStep(from.Position, dir)
+		if next.X != to.Position.X || next.Y != to.Position.Y {
+			continue
+		}
+		inputSide := nextDir.Opposite()
+		// 同层优先：同层有一个「会接货」的建筑时，坡道候选不会被选中；
+		// 但如果同层建筑不收这个方向，坡道仍然成立（与 conveyorDownstreamAt 同口径）。
+		target := conveyorDownstreamAt(ws, conveyors, from.OwnerID, next, level, inputSide, accepts)
+		if target != nil && target.ID == to.ID {
+			return true
+		}
+	}
+	return false
+}
+
+// conveyorAt 返回 (x,y) 上属于 ownerID 的运输建筑：地面层优先，然后自下而上
+// 找高架层。分拣器/建筑直连 IO 不用这个函数，它们只看 TileBuilding（只接地面层）。
+func conveyorAt(ws *model.WorldState, conveyors map[string]*model.Building, pos model.Position, ownerID string) *model.Building {
+	if ws == nil {
+		return nil
+	}
+	if id := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]; id != "" {
+		if b := conveyors[id]; b != nil && b.Conveyor != nil && b.OwnerID == ownerID {
+			return b
+		}
+	}
+	for elevation := 1; elevation <= model.MaxBeltElevation; elevation++ {
+		id := ws.BeltLayerAt(pos.X, pos.Y, elevation)
+		if id == "" {
+			continue
+		}
+		if b := conveyors[id]; b != nil && b.Conveyor != nil && b.OwnerID == ownerID {
+			return b
+		}
+	}
+	return nil
+}
+
+// conveyorDownstreamTargets 是第 19 轮契约 §3.3 的统一下游算法（服务端权威，
+// 3D/2D 必须同口径）。带 A（高度 a，输出方向 d）沿 SurfaceStep 到邻格 N：
+//
+//  1. 同层优先：N 上高度 a 的运输建筑，若接受来自 opposite(d') 侧的输入 → 连；
+//  2. 坡道（只在同层没连上时）：依次看 N 上高度 a−1、a+1（≥0）的纯传送带 B，
+//     要求 B.output == d'（直行延续，坡道不许转弯/侧汇）且接受输入 → 连；
+//  3. 都没有 → 无下游（死头）。
+//
+// 分流器保留原有的多输出方向逻辑（它们只在地面层）。
+func conveyorDownstreamTargets(
+	ws *model.WorldState,
+	conveyors map[string]*model.Building,
+	building *model.Building,
+	allowedInputs map[string]map[model.ConveyorDirection]struct{},
+) []conveyorLink {
+	if ws == nil || building == nil || building.Conveyor == nil {
+		return nil
+	}
+	output := building.Conveyor.Output
+	dirs := conveyorOutputPriority(output, conveyorIncomingDirs(ws, conveyors, building))
+	if building.Splitter != nil {
+		dirs = building.Splitter.OutputDirections
+	}
+	accepts := func(targetID string, dir model.ConveyorDirection) bool {
+		if allowedInputs != nil {
+			return allowsInput(allowedInputs[targetID], dir)
+		}
+		return allowsInput(conveyorAllowedInputs(conveyors[targetID]), dir)
+	}
+	// 目标必须属于同一玩家（conveyorAt 已按 owner 过滤）。
+	var targets []conveyorLink
+	for _, dir := range dirs {
+		if !dir.Valid() || dir == model.ConveyorAuto {
+			continue
+		}
+		if building.Splitter == nil && output.Valid() && output != model.ConveyorAuto && dir != output {
+			continue
+		}
+		next, nextDir := ws.SurfaceStep(building.Position, dir)
+		inputSide := nextDir.Opposite()
+		level := building.BeltElevation()
+		link := conveyorDownstreamAt(ws, conveyors, building.OwnerID, next, level, inputSide, accepts)
+		if link == nil {
+			continue
+		}
+		targets = append(targets, conveyorLink{targetID: link.ID, output: dir, input: inputSide})
+	}
+	return targets
+}
+
+// conveyorDownstreamAt 按 §3.3 在邻格 N 上找下游：同层优先，其次坡道（±1 层、
+// 只认直行延续的纯传送带）。返回 nil 表示死头。
+func conveyorDownstreamAt(
+	ws *model.WorldState,
+	conveyors map[string]*model.Building,
+	ownerID string,
+	next model.Position,
+	level int,
+	inputSide model.ConveyorDirection,
+	accepts func(string, model.ConveyorDirection) bool,
+) *model.Building {
+	sameLevel := conveyorAtLevel(ws, conveyors, next, ownerID, level)
+	if sameLevel != nil && accepts(sameLevel.ID, inputSide) {
+		return sameLevel
+	}
+	// 坡道：只对纯传送带（不是分流器/集装机/监测器），且必须直行延续。
+	for _, ramp := range []int{level - 1, level + 1} {
+		if ramp < 0 || ramp > model.MaxBeltElevation {
+			continue
+		}
+		candidate := conveyorAtLevel(ws, conveyors, next, ownerID, ramp)
+		if candidate == nil || candidate.Splitter != nil {
+			continue
+		}
+		if !model.SupportsElevation(candidate.Type) {
+			continue
+		}
+		// 坡道只认直行延续：B 自己的输出方向必须等于进入 N 后的前进方向 d'
+		// （= opposite(inputSide)），不许转弯、不许侧汇。
+		if candidate.Conveyor.Output != inputSide.Opposite() {
+			continue
+		}
+		if accepts(candidate.ID, inputSide) {
+			return candidate
+		}
+	}
+	return nil
+}
+
+// conveyorAtLevel 返回 (x,y) 上恰好 height 层的运输建筑；height=0 走 TileBuilding。
+func conveyorAtLevel(ws *model.WorldState, conveyors map[string]*model.Building, pos model.Position, ownerID string, height int) *model.Building {
+	if ws == nil || height < 0 || height > model.MaxBeltElevation {
+		return nil
+	}
+	var id string
+	if height == 0 {
+		id = ws.TileBuilding[model.TileKey(pos.X, pos.Y)]
+	} else {
+		id = ws.BeltLayerAt(pos.X, pos.Y, height)
+	}
+	if id == "" {
+		return nil
+	}
+	b := conveyors[id]
+	if b == nil || b.Conveyor == nil || b.OwnerID != ownerID {
+		return nil
+	}
+	return b
 }
 
 func conveyorAllowedInputs(building *model.Building) map[model.ConveyorDirection]struct{} {
@@ -526,53 +686,6 @@ func conveyorAllowedInputs(building *model.Building) map[model.ConveyorDirection
 		allowed[dir] = struct{}{}
 	}
 	return allowed
-}
-
-func conveyorOutputTargets(
-	ws *model.WorldState,
-	conveyors map[string]*model.Building,
-	building *model.Building,
-	incoming []model.ConveyorDirection,
-	allowedInputs map[string]map[model.ConveyorDirection]struct{},
-) []conveyorLink {
-	if ws == nil || building == nil || building.Conveyor == nil {
-		return nil
-	}
-	output := building.Conveyor.Output
-	dirs := conveyorOutputPriority(output, incoming)
-	if building.Splitter != nil {
-		dirs = building.Splitter.OutputDirections
-	}
-	var targets []conveyorLink
-	for _, dir := range dirs {
-		if !dir.Valid() || dir == model.ConveyorAuto {
-			continue
-		}
-		if building.Splitter == nil && output.Valid() && output != model.ConveyorAuto && dir != output {
-			continue
-		}
-		if building.Splitter == nil && output == model.ConveyorAuto && containsDirection(incoming, dir) {
-			continue
-		}
-		next, nextDir := ws.SurfaceStep(building.Position, dir)
-		nx, ny := next.X, next.Y
-		targetID := ws.TileBuilding[model.TileKey(nx, ny)]
-		if targetID == "" {
-			continue
-		}
-		target := conveyors[targetID]
-		if target == nil || target.Conveyor == nil {
-			continue
-		}
-		if target.OwnerID != building.OwnerID {
-			continue
-		}
-		if !allowsInput(allowedInputs[targetID], nextDir.Opposite()) {
-			continue
-		}
-		targets = append(targets, conveyorLink{targetID: targetID, output: dir, input: nextDir.Opposite()})
-	}
-	return targets
 }
 
 func conveyorOutputPriority(output model.ConveyorDirection, incoming []model.ConveyorDirection) []model.ConveyorDirection {

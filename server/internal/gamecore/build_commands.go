@@ -43,6 +43,9 @@ type buildPayload struct {
 	Direction    *string            `json:"direction"`
 	Rotation     *int               `json:"rotation"`
 	AutoApproach bool               `json:"auto_approach"`
+	// Elevation 是传送带目标层（第 19 轮契约 §3.2）：0 = 地面（缺省），
+	// 1..MaxBeltElevation = 高架。高架带必须显式给 direction（不允许 auto）。
+	Elevation int `json:"elevation"`
 }
 
 // execBuild handles the "build" command
@@ -115,25 +118,78 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		return res, nil
 	}
 
+	// 高架传送带（第 19 轮契约 §3.2）：只有 conveyor_belt_mk1/2/3 能架高，
+	// 该层该格不能已有带子/施工任务；地面占用只能是空地或 LowLogistics。
+	// 高架带不写 TileBuilding，所以下面的地面占位检查对它不适用。
+	if p.Elevation != 0 {
+		if !model.SupportsElevation(btype) {
+			res.Code = model.CodeInvalidElevation
+			res.Message = "只有传送带可以架高"
+			return res, nil
+		}
+		if p.Elevation < 0 || p.Elevation > model.MaxBeltElevation {
+			res.Code = model.CodeInvalidElevation
+			res.Message = fmt.Sprintf("高度只能 0–%d 层", model.MaxBeltElevation)
+			return res, nil
+		}
+		if len(footprintTiles) != 1 {
+			res.Code = model.CodeInvalidElevation
+			res.Message = "高架传送带只能占一格"
+			return res, nil
+		}
+		tile := footprintTiles[0]
+		if id := ws.BeltLayerAt(tile.X, tile.Y, p.Elevation); id != "" {
+			res.Code = model.CodePositionOccupied
+			res.Message = tileOccupiedMessage(ws, playerID, id, "该层已有传送带")
+			return res, nil
+		}
+		if ws.Construction != nil {
+			if key := model.BeltLayerKey(tile.X, tile.Y, p.Elevation); ws.Construction.IsTileReserved(key) {
+				res.Code = model.CodePositionOccupied
+				res.Message = "该层已有施工任务"
+				return res, nil
+			}
+		}
+		groundID := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]
+		if groundID != "" {
+			ground := ws.Buildings[groundID]
+			if ground == nil || !model.IsLowLogistics(ground.Type) {
+				res.Code = model.CodePositionOccupied
+				res.Message = "高架传送带不能架在建筑上方"
+				return res, nil
+			}
+		}
+	}
+
 	// Check the whole footprint is unoccupied; an occupied footprint may still
 	// accept a vertically stacked layer of the same building type
 	// (vertical_construction tech).
-	if occupying := footprintOccupant(ws, footprintTiles); occupying != nil && btype != model.BuildingTypeLogisticsDistributor {
-		stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
-		if stackErr != nil {
-			res.Code = model.CodePositionOccupied
-			res.Message = tileOccupiedMessage(ws, playerID, occupying.ID, stackErr.Error())
-			return res, nil
-		}
-		pos = &stackedPos
-	}
-	if ws.Construction != nil && pos.Z == 0 {
-		for _, tile := range footprintTiles {
-			key := model.TileKey(tile.X, tile.Y)
-			if ws.Construction.IsTileReserved(key) {
+	if p.Elevation == 0 {
+		if occupying := footprintOccupant(ws, footprintTiles); occupying != nil && btype != model.BuildingTypeLogisticsDistributor {
+			stackedPos, stackErr := resolveVerticalPlacement(ws, ws.Players[playerID], btype, *pos)
+			if stackErr != nil {
 				res.Code = model.CodePositionOccupied
-				res.Message = constructionReservationMessage(ws, playerID, key)
+				res.Message = tileOccupiedMessage(ws, playerID, occupying.ID, stackErr.Error())
 				return res, nil
+			}
+			pos = &stackedPos
+		}
+		// 反过来：地面层要造非 LowLogistics 建筑时，占地内不能有高架带。
+		if !model.IsLowLogistics(btype) && btype != model.BuildingTypeLogisticsDistributor {
+			if overhead := ws.BeltLayerUnderBuilding(footprintTiles); overhead != nil {
+				res.Code = model.CodePositionOccupied
+				res.Message = "上方有高架传送带"
+				return res, nil
+			}
+		}
+		if ws.Construction != nil && pos.Z == 0 {
+			for _, tile := range footprintTiles {
+				key := model.TileKey(tile.X, tile.Y)
+				if ws.Construction.IsTileReserved(key) {
+					res.Code = model.CodePositionOccupied
+					res.Message = constructionReservationMessage(ws, playerID, key)
+					return res, nil
+				}
 			}
 		}
 	}
@@ -212,6 +268,29 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			conveyorDir = dir
 		}
 	}
+	if p.Elevation > 0 {
+		// 高架带必须有明确输出方向：不允许 auto，缺省按 rotation 推
+		// （rotation 90 = east、180 = south、270 = west，见 PlanRotationForDirection 的逆）。
+		if conveyorDir == model.ConveyorAuto {
+			res.Code = model.CodeInvalidElevation
+			res.Message = "高架传送带必须有明确的输出方向（不能是 auto）"
+			return res, nil
+		}
+		if p.Direction == nil && p.Rotation != nil {
+			// 本游戏的 rotation 是「朝向」而不是 180° 旋转：0=北、90=东、
+			// 180=南、270=西（见 model.PlanRotationForDirection）。
+			switch rotation {
+			case model.PlanRotation90:
+				conveyorDir = model.ConveyorEast
+			case model.PlanRotation180:
+				conveyorDir = model.ConveyorSouth
+			case model.PlanRotation270:
+				conveyorDir = model.ConveyorWest
+			default:
+				conveyorDir = model.ConveyorNorth
+			}
+		}
+	}
 
 	autoApproach := p.AutoApproach
 	var approachUnit *model.Unit
@@ -237,10 +316,13 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	// 建造不能把任何地面单位（含己方机甲）关进死角：否则玩家只能拆家自救
 	// （试玩报告 #5：机甲被自家建筑围死），bot 也会用自家建筑把军团圈死
 	// （试玩报告 B）。占位按整个占地范围计算，回执写明单位名/坐标与最后出口。
-	if enclosed := buildingEnclosure(ws, btype, rotation, *pos); enclosed != nil {
-		res.Code = model.CodeInvalidTarget
-		res.Message = enclosureMessage(enclosed)
-		return res, nil
+	// 高架带不挡地面单位（它不进 TileBuilding），跳过围死判定。
+	if p.Elevation == 0 {
+		if enclosed := buildingEnclosure(ws, btype, rotation, *pos); enclosed != nil {
+			res.Code = model.CodeInvalidTarget
+			res.Message = enclosureMessage(enclosed)
+			return res, nil
+		}
 	}
 
 	if ws.Construction == nil {
@@ -259,6 +341,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		BuildingType:      btype,
 		Position:          *pos,
 		ConveyorDirection: conveyorDir,
+		Elevation:         p.Elevation,
 		RecipeID:          recipeID,
 		MiningItem:        model.MiningItemAt(ws, btype, rotation, *pos),
 		Cost:              def.BuildCost,
@@ -1062,10 +1145,42 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	for _, p := range tiles {
 		key := model.TileKey(p.X, p.Y)
 		lavaSite := model.RequiresLavaProximity(task.BuildingType) && ws.Grid[p.Y][p.X].Terrain == terrain.TileLava
+		if task.Elevation > 0 {
+			if id := ws.BeltLayerAt(p.X, p.Y, task.Elevation); id != "" {
+				res.Code = model.CodePositionOccupied
+				res.Message = "第 " + fmt.Sprint(task.Elevation) + " 层该格已有传送带"
+				return res, nil
+			}
+			if reserved := ws.Construction.ReservedTiles[model.BeltLayerKey(p.X, p.Y, task.Elevation)]; reserved != "" && reserved != taskID {
+				res.Code = model.CodePositionOccupied
+				res.Message = "该层已有施工任务"
+				return res, nil
+			}
+			if !ws.Grid[p.Y][p.X].Terrain.Buildable() {
+				res.Code = model.CodePositionOccupied
+				res.Message = "施工占地不可用"
+				return res, nil
+			}
+			if groundID := ws.TileBuilding[key]; groundID != "" {
+				if ground := ws.Buildings[groundID]; ground == nil || !model.IsLowLogistics(ground.Type) {
+					res.Code = model.CodePositionOccupied
+					res.Message = "高架传送带不能架在建筑上方"
+					return res, nil
+				}
+			}
+			continue
+		}
 		if ws.TileBuilding[key] != "" || (!ws.Grid[p.Y][p.X].Terrain.Buildable() && task.BuildingType != model.BuildingTypeFoundation && !lavaSite) || (ws.Construction.ReservedTiles[key] != "" && ws.Construction.ReservedTiles[key] != taskID) {
 			res.Code = model.CodePositionOccupied
 			res.Message = "施工占地不可用"
 			return res, nil
+		}
+		if !model.IsLowLogistics(task.BuildingType) && task.BuildingType != model.BuildingTypeLogisticsDistributor {
+			if overhead := ws.BeltLayerUnderBuilding([]model.Position{p}); overhead != nil {
+				res.Code = model.CodePositionOccupied
+				res.Message = "上方有高架传送带"
+				return res, nil
+			}
 		}
 		if foundation := ws.FoundationAt(p); foundation != nil && (task.BuildingType == model.BuildingTypeFoundation || (foundation.Job != nil && foundation.Job.Type == model.BuildingJobDemolish)) {
 			res.Code = model.CodePositionOccupied
@@ -1093,7 +1208,7 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 		ws.Construction.ReservedTiles = make(map[string]string)
 	}
 	for _, p := range tiles {
-		ws.Construction.ReservedTiles[model.TileKey(p.X, p.Y)] = taskID
+		ws.Construction.ReservedTiles[task.ReservationKey(p)] = taskID
 	}
 
 	// Re-add to order if not present

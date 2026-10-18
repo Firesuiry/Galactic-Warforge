@@ -91,3 +91,44 @@ func TestItemGrowthValidation(t *testing.T) {
 		t.Fatalf("缺省观察窗口应为 600，实际 %d", got)
 	}
 }
+
+// 传送带没有 Storage，货在 Conveyor.Buffer 里；不数它的话 item_growth 在带子上
+// 永远读到 0（第 19 轮 高架带断言就靠它）。这里覆盖：纯带子计数、混合物品只数
+// 目标物品、库存与带子货叠加。
+func TestCountItemInBuildingCountsConveyorBuffer(t *testing.T) {
+	belt := &model.Building{
+		Conveyor: &model.ConveyorState{
+			Buffer: []model.ItemStack{
+				{ItemID: "iron_ingot", Quantity: 3},
+				{ItemID: "copper_ingot", Quantity: 2},
+				{ItemID: "iron_ingot", Quantity: 1},
+			},
+		},
+	}
+	if got := countItemInBuilding(belt, "iron_ingot"); got != 4 {
+		t.Fatalf("带子上铁锭应为 4，实际 %d", got)
+	}
+	if got := countItemInBuilding(belt, "copper_ingot"); got != 2 {
+		t.Fatalf("带子上铜锭应为 2，实际 %d", got)
+	}
+	if got := countItemInBuilding(belt, "stone"); got != 0 {
+		t.Fatalf("不在带子上的物品应为 0，实际 %d", got)
+	}
+
+	// 同时有库存和带子的建筑：两者相加。
+	station := &model.Building{Storage: &model.StorageState{
+		Inventory: model.ItemInventory{"iron_ingot": 5},
+	}}
+	belt.Storage = station.Storage
+	if got := countItemInBuilding(belt, "iron_ingot"); got != 9 {
+		t.Fatalf("库存 5 + 带子 4 应为 9，实际 %d", got)
+	}
+
+	// nil 安全：空建筑、无 Storage 的建筑都不 panic。
+	if got := countItemInBuilding(&model.Building{}, "iron_ingot"); got != 0 {
+		t.Fatalf("空建筑应为 0，实际 %d", got)
+	}
+	if got := countItemInBuilding(nil, "iron_ingot"); got != 0 {
+		t.Fatalf("nil 建筑应为 0，实际 %d", got)
+	}
+}

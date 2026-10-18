@@ -1,0 +1,1178 @@
+{
+  "parent": "cp-base",
+  "note": "L5 cp-belt-dsp（第 19 轮 §5 多层传送带逻辑层）：从 cp-base 读档，只用玩家命令 + 快进（料全部来自自家产线：b-105 铁锭 / b-97 铜锭 / b-49 铁矿 / b-59 铜矿，手搓铁锭 64、齿轮 6、电路板 13），在基地南侧空地上搭一条立体交叉的物流场景：① 铜主线 y=153 从 x=48 到 x=56 向东，源头是补给站 C_src(44,152) 经两台分拣器上料（主线只放行 copper_ingot，侧汇支线只放行 copper_ore），终点由分拣器 (57,153) 卸进 C_dst(58,152)。② 侧汇支带 (48,152)(49,152) 向东 → (50,152) 转南，从北侧汇入地面主线 (50,153)。③ 铁线 (53,151)→(53,155) 向南：其中 (53,152) 升到 1 层、(53,153) 保持 1 层跨过同格的地面铜带、(53,154) 落回地面，起点是 I_src(51,147) 经分拣器 (53,150) 上料，终点由跨格分拣器 (53,157)（背面扫 2 格取 (53,155) 带、正面放 (53,158)）卸进 I_dst(52,158)。供电：新增电塔 (51,151) 接现有电网（离 b-57 曼哈顿 9 格），另补 2 台风机（新负载 13 > 现有余量）。契约：两条线终点各自只收到自己的物品（C_dst 有铜锭/铜矿、无铁锭；I_dst 有铁锭、无铜），11 台分拣器 / 6 座补给站 / 3 座电塔 running，并用 item_growth 证明高架铁线与铜主线此刻真的在走货 （item_growth 的料在窗口开始前才放进源站，存量断言不能只靠读档前攒下的量）。高架段走货的观察点取该线终点 I_dst 而不是高架带格 (53,153)e1：铁线上料分拣器每 6 tick 才放 1 件，带子 throughput=1、每格停留 1 tick，按 300/600 tick 窗口采样时该格为空的概率极高（实测两次计数都是 0，而同一时段 I_dst 收到了货）；I_dst 只可能由这条高架线喂货，其增长等价地证明整条线在走。",
+  "build": [
+    "机甲从 (49,134) 开到 (50,150)",
+    "从 b-105 取铁锭 51、b-97 取铜锭 30、b-49 取铁矿 48、b-59 取铜矿 6（全是玩家命令，无管理员发料）",
+    "手搓铁锭 64、齿轮 6、电路板 13",
+    "电力感应塔 (51,151)，风机 (47,156)、(56,156)",
+    "补给站 C_src(44,152)、C_dst(58,152)、I_src(51,147)、I_dst(52,158)",
+    "铜主线 y=153：x=48..56 向东（地面）",
+    "侧汇支带：(48,152)(49,152) 向东 → (50,152) 转南汇入 (50,153)",
+    "铁线：x=53，y=151 地面 → y=152 升 1 层 → y=153 保持 1 层跨过地面铜带 → y=154 落回地面 → y=155 带尾",
+    "5 台分拣器：(47,153) 铜主线上料、(47,152) 支线上料、(57,153) 铜收货、(53,150) 铁线上料、(53,157) 跨格铁收货",
+    "configure_sorter 过滤：主线 allow copper_ingot、支线 allow copper_ore、铁线 allow iron_ingot",
+    "往 C_src 放铜锭 10 + 铜矿 6、往 I_src 放铁锭（分两批），item_growth 证明高架段与两条主线在走货"
+  ],
+  "steps": [
+    {
+      "cmd": {
+        "type": "move",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40",
+          "position": {
+            "x": 50,
+            "y": 150,
+            "z": 0
+          }
+        }
+      },
+      "note": "机甲从 (49,134) 开到场景区旁 (50,150)：建造射程 18 格，场景区最远的 (58,152) 距离 10"
+    },
+    {
+      "wait_until": {
+        "kind": "unit_near",
+        "player": "p1",
+        "type": "executor",
+        "n": 1,
+        "position": {
+          "x": 50,
+          "y": 150,
+          "z": 0
+        },
+        "radius": 2
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 51,
+          "direction": "to_player"
+        }
+      },
+      "note": "料全部来自自家产线：取 b-105 铁补给站里的铁锭 51"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-97",
+          "item_id": "copper_ingot",
+          "quantity": 30,
+          "direction": "to_player"
+        }
+      },
+      "note": "取 b-97 铜补给站里的铜锭 30"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-49",
+          "item_id": "iron_ore",
+          "quantity": 48,
+          "direction": "to_player"
+        }
+      },
+      "note": "取 b-49 铁矿机输出缓冲里的铁矿 48（配合背包 16 手搓成锭）"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-59",
+          "item_id": "copper_ore",
+          "quantity": 6,
+          "direction": "to_player"
+        }
+      },
+      "note": "取 b-59 铜矿机里的铜矿 6（C_src 要放 6 铜矿）"
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_iron",
+          "quantity": 64
+        }
+      },
+      "note": "手搓铁矿→铁锭 64（背包 16 + 取来 48）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 132
+      },
+      "timeout_ticks": 9000
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "gear",
+          "quantity": 6
+        }
+      },
+      "note": "手搓齿轮 6（背包原有 13，本层建材共需 19 个）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "gear",
+        "n": 19
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 13
+        }
+      },
+      "note": "手搓电路板 13（4 补给站 ×2 + 5 分拣器 ×1）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "circuit_board",
+        "n": 13
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 51,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "tesla_tower",
+          "direction": "auto"
+        }
+      },
+      "note": "电力感应塔 (51,151)：离现有电塔 b-57 (52,143) 曼哈顿 9 格（无线 12 格内），接上现有电网"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "tesla_tower",
+        "n": 3
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 47,
+            "y": 156,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      },
+      "note": "风机 W1 (47,156)：新增负载 13（5 分拣器 ×1 + 4 补给站 ×2），现有余量不够，补 2 台风机"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 4
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 56,
+            "y": 156,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      },
+      "note": "风机 W2 (56,156)"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 5
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      },
+      "note": "C_src 铜源补给站 (44,152)，占地 44..46,152..154"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 3
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 58,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      },
+      "note": "C_dst 铜收货补给站 (58,152)，占地 58..60,152..154"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 4
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 51,
+            "y": 147,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      },
+      "note": "I_src 铁源补给站 (51,147)，占地 51..53,147..149"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 5
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 52,
+            "y": 158,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "supply_station",
+          "direction": "auto"
+        }
+      },
+      "note": "I_dst 铁收货补给站 (52,158)，占地 52..54,158..160"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 6
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 48,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      },
+      "note": "铜主线 y=153（48..56 向东）：地面带，和 (53,153) 高架铁带共格不同层"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 49,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 50,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 51,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 52,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 54,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 55,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 56,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 13
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 48,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      },
+      "note": "侧汇支带 (48,152)(49,152) 向东 → (50,152) 转南汇入 (50,153) 主线"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 49,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "east"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 50,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 16
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 151,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "铁线 (53,151) 地面南（分拣器 53,150 放货端）"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 17
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south",
+          "elevation": 1
+        }
+      },
+      "note": "上坡：e0 (53,151) 的输出南 = 同格 e1 (53,152) 的行进方向"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 18
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south",
+          "elevation": 1
+        }
+      },
+      "note": "高架跨线格 (53,153) e1：下方是同格地面铜带 e0（低矮物流建筑，允许架高）"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 19
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 154,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "下坡：e1 (53,153) 同层无带 → 邻格 e0 (53,154) 直行延续"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 20
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 155,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "铁带带尾 (53,155)；(53,156) 留空给跨格分拣器取货"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 21
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 47,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 90
+        }
+      },
+      "note": "铜主线上料：背取 (46,153)=C_src，前放 (48,153)=主线（过滤 allow copper_ingot）"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 7
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 47,
+            "y": 152,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 90
+        }
+      },
+      "note": "支线上料：背取 (46,152)=C_src，前放 (48,152)=支带（过滤 allow copper_ore）"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 8
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 57,
+            "y": 153,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 90
+        }
+      },
+      "note": "铜收货：背取 (56,153)=主线，前放 (58,153)=C_dst（不过滤）"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 9
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 150,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 180
+        }
+      },
+      "note": "铁线上料：背取 (53,149)=I_src，前放 (53,151)=铁带"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 10
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 53,
+            "y": 157,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 180
+        }
+      },
+      "note": "跨格铁收货：取货端沿背面（北）扫 range=3，(53,156) 空 → 取 (53,155) 带（2 步），前放 (53,158)=I_dst"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 11
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "configure_sorter",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-168"
+        },
+        "payload": {
+          "filter_mode": "allow",
+          "filter_items": [
+            "copper_ingot"
+          ]
+        }
+      },
+      "note": "铜主线上料只放行铜锭"
+    },
+    {
+      "cmd": {
+        "type": "configure_sorter",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-170"
+        },
+        "payload": {
+          "filter_mode": "allow",
+          "filter_items": [
+            "copper_ore"
+          ]
+        }
+      },
+      "note": "支线上料只放行铜矿"
+    },
+    {
+      "cmd": {
+        "type": "configure_sorter",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-174"
+        },
+        "payload": {
+          "filter_mode": "allow",
+          "filter_items": [
+            "iron_ingot"
+          ]
+        }
+      },
+      "note": "铁线上料只放行铁锭"
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "tesla_tower",
+        "n": 3
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 5
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 6
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 11
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "copper_ingot",
+          "quantity": 10,
+          "direction": "to_building"
+        }
+      },
+      "note": "C_src 放铜锭 10（主线分拣器只放行 copper_ingot）"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "copper_ore",
+          "quantity": 6,
+          "direction": "to_building"
+        }
+      },
+      "note": "C_src 放铜矿 6（支线分拣器只放行 copper_ore，证明侧汇支线的货能进主线）"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-130",
+          "item_id": "iron_ingot",
+          "quantity": 30,
+          "direction": "to_building"
+        }
+      },
+      "note": "I_src 放铁锭 30：高架铁线走货的料"
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 52,
+          "y": 158,
+          "z": 0
+        },
+        "item_id": "iron_ingot",
+        "growth": 1,
+        "advance_ticks": 600
+      },
+      "note": "高架铁线走货（改看终点 I_dst：高架带格瞬时件数不稳，见 note 说明）：放铁锭后 600 tick 内 I_dst 收到铁锭"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "copper_ingot",
+          "quantity": 12,
+          "direction": "to_building"
+        }
+      },
+      "note": "再补铜锭 12 进 C_src（下一段观察窗口的料）"
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 58,
+          "y": 152,
+          "z": 0
+        },
+        "item_id": "copper_ingot",
+        "growth": 2,
+        "advance_ticks": 1200
+      },
+      "note": "C_dst 铜锭继续增长，证明主线持续流动"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-130",
+          "item_id": "iron_ingot",
+          "quantity": 6,
+          "direction": "to_building"
+        }
+      },
+      "note": "再补铁锭 6 进 I_src"
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 52,
+          "y": 158,
+          "z": 0
+        },
+        "item_id": "iron_ingot",
+        "growth": 1,
+        "advance_ticks": 600
+      },
+      "note": "I_dst 铁锭继续增长（补 6 个后 600 tick 内至少再到 1 个），证明高架铁线持续流动"
+    }
+  ],
+  "end_tick": 13132,
+  "contract": {
+    "checks": [
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "building_item_at_gte",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 3,
+        "position": {
+          "x": 58,
+          "y": 152,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_gte",
+        "player": "p1",
+        "item_id": "copper_ore",
+        "n": 1,
+        "position": {
+          "x": 58,
+          "y": 152,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_lt",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 1,
+        "position": {
+          "x": 58,
+          "y": 152,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 3,
+        "position": {
+          "x": 52,
+          "y": 158,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_lt",
+        "player": "p1",
+        "item_id": "copper_ingot",
+        "n": 1,
+        "position": {
+          "x": 52,
+          "y": 158,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_item_at_lt",
+        "player": "p1",
+        "item_id": "copper_ore",
+        "n": 1,
+        "position": {
+          "x": 52,
+          "y": 158,
+          "z": 0
+        }
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 11
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "supply_station",
+        "n": 6
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "tesla_tower",
+        "n": 3
+      }
+    ]
+  }
+}

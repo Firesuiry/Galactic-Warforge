@@ -108,6 +108,11 @@ type WorldState struct {
 
 	// Tile occupancy: maps "x,y" -> entity ID
 	TileBuilding map[string]string `json:"-"`
+	// BeltLayers 是高架传送带的占格索引：`x:y@e`（e ≥ 1）-> entity ID。
+	// 地面层（e=0）仍只写 TileBuilding；高架带不进 TileBuilding，地面单位因此
+	// 能从高架带下面走过、寻路不受影响。与 TileBuilding 在同一处（建造/拆除/
+	// 摧毁/读档重建）维护，不进快照（建筑自身的 conveyor.elevation 已落盘）。
+	BeltLayers map[string]string `json:"-"`
 	// 寻路暂存（epoch 戳免清零）：仅供结算期单线程 BFS 复用，不落盘。
 	PathScratchParent []int32             `json:"-"`
 	PathScratchDepth  []int32             `json:"-"`
@@ -141,6 +146,7 @@ func NewWorldState(planetID string, faceSize int) *WorldState {
 		LogisticsDrones:   make(map[string]*LogisticsDroneState),
 		LogisticsShips:    make(map[string]*LogisticsShipState),
 		TileBuilding:      make(map[string]string),
+		BeltLayers:        make(map[string]string),
 		TileUnits:         make(map[string][]string),
 		PowerGrid:         NewPowerGridGraph(surface.Grid{Size: faceSize}),
 		Construction:      NewConstructionQueue(),

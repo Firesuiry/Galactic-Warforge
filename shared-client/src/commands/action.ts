@@ -154,7 +154,7 @@ export async function cmdRaw(args: string[], { api }: CommandContext): Promise<s
 export async function cmdBuild(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
   if (parsed.positionals.length < 3) {
-    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--rotation 0|90|180|270] [--approach] [--planet <planet_id>]');
+    return fmtError('Usage: build <x> <y> <building_type> [--z <z>] [--direction <dir>] [--recipe <recipe_id>] [--rotation 0|90|180|270] [--elevation <0-4>] [--approach] [--planet <planet_id>]');
   }
   try {
     const position = parsePosition(
@@ -169,12 +169,16 @@ export async function cmdBuild(args: string[], { api }: CommandContext): Promise
     const rotationRaw = getStringOption(parsed, 'rotation');
     const rotation = rotationRaw === undefined ? undefined : requireInt(rotationRaw, 'rotation');
     if (rotation !== undefined && ![0, 90, 180, 270].includes(rotation)) return fmtError('rotation 必须是 0/90/180/270');
+    const elevationRaw = getStringOption(parsed, 'elevation');
+    const elevation = elevationRaw === undefined ? undefined : requireInt(elevationRaw, 'elevation');
+    if (elevation !== undefined && (elevation < 0 || elevation > 4)) return fmtError('elevation 必须是 0-4（0 = 地面，只有传送带能架高）');
     return fmtCommandResponse(await api.cmdBuild(position, parsed.positionals[2], {
       direction: direction as Direction | undefined,
       rotation: rotation as 0 | 90 | 180 | 270 | undefined,
       autoApproach: parsed.options.approach === true ? true : undefined,
       recipeId: getStringOption(parsed, 'recipe'),
       planetId: getStringOption(parsed, 'planet'),
+      elevation,
     }));
   } catch (e) {
     return fmtError(toErrorMessage(e));
