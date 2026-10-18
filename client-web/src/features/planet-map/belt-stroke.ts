@@ -11,6 +11,7 @@ export interface BeltElevationPlacement extends BeltPlacement { elevation: numbe
 export interface ExistingBeltLike {
   position: { x: number; y: number };
   type: string;
+  owner_id?: string;
   conveyor?: { output?: string; elevation?: number };
 }
 
@@ -57,16 +58,21 @@ export function isCardinalDirection(direction: string | undefined): direction is
  * 拖拽铺带第一格的高度（§3.5）：
  * 相邻若有一条现成带子正对着这一格输出（它的 output 方向步进一格 = 本格），
  * 取那条带子的高度（多条取最高，保证接着往上叠而不是往下钻）；否则取目标高度。
+ *
+ * `playerId` 给了就只看**自己的**带子（别人的带子不决定起始高度：场景数据里含敌方/中立建筑，
+ * 接着敌人的带子定高会算出一个自己铺不出来的坡）。缺省（undefined）保持旧行为，只按几何判定。
  */
 export function resolveBeltStartElevation(
   tile: SurfacePoint,
   targetElevation: number,
   belts: readonly ExistingBeltLike[],
   size: number,
+  playerId?: string,
 ): number {
   let upstream: number | undefined;
   for (const belt of belts) {
     if (!belt.type.startsWith('conveyor_belt_')) continue;
+    if (playerId && belt.owner_id !== playerId) continue;
     if (!isCardinal(belt.conveyor?.output)) continue;
     const origin = { x: Math.round(belt.position.x), y: Math.round(belt.position.y) };
     const next = surfaceStep(origin, belt.conveyor.output, size).tile;

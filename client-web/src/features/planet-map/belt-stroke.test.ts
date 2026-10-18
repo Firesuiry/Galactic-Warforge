@@ -54,6 +54,19 @@ describe('拖拽铺带高度（§3.5）', () => {
     expect(resolveBeltStartElevation({ x: 5, y: 2 }, 0, belts, 16)).toBe(2);
   });
 
+  it('他人的带子不决定起始高度（只看己方上游带）', () => {
+    const mixed: ExistingBeltLike[] = [
+      { ...belts[0], owner_id: 'enemy' },      // (4,0) 向东输出，(5,0) 是别人的带子
+      { position: { x: 4, y: 2 }, type: 'conveyor_belt_mk2', owner_id: 'p1', conveyor: { output: 'east', elevation: 2 } },
+    ];
+    // 别人的带子（0 层）不参与 → 取目标高度 2，而不是 0
+    expect(resolveBeltStartElevation({ x: 5, y: 0 }, 2, mixed, 16, 'p1')).toBe(2);
+    // 己方的带子照旧决定起始高度
+    expect(resolveBeltStartElevation({ x: 5, y: 2 }, 0, mixed, 16, 'p1')).toBe(2);
+    // 不给 playerId 时保持旧行为（几何判定，不看归属）
+    expect(resolveBeltStartElevation({ x: 5, y: 0 }, 2, mixed, 16)).toBe(0);
+  });
+
   it('从地面带接着拉到 2 层：第一格 0，之后直行每格 +1', () => {
     const start = resolveBeltStartElevation({ x: 5, y: 0 }, 2, belts, 16);
     const path = assignBeltElevations(straightEast(6, 5, 0), start, 2);

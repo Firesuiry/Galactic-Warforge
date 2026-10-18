@@ -362,12 +362,13 @@ export function PlanetMapThree(props: Props) {
     if (event.button === 0 && interactionMode.kind === 'build' && isConveyorBeltBuilding(interactionMode.buildingType)) {
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
       if (tile) {
-        // 第一格高度：相邻有现成带子正对着它输出时接那条带的高度，否则取目标高度（§3.5）。
+        // 第一格高度：相邻有**己方**现成带子正对着它输出时接那条带的高度，否则取目标高度（§3.5）。
         const startElevation = resolveBeltStartElevation(
           tile,
           interactionMode.elevation ?? 0,
           Object.values(latest.current.planet.buildings ?? {}),
           props.planet.surface.face_size,
+          session.playerId,
         );
         const modeDirection = interactionMode.direction;
         const first: BeltElevationPlacement = {
