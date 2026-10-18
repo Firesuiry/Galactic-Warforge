@@ -1,49 +1,50 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { hoveredTile, statusText, waitPlanetThree } from './support/planet-three';
+
 /**
  * 抽屉打开/关闭不得让地图画布横向位移（试玩 1009 H）：
  * `.planet-map-shell` 的 overflow 若还是 hidden，它仍是滚动容器——抽屉展开时右侧内容
  * 比壳宽，浏览器会为「聚焦/滚动到可见」把壳 scrollLeft 改写成 300，整个地图横向滚走
  * 300px，点格与悬停全部错位。改为 overflow:clip 后画布 rect.x 在两种状态下必须一致，
- * 且点击某格得到的悬停/选中坐标必须与换算出的格子相同（400px 与 1280px 两档）。
+ * 且点击某格得到的悬停/选中坐标必须与投影出的格子相同（400px 与 1280px 两档）。
+ *
+ * R20-C1：2D 视图删除后画布是 `.planet-three__surface canvas`（WebGL），
+ * 格子的屏幕位置由 `window.__planetThree.tileScreenPos` 给出（页面 CSS 像素）。
  */
 
 /**
- * 打开离线样例行星页。
+ * 打开离线样例行星页（3D）。
  *
- * `zoom` 是 px/cell 缩放档（细分网格后按 cell 记）。窄屏必须显式给一个较大的档并同时给
- * `x`/`y`：fixture 图只有 24×16 cell，无深链坐标时页面会用「自适应占屏」覆盖 zoom，
- * 400px 视口下落到 8px/cell（整图 192px 宽，居中后正好被 300px 宽的抽屉整个盖住，
- * 一个可点格都不剩）。带 x/y 深链后相机按指定档位聚焦，整图 384px 宽、左缘留出抽屉之外
- * 的一条可点区域——这才是这条用例要验证的「抽屉覆盖下点格仍然命中」。
+ * fixture 图只有 24×16 cell：深链 `x`/`y` 让 3D 相机聚焦到图内，
+ * 无深链时页面会按基地自适应占屏。窄屏下抽屉（300px）会盖住右半边，
+ * 左侧仍留出可点区域——这才是这条用例要验证的「抽屉覆盖下点格仍然命中」。
  */
-async function openFixturePlanet(page: Page, zoom?: number, focus?: { x: number; y: number }) {
+async function openFixturePlanet(page: Page, focus?: { x: number; y: number }) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
   await page.waitForURL(/\/planet\//, { timeout: 15_000 });
-  const query = [
-    'view=2d',
-    zoom ? `zoom=${zoom}` : '',
-    focus ? `x=${focus.x}` : '',
-    focus ? `y=${focus.y}` : '',
-  ].filter(Boolean).join('&');
-  await page.goto(`/planet/planet-1-1?${query}`);
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 15_000 });
+  const query = focus ? `?x=${focus.x}&y=${focus.y}` : '';
+  await page.goto(`/planet/planet-1-1${query}`);
+  await waitPlanetThree(page);
 }
 
 async function dismissToasts(page: Page) {
-  const close = page.locator('.toast__close');
-  for (let remaining = await close.count(); remaining > 0; remaining -= 1) {
-    await close.first().click();
-  }
-  await expect(page.locator('.toast')).toHaveCount(0);
+  // toast 会自己超时消退：出场动画期间元素不可见/正在 detach，Playwright 的 click
+  // 会一直等可操作性。直接在 DOM 上点关闭按钮（与用户点 × 同一条 React 路径），
+  // 并轮询到真正清零。
+  await expect.poll(async () => {
+    await page.evaluate(() => {
+      document.querySelectorAll<HTMLElement>('.toast__close').forEach((button) => button.click());
+    });
+    return page.locator('.toast').count();
+  }, { timeout: 10_000 }).toBe(0);
 }
 
 interface CanvasGeometry {
   x: number;
   width: number;
-  scrollLeft: number;
   shellScrollLeft: number;
   shellOverflowX: string;
   windowScrollX: number;
@@ -51,7 +52,7 @@ interface CanvasGeometry {
 
 async function canvasGeometry(page: Page): Promise<CanvasGeometry> {
   return page.evaluate(() => {
-    const surface = document.querySelector('.planet-map-canvas__surface')!;
+    const surface = document.querySelector('.planet-three__surface')!;
     const shell = document.querySelector('.planet-map-shell')!;
     const rect = surface.getBoundingClientRect();
     // 取整到 0.5px：GPU 下滚动条出现/消失会让宽度有 <0.1px 的亚像素抖动，
@@ -60,7 +61,6 @@ async function canvasGeometry(page: Page): Promise<CanvasGeometry> {
     return {
       x: round(rect.x),
       width: round(rect.width),
-      scrollLeft: Math.round(shell.scrollLeft),
       shellScrollLeft: Math.round(shell.scrollLeft),
       shellOverflowX: getComputedStyle(shell).overflowX,
       windowScrollX: Math.round(window.scrollX),
@@ -68,41 +68,12 @@ async function canvasGeometry(page: Page): Promise<CanvasGeometry> {
   });
 }
 
-/** 用画布上的相机参数把 tile 换算成元素内点击坐标（与前端 pointToTile 同口径）。 */
-async function tileToLocalPoint(page: Page, tile: { x: number; y: number }) {
-  return page.evaluate((target) => {
-    const surface = document.querySelector('.planet-map-canvas__surface') as HTMLElement;
-    const offsetX = Number(surface.getAttribute('data-camera-offset-x'));
-    const offsetY = Number(surface.getAttribute('data-camera-offset-y'));
-    const tileSize = Number(surface.getAttribute('data-tile-size'));
-    const width = surface.clientWidth;
-    const height = surface.clientHeight;
-    // 与前端 pointToTile 同口径：mapWidth*tileSize > 视口时启用环面回绕，
-    // 命中格取规范（unwrapped）坐标。
-    const mapWidth = Number(surface.getAttribute('data-map-width') ?? 0);
-    const mapHeight = Number(surface.getAttribute('data-map-height') ?? 0);
-    const wrapMod = (value: number, size: number) => ((value % size) + size) % size;
-    const canonAxis = (value: number, offset: number, mapTiles: number, viewportPx: number) => (
-      mapTiles * tileSize > viewportPx
-        ? Math.floor(-offset / tileSize) + wrapMod(value - Math.floor(-offset / tileSize), mapTiles)
-        : value
-    );
-    return {
-      x: offsetX + (canonAxis(target.x, offsetX, mapWidth, width) + 0.5) * tileSize,
-      y: offsetY + (canonAxis(target.y, offsetY, mapHeight, height) + 0.5) * tileSize,
-      offsetX,
-      offsetY,
-      tileSize,
-      width,
-      height,
-    };
-  }, tile);
-}
-
-async function hoveredTile(page: Page): Promise<{ x: number; y: number } | null> {
-  const text = await page.locator('.planet-map-canvas__status').innerText();
-  const match = text.match(/Hover \((\d+), (\d+)\)/);
-  return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
+/** 屏幕点是否真的落在 3D 画布上（没有被抽屉/建造栏等 HUD 覆盖）。 */
+async function hitCanvas(page: Page, x: number, y: number): Promise<boolean> {
+  return page.evaluate(([px, py]) => {
+    const element = document.elementFromPoint(px, py);
+    return Boolean(element?.closest('.planet-three__surface'));
+  }, [x, y]);
 }
 
 for (const viewport of [
@@ -111,15 +82,14 @@ for (const viewport of [
 ]) {
   test(`抽屉开/关画布不横向位移且点格命中正确（${viewport.label}）`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await openFixturePlanet(page, 16, { x: 6, y: 6 });
+    await openFixturePlanet(page, { x: 4, y: 3 });
     await dismissToasts(page);
 
     const closed = await canvasGeometry(page);
 
     await page.getByRole('button', { name: '工作台' }).first().click();
     await expect(page.getByRole('tab', { name: '工作台' })).toBeVisible();
-    // 抽屉是覆盖式的（不挤压画布），展开动画 300ms 后才完全盖住右侧格子；
-    // 细分网格后窄屏下画布上的可用格子本就不多，必须等动画落定再挑。
+    // 抽屉是覆盖式的（不挤压画布），展开动画 300ms 后才完全盖住右侧格子。
     await page.waitForTimeout(600);
     const opened = await canvasGeometry(page);
 
@@ -130,76 +100,65 @@ for (const viewport of [
     expect(opened.windowScrollX).toBe(0);
     expect(opened.shellOverflowX).toBe('clip');
 
-    // 抽屉开着时点击指定格子：悬停坐标必须就是那一格（与布局换算一致）。
+    // 抽屉开着时点几格空地：悬停坐标必须就是那一格（与投影一致）。
     // 只取屏幕点真的落在画布上的格子（抽屉覆盖的右侧格子跳过）。
-    const surface = page.locator('.planet-map-canvas__surface');
-    const box = (await surface.boundingBox())!;
-    const hitCanvas = (x: number, y: number) => page.evaluate(
-      ([px, py]) => {
-        const element = document.elementFromPoint(px, py);
-        return Boolean(element?.closest('.planet-map-canvas__surface'));
-      },
-      [x, y],
-    );
-    let verified = 0;
-    // 先试几处典型格，再按网格兜底扫：窄屏下抽屉、新手引导（9 步时多折一行）会盖住不同的格子，
-    // 本用例校验的是「点到的就是那一格」，不关心具体是哪几格。
     //
-    // 细分网格后 fixture 图仍是 24×16 格（face_size 8），但 400px 视口下自适应档是 8px/cell，
-    // 画布只放得下约 50×105 格——候选格要按实际可视范围生成，写死 0–15 会全部落在画布外。
-    const visibleTiles = await page.evaluate(() => {
-      const surface = document.querySelector('.planet-map-canvas__surface') as HTMLElement;
-      const tileSize = Number(surface.getAttribute('data-tile-size'));
-      const offsetX = Number(surface.getAttribute('data-camera-offset-x'));
-      const offsetY = Number(surface.getAttribute('data-camera-offset-y'));
-      const mapWidth = Number(surface.getAttribute('data-map-width') ?? 0);
-      const mapHeight = Number(surface.getAttribute('data-map-height') ?? 0);
-      const wrapMod = (value: number, size: number) => ((value % size) + size) % size;
-      const canon = (value: number, offset: number, mapTiles: number, viewportPx: number) => (
-        mapTiles * tileSize > viewportPx
-          ? Math.floor(-offset / tileSize) + wrapMod(value - Math.floor(-offset / tileSize), mapTiles)
-          : value
+    // 候选不能用 tileScreenPos 生成：它在该格不可见时会**先聚焦**（把格子挪到屏幕中心），
+    // 窄屏下中心正好被抽屉盖住。这里用 project()（相对画布、不移动相机）在相机中心附近
+    // 扫一圈，取真正露在 HUD 之外的点。
+    // 窄屏（400px）下默认聚焦高度里只有相机中心附近 1–2 格投在画布内，
+    // 还要再扣掉抽屉与图标列——显式把相机拉远（`zoom(factor)` 是相对倍率，<1 = 拉远），
+    // 让画布左侧露出足够多可点格。贴地高度 < ~2.8 时相邻格会投到画布外，只拉远不拉近。
+    if (viewport.width <= 900) {
+      await page.evaluate(() => window.__planetThree!.zoom(0.5));
+      await page.waitForTimeout(400);
+    }
+    const canvasBox = (await page.locator('.planet-three__surface').boundingBox())!;
+    const center = await page.evaluate(() => window.__planetThree!.getCenterTile()) ?? { x: 0, y: 0 };
+    const candidates: Array<{ tile: { x: number; y: number }; x: number; y: number }> = [];
+    for (let dy = -7; dy <= 7; dy += 1) {
+      for (let dx = -7; dx <= 7; dx += 1) {
+        const tile = { x: center.x + dx, y: center.y + dy };
+        const projected = await page.evaluate((target) => window.__planetThree!.project(target), tile);
+        if (!projected?.visible) continue;
+        const x = canvasBox.x + projected.x;
+        const y = canvasBox.y + projected.y;
+        if (x < canvasBox.x + 8 || x > canvasBox.x + canvasBox.width - 8) continue;
+        if (y < canvasBox.y + 8 || y > canvasBox.y + canvasBox.height - 8) continue;
+        if (!(await hitCanvas(page, x, y))) continue;
+        // 投影与拾取必须一致：球面倾斜时边缘格的投影点可能落在另一格上，
+        // 用场景自己的拾取再核一次（pickAt 与真实鼠标同一条射线）。
+        const picked = await page.evaluate(
+          ([px, py]) => window.__planetThree!.pickAt(px, py),
+          [x, y] as const,
+        );
+        if (!picked || Math.round(picked.x) !== tile.x || Math.round(picked.y) !== tile.y) continue;
+        candidates.push({ tile, x, y });
+      }
+    }
+    expect(candidates.length, '抽屉开着时画布上应仍有可点的格子').toBeGreaterThan(0);
+    let verified = 0;
+    for (const { tile, x, y } of candidates) {
+      await page.mouse.move(x, y);
+      await expect.poll(() => hoveredTile(page), { timeout: 5_000 }).toEqual(tile);
+      // 点击同一格：选中坐标必须仍是该格（不能偏到相邻格）。选中状态经 React 提交，
+      // 状态行可能晚一帧出现——轮询到出现「地块」行为止。
+      await page.mouse.click(x, y);
+      const selectionOf = async () => (
+        (await statusText(page)).split('\n').find((line) => /地块|建筑|单位|资源|小队|未选中对象/.test(line)) ?? ''
       );
-      const list: Array<{ x: number; y: number }> = [];
-      for (let screenY = 1; screenY * tileSize + tileSize <= surface.clientHeight - 2; screenY += 1) {
-        for (let screenX = 1; screenX * tileSize + tileSize <= surface.clientWidth - 2; screenX += 1) {
-          const x = canon(screenX, offsetX, mapWidth, surface.clientWidth);
-          const y = canon(screenY, offsetY, mapHeight, surface.clientHeight);
-          // 小图（fixture 24×16）在画布里只占一块：画布其余位置的屏幕点不对应任何格子，
-          // 悬停会被渲染层钳成 null。只取真的落在图内的格。
-          if (x < 0 || y < 0 || x >= mapWidth || y >= mapHeight) continue;
-          list.push({ x, y });
-        }
+      // 未探索格（fixture 的测绘面纱之外）点击只弹「该区域尚未探索」提示、不产生选中文案：
+      // 那不是命中错位，清掉提示后换下一个候选。
+      await page.waitForTimeout(400);
+      if (await page.locator('.planet-three__fog-notice').count() > 0) {
+        continue;
       }
-      return list;
-    });
-    const candidates = visibleTiles;
-    for (const tile of candidates) {
-      const local = await tileToLocalPoint(page, tile);
-      if (local.x < 4 || local.y < 4 || local.x > local.width - 4 || local.y > local.height - 4) {
-        continue; // 该格在当前缩放下不在画布内
-      }
-      const screenX = box.x + local.x;
-      const screenY = box.y + local.y;
-      if (!(await hitCanvas(screenX, screenY))) {
-        continue; // 被抽屉/建造栏等 HUD 覆盖
-      }
-      await page.mouse.move(screenX, screenY);
-      await expect
-        .poll(() => hoveredTile(page), { timeout: 5_000 })
-        .toEqual(tile);
-      // 点击同一格：悬停/选中坐标必须仍是该格（不能偏到左边一格）。
-      // 焦点跟随「选中/地块」标签——它由点击格算出，偏移就会写成相邻格。
-      await page.mouse.click(screenX, screenY);
-      await expect
-        .poll(() => hoveredTile(page), { timeout: 5_000 })
-        .toEqual(tile);
-      const status = await page.locator('.planet-map-canvas__status').innerText();
-      const selectionLine = status.split('\n').find((line) => /地块|建筑|单位|资源|小队|未选中对象/.test(line)) ?? '';
+      await expect.poll(selectionOf, { timeout: 5_000 }).not.toBe('');
+      const selectionLine = await selectionOf();
       if (/^(资源|建筑|单位|小队) /.test(selectionLine) && !/\(\d+, \d+/.test(selectionLine)) {
         continue; // 点中了格上的实体（状态栏只报实体名、不带坐标），换一格校验坐标
       }
-      expect(selectionLine, `点击 (${tile.x}, ${tile.y}) 后状态栏应报同一格`).toMatch(
+      expect(selectionLine, `点击 (${tile.x}, ${tile.y}) 后状态行应报同一格`).toMatch(
         new RegExp(`(未选中对象|\\(${tile.x}, ${tile.y}, \\d+\\))`),
       );
       expect(selectionLine).not.toMatch(new RegExp(`\\(${tile.x - 1}, ${tile.y},`));
@@ -214,7 +173,7 @@ for (const viewport of [
     // 窄屏下新手引导面板与抽屉把手在垂直方向重叠（点不到把手），直接刷新页面拿到
     // 收起态（抽屉默认收起），避免依赖命中判定。
     await page.reload();
-    await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 15_000 });
+    await waitPlanetThree(page);
     await expect(page.locator('.planet-drawer--open')).toHaveCount(0);
     const reclosed = await canvasGeometry(page);
     // 断言的是「没有 300px 级别的横向位移」，不是亚像素：生产构建（vite preview）下

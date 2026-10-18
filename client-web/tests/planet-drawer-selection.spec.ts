@@ -1,34 +1,46 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { entityScreenPos, waitPlanetThree } from './support/planet-three';
+
 /**
  * 工作台抽屉不得遮挡底部选择条（窄屏与宽屏都要成立）：
  * - 宽屏（>900px）：选择条右移让位（CSS `:has(.planet-drawer--open)`），与抽屉体不重叠；
  * - 窄屏（400px）：抽屉是覆盖式，抽屉体底部为选择条留出高度（--planet-bottom-reserve），
  *   选择条按钮仍可点击。
  * 用 fixture（离线样例）模式，不依赖战争服当前局势。
+ *
+ * R20-C1：2D 视图删除后不再有 DOM 实体层（D1），选中改用 3D 投影点击
+ * （`window.__planetThree.entityScreenPos` → 真实鼠标）；投影点不可用时退回 `?select=` 深链。
  */
+
+/** 离线样例里 p1 的建筑（fixtures/scenarios/baseline.ts，2×2 占地）。 */
+const SELECTED_BUILDING = 'assembler-1';
 
 async function openFixturePlanet(page: Page) {
   await page.goto('/login');
   await page.getByRole('radio', { name: '离线样例' }).click();
   await page.getByRole('button', { name: '打开离线场景' }).click();
   await page.waitForURL(/\/planet\//, { timeout: 15_000 });
-  await page.goto('/planet/planet-1-1?view=2d');
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 15_000 });
+  await page.goto('/planet/planet-1-1');
+  await waitPlanetThree(page);
 }
 
 /** 关掉进入页面时弹出的告警 toast：它浮在选择条之上，会挡住按钮命中。 */
 async function dismissToasts(page: Page) {
-  const close = page.locator('.toast__close');
-  for (let remaining = await close.count(); remaining > 0; remaining -= 1) {
-    await close.first().click();
-  }
-  await expect(page.locator('.toast')).toHaveCount(0);
+  // toast 会自己超时消退：出场动画期间元素不可见/正在 detach，Playwright 的 click
+  // 会一直等可操作性。直接在 DOM 上点关闭按钮（与用户点 × 同一条 React 路径），
+  // 并轮询到真正清零。
+  await expect.poll(async () => {
+    await page.evaluate(() => {
+      document.querySelectorAll<HTMLElement>('.toast__close').forEach((button) => button.click());
+    });
+    return page.locator('.toast').count();
+  }, { timeout: 10_000 }).toBe(0);
 }
 
 /**
  * 收起会盖住地图的浮层：左上行星胶囊（§3.2 默认收起，展开态的四张资源芯片会压住
- * 上方格子）、警报条（顶栏下方居中的窄条）。两者都不在 elementFromPoint 的 HUD 清单里，
+ * 上方格子）、警报条（顶栏下方居中的窄条）。两者都不在 HUD 清单里，
  * 但它们确实盖住地图——不收起来，这条「点实体 → 选择条」的用例会挑不到干净格子。
  */
 async function collapseHudOverlays(page: Page) {
@@ -39,30 +51,26 @@ async function collapseHudOverlays(page: Page) {
   await expect(page.locator('.planet-title-chip--collapsed')).toHaveCount(1);
 }
 
-/** 点地图上的一个实体 → 底部选择条出现（挑中心点没被 HUD 按钮盖住的实体）。 */
+/** 点地图上的一个实体 → 底部选择条出现（投影点被 HUD 盖住时退回深链）。 */
 async function selectFirstBuilding(page: Page) {
-  const surface = page.locator('.planet-map-canvas__surface');
-  const entities = page.locator('[data-entity-kind="building"]');
-  const count = await entities.count();
-  expect(count).toBeGreaterThan(0);
-
-  for (let index = 0; index < count; index += 1) {
-    const entityBox = await entities.nth(index).boundingBox();
-    if (!entityBox) continue;
-    const centerX = entityBox.x + entityBox.width / 2;
-    const centerY = entityBox.y + entityBox.height / 2;
-    const top = await page.evaluate(
-      ([x, y]) => document.elementFromPoint(x, y)?.tagName ?? '',
-      [centerX, centerY],
-    );
-    if (top !== 'CANVAS') continue;
-
-    const surfaceBox = (await surface.boundingBox())!;
-    await surface.click({ position: { x: centerX - surfaceBox.x, y: centerY - surfaceBox.y } });
-    await expect(page.getByTestId('planet-selection-bar')).toBeVisible({ timeout: 10_000 });
-    return;
+  const selectionBar = page.getByTestId('planet-selection-bar');
+  await expect(selectionBar).toHaveCount(0);
+  const point = await entityScreenPos(page, SELECTED_BUILDING);
+  const covered = await page.evaluate(([x, y]) => {
+    const top = document.elementFromPoint(x, y);
+    return !top?.closest('.planet-three__surface');
+  }, [point.x, point.y] as const);
+  if (!covered) {
+    await page.mouse.click(point.x, point.y);
   }
-  throw new Error('所有实体中心点都被 HUD 覆盖，无法用画布点选');
+  if (covered || !(await selectionBar.isVisible().catch(() => false))) {
+    // 投影点被浮层盖住（或点击被软渲染吞掉）：深链选中同一栋建筑，
+    // 选择条与抽屉的几何契约照常校验。
+    await page.goto(`/planet/planet-1-1?select=building:${SELECTED_BUILDING}`);
+    await waitPlanetThree(page);
+  }
+  await expect(selectionBar).toBeVisible({ timeout: 10_000 });
+  await expect(selectionBar).toContainText('制造台');
 }
 
 async function barAndDrawerGeometry(page: Page) {
