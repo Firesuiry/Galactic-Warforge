@@ -32,7 +32,8 @@ import { PlanetBuildBar } from "@/features/planet-map/PlanetBuildBar";
 import { initialBuildDirection } from "@/features/planet-map/build-workflow";
 import { BuildPlacementHint } from "@/features/planet-map/BuildPlacementHint";
 import { notifyApproachingThreats } from "@/features/planet-map/attack-alerts";
-import { PlanetLayerPanel, type PlanetThreeViewportSnapshot } from "@/features/planet-map/PlanetPanels";
+import { PlanetLayerPanel } from "@/features/planet-map/PlanetPanels";
+import { parseTiltParam } from "@/features/planet-map/planet-three-status";
 import { PlanetMapToolbar } from "@/features/planet-map/PlanetMapToolbar";
 import { PlanetMinimap } from "@/features/planet-map/PlanetMinimap";
 import { PlanetSelectionBar } from "@/features/planet-map/PlanetSelectionBar";
@@ -140,8 +141,17 @@ export function PlanetPage() {
   );
   const { planetId = "" } = useParams();
   const captureRef = useRef<PlanetMapCapture | null>(null);
-  // 3D 相机视口快照（R20-A ④）：调试面板在 3D 下按中心格 + zoom + tilt 导出分享链接/视口 JSON。
-  const [threeViewport, setThreeViewport] = useState<PlanetThreeViewportSnapshot | null>(null);
+  // 3D 深链（R20-A ⑥）：分享链接里的 `tilt` / `zoom` 在 3D 视图打开时还原相机。
+  // 3D 相机状态按需读取（调试面板打开/复制链接时经 capture.getViewport 拉），
+  // 不再维护挂载时上报一次的快照 state。
+  const [captureVersion, setCaptureVersion] = useState(0);
+  const threeInitialTilt = parseTiltParam(searchParams.get("tilt"), 0.65);
+  const threeInitialZoom = (() => {
+    const raw = searchParams.get("zoom");
+    if (raw === null || raw.trim() === "") return undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  })();
   // 跨场景窗口的己方实体累积（只增不减）：新手引导是「有没有建过」的历史推导，
   // 不能用只覆盖相机窗口的 sceneQuery 数据——镜头一平移，窗口外的基地就从响应里
   // 消失，引导会从 4/8 回退到 1/8（试玩报告 2026-10-07 阻断级 4）。
@@ -915,11 +925,14 @@ export function PlanetPage() {
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
-          onCanvasReady={(capture) => { captureRef.current = capture; }}
+          onCanvasReady={(capture) => {
+            captureRef.current = capture;
+            // 3D capture 就绪后让调试面板重渲染，拿到 getViewport 句柄（R20-A ⑥）。
+            setCaptureVersion(version => version + 1);
+          }}
           onContextTile={interactions.contextTile}
           onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
-          onViewportChange={setThreeViewport}
           onSelectEntity={() => {
             setActiveDetailPanel("selection");
             toggleDrawer(true);
@@ -927,6 +940,8 @@ export function PlanetPage() {
           overview={overviewQuery.data}
           planet={planet}
           runtime={runtime}
+          initialTilt={threeInitialTilt}
+          initialZoom={threeInitialZoom}
           theaters={theatersQuery.data?.theaters}
           /* 3D 左下那一列的「图层与视角」与 2D 工具条是**同一份**面板：
              两个视图各维护一套图层开关时，勾选状态与文案会漂移（§3.2 复核）。 */
@@ -1096,7 +1111,8 @@ export function PlanetPage() {
         />
         <PlanetDebugPanel
           capture={captureRef.current}
-          threeViewport={isThree ? threeViewport : null}
+          captureVersion={captureVersion}
+          threeDimensional={isThree}
           catalog={catalog}
           currentTick={planet.tick}
           game={currentGameQuery.data}

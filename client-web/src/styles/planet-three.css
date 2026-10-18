@@ -110,3 +110,6 @@
 .planet-three__nav-status-line--zone { color:#5ef7a1; }
 /* D2 战区拖拽矩形预览：与 Shift 框选同一块叠加层，色用战区圈的青绿。 */
 .planet-three__zone-rect { border-color:#39e6d0; background:rgba(57,230,208,0.12); }
+/* 战区拖拽预览（R20-A ⑥）：地面圆投影成 SVG 多边形（不是屏幕矩形）。 */
+.planet-three__zone-ring { position:absolute; inset:0; z-index:5; width:100%; height:100%; pointer-events:none; overflow:hidden; }
+.planet-three__zone-ring-label { font-size:12px; font-weight:600; paint-order:stroke; stroke:rgba(8,14,28,.9); stroke-width:3px; }

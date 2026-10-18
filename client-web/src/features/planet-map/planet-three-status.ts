@@ -92,8 +92,10 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT' || element.isContentEditable;
 }
 
-/** +/- 键 → 3D 缩放倍率（null = 不是缩放键）。`=` 与 `+` 同键（US 键盘 Shift+=）。 */
-export function zoomFactorForKey(key: string): number | null {
+/** +/- 键 → 3D 缩放倍率（null = 不是缩放键）。`=` 与 `+` 同键（US 键盘 Shift+=）。
+ *  带 Ctrl/Meta/Alt 的组合键不抢（浏览器缩放 / 系统快捷键优先）。 */
+export function zoomFactorForKey(key: string, event?: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>): number | null {
+  if (event && (event.ctrlKey || event.metaKey || event.altKey)) return null;
   if (key === '+' || key === '=') return 1.4;
   if (key === '-' || key === '_') return 1 / 1.4;
   return null;
@@ -115,6 +117,101 @@ export function toPagePoint(
 export interface DragModifiers {
   shift?: boolean;
   ctrl?: boolean;
+}
+
+/**
+ * 测试接口的方法绑定（R20-A ①）：`Object.create(target)` 会让外部调用 `focus()/zoom()/setTilt()`
+ * 时 this 指向包装对象，真实场景状态不变。这里遍历场景原型链，把函数 `.bind(target)` 挂到返回对象上。
+ */
+export function bindSceneMethods<T extends object>(target: T): Record<string, unknown> {
+  const bound: Record<string, unknown> = {};
+  const seen = new Set<string>();
+  for (
+    let proto: object | null = Object.getPrototypeOf(target);
+    proto && proto !== Object.prototype;
+    proto = Object.getPrototypeOf(proto)
+  ) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name === 'constructor' || seen.has(name)) continue;
+      seen.add(name);
+      const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+      if (descriptor && typeof descriptor.value === 'function') {
+        bound[name] = descriptor.value.bind(target);
+      }
+    }
+  }
+  return bound;
+}
+
+/**
+ * 3D 相机状态（R20-A ④ / ⑥）：scene 的 `getCameraState()` 由 R20-B 提供；
+ * 本分支按「有就调用、没有就退化」写——没有时用 `getCenterTile()` + 组件自己的 tilt 兜底。
+ */
+export interface PlanetThreeCameraState {
+  center: { x: number; y: number } | null;
+  /** 相机高度（zoom 量纲）；scene 没有该接口时为 null（不是 0，避免伪造）。 */
+  altitude: number | null;
+  tilt: number;
+  /** 是否地面视角；scene 没暴露时按 altitude 推断，再退化到 true。 */
+  groundView: boolean;
+}
+
+interface CameraStateSource {
+  getCameraState?: () => {
+    center?: { x: number; y: number } | null;
+    altitude?: number;
+    zoom?: number;
+    tilt?: number;
+    groundView?: boolean;
+  } | null;
+  getCenterTile?: () => { x: number; y: number } | null;
+  isGroundView?: () => boolean;
+}
+
+/**
+ * 读取相机状态：优先 `scene.getCameraState()`；没有该方法时退化为
+ * `getCenterTile()` + 当前 tilt（altitude 记 null）。
+ */
+export function readPlanetThreeCameraState(
+  scene: CameraStateSource | null | undefined,
+  tiltFallback: number,
+): PlanetThreeCameraState {
+  const state = typeof scene?.getCameraState === 'function' ? scene.getCameraState() : null;
+  const center = state?.center
+    ?? (typeof scene?.getCenterTile === 'function' ? scene.getCenterTile() : null)
+    ?? null;
+  const altitudeRaw = state?.altitude ?? state?.zoom;
+  const altitude = typeof altitudeRaw === 'number' && Number.isFinite(altitudeRaw) ? altitudeRaw : null;
+  const tilt = typeof state?.tilt === 'number' && Number.isFinite(state.tilt) ? state.tilt : tiltFallback;
+  const groundView = typeof state?.groundView === 'boolean'
+    ? state.groundView
+    : typeof scene?.isGroundView === 'function'
+      ? scene.isGroundView()
+      : altitude === null || altitude < 130;
+  return {
+    center: center ? { x: center.x, y: center.y } : null,
+    altitude,
+    tilt,
+    groundView,
+  };
+}
+
+/**
+ * 状态行缩放档文案：只有拿到相机高度（scene 有 `getCameraState`）时显示，
+ * 否则省略（null）。档位与导航列一致：贴地 / 近景 / 全球。
+ */
+export function cameraZoomLabel(altitude: number | null | undefined): string | null {
+  if (typeof altitude !== 'number' || !Number.isFinite(altitude)) return null;
+  const level = altitude >= 190 ? '全球' : altitude >= 60 ? '近景' : '贴地';
+  return `缩放 ${level} · 高度 ${altitude.toFixed(1)}`;
+}
+
+/** 深链 `tilt` 参数解析：非法/缺失时回落到当前值（分享链接再打开要回到同一俯仰）。 */
+export function parseTiltParam(raw: string | null, fallback: number): number {
+  if (raw === null || raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(1.1, Math.max(0, value));
 }
 
 /**

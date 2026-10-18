@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { getFixtureScenario } from '@/fixtures';
 import { PlanetMapThree } from './PlanetMapThree';
+import { bindSceneMethods } from './planet-three-status';
 import { resetPlanetViewStore, usePlanetViewStore } from './store';
 
 // 捕获场景构造时注册的点击回调，让测试能直接喂 tile（jsdom 里没有 WebGL 拾取）。
@@ -13,6 +14,10 @@ let onHover: ((tile: { x: number; y: number }) => void) | undefined;
 let onMiss: (() => void) | undefined;
 /** +/- 缩放键：记录场景收到的 zoom 倍率。 */
 let zoomCalls: number[] = [];
+/** 场景投影：默认返回 null（不可见）；需要时喂一个假的线性投影。 */
+let projectResult: ((tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null) | null = null;
+/** clickTile 收到的选项（验证 button 透传 / 右键退回）。 */
+let clickTileCalls: ({ tile: { x: number; y: number }; options?: { button?: 0 | 2 } })[] = [];
 
 vi.mock('./planet-three-scene', () => ({
   PlanetThreeScene: class {
@@ -36,8 +41,11 @@ vi.mock('./planet-three-scene', () => ({
     setTilt() {}
     pickAt() { return pickResult; }
     setBeltDragPath(path: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)) { dragPaths.push(path); }
-    project() { return null; }
-    clickTile() { return { dispatched: false, offscreen: false }; }
+    project(tile: { x: number; y: number }) { return projectResult ? projectResult(tile) : null; }
+    clickTile(tile: { x: number; y: number }, options?: { button?: 0 | 2 }) {
+      clickTileCalls.push({ tile, options });
+      return { dispatched: true, offscreen: false };
+    }
     capture() { return null; }
     handleBattleEvent() {}
     destroy() {}
@@ -53,6 +61,8 @@ afterEach(() => {
   pickResult = null;
   dragPaths = [];
   zoomCalls = [];
+  projectResult = null;
+  clickTileCalls = [];
 });
 
 /** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
@@ -237,6 +247,9 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     vi.stubGlobal('PointerEvent', PointerEventPolyfill);
   });
 
+  /** 假投影：格坐标 → 屏幕（(x+1)*4, (y+1)*4），全部可见——jsdom 没有 WebGL。 */
+  const linearProjection = (tile: { x: number; y: number }) => ({ x: (tile.x + 1) * 4, y: (tile.y + 1) * 4, visible: true });
+
   function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp', init: Record<string, unknown> = {}) {
     // jsdom 没有 Pointer Events 的捕获 API；拖拽处理器会调用它们。
     const target = host as HTMLElement & { setPointerCapture?: () => void; releasePointerCapture?: () => void; hasPointerCapture?: () => boolean };
@@ -264,7 +277,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
 
     pickResult = { x: 4, y: 3 };
@@ -315,7 +328,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'north' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -331,7 +344,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'auto' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -350,7 +363,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     // 建造模式朝向故意给 east：拖拽第一格必须取实际首段方向（north），否则高度会推迟一格。
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 4, y: 3 };
     drag(host, 'pointerDown');
@@ -378,7 +391,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -399,7 +412,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -421,7 +434,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -438,7 +451,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -471,7 +484,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -504,7 +517,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     // rotation 90 = 东（ROTATION_FACING 锚点与服务端 SorterFacing 一致）。
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'auto', rotation: 90, elevation: 2 }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -530,7 +543,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const onInteractTile = vi.fn();
     const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
 
     pickResult = { x: 3, y: 3 };
     drag(host, 'pointerDown');
@@ -628,6 +641,9 @@ describe('3D 战区拖拽（R20-A ③）', () => {
     vi.stubGlobal('PointerEvent', PointerEventPolyfill);
   });
 
+  /** 假投影：格坐标 → 屏幕（(x+1)*4, (y+1)*4），全部可见——jsdom 没有 WebGL。 */
+  const linearProjection = (tile: { x: number; y: number }) => ({ x: (tile.x + 1) * 4, y: (tile.y + 1) * 4, visible: true });
+
   function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp', init: Record<string, unknown> = {}) {
     const target = host as HTMLElement & { setPointerCapture?: () => void; releasePointerCapture?: () => void; hasPointerCapture?: () => boolean };
     target.setPointerCapture = () => {};
@@ -640,19 +656,23 @@ describe('3D 战区拖拽（R20-A ③）', () => {
   it('左键拖矩形：拖拽中出预览，松手按两角格子换算圆心+半径', () => {
     const onDefineZone = vi.fn();
     const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
 
+    projectResult = linearProjection;
     pickResult = { x: 10, y: 20 };
     drag(host, 'pointerDown', { clientX: 100, clientY: 100 });
     pickResult = { x: 30, y: 40 };
     drag(host, 'pointerMove', { clientX: 200, clientY: 180 });
-    expect(screen.getByTestId('planet-three-zone-rect')).toBeInTheDocument();
+    // 预览是**地面圆**（不是屏幕矩形）：圆心 = 两角中点、半径 = 半宽/半高取大。
+    expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
+    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
+    expect(screen.getByText('半径 10 格')).toBeInTheDocument();
     drag(host, 'pointerUp', { clientX: 200, clientY: 180 });
 
     // 圆心 = 两角中点，半径 = 半宽/半高取大（theaterZoneFromDragRect 同口径）。
     expect(onDefineZone).toHaveBeenCalledWith({ position: { x: 20, y: 30, z: 0 }, radius: 10 });
-    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('planet-three-zone-ring')).not.toBeInTheDocument();
     // 划定模式保持（可连续画多个区域，与 2D 一致）。
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('theater_zone');
   });
@@ -660,8 +680,9 @@ describe('3D 战区拖拽（R20-A ③）', () => {
   it('没拖动（单击）不定义战区；Esc 清预览并退出模式', () => {
     const onDefineZone = vi.fn();
     const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
-    const host = container.querySelector('.planet-three') as HTMLElement;
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
     act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    projectResult = linearProjection;
     pickResult = { x: 5, y: 5 };
     drag(host, 'pointerDown', { clientX: 10, clientY: 10 });
     drag(host, 'pointerUp', { clientX: 11, clientY: 11 });
@@ -669,9 +690,10 @@ describe('3D 战区拖拽（R20-A ③）', () => {
 
     drag(host, 'pointerDown', { clientX: 10, clientY: 10 });
     drag(host, 'pointerMove', { clientX: 90, clientY: 90 });
+    expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
-    expect(screen.queryByTestId('planet-three-zone-rect')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('planet-three-zone-ring')).not.toBeInTheDocument();
   });
 });
 
@@ -686,11 +708,97 @@ describe('__planetThree 测试接口（R20-A ⑤）', () => {
     for (const name of ['tileScreenPos', 'entityScreenPos', 'clickTile', 'dragTiles']) {
       expect(typeof api![name]).toBe('function');
     }
-    // 场景实例的方法经原型继承保留（对象展开会把类方法全丢掉，试玩 1020 实测）。
+    // 场景实例的方法经原型链显式绑定保留（`Object.create` 会让 this 指向包装对象，
+    // 外部调用 focus() 改的是包装对象、真实场景状态不变——R20-A ① 回归）。
     expect(typeof api!.getCenterTile).toBe('function');
     expect(typeof api!.focus).toBe('function');
     expect(typeof api!.zoom).toBe('function');
     // 场景 mock 的 project 返回 null → 接口给 null（而不是抛错）。
     expect((api!.tileScreenPos as (t: { x: number; y: number }) => unknown)({ x: 1, y: 1 })).toBeNull();
+  });
+
+  it('原型方法显式绑定到真实场景：__planetThree.focus() 后 target.isGroundView() 为 true', async () => {
+    // 最小假场景类：focus() 改的是**实例字段**，用 Object.create 包装时读不到。
+    class FakeScene {
+      groundView = false;
+      altitude = 300;
+      focusCalls: { x: number; y: number }[] = [];
+      focus(tile: { x: number; y: number }) { this.groundView = true; this.altitude = 20; this.focusCalls.push(tile); }
+      isGroundView() { return this.groundView; }
+      zoom(factor: number) { this.altitude /= factor; }
+      getCenterTile() { return { x: 4, y: 4 }; }
+    }
+    const target = new FakeScene();
+    const api = bindSceneMethods(target);
+    (api.focus as (tile: { x: number; y: number }) => void)({ x: 9, y: 9 });
+    expect(target.isGroundView()).toBe(true);
+    expect(target.focusCalls).toEqual([{ x: 9, y: 9 }]);
+    (api.zoom as (factor: number) => void)(2);
+    expect(target.altitude).toBe(10);
+    expect((api.isGroundView as () => boolean)()).toBe(true);
+  });
+
+  it('clickTile(tile, 2)：scene 支持 {button} 时透传，否则合成右键事件走 onContextMenu', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    projectResult = (tile) => ({ x: tile.x * 4, y: tile.y * 4, visible: true });
+    render(<PlanetMapThree planet={scenario.planets['planet-1-1']} />);
+    const api = (window as unknown as { __planetThree?: Record<string, unknown> }).__planetThree;
+    (api!.clickTile as (t: { x: number; y: number }, b: 0 | 2) => unknown)({ x: 3, y: 4 }, 2);
+    expect(clickTileCalls).toHaveLength(1);
+    expect(clickTileCalls[0].options).toEqual({ button: 2 });
+    expect(clickTileCalls[0].tile).toEqual({ x: 3, y: 4 });
+  });
+
+  it('dragTiles：派发的 clientX/clientY 是页面坐标（不做二次换算）', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 0; }
+    });
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    // 画布宿主在页面 (100, 50)；场景 project 返回画布内坐标。
+    const hostRect = { left: 100, top: 50, right: 900, bottom: 650, width: 800, height: 600, x: 100, y: 50, toJSON: () => ({}) } as DOMRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(hostRect);
+    projectResult = (tile) => ({ x: tile.x * 4, y: tile.y * 4, visible: true });
+    render(<PlanetMapThree planet={scenario.planets['planet-1-1']} />);
+    const api = (window as unknown as { __planetThree?: Record<string, unknown> }).__planetThree;
+    const events: { type: string; clientX: number; clientY: number }[] = [];
+    const surface = document.querySelector('.planet-three__surface') as HTMLElement;
+    for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+      surface.addEventListener(type, event => {
+        const pointer = event as PointerEvent;
+        events.push({ type, clientX: pointer.clientX, clientY: pointer.clientY });
+      });
+    }
+    (api!.dragTiles as (from: { x: number; y: number }, to: { x: number; y: number }) => boolean)({ x: 2, y: 3 }, { x: 6, y: 3 });
+    // 页面坐标 = 画布偏移 + 场景投影（(2*4+100, 3*4+50) = (108, 62)）。
+    expect(events[0]).toEqual({ type: 'pointerdown', clientX: 108, clientY: 62 });
+    expect(events.at(-1)).toEqual({ type: 'pointerup', clientX: 124, clientY: 62 });
+    expect(events.filter(e => e.type === 'pointermove')).toHaveLength(4);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('entityScreenPos 对多格建筑返回占地中心', async () => {
+    const { getFixtureScenario } = await import('@/fixtures');
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // fixture 建筑不一定带 footprint；显式挑一个并给它 3×3 占地（多格建筑投影取占地中心）。
+    const multi = Object.values(planet.buildings ?? {})[0] as unknown as { id: string; position: { x: number; y: number; z: number }; runtime?: { params?: { footprint?: { width: number; height: number } } } };
+    expect(multi).toBeTruthy();
+    multi.runtime = {
+      params: { footprint: { width: 3, height: 3 } },
+    };
+    const footprint = { width: 3, height: 3 };
+    projectResult = (tile) => ({ x: tile.x * 10, y: tile.y * 10, visible: true });
+    render(<PlanetMapThree planet={planet} />);
+    const api = (window as unknown as { __planetThree?: Record<string, unknown> }).__planetThree;
+    const point = (api!.entityScreenPos as (id: string) => { x: number; y: number } | null)(multi!.id);
+    // 占地中心 = 原点 + (width-1)/2, (height-1)/2，再投影（页面偏移 0）。
+    expect(point).toEqual({
+      x: (multi!.position.x + (footprint.width - 1) / 2) * 10,
+      y: (multi!.position.y + (footprint.height - 1) / 2) * 10,
+    });
   });
 });

@@ -1886,24 +1886,21 @@ export function PlanetActivityPanel({
 }
 
 /**
- * 3D 相机视口快照（R20-A ④）：调试面板的分享链接/视口 JSON 在 3D 下按
+ * 3D 相机视口快照：调试面板的分享链接/视口 JSON 在 3D 下按
  * 「中心格 + zoom + tilt」导出，不再用 2D 的 tileSize/offset 视口矩形。
+ * 类型定义在 `planet-map-capture.ts`（与 capture.getViewport 同处），这里转出保持旧 import 可用。
  */
-export interface PlanetThreeViewportSnapshot {
-  center: { x: number; y: number } | null;
-  /** 相机高度（世界单位，与 2D 的 tileSize 同为「缩放」量纲）。 */
-  altitude: number;
-  tilt: number;
-  width: number;
-  height: number;
-}
+import type { PlanetThreeViewportSnapshot } from "./planet-map-capture";
+export type { PlanetThreeViewportSnapshot };
 
 interface PlanetDebugPanelProps {
   catalog?: CatalogView;
   /** 行星地图截图捕获句柄（Pixi extract / 3D 画布）；尚未就绪时为 null。 */
   capture: PlanetMapCapture | null;
-  /** 3D 相机快照：提供时分享链接/视口 JSON 走 3D 口径（中心格 + zoom + tilt）。 */
-  threeViewport?: PlanetThreeViewportSnapshot | null;
+  /** capture 版本号：3D 场景就绪后重渲染面板，拿到 getViewport 句柄（R20-A ⑥）。 */
+  captureVersion?: number;
+  /** 是否 3D 视图：分享链接/视口 JSON 走 3D 口径（中心格 + zoom + tilt）。 */
+  threeDimensional?: boolean;
   currentTick: number;
   /** 本局概要（GET /games/current）：判断 admin 身份与多人门禁提示。 */
   game?: GameSummary;
@@ -1945,10 +1942,46 @@ export function buildThreeShareUrl(options: {
   return url.toString();
 }
 
+/**
+ * 3D 视口快照按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时调用 `capture.getViewport()`，
+ * 不在挂载时上报一次。scene 没有 `getCameraState` 时 `getViewport` 退化为中心格 + 当前 tilt
+ * （altitude 0）；capture 未就绪时返回 null。
+ */
+export function readThreeViewport(capture: PlanetMapCapture | null | undefined): PlanetThreeViewportSnapshot | null {
+  if (!capture?.getViewport) return null;
+  try {
+    return capture.getViewport();
+  } catch {
+    return null;
+  }
+}
+
+/** 分享链接的 3D 深链参数（单测用：生成的链接再解析回来要得到同一中心格与 tilt）。 */
+export interface ThreeViewLinkParams {
+  center: { x: number; y: number } | null;
+  zoom: number;
+  tilt: number;
+}
+
+/** 从分享链接解析 3D 相机参数（与 buildThreeShareUrl 互逆）。 */
+export function parseThreeViewLink(href: string): ThreeViewLinkParams {
+  const params = new URL(href).searchParams;
+  const x = Number(params.get("x"));
+  const y = Number(params.get("y"));
+  const zoom = Number(params.get("zoom"));
+  const tilt = Number(params.get("tilt"));
+  return {
+    center: Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null,
+    zoom: Number.isFinite(zoom) ? zoom : 0,
+    tilt: Number.isFinite(tilt) ? tilt : 0,
+  };
+}
+
 export function PlanetDebugPanel({
   catalog,
   capture,
-  threeViewport,
+  captureVersion,
+  threeDimensional,
   currentTick,
   game,
   networks,
@@ -1958,6 +1991,10 @@ export function PlanetDebugPanel({
   planet,
   runtime,
 }: PlanetDebugPanelProps) {
+  void captureVersion;
+  // 3D 视口快照**不**在渲染期读取：只在面板打开/点「复制链接」/导出 JSON 时现拉
+  // （R20-A ⑥，旧实现挂载时上报一次，scene 没就绪时快照永远是 altitude 0）。
+  const readViewportNow = () => (threeDimensional ? readThreeViewport(capture) : null);
   const {
     camera,
     debugOpen,
@@ -2057,9 +2094,23 @@ export function PlanetDebugPanel({
     if (typeof window === "undefined") {
       return "";
     }
-    // 3D（R20-A ④）：视口 = 中心格 + zoom（相机高度）+ tilt，2D 的 offset/tileSize 不适用。
-    if (threeViewport) {
-      return buildThreeShareUrl({ href: window.location.href, selected, layers, viewport: threeViewport });
+    // 3D（R20-A ④⑥）：视口 = 中心格 + zoom（相机高度）+ tilt，2D 的 offset/tileSize 不适用。
+    // 点「复制链接」时**现拉** scene.getCameraState()，拿到的是此刻的相机，不是挂载时的。
+    const viewport = readViewportNow();
+    if (viewport) {
+      return buildThreeShareUrl({ href: window.location.href, selected, layers, viewport });
+    }
+    if (threeDimensional) {
+      // 3D 但场景还没就绪（没有相机状态）：链接里只带 view=3d 与图层/选中，
+      // 不拿 2D 的 offset/tileSize 冒充相机（否则链接会回到错误的位置）。
+      const params = buildViewLinkSearchParams(selected, layers, {
+        minX: 0, minY: 0, maxX: 0, maxY: 0, centerX: 0, centerY: 0,
+        wrapX: false, wrapY: false, mapWidth: planet.map_width, mapHeight: planet.map_height,
+      }, 0);
+      params.set("view", "3d");
+      const url = new URL(window.location.href);
+      url.search = params.toString();
+      return url.toString();
     }
     const tileSize = getPlanetRenderTileSize(
       camera.zoomIndex,
@@ -2099,8 +2150,25 @@ export function PlanetDebugPanel({
   }
 
   function exportViewportJson() {
-    if (threeViewport) {
-      // 3D：整张行星都在场景里，可见集合不按 2D 视口矩形裁剪；视口只记录相机状态。
+    // 3D（R20-A ⑥）：导出时**现拉**相机状态，并按 scene 当前场景窗口（store.sceneWindow）
+    // 裁剪可见集合；拿不到场景窗口时不裁剪，JSON 里标 `bounds: null`。
+    const viewport = readViewportNow();
+    if (threeDimensional) {
+      const sceneWindow = usePlanetViewStore.getState().sceneWindow;
+      const bounds = sceneWindow
+        ? {
+          minX: sceneWindow.x,
+          minY: sceneWindow.y,
+          maxX: sceneWindow.x + sceneWindow.width - 1,
+          maxY: sceneWindow.y + sceneWindow.height - 1,
+          centerX: sceneWindow.x + sceneWindow.width / 2,
+          centerY: sceneWindow.y + sceneWindow.height / 2,
+          wrapX: false,
+          wrapY: false,
+          mapWidth: planet.map_width,
+          mapHeight: planet.map_height,
+        }
+        : null;
       const payload = buildViewportExport({
         planet,
         runtime,
@@ -2110,20 +2178,22 @@ export function PlanetDebugPanel({
         layers,
         camera,
         tileSize: 1,
-        viewportWidth: threeViewport.width || 1,
-        viewportHeight: threeViewport.height || 1,
+        viewportWidth: viewport?.width || capture?.clientWidth || 1,
+        viewportHeight: viewport?.height || capture?.clientHeight || 1,
         shareUrl: buildShareUrl(),
+        bounds,
       });
       const withCamera = {
         ...payload,
         viewport: {
           ...payload.viewport,
           mode: "3d" as const,
-          center: threeViewport.center,
-          zoom: threeViewport.altitude,
-          tilt: threeViewport.tilt,
-          width: threeViewport.width,
-          height: threeViewport.height,
+          bounds,
+          center: viewport?.center ?? null,
+          zoom: viewport?.altitude ?? 0,
+          tilt: viewport?.tilt ?? 0,
+          width: viewport?.width ?? capture?.clientWidth ?? 0,
+          height: viewport?.height ?? capture?.clientHeight ?? 0,
         },
       };
       downloadData(
