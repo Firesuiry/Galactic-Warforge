@@ -32,6 +32,8 @@ const BELT = 'conveyor_belt_mk1';
 /** 高架带需要的格数（契约 ≥7）。 */
 const SPAN = 8;
 const GROUND_SPAN = 3;
+/** 报告目录（R20-E）。 */
+const REPORT_DIR = '/home/firesuiry/develop/siliconWorld/tmp/playtest-1020-e';
 
 interface ScenePayload {
   map_width: number;
@@ -216,61 +218,22 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
       pathPoints[index] = { x: canvasBox.x + projected!.x, y: canvasBox.y + projected!.y };
     }
   }
-  // 真实鼠标拖整条走廊。软渲染 + 并行 worker 下浏览器会合并连续的 pointermove，
-  // 中间格一旦丢失，笔迹就从断点处重新起笔（实测只落到第 6 格）。
-  // 兜底（契约允许）：拖完若不足 ≥7 格，用 `__planetThree.dragTiles` 从起点重拖一次；
-  // 它派发同一串 pointer 事件，只是不经过浏览器鼠标管线。
+  // 真实鼠标拖整条走廊：一次按下 → 逐格 move → 松手，松手即断言。
+  // 浏览器会合并最后几次 pointermove，松手时 PlanetMapThree 会按 pointerup 坐标补齐笔迹
+  // （R20-E 修复），所以这里不再逐格留拍、也不再补发缺格。
   await page.mouse.move(pathPoints[0].x, pathPoints[0].y);
   await page.mouse.down();
-  for (const point of pathPoints.slice(1)) {
-    await page.mouse.move(point.x, point.y, { steps: 3 });
-    await page.waitForTimeout(40);
-  }
+  await page.mouse.move(pathPoints.at(-1)!.x, pathPoints.at(-1)!.y, { steps: SPAN * 3 });
   await settleProjection(page);
-
 
   // 拖拽中：ghost 是场景内部状态（`beltDragPath` 是私有字段，测试接口不暴露），
   // 按契约「读不到就截图 + 断言命令」：截图留档，并断言**松开前不落库**
   // （预览只在松手时逐格下单——中途下发会先在旧高度上落一批带子）。
-  await page.screenshot({ path: '/tmp/playtest-1020-c1/belt-elevated-drag-mid.png' });
+  await page.screenshot({ path: REPORT_DIR + '/belt-elevated-drag-mid.png' });
   expect(commands, '拖拽中不得下发 build 命令（ghost 只是预览）').toHaveLength(0);
 
   await page.mouse.up();
   await settleProjection(page, 1200);
-  // 逐格下单是串行的（每条命令都等 HTTP 回执）：先等真实鼠标拖出的命令落库；
-  // 不足契约要求（≥7 格）时用合成指针接口重拖一次。
-  // 跨越地面带的那几格必须由真实拖拽下发（兜底单格点击会被「不能架在建筑上方」拦下）。
-  const groundCoveredByMouse = () => corridor.ground.every((tile) => buildCommandPlacements(commands, BELT).some(
-    (placement) => placement.position.x === tile.x && placement.position.y === tile.y,
-  ));
-  const placedEnough = await expect.poll(
-    () => groundCoveredByMouse() && buildCommandPlacements(commands, BELT).length >= SPAN - 1,
-    { timeout: 15_000, message: '真实鼠标拖拽应覆盖跨越段并逐格下发 build 命令' },
-  ).toBe(true).then(() => true).catch(() => false);
-  if (!placedEnough) {
-    // 先 Esc 退出建造模式再重进（清掉上一次不完整的拖拽态），高度回到 1 层后重拖。
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.planet-build-bar__hint')).toHaveCount(0);
-    await page.locator(`.planet-build-card[data-building-id="${BELT}"]`).click();
-    await expect(page.locator('.planet-build-bar__hint')).toContainText('放置 传送带');
-    await page.keyboard.press('PageUp');
-    await expect(page.locator('.planet-build-bar__elevation-label')).toHaveText('高度 1');
-    // 合成接口按真实拖拽算好的 pathPoints 补发缺的格。用 clickTile(tile, 2) 不行
-    // （右键会取消模式），单格左键 clickTile 在已落成带上方会被本地预检拦下
-    // （高架带不能架在建筑上方）——这里只补**高架带仍缺、且地面层空闲**的格；
-    // 跨越地面带的那几格已在真实拖拽里下发过，不会进这个循环。
-    for (const tile of corridor.path) {
-      if (buildCommandPlacements(commands, BELT).some((placement) => (
-        placement.position.x === tile.x && placement.position.y === tile.y
-      ))) {
-        continue;
-      }
-      if (corridor.ground.some((ground) => ground.x === tile.x && ground.y === tile.y)) continue;
-      await page.evaluate((target) => window.__planetThree!.clickTile(target), tile);
-      await page.waitForTimeout(150);
-    }
-    await settleProjection(page, 1500);
-  }
 
   // ④ 命令：整条带每格一条 build，跨越地面带的格 elevation=1。
   // 契约口径：拖一条 ≥7 格的带（末格是松手点，个别环境下最后一次 move 被合并）。
@@ -344,6 +307,6 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
     window.__planetThree!.zoom(0.6);
   }, corridor.ground[1]);
   await settleProjection(page, 800);
-  await page.screenshot({ path: '/tmp/playtest-1020-c1/belt-elevated-drag-after.png' });
+  await page.screenshot({ path: REPORT_DIR + '/belt-elevated-drag-after.png' });
   expect(await page.locator(THREE_CANVAS).isVisible()).toBe(true);
 });
