@@ -181,7 +181,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `blueprint_set_component` | planet | — | `blueprint_id`, `slot_id`, `component_id` | `blueprint_set_component` | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | planet | — | `blueprint_id` | `blueprint_validate` | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | planet | — | `parent_blueprint_id`, `blueprint_id`, `allowed_slot_ids`, `name?` | `blueprint_variant` | Create a controlled variant from a preset or player blueprint |
-| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?` | `build` | Build any server-side buildable structure |
+| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?`, `elevation?` | `build` | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | system | — | `system_id`, `layer_index`, `node_a_id`, `node_b_id` | `build_dyson_frame` | Build a Dyson sphere frame |
 | `build_dyson_node` | system | — | `system_id`, `layer_index`, `latitude`, `longitude`, `orbit_radius?` | `build_dyson_node` | Build a Dyson sphere node |
 | `build_dyson_shell` | system | — | `system_id`, `layer_index`, `latitude_min`, `latitude_max`, `coverage` | `build_dyson_shell` | Build a Dyson sphere shell |
@@ -243,7 +243,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
-- `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。
+- `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。 elevation 只对 conveyor_belt_mk1/2/3 有效（0–4，缺省 0 = 地面）；高架带必须有明确 direction（不能 auto），地面占用只能是空地或低矮物流建筑。
 - `configure_sorter`：只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
@@ -265,6 +265,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - 并发上限按玩家跨全部行星聚合：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
+  - **多层传送带（第 19 轮契约 §3）**：`elevation`（0–4，缺省 0 = 地面）只对 `conveyor_belt_mk1/mk2/mk3` 有效；其它建筑给 >0 → `INVALID_ELEVATION`「只有传送带可以架高」，越界同码「高度只能 0–4 层」。高架带必须有明确 `direction`（不能 `auto`，否则 `INVALID_ELEVATION`），缺省按 `rotation` 推。高架格的地面占用只能是空地或低矮物流建筑（`conveyor_belt_*`、`splitter`、`automatic_piler`、`traffic_monitor`、`sorter_*`、`pile_sorter`，含施工中），否则 `POSITION_OCCUPIED`「高架传送带不能架在建筑上方」；反过来，地面层造非低矮物流建筑时占地内不能有高架带 → `POSITION_OCCUPIED`「上方有高架传送带」。高架带不占 `TileBuilding`（地面单位可从下面走过，分拣器与建筑直连 IO 只接地面层），建筑 JSON 的 `conveyor.elevation` 表示所在层。连接规则：同层优先；同层没连上时看邻格 `a±1` 层的**纯传送带**，且必须是直行延续（`output == d'`），坡道不许转弯/侧汇；否则死头。
   - **占地（细分网格）**：`position` 是占地原点（左上 cell）。建筑按 `buildings.yaml` 的 `footprint {width, height}` 真实占 1×1 / 2×2 / 3×3 / 5×5 个 cell，旋转 90/270 交换宽高；占地内每一格都必须在界内、可建造（`foundation` 例外，它自己铺地形）且空闲，否则 `INVALID_TARGET`（「占地地块 (x,y) 不可建造」）或 `POSITION_OCCUPIED`。`TileBuilding` 与 `Grid[].BuildingID` 为占地每一格登记，拆除时整块释放；垂直叠层仍按原点 `position.z` 递增。
   - `mining_machine` / `water_pump` / `oil_extractor` 必须建在对应资源点上（不校验枯竭；枯竭点任何建筑都能建）；`orbital_collector` 只能建在气态行星。采矿机覆盖**占地内及外扩 1 圈**的资源 cell（矿脉在生成时按 cell 成簇）。
   - **采集建筑只采一种矿**（DSP 口径，试玩 1016 报告 B2）：下单时按覆盖框里**数量最多的矿种**定死这一台采什么（平票取物品 ID 较小者，结果确定），写进施工任务的 `mining_item`，落成时写进建筑的 `mining_item`（`build` 回执也会写明「施工任务已排队（位置 x,y），将开采「铁矿石」」）。覆盖框里混了别的矿种时那些矿脉一格都不采——不会出现「铜矿先攒满输出缓冲、把整条产线堵死」。校验仍只要求覆盖框里有允许的矿（`INVALID_TARGET`：「<建筑> 占地及外圈没有可开采的资源节点」/「<建筑> 无法开采资源 <kind>」）。

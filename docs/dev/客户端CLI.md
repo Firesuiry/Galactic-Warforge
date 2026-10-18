@@ -157,7 +157,7 @@ agent_thread agent-war-director
 | `blueprint_set_component` | `blueprint_set_component <blueprint_id> <slot_id> <component_id>` | `blueprint_set_component` | management | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | `blueprint_validate <blueprint_id>` | `blueprint_validate` | management | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | `blueprint_variant <parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv> [--name <name>]` | `blueprint_variant` | management | Create a controlled variant from a preset or player blueprint |
-| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>]` | `build` | build | Build any server-side buildable structure |
+| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0\|90\|180\|270] [--elevation 0-4] [--approach]` | `build` | build | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | `build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>` | `build_dyson_frame` | build | Build a Dyson sphere frame |
 | `build_dyson_node` | `build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | `build_dyson_node` | build | Build a Dyson sphere node |
 | `build_dyson_shell` | `build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | `build_dyson_shell` | build | Build a Dyson sphere shell |
