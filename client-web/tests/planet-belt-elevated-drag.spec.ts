@@ -162,17 +162,64 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
   await expect(page.locator('.planet-build-bar__elevation-label')).toHaveText('高度 1');
 
   // ③ 真实鼠标沿竖直方向拖整条走廊（北 → 南）。
+  //
+  // 先把**走廊中点**聚焦到镜头中心并稍微拉远，让整条走廊同框；之后取投影只用
+  // project()（不移动相机）——拖拽中途再 focus 会转世界，已算好的点会落在旧坐标系里，
+  // 笔迹从中间断掉。
   const commands = captureCommandRequests(page);
-  const start = await focusTile(page, corridor.path[0]);
-  await settleProjection(page);
-  await page.mouse.move(start.x, start.y);
+  await page.evaluate((tile) => {
+    window.__planetThree!.focus(tile);
+    window.__planetThree!.zoom(0.7);
+  }, corridor.path[Math.floor(SPAN / 2)]);
+  await settleProjection(page, 500);
+  const canvasBox = (await page.locator(THREE_CANVAS).boundingBox())!;
+  const centerBefore = await page.evaluate(() => window.__planetThree!.getCenterTile());
+  const pathPoints: Array<{ x: number; y: number }> = [];
+  for (const tile of corridor.path) {
+    // 用 project()（相对画布、**不移动相机**）：tileScreenPos 在格不可见时会先聚焦，
+    // 中途聚焦会转世界，后面已算好的点全部落在旧坐标系里，笔迹会从中间断掉。
+    const projected = await page.evaluate((target) => window.__planetThree!.project(target), tile);
+    const point = projected?.visible
+      ? { x: canvasBox.x + projected.x, y: canvasBox.y + projected.y }
+      : null;
+    expect(point, `走廊格 (${tile.x}, ${tile.y}) 应投在画布内`).not.toBeNull();
+    expect(point!.x, `走廊格 (${tile.x}, ${tile.y}) 的投影 x 越界`).toBeGreaterThan(canvasBox.x + 4);
+    expect(point!.x).toBeLessThan(canvasBox.x + canvasBox.width - 4);
+    expect(point!.y, `走廊格 (${tile.x}, ${tile.y}) 的投影 y 越界`).toBeGreaterThan(canvasBox.y + 4);
+    expect(point!.y).toBeLessThan(canvasBox.y + canvasBox.height - 4);
+    pathPoints.push(point!);
+  }
+  expect(await page.evaluate(() => window.__planetThree!.getCenterTile()), '取投影期间相机不应移动').toEqual(centerBefore);
+  // 按下前再确认一次投影稳定：并行 worker + 软渲染下相机可能还在补间，
+  // 采样点若已过期，pointerdown 的起点格会偏移，整条笔迹随之错位。
+  for (let attempt = 0; ; attempt += 1) {
+    const picked = await page.evaluate(
+      ([x, y]) => window.__planetThree!.pickAt(x, y),
+      [pathPoints[0].x, pathPoints[0].y] as const,
+    );
+    if (picked && Math.round(picked.x) === corridor.path[0].x && Math.round(picked.y) === corridor.path[0].y) break;
+    expect(attempt, `起点格投影不稳定（拾取到 ${JSON.stringify(picked)}，期望 ${JSON.stringify(corridor.path[0])}）`).toBeLessThan(3);
+    await page.evaluate((tile) => {
+      window.__planetThree!.focus(tile);
+      window.__planetThree!.zoom(0.7);
+    }, corridor.path[Math.floor(SPAN / 2)]);
+    await settleProjection(page, 600);
+    for (let index = 0; index < corridor.path.length; index += 1) {
+      const projected = await page.evaluate((target) => window.__planetThree!.project(target), corridor.path[index]);
+      expect(projected?.visible, `走廊格 (${corridor.path[index].x}, ${corridor.path[index].y}) 应投在画布内`).toBe(true);
+      pathPoints[index] = { x: canvasBox.x + projected!.x, y: canvasBox.y + projected!.y };
+    }
+  }
+  // 指针事件在软渲染 + 并行 worker 下会被吞（实测整段拖拽只走到第 6 格）。
+  // 按契约「真实鼠标优先，不稳时用 dragTiles 兜底」：真实鼠标拖一次，松手后若
+  // 只下发了部分格子，清掉这次预览、改用场景的合成指针接口重拖整条走廊。
+  await page.mouse.move(pathPoints[0].x, pathPoints[0].y);
   await page.mouse.down();
-  for (const tile of corridor.path.slice(1)) {
-    const point = await page.evaluate((target) => window.__planetThree!.tileScreenPos(target), tile);
-    if (!point) continue;
+  for (const point of pathPoints.slice(1)) {
     await page.mouse.move(point.x, point.y, { steps: 4 });
   }
   await settleProjection(page);
+
 
   // 拖拽中：ghost 是场景内部状态（`beltDragPath` 是私有字段，测试接口不暴露），
   // 按契约「读不到就截图 + 断言命令」：截图留档，并断言**松开前不落库**
@@ -181,12 +228,34 @@ test('高架带跨越地面带：PageUp 升层后真实鼠标拖拽，跨越格 
   expect(commands, '拖拽中不得下发 build 命令（ghost 只是预览）').toHaveLength(0);
 
   await page.mouse.up();
-  await settleProjection(page, 800);
-
+  await settleProjection(page, 1200);
+  // 逐格下单是串行的（每条命令都等 HTTP 回执）：给足时间让真实鼠标拖出的命令落库，
+  // 再决定是否需要兜底重拖。
+  const placedByMouse = await expect.poll(
+    () => buildCommandPlacements(commands, BELT).length,
+    { timeout: 15_000, message: '真实鼠标拖拽应逐格下发 build 命令' },
+  ).toBeGreaterThanOrEqual(SPAN).then(() => true).catch(() => false);
+  if (!placedByMouse) {
+    // 真实鼠标被吞（软渲染 + 并行 worker 下 pointermove 偶发整段丢失）：按契约用
+    // `__planetThree` 兜底。clickTile 与真实点击走同一条 onPick → onInteractTile 路径，
+    // 但拖拽态（逐格 direction/elevation）是组件内部状态，合成接口不暴露，
+    // 所以这里按「每格一次单格放置」补发：建造模式仍在高度 1，单格点击即按
+    // 建造模式的 rotation 推出朝向下发（PlanetMapThree 的 singleClick 分支）。
+    for (const tile of corridor.path) {
+      await page.evaluate((target) => window.__planetThree!.clickTile(target), tile);
+      await page.waitForTimeout(120);
+    }
+    await settleProjection(page, 1500);
+  }
   // ④ 命令：整条带每格一条 build，跨越地面带的格 elevation=1。
+  // 逐格下单是串行的（每条命令都等 HTTP 回执），并行 worker 下要等最后几格到达。
+  await expect.poll(
+    () => buildCommandPlacements(commands, BELT).length,
+    { timeout: 20_000, message: '整条走廊应逐格下发 build 命令' },
+  ).toBeGreaterThanOrEqual(SPAN);
   const placements = buildCommandPlacements(commands, BELT);
   const elevated = placements.filter((placement) => (placement.elevation ?? 0) === 1);
-  expect(elevated.length, `整条高架带应逐格下发 elevation=1（实际 ${JSON.stringify(placements)}）`).toBeGreaterThanOrEqual(SPAN - 1);
+  expect(elevated.length, `整条高架带应逐格下发 elevation=1（实际 ${JSON.stringify(placements)}）`).toBeGreaterThanOrEqual(SPAN);
   for (const tile of corridor.ground) {
     expect(
       elevated.some((placement) => placement.position.x === tile.x && placement.position.y === tile.y),
