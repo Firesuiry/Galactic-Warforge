@@ -4,7 +4,7 @@
  * 试玩 1011 第六轮：玩家看不出传送带朝向（白/黄条纹带没有流向感）。
  * 这里提供两块内容：
  * 1. 纹理工厂（CanvasTexture，按 key 缓存，只创建一次）：
- *    - beltChevronTexture：带体顶面贴图（底色 + 琥珀 chevron），沿 UV 滚动即「流向」；
+ *    - beltChevronTexture：传送带带面贴图（深色带面 + 横向 slat + 极弱 chevron），沿 UV 滚动即「流向」；
  *    - directionArrowTexture：透明底琥珀箭头，用于分拣器顶面与建造 ghost；
  *    - filterLabelTexture：过滤物品首字（有 icon_key 时取首字，与 DOM Icon 回退一致）。
  * 2. LogisticsDirectionMarks：把所有分拣器/分流器的顶面箭头合并成 1 个 mesh
@@ -18,11 +18,13 @@ import { logisticsArrows, directionVector, type CardinalDirection } from '../log
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 import type { TilePoint } from '../model';
 
-/** 带体顶面底色（与 conveyor-geometry 的带体材质同色，贴图叠上去不跳色）。 */
-const BELT_TOP = '#26363e';
-/** 流向强调色（与传送带琥珀色系一致）。 */
+/** 带面底色：DSP 传送带的深色带面（比机身石墨更深，衬得出浅色横向带条）。 */
+const BELT_DECK = '#161f24';
+/** 横向带条（slat）的受光面 / 阴影面。 */
+const SLAT_LIGHT = '#6b8088';
+const SLAT_DARK = '#3d4d54';
+/** 流向强调色（与传送带琥珀色系一致，分拣器箭头仍在用）。 */
 const CHEVRON = '#ffc76a';
-const CHEVRON_DIM = '#8a6a2f';
 
 const textures = new Map<string, THREE.CanvasTexture>();
 
@@ -47,32 +49,48 @@ function toTexture(key: string, element: HTMLCanvasElement, repeat = false): THR
 }
 
 /**
- * 传送带顶面：底色 + 一个沿 +U 指向的 chevron（1 格 1 个）。
- * 纹理按 1 次重复 = 1 格铺设（见 conveyor-geometry 的 UV），因此滚动 offset 的单位就是「格」。
+ * 传送带带面滚动贴图（DSP 口径）：深色带面 + 每格 2 条横向浅色 slat + 极弱中心 chevron。
+ *
+ * - 纹理按 1 次重复 = 1 格铺设（见 conveyor-geometry 的 UV），滚动 offset 的单位就是「格」；
+ * - slat 是横向（垂直流向）的浅色带条，宽度 .04 格、沿流向等距两条——滚动起来就是
+ *   「带条连续滚过去」的 DSP 质感，比 chevron 更能读出一整条带在动；
+ * - 中心 chevron 只做低对比的流向辅助（远景/静止帧也能判断方向），不能抢过建筑本体。
  */
 export function beltChevronTexture(): THREE.CanvasTexture {
-  const key = 'belt-chevron';
+  const key = 'belt-deck-slats';
   const hit = textures.get(key);
   if (hit) return hit;
-  const [element, ctx] = canvas(64, 48);
+  // 纹理长宽比 ≈ 1 格长 : 带面宽（.47 格）≈ 2.1，避免带条被横向拉伸。
+  const [element, ctx] = canvas(256, 120);
   if (!ctx) return toTexture(key, element, true);
-  ctx.fillStyle = BELT_TOP;
-  ctx.fillRect(0, 0, 64, 48);
-  const draw = (color: string, width: number, inset: number) => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(26 + inset, 12 + inset);
-    ctx.lineTo(42 - inset, 24);
-    ctx.lineTo(26 + inset, 36 - inset);
-    ctx.stroke();
-  };
-  // 箭头只占带面中间一半宽、线条偏细：一眼看得出流向，但不压过建筑本体（审美验收：
-  // 初版满幅粗箭头在近景里比工厂还抢眼）。
-  draw(CHEVRON_DIM, 7, 0);
-  draw(CHEVRON, 4, 0);
+  ctx.fillStyle = BELT_DECK;
+  ctx.fillRect(0, 0, 256, 120);
+  // 每格 2 条横向 slat：.04 格宽 = 256 * .04 ≈ 10 px，中心落在 .25 / .75 处（等距）。
+  for (const center of [.25, .75]) {
+    const x = 256 * center, half = 256 * .04 / 2;
+    ctx.fillStyle = SLAT_DARK;
+    ctx.fillRect(x - half, 0, half * 2, 120);
+    // 下游侧受光边：带条滚动时这条亮边就是方向提示。
+    ctx.fillStyle = SLAT_LIGHT;
+    ctx.fillRect(x + half - 2, 0, 2, 120);
+  }
+  // 两侧暗边：带面靠近护栏处的阴影，让带面看起来陷在护栏之间。
+  // （用两档透明矩形而不是渐变：测试环境的 canvas 2D 桩没有 createLinearGradient。）
+  for (const [inset, alpha] of [[0, .42], [3, .18]]) {
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(0, inset, 256, 3);
+    ctx.fillRect(0, 117 - inset, 256, 3);
+  }
+  // 极弱中心 chevron（每格一个），低对比，只作流向辅助。
+  ctx.strokeStyle = 'rgba(214, 236, 242, .075)';
+  ctx.lineWidth = 5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(110, 42);
+  ctx.lineTo(134, 60);
+  ctx.lineTo(110, 78);
+  ctx.stroke();
   return toTexture(key, element, true);
 }
 

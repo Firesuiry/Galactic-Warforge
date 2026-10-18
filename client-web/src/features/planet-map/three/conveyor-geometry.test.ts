@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { Building, BuildingFractionationState, BuildingSprayCoaterState, LogisticsStationState, PortDirection, SplitterConfig } from '@shared/types';
-import { ConveyorGeometry, conveyorPaths } from './conveyor-geometry';
+import { ConveyorGeometry, conveyorCaps, conveyorPaths,
+  BELT_BODY_BOTTOM, BELT_BODY_HALF, BELT_CAP_TOP, BELT_DECK_HALF, BELT_DECK_TOP, BELT_RAIL_OUTER, BELT_RAIL_TOP,
+  BELT_TOTAL_WIDTH } from './conveyor-geometry';
 import { surfaceTileSize, tileNormal } from './projection';
 
 const opposite: Record<SurfaceDirection,SurfaceDirection> = { north:'south', east:'west', south:'north', west:'east' };
@@ -133,12 +135,14 @@ describe('continuous surface conveyor paths', () => {
     }
   });
 
-  it('caps missing, hidden, hostile and incompatible neighbors within their own tiles', () => {
+  it('caps missing, hidden, hostile and incompatible neighbors at the cell boundary', () => {
     const source=belt('a',7,7);
     for(const neighbors of [[],[belt('b',8,7,'east','west','enemy')],[belt('b',8,7,'west')],[belt('b',8,7,'south','east')]]) {
       const path=conveyorPaths([source,...neighbors],16)[0];
       expect(path.connected.size).toBe(0);
-      expect(path.point(1).clone().normalize().distanceTo(tileNormal({x:7.36,y:7},16))).toBeLessThan(1e-10);
+      // 断开的一端也落在格边界（.5）：一格带体就是一整格，端点由端盖封口。
+      expect(path.point(1).clone().normalize().distanceTo(tileNormal({x:7.5,y:7},16))).toBeLessThan(1e-10);
+      expect(conveyorCaps(path)).toEqual({ start: true, end: true });
     }
   });
 
@@ -149,6 +153,81 @@ describe('continuous surface conveyor paths', () => {
     expect(merge.map(path=>path.input).sort()).toEqual(['north','west']);
     expect(paths.find(path=>path.building.id==='a')!.connected.has('south')).toBe(false);
     expect(paths.find(path=>path.building.id==='parallel')!.connected.size).toBe(0);
+  });
+});
+
+describe('DSP belt profile', () => {
+  it('uses the contracted cross section: low body, raised light rails, bright caps, sunken dark deck', () => {
+    expect(BELT_DECK_TOP).toBe(.105);
+    expect(BELT_DECK_HALF).toBe(.235);
+    expect(BELT_RAIL_TOP).toBe(.15);
+    expect(BELT_CAP_TOP).toBe(.17);
+    expect(BELT_RAIL_OUTER).toBe(.30);
+    expect(BELT_BODY_HALF).toBe(.30);
+    expect(BELT_BODY_BOTTOM).toBe(-.02);
+    // 总宽 .62 略窄于格宽 .86，格间留缝。
+    expect(BELT_TOTAL_WIDTH).toBeCloseTo(.62, 10);
+    expect(BELT_TOTAL_WIDTH).toBeLessThan(.86);
+    // 带面比护栏顶低、比机身底面高：物品坐在带面上、被两侧护栏框住。
+    expect(BELT_DECK_TOP).toBeLessThan(BELT_RAIL_TOP);
+    expect(BELT_RAIL_TOP).toBeLessThan(BELT_CAP_TOP);
+    expect(BELT_RAIL_OUTER).toBeGreaterThan(BELT_DECK_HALF);
+  });
+
+  it('caps only true endpoints: connected lines and turns stay open', () => {
+    const line = conveyorPaths([belt('a',5,5), belt('b',6,5)],16);
+    expect(line.map(conveyorCaps)).toEqual([{ start: true, end: false }, { start: false, end: true }]);
+    // 转弯两端都接着带体：不许画端盖（否则近景里弯角处会看到夹板）。
+    const turn = conveyorPaths([belt('a',5,5), belt('b',6,5,'south'), belt('c',6,6,'south')],16);
+    expect(conveyorCaps(turn.find(path => path.building.id === 'b')!)).toEqual({ start: false, end: false });
+    // 建筑端口也算连接（不封口），机器侧端口探到 .64。
+    const minerLine = conveyorPaths([belt('a',5,5), machine(5,6,'output')],16);
+    expect(minerLine[0].input).toBe('south');
+    expect(conveyorCaps(minerLine[0])).toEqual({ start: false, end: true });
+    expect(minerLine[0].point(0).clone().normalize().distanceTo(tileNormal({ x: 5, y: 5.64 }, 16))).toBeLessThan(1e-10);
+  });
+
+  it('builds the profile at the contracted cell heights (deck sits .105 above the belt centreline)', () => {
+    const renderer = new ConveyorGeometry(), buildings = [belt('a',5,7), belt('b',6,7)];
+    renderer.refresh(buildings, 16);
+    const size = surfaceTileSize(100,16), base = 100 + size * .19;
+    const bounds = renderer.group.children.map(child => {
+      const positions = (child as THREE.Mesh).geometry.getAttribute('position');
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < positions.count; i++) {
+        const radius = (Math.hypot(positions.getX(i), positions.getY(i), positions.getZ(i)) - base) / size;
+        min = Math.min(min, radius); max = Math.max(max, radius);
+      }
+      return { min, max };
+    });
+    // 三段结构（石墨机身/陶瓷护栏/合金顶盖）合起来从机身底面 -.02 到护栏顶盖 .17。
+    const structure = bounds.slice(0, 3);
+    expect(Math.min(...structure.map(bound => bound.min))).toBeCloseTo(BELT_BODY_BOTTOM, 2);
+    expect(Math.max(...structure.map(bound => bound.max))).toBeCloseTo(BELT_CAP_TOP, 2);
+    // 带面是第 4 层独立 mesh：整层贴在同一高度 .105（滚动贴图走 UV，不加几何体）。
+    expect(bounds[3].min).toBeCloseTo(BELT_DECK_TOP, 2);
+    expect(bounds[3].max).toBeCloseTo(BELT_DECK_TOP, 2);
+    renderer.dispose();
+  });
+
+  it('keeps the outer rail continuous through a turn (no gap at the corner)', () => {
+    const renderer = new ConveyorGeometry(), size = surfaceTileSize(100,16);
+    const buildings = [belt('a',5,5), belt('b',6,5,'south'), belt('c',6,6,'south')];
+    renderer.refresh(buildings, 16);
+    renderer.group.updateMatrixWorld(true);
+    const turn = conveyorPaths(buildings,16).find(path => path.building.id === 'b')!;
+    // 顶盖中线（±.2775）上打 17 条向下的射线：每个采样点都必须有护栏命中，
+    // 弯道外侧不能出现缺口，且拾取仍回到转弯格自身。
+    for (const side of [-1, 1]) for (let i = 0; i <= 16; i++) {
+      const t = .04 + (i / 16) * .92;
+      const point = turn.point(t), up = point.clone().normalize();
+      const origin = point.clone().addScaledVector(turn.side(t), side * .2775 * size)
+        .addScaledVector(up, (BELT_CAP_TOP + .02) * size);
+      const hits = new THREE.Raycaster(origin, up.clone().negate()).intersectObject(renderer.group, true);
+      expect(hits.length, `t=${t} side=${side}`).toBeGreaterThan(0);
+      expect(renderer.resolveHit(hits[0])).toEqual({ x: 6, y: 5 });
+    }
+    renderer.dispose();
   });
 });
 

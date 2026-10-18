@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { surfaceStep } from '@shared/surface';
 import type { ConveyorDirection } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { getFogState, type TilePoint } from '../model';
 import { getItemColorValue } from '../item-colors';
+import { beltItemSpeedTilesPerSec } from '../planet-logistics-flow';
 import { tileNormal, tileFrame, surfaceTileSize } from './projection';
-import { conveyorPaths, type ConveyorPath } from './conveyor-geometry';
+import { conveyorPaths, BELT_DECK_TOP, type ConveyorPath } from './conveyor-geometry';
 import { logisticsFlightNormal } from './logistics-flight';
 
 export interface ActivityOptions {
@@ -26,6 +28,14 @@ export interface ActivitySource {
   color: string;
   normal?: THREE.Vector3;
   altitude?: number;
+  /** 该建的吞吐（带上物品流速口径，与 2D 货物圆点 / 带面贴图滚动共用 beltItemSpeedTilesPerSec）。 */
+  throughput?: number;
+  /**
+   * 带上有货但连续多少 tick 没动出去（服务端 conveyor.blocked_ticks 直出）。
+   * 3D 物品用它判断「堵在输出端」，比只看 dead-end 拓扑更准：带子正对分拣器时
+   * 拓扑上不连任何带体，但分拣器照样从带上取货，不能画成堵死。
+   */
+  blockedTicks?: number;
 }
 
 /**
@@ -65,6 +75,7 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     for (const [index, stack] of (building.type === 'splitter' ? [] : building.conveyor?.buffer ?? []).entries()) {
       if (stack.quantity > 0) sources.push({ ...base, id: `${building.id}:cargo:${index}`, kind: 'cargo',
         itemId: stack.item_id, quantity: stack.quantity, direction: building.conveyor?.output, buildingId: building.id,
+        throughput: building.conveyor?.throughput, blockedTicks: building.conveyor?.blocked_ticks,
         color: itemColors.get(stack.item_id) ?? '#d8ae67' });
     }    if (!running) continue;
     const functions = building.runtime.functions;
@@ -72,7 +83,7 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     const definition = definitions.get(building.type);
     const resource = resources.get(`${building.position.x}:${building.position.y}`);
     // Mirrors rules.go mineResource: finite/renewable require remaining stock;
-    // decay resources (oil) depend on current yield, not remaining stock. Running
+    // decay resources (oil) depend on current yield, not remaining. Running
     // only means powered: the server leaves an exhausted miner in that state.
     const resourceProducing = resource && (resource.current_yield ?? 0) > 0
       && (resource.behavior === 'decay' || (['finite', 'renewable'].includes(resource.behavior) && (resource.remaining ?? 0) > 0));
@@ -104,23 +115,24 @@ interface SourcePosition {
   normal: THREE.Vector3;
   tangent: THREE.Vector3;
   size: number;
-  stackIndex: number;
-  stackCount: number;
-  /** 该堆在同格 buffer 里的总件数（决定画几个方块）与本次渲染的方块序号。 */
-  stackQuantity: number;
-  cargoIndex: number;
-  cargoCount: number;
+  /** 该方块在这一格带子上的序号（0 = 队首，离输出端最近）与这格画出的方块总数。 */
+  cargoOrdinal: number;
+  beltCargoCount: number;
+  /** 带上货物堵住了：不前进，向输出端排队堆叠。 */
+  blocked: boolean;
   prior?: THREE.Vector3;
   path?: ConveyorPath;
 }
 const LIMIT = 4096;
 /**
- * 单格物料方块的目标边长（cell）：DSP 式「带上的小物件」——远小于带宽（0.52 cell），
- * 一格内能看见多个、等间距沿带前进，不再是一个方块几乎占满带宽。
+ * 单格物料方块的目标边长（cell）：DSP 式「带上的小物件」——0.24 cell，远小于带面宽（0.47 cell），
+ * 一格内密排 4 个、朝流动方向、坐在带面上。
  */
-export const BELT_CARGO_CELL = .3;
-/** 单堆最多画几个方块：一格 0.95 cell 的行程里 0.3 cell 的方块最多排 3 个不叠。 */
-export const BELT_CARGO_MAX_PER_STACK = 3;
+export const BELT_CARGO_CELL = .24;
+/** 单堆最多画几个方块：一格 1 cell 的行程里 0.24 cell 的方块按 .25 间距密排，正好 4 个。 */
+export const BELT_CARGO_MAX_PER_STACK = 4;
+/** 物品中心离带体中心线的高度 = 带面顶 + 半边长（坐在带面上，不能陷进带面）。 */
+const BELT_CARGO_LIFT = BELT_DECK_TOP + BELT_CARGO_CELL / 2;
 
 /** Two draw calls at most: instanced physical cargo plus a single soft particle cloud. */
 export class IndustrialActivity {
@@ -133,13 +145,19 @@ export class IndustrialActivity {
   private readonly colors = new Float32Array(LIMIT * 3);
   private readonly sizes = new Float32Array(LIMIT);
   private readonly matrix = new THREE.Matrix4();
+  private readonly frame = new THREE.Matrix4();
   private readonly rotation = new THREE.Quaternion();
   private readonly position = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
+  private readonly flowTangent = new THREE.Vector3();
+  private readonly flowSide = new THREE.Vector3();
   private entries: SourcePosition[] = [];
   private observations = new Map<string, THREE.Vector3>();
   private time = 0;
+  /** 全网络共享的带面行程（格）：所有可见带子同一相位，直段上物品才连成一条密排的流。 */
+  private beltTravel = 0;
+  private beltSpeed = 0;
   private snapshotAge = 0;
   private lastTick: number | undefined;
 
@@ -173,13 +191,21 @@ export class IndustrialActivity {
     const fog = data.fog ?? ('bounds' in data.planet ? data.planet : undefined);
     const buildings = Object.values(data.planet.buildings ?? {}).filter(building =>
       building.owner_id === data.playerId || Boolean(fog && getFogState(fog, building.position.x, building.position.y).visible));
-    const paths = new Map(conveyorPaths(buildings, faceSize, this.radius).map(path => [path.building.id, path]));
-    const counts = new Map<string, number>();
+    const buildingTiles = new Set(Object.values(data.planet.buildings ?? {}).map(building => `${building.position.x}:${building.position.y}`));
+    // 一条带子可能有多条路线（侧汇入/分拣器分支）；带上物品跟「主路线」走（第一条），
+    // 否则同一格上的货物会在两条路线之间来回跳。
+    const paths = new Map<string, ConveyorPath>();
+    for (const path of conveyorPaths(buildings, faceSize, this.radius)) if (!paths.has(path.building.id)) paths.set(path.building.id, path);
+    // 每格带子上画出的方块总数（堵住时按这个总数排队，队首贴输出端）。
+    const cubeTotals = new Map<string, number>();
+    let throughput = 0;
     for (const source of sources) if (source.kind === 'cargo') {
       const key = `${source.position.x}:${source.position.y}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      cubeTotals.set(key, (cubeTotals.get(key) ?? 0) + Math.max(1, Math.min(source.quantity ?? 1, BELT_CARGO_MAX_PER_STACK)));
+      throughput = Math.max(throughput, source.throughput ?? 1);
     }
-    const indices = new Map<string, number>();
+    this.beltSpeed = beltItemSpeedTilesPerSec(throughput || 1);
+    const ordinals = new Map<string, number>();
     const entries: SourcePosition[] = [];
     for (const source of sources) {
       const normal = source.normal ?? tileNormal(source.position, faceSize);
@@ -188,27 +214,32 @@ export class IndustrialActivity {
         : source.direction === 'west' ? east.negate() : east;
       const size = surfaceTileSize(this.radius, faceSize);
       const key = `${source.position.x}:${source.position.y}`;
-      const stackIndex = indices.get(key) ?? 0;
-      if (source.kind === 'cargo') indices.set(key, stackIndex + 1);
       const prior = this.observations.get(source.id);
       if (source.kind === 'flight') nextObservations.set(source.id, normal.clone());
-      const base = { source, color: itemColor(source.color), normal, tangent, size, stackIndex, stackCount: counts.get(key) ?? 1,
-        path: source.buildingId ? paths.get(source.buildingId) : undefined,
+      const path = source.buildingId ? paths.get(source.buildingId) : undefined;
+      const base = { source, color: itemColor(source.color), normal, tangent, size, path,
         prior: source.kind === 'flight' && prior && prior.distanceToSquared(normal) > 1e-12 ? prior : undefined };
-      if (source.kind !== 'cargo') { entries.push({ ...base, stackQuantity: 1, cargoIndex: 0, cargoCount: 1 }); continue; }
-      // 一堆 N 件画 N 个方块（上限 BELT_CARGO_MAX_PER_STACK）：一格内多个小方块等间距前进，
-      // 而不是一件一个满格大方块（DSP 式「带上的小物件」）。
+      if (source.kind !== 'cargo') { entries.push({ ...base, cargoOrdinal: 0, beltCargoCount: 1, blocked: false }); continue; }
+      // 堵塞判定：停机、服务端 blocked_ticks（带上有货却一直没动出去）、或输出方向是
+      // 死头（既没有连接的带体，也没有建筑能接货）。正对分拣器的带子拓扑上不连带体，
+      // 但分拣器会从带上取货，不能画成堵死。
+      const deadEnd = path !== undefined && !path.connected.has(path.output)
+        && !buildingTiles.has(neighborTile(path, faceSize));
+      const blocked = !source.active || (source.blockedTicks ?? 0) > 0 || deadEnd;
+      const ordinal = ordinals.get(key) ?? 0;
       const quantity = Math.max(1, Math.min(source.quantity ?? 1, BELT_CARGO_MAX_PER_STACK));
       for (let cargoIndex = 0; cargoIndex < quantity; cargoIndex++) {
-        entries.push({ ...base, stackQuantity: quantity, cargoIndex, cargoCount: quantity });
+        entries.push({ ...base, cargoOrdinal: ordinal + cargoIndex, beltCargoCount: cubeTotals.get(key) ?? 1, blocked });
       }
+      ordinals.set(key, ordinal + quantity);
     }
     this.entries = entries;
     if (newSnapshot) { this.observations = nextObservations; this.snapshotAge = 0; this.lastTick = tick; }
   }
 
   animate(dt: number, _time: number, options: ActivityOptions = {}) {
-    if (!options.paused && !options.reducedMotion) this.time += Math.min(Math.max(dt, 0), .1);
+    const step = Math.min(Math.max(dt, 0), .1);
+    if (!options.paused && !options.reducedMotion) { this.time += step; this.beltTravel += step * this.beltSpeed; }
     if (!options.paused) this.snapshotAge += Math.max(0, dt);
     let cargoCount = 0, particleCount = 0;
     const point = (position: THREE.Vector3, color: THREE.Color, size: number) => {
@@ -222,17 +253,32 @@ export class IndustrialActivity {
       if (source.kind === 'flight' ? options.logistics === false : options.buildings === false) continue;
       if (source.kind === 'energy' && options.power === false) continue;
       if (source.kind === 'cargo') {
-        const moving = source.active && source.direction && !['auto', ''].includes(source.direction);
-        // 方块沿带前进的行程占带宽 0.95；方块 0.3 宽、错位 0.25（见 offset 处），
-        // 相切不叠：N 个方块正好铺满一个「格」的行程。
-        const lane = entry.stackIndex + entry.cargoIndex / entry.cargoCount;
-        const spread = entry.stackCount;
-        const phase = (this.time * .55 + lane / spread) % 1;
-        const offset = (moving ? phase : (lane + .5) / spread) - .5;
-        if (entry.path) this.position.copy(entry.path.point(offset + .5)).addScaledVector(normal, size * .1);
-        else this.position.copy(normal).multiplyScalar(this.radius + size * .29).addScaledVector(tangent, offset * size * .95);
-        this.rotation.setFromUnitVectors(this.up, normal);
-        // 细分网格：方块固定 0.3 cell 边长（DSP 式小物件），一格内可见多个、等间距前进。
+        const total = Math.max(1, entry.beltCargoCount);
+        // 堵塞：不前进，向后堆到输出端：队首（ordinal 0）离输出端口最近。
+        const phase = entry.blocked ? 1 - (entry.cargoOrdinal + .5) / total
+          : (this.beltTravel + entry.cargoOrdinal / total) % 1;
+        if (entry.path) {
+          const u = phase, p = entry.path.point(u);
+          const up = p.clone().normalize();
+          this.position.copy(p).addScaledVector(up, size * BELT_CARGO_LIFT);
+          // 朝向随流向：弯道上用 u±ε 的切向，物品不能还是正南正北的方盒。
+          const before = entry.path.point(Math.max(0, u - .002));
+          const after = entry.path.point(Math.min(1, u + .002));
+          this.flowTangent.copy(after).sub(before);
+          if (this.flowTangent.lengthSq() < 1e-12) this.flowTangent.copy(entry.path.point(1)).sub(entry.path.point(0));
+          this.flowTangent.normalize();
+          // 切向里可能混进一点径向分量，正交化后再拼基（局部 +X 沿流向、+Y 朝上）。
+          this.flowTangent.addScaledVector(up, -this.flowTangent.dot(up)).normalize();
+          this.flowSide.crossVectors(this.flowTangent, up).normalize();
+          this.frame.makeBasis(this.flowTangent, up, this.flowSide);
+          this.rotation.setFromRotationMatrix(this.frame);
+        } else {
+          // 非带体建筑（conveyor buffer）：沿输出方向在地面上排开，堵住时同样堆到放货端。
+          const moving = !entry.blocked && Boolean(source.direction) && !['auto', ''].includes(source.direction!);
+          const offset = moving ? phase - .5 : .5 - (entry.cargoOrdinal + .5) / total;
+          this.position.copy(normal).multiplyScalar(this.radius + size * .29).addScaledVector(tangent, offset * size * .95);
+          this.rotation.setFromUnitVectors(this.up, normal);
+        }
         this.scale.setScalar(size * BELT_CARGO_CELL);
         this.matrix.compose(this.position, this.rotation, this.scale);
         this.cargo.setMatrixAt(cargoCount, this.matrix);
@@ -273,4 +319,10 @@ export class IndustrialActivity {
     this.entries = [];
     this.observations.clear();
   }
+}
+
+/** 带子在输出方向上的邻居格（处理旋转立方体接缝）。 */
+function neighborTile(path: ConveyorPath, faceSize: number): string {
+  const step = surfaceStep(path.building.position, path.output, faceSize);
+  return `${step.tile.x}:${step.tile.y}`;
 }

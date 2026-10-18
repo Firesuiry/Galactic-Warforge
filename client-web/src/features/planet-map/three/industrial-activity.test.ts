@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import type { PlanetThreeData } from '../planet-three-scene';
 import { collectActivity, itemColor, IndustrialActivity, BELT_CARGO_CELL, BELT_CARGO_MAX_PER_STACK } from './industrial-activity';
+import { conveyorPaths, BELT_DECK_TOP, type ConveyorPath } from './conveyor-geometry';
+import { beltItemSpeedTilesPerSec } from '../planet-logistics-flow';
 import { getItemColorValue } from '../item-colors';
-import { tileNormal, surfaceTileSize } from './projection';
+import { tileFrame, tileNormal, surfaceTileSize } from './projection';
 
 function fixture(): PlanetThreeData {
   return {
@@ -18,6 +20,46 @@ function factory(state = 'running'): Building {
     runtime: { state, functions: { production: { throughput: 1 }, collect: { yield_per_tick: 1 }, energy: { output_per_tick: 1 } } },
     production: { remaining_ticks: 5 }, conveyor: { output: 'east', input: 'west', buffer: [{ item_id: 'iron_ore', quantity: 12 }] },
   } as unknown as Building;
+}
+
+const opposite: Record<string, string> = { north: 'south', east: 'west', south: 'north', west: 'east' };
+/** 一格带体：默认朝东、西侧输入，带 2 的吞吐（beltItemSpeedTilesPerSec(2) = 1.8 格/秒）。 */
+function belt(id: string, x: number, y: number, output = 'east', input = opposite[output],
+    buffer: { item_id: string; quantity: number }[] = [], blockedTicks = 0): Building {
+  return { id, type: 'conveyor_belt_mk1', position: { x, y, z: 0 }, owner_id: 'p1',
+    runtime: { state: 'running' },
+    conveyor: { input, output, throughput: 2, buffer, ...(blockedTicks ? { blocked_ticks: blockedTicks } : {}) },
+  } as unknown as Building;
+}
+function sorter(x: number, y: number, rotation = '90'): Building {
+  return { id: 'sorter', type: 'sorter_mk1', position: { x, y, z: 0 }, owner_id: 'p1', rotation,
+    sorter: { cycle_ticks: 6, range: 1, filter: { mode: 'allow', items: [] } }, runtime: { state: 'running' },
+  } as unknown as Building;
+}
+function scene(buildings: Building[]) {
+  const data = fixture();
+  data.planet.buildings = Object.fromEntries(buildings.map(building => [building.id, building]));
+  const world = new THREE.Group(), activity = new IndustrialActivity(world);
+  return { data, world, activity, cargo: () => world.children[0].children[0] as THREE.InstancedMesh };
+}
+/** 从实例矩阵位置反推带上的行程 u（sampling 最近点；物品中心恰好在 path.point(u) 的正上方）。 */
+function locate(path: ConveyorPath, position: THREE.Vector3, size: number): number {
+  let best = 0, bestDistance = Infinity;
+  const lift = size * (BELT_DECK_TOP + BELT_CARGO_CELL / 2);
+  for (let i = 0; i <= 400; i++) {
+    const u = i / 400, p = path.point(u);
+    const distance = p.clone().addScaledVector(p.clone().normalize(), lift).distanceTo(position);
+    if (distance < bestDistance) { bestDistance = distance; best = u; }
+  }
+  return best;
+}
+function placement(cargo: THREE.InstancedMesh, path: ConveyorPath, size: number, index: number) {
+  const matrix = new THREE.Matrix4().fromArray(cargo.instanceMatrix.array as Float32Array, index * 16);
+  const position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
+  matrix.decompose(position, quaternion, scale);
+  const u = locate(path, position, size);
+  const tangent = path.point(Math.min(1, u + .002)).sub(path.point(Math.max(0, u - .002))).normalize();
+  return { position, quaternion, scale, u, tangent };
 }
 
 describe('authoritative industrial activity', () => {
@@ -132,10 +174,10 @@ describe('authoritative industrial activity', () => {
     for (let i = 0; i < cargo.count; i++) {
       const matrix = new THREE.Matrix4().fromArray(cargo.instanceMatrix.array, i * 16);
       matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
-      // 方块边长 = 0.3 cell：远小于 0.52 cell 的带宽，一格内可见多个。
+      // 方块边长 = 0.24 cell：远小于 0.47 cell 的带面宽，一格内密排 4 个。
       // instanceMatrix 是 Float32，比较放到 1e-5 的相对精度即可。
       expect(scale.x).toBeCloseTo(size * BELT_CARGO_CELL, 5);
-      expect(scale.x).toBeLessThan(size * .52);
+      expect(scale.x).toBeLessThan(size * .47);
     }
     activity.destroy();
   });
@@ -165,6 +207,112 @@ describe('authoritative industrial activity', () => {
     expect(read(1)).toBe(itemColor(getItemColorValue('copper_ingot', '#74c0fc')).getHexString());
     expect(read(2)).toBe(itemColor(getItemColorValue('gear', '#74c0fc')).getHexString());
     expect(new Set([read(0), read(1), read(2)]).size).toBe(3);
+    activity.destroy();
+  });
+});
+
+describe('belt cargo on the DSP conveyor', () => {
+  it('uses .24 cell cargo and sits on the deck at deck top + half edge', () => {
+    expect(BELT_CARGO_CELL).toBe(.24);
+    expect(BELT_CARGO_MAX_PER_STACK).toBe(4);
+    const { data, activity, cargo } = scene([
+      belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }]), belt('b',2,1),
+    ]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4), base = 100 + size * .19;
+    expect(mesh.count).toBe(4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
+    const lift = size * (BELT_DECK_TOP + BELT_CARGO_CELL / 2);
+    for (let i = 0; i < mesh.count; i++) {
+      const { position, quaternion } = placement(mesh, path, size, i);
+      // 中心高度 = 带面顶 .105 + 半边长（不能陷进带面）——物品正好坐在带面上。
+      expect(position.length()).toBeCloseTo(base + lift, 3);
+      const up = position.clone().normalize();
+      expect(new THREE.Vector3(0,1,0).applyQuaternion(quaternion).dot(up)).toBeGreaterThan(.999);
+    }
+    activity.destroy();
+  });
+
+  it('points cargo along the flow direction, including through a curve', () => {
+    const { data, activity, cargo } = scene([
+      belt('a',1,1), belt('b',2,1,'south','west',[{ item_id: 'iron_ore', quantity: 4 }]), belt('c',2,2,'south','north'),
+    ]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'b')!;
+    // b 是转弯带（西进南出）：带上的物品在弯道里必须随切向转，不能还是正南正北的方盒。
+    const east = tileFrame({ x: 2, y: 1 }, 4).east, south = tileFrame({ x: 2, y: 1 }, 4).south;
+    let sawDiagonal = false;
+    for (let i = 0; i < mesh.count; i++) {
+      const { quaternion, u, tangent } = placement(mesh, path, size, i);
+      const forward = new THREE.Vector3(1,0,0).applyQuaternion(quaternion);
+      expect(forward.dot(tangent)).toBeGreaterThan(.999);
+      if (Math.abs(u - .5) < .13) {
+        sawDiagonal = true;
+        expect(Math.abs(tangent.dot(east))).toBeGreaterThan(.4);
+        expect(Math.abs(tangent.dot(south))).toBeGreaterThan(.4);
+      }
+    }
+    expect(sawDiagonal).toBe(true);
+    activity.destroy();
+  });
+
+  it('advances cargo with the same belt speed as the scrolling deck texture', () => {
+    const { data, activity, cargo } = scene([
+      belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }]), belt('b',2,1),
+    ]);
+    const mesh = cargo(), size = surfaceTileSize(100,4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
+    activity.update(data); activity.animate(.1, 0);
+    const before = Array.from({length: mesh.count}, (_, i) => placement(mesh, path, size, i).u);
+    activity.animate(.1, .1);
+    const after = Array.from({length: mesh.count}, (_, i) => placement(mesh, path, size, i).u);
+    // u 用全局时钟推进，速度口径 = beltItemSpeedTilesPerSec(throughput)（与 2D 圆点/贴图同一份）。
+    const expected = beltItemSpeedTilesPerSec(2) * .1;
+    before.forEach((u, i) => expect(((after[i] - u) % 1 + 1) % 1).toBeCloseTo(expected, 2));
+    activity.destroy();
+  });
+
+  it('piles blocked cargo at the output end, queue front closest to the port, and freezes it', () => {
+    // 单格死头带（朝东、东边什么都没有）→ 堵塞；4 个方块从输出端往里排。
+    const { data, activity, cargo } = scene([belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }])]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4)[0];
+    expect(mesh.count).toBe(4);
+    for (let i = 0; i < mesh.count; i++) {
+      const { u } = placement(mesh, path, size, i);
+      // u = 1 - (k+.5)/spread：队首贴输出端，后面的依次往后堆。
+      expect(u).toBeCloseTo(1 - (i + .5) / 4, 2);
+    }
+    const frozen = mesh.instanceMatrix.array.slice(0, mesh.count * 16);
+    activity.animate(.4, 3);
+    expect(mesh.instanceMatrix.array.slice(0, mesh.count * 16)).toEqual(frozen);
+    activity.destroy();
+  });
+
+  it('trusts server blocked_ticks on a connected belt that cannot move its items', () => {
+    const { data, activity, cargo } = scene([
+      belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }], 40), belt('b',2,1),
+    ]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
+    for (let i = 0; i < mesh.count; i++) expect(placement(mesh, path, size, i).u).toBeCloseTo(1 - (i + .5) / 4, 2);
+    activity.destroy();
+  });
+
+  it('does not pile cargo on a belt facing a sorter: the sorter takes from the passing belt', () => {
+    const { data, activity, cargo } = scene([
+      belt('a',1,1,'east','west',[{ item_id: 'iron_ore', quantity: 4 }]), sorter(2,1),
+    ]);
+    activity.update(data); activity.animate(.1, 0);
+    const mesh = cargo(), size = surfaceTileSize(100,4);
+    const path = conveyorPaths(Object.values(data.planet.buildings!), 4).find(p => p.building.id === 'a')!;
+    // 拓扑上不连带体，但分拣器会从这条带上取货：物品照常前进，不能堆在输出端。
+    for (let i = 0; i < mesh.count; i++) {
+      expect(placement(mesh, path, size, i).u).toBeCloseTo((beltItemSpeedTilesPerSec(2) * .1 + i / 4) % 1, 2);
+    }
     activity.destroy();
   });
 });
