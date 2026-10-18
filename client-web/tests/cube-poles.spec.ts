@@ -52,7 +52,9 @@ for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_p
     page.on('console',m=>{if(m.type()==='error')errors.push(`${m.text()} (${m.location().url})`);});
     await page.addInitScript(({player,key})=>localStorage.setItem('siliconworld-client-web-session',JSON.stringify({state:{serverUrl:location.origin,playerId:player,playerKey:key},version:0})),{player,key});
     await page.goto('/planet/planet-1-1');
-    await page.waitForFunction(()=>Boolean((window as any).__planetThree?.data?.planet));
+    // R20-A 起 `__planetThree` 是场景方法的绑定包装对象，私有字段 `data` 不再可见：
+    // 以相机中心格就绪代替「数据已 setData」（相机中心来自 data.planet 的窗口钳位）。
+    await page.waitForFunction(()=>Boolean((window as any).__planetThree?.getCenterTile?.()));
     if(n>512/3) await expect.poll(()=>page.evaluate(()=>Boolean((window as any).__planetThree.localSurface))).toBe(true);
     const click=async(tile:{x:number;y:number})=>{
       const p=await page.evaluate(t=>{const r=(window as any).__planetThree;r.focus(t,true);return r.project(t);},tile);
