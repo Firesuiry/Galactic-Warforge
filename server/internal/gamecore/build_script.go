@@ -302,7 +302,7 @@ type BeltLink struct {
 // 端口规则（见 docs/guide/细分网格与DSP界面.md §1.2 与实物经济与分拣器.md §2）：
 // 建筑 IO 是「占地外圈一圈相邻 cell」。分拣器是 1×1，取货端沿朝向的反方向扫
 // Range 格、放货端沿朝向扫 Range 格，所以「带子 → 分拣器 → 下游占地」这条
-// 直线在 Range ≥ 2 时两个端点都能连上（mk1 的 Range=1 只够接一侧）。
+// 直线两端都能连上（第 19 轮起所有档位 range=3）。
 func PlanBeltLink(ws *model.WorldState, src *model.Building, targetType model.BuildingType) (BeltLink, bool) {
 	if ws == nil || src == nil {
 		return BeltLink{}, false

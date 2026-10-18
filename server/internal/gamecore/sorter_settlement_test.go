@@ -79,7 +79,8 @@ func TestSorterFilterSkipsFrontStackAndTakesBehind(t *testing.T) {
 }
 
 func TestSorterReachFollowsRange(t *testing.T) {
-	// Range 决定沿朝向轴扫几格：mk1=1 扫不到 2 格外的带子。
+	// Range 决定沿朝向轴扫几格（第 19 轮起所有档位都是 3，但选路仍按状态里的 range
+	// 走，所以这里直接改状态验证扫描边界）。
 	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 
@@ -147,7 +148,7 @@ func TestSorterFacingFollowsRotation(t *testing.T) {
 }
 
 func TestSorterTripCycleMatchesCycleTicksAndDistance(t *testing.T) {
-	// 往返周期 = cycle_ticks × 端点距离格数（mk1 的 cycle_ticks = 6）。
+	// 往返周期 = cycle_ticks × max(1, 取端步数 + 放端步数 − 1)（mk1 的 cycle_ticks = 6）。
 	ws := model.NewWorldState("planet-1", 6)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	input := newConveyorBuilding("in", model.Position{X: 1, Y: 2}, model.ConveyorEast)
@@ -159,7 +160,8 @@ func TestSorterTripCycleMatchesCycleTicksAndDistance(t *testing.T) {
 	if sorter.Sorter.CycleTicks != 6 {
 		t.Fatalf("mk1 cycle_ticks = %d, want 6", sorter.Sorter.CycleTicks)
 	}
-	// 两端点各距 1 格 → 距离 2 → 周期 12 tick。
+	// 两端点各距 1 格 → 往返长度 max(1, 1+1−1) = 1 → 周期 6 tick。
+	input.Conveyor.MaxStack = 100
 	input.Conveyor.Insert(model.ItemIronOre, 40)
 
 	ws.Tick = 100
@@ -167,33 +169,35 @@ func TestSorterTripCycleMatchesCycleTicksAndDistance(t *testing.T) {
 	if got := output.Conveyor.TotalItems(); got != 1 {
 		t.Fatalf("first trip must move exactly one item, got %d", got)
 	}
-	if sorter.Sorter.NextTripTick != 112 {
-		t.Fatalf("next trip tick = %d, want 112", sorter.Sorter.NextTripTick)
+	if sorter.Sorter.NextTripTick != 106 {
+		t.Fatalf("next trip tick = %d, want 106", sorter.Sorter.NextTripTick)
 	}
-	for tick := int64(101); tick < 112; tick++ {
+	for tick := int64(101); tick < 106; tick++ {
 		ws.Tick = tick
 		settleSorters(ws)
 	}
 	if got := output.Conveyor.TotalItems(); got != 1 {
 		t.Fatalf("sorter tripped before its cycle elapsed, output=%d", got)
 	}
-	ws.Tick = 112
+	ws.Tick = 106
 	settleSorters(ws)
 	if got := output.Conveyor.TotalItems(); got != 2 {
-		t.Fatalf("sorter must trip again at tick 112, output=%d", got)
+		t.Fatalf("sorter must trip again at tick 106, output=%d", got)
 	}
 
-	// 一 tick 内搬动 12 件需要 12 个周期：60 tick 内最多 5 次往返（t=100/112/124/136/148）。
+	// 周期 6：60 tick 内最多 11 次往返（t=100/106/…/160）。
 	ws.Tick = 0
 	sorter.Sorter.NextTripTick = 0
 	output.Conveyor.Take(output.Conveyor.TotalItems())
+	// 输出带默认容量 10：先清空，保证 11 趟都有地方落货（不是节拍问题）。
+	output.Conveyor.MaxStack = 100
 	ws.Tick = 100
 	for tick := int64(100); tick <= 160; tick++ {
 		ws.Tick = tick
 		settleSorters(ws)
 	}
-	if got := output.Conveyor.TotalItems(); got != 6 {
-		t.Fatalf("mk1 throughput over 60 ticks = %d items, want 6 (cycle 12)", got)
+	if got := output.Conveyor.TotalItems(); got != 11 {
+		t.Fatalf("mk1 throughput over 60 ticks = %d items, want 11 (cycle 6)", got)
 	}
 }
 
@@ -230,8 +234,8 @@ func TestSorterTransferReflectsActualMovement(t *testing.T) {
 	if input.Conveyor.TotalItems() != 2 || output.Conveyor.TotalItems() != 1 {
 		t.Fatal("transfer record must correspond to inventory movement")
 	}
-	// 两端点各距 1 格 → 距离 2 → mk1 周期 12 tick。
-	if sorter.Sorter.NextTripTick != 24 {
+	// 两端点各距 1 格 → 往返长度 1 → mk1 周期 6 tick。
+	if sorter.Sorter.NextTripTick != 18 {
 		t.Fatalf("next trip tick = %d, want 24", sorter.Sorter.NextTripTick)
 	}
 
@@ -242,9 +246,9 @@ func TestSorterTransferReflectsActualMovement(t *testing.T) {
 		t.Fatal("trip inside the cycle must not refresh the transfer record")
 	}
 
-	ws.Tick = 24
+	ws.Tick = 18
 	settleSorters(ws)
-	if got := sorter.Sorter.LastTransfer; got == transfer || got.Tick != 24 || got.Sequence != 2 || got.Quantity != 1 {
+	if got := sorter.Sorter.LastTransfer; got == transfer || got.Tick != 18 || got.Sequence != 2 || got.Quantity != 1 {
 		t.Fatalf("expected next trip after the cycle to advance sequence, got %+v", got)
 	}
 }

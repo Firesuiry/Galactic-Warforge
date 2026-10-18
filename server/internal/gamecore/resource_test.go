@@ -264,6 +264,9 @@ func TestMiningOutputFeedsStorageAndLogistics(t *testing.T) {
 	// 采集类仍直连皮带：矿机 → 带子 → 分拣器 → 仓库。
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
 	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	// 第 19 轮起分拣器耗电：这些夹具只测物流链，不搭电网。
+	sorter.Runtime.Params.EnergyConsume = 0
+	sorter.Runtime.Functions.Energy.ConsumePerTick = 0
 	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, miner)
 	attachBuilding(ws, belt)
@@ -314,6 +317,9 @@ func TestWaterPumpFeedsStorageAndLogistics(t *testing.T) {
 	}
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
 	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	// 第 19 轮起分拣器耗电：这些夹具只测物流链，不搭电网。
+	sorter.Runtime.Params.EnergyConsume = 0
+	sorter.Runtime.Functions.Energy.ConsumePerTick = 0
 	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, pump)
 	attachBuilding(ws, belt)
@@ -366,6 +372,9 @@ func TestOilExtractorFeedsStorageAndLogistics(t *testing.T) {
 	}
 	belt := newConveyorBuilding("belt", model.Position{X: 4, Y: 1}, model.ConveyorEast)
 	sorter := newSorterBuilding("sorter", model.Position{X: 5, Y: 1})
+	// 第 19 轮起分拣器耗电：这些夹具只测物流链，不搭电网。
+	sorter.Runtime.Params.EnergyConsume = 0
+	sorter.Runtime.Functions.Energy.ConsumePerTick = 0
 	depot := newDepotBuilding("depot", model.Position{X: 6, Y: 1})
 	attachBuilding(ws, extractor)
 	attachBuilding(ws, belt)
