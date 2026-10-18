@@ -200,6 +200,8 @@ describe('continuous surface conveyor paths', () => {
     };
     // 北侧支带带面（主带带面半宽之外）：命中 .09 的带面，而不是 .128 的侧栏。
     expect(probe(0, -.36)).toEqual({ height: expect.closeTo(BELT_DECK_TOP, 2), tile: { x: 6, y: 5 } });
+    // 支带带面末端的小舌（MERGE_DECK_TONGUE）盖住主带带面外的暗边。
+    expect(probe(0, -.30).height).toBeCloseTo(BELT_DECK_TOP, 2);
     // 汇入侧侧栏被切开：侧栏中线位置没有 .128 的侧栏。
     expect(probe(0, -.2775).height).toBeLessThan(BELT_DECK_TOP);
     // 开口之外（西侧）侧栏仍在；南侧（没有汇入）侧栏也在。
@@ -208,11 +210,13 @@ describe('continuous surface conveyor paths', () => {
     renderer.dispose();
   });
 
-  // 疑似源码 bug（conveyor-geometry.ts `port(direction, distance)`）：支带内端用「图集格坐标」
-  // 偏移 BELT_DECK_HALF=.24，但带面半宽是**局部切平面坐标**。球面 tan 映射下 .24 格图集距离
-  // 在局部坐标里约 .337，支带带面因此停在主带带面边缘（.24）之外约 .1 格，开口处露出缝隙。
-  // 期望：支带带面在主带带面边缘（局部 .24）处与之无缝相接。
-  it.todo('seamlessly joins the T-branch deck to the main deck edge (currently ~.1 cell gap)');
+  // 疑似源码 bug（conveyor-geometry.ts `port(direction, distance)` + `MERGE_DECK_TONGUE`）：
+  // 支带内端按「图集格坐标」偏移 BELT_DECK_HALF=.24（`tile = position + dx*reach`），但带面半宽
+  // 是**局部切平面坐标**。球面 tan 映射下 .24 格图集距离在局部坐标里约 .337，支带带面停在
+  // 主带带面边缘（局部 .24）之外约 .097 格；.05 格的小舌只补到局部 .29，接缝处仍有约 .05 格
+  // （世界 .035 格）没有带面（射线打到机身底面 −.02，近景是一条暗缝）。
+  // 期望：支带带面延伸到主带带面边缘（局部 .24）并与主带带面无缝相接。
+  it.todo('seamlessly joins the T-branch deck to the main deck edge (currently a ~.05 cell gap at s=-.24..-.29)');
 });
 
 describe('DSP belt profile', () => {
