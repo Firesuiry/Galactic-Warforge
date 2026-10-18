@@ -11,6 +11,10 @@
 #                              [--tick-rate 4] [--checkpoint cp-base]
 #   scripts/playtest-down.sh 205
 #
+# --checkpoint 给了存档名时，起服务前会按当前 worktree 的 Go 版本常量检查该存档；
+# 缺失或版本不符（旧 worktree 留下的 .run/checkpoints）会自动跑 checkpointbuild
+# 重建该层（含父链），失败则报错退出，不会静默起空局。
+#
 # 详见 docs/guide/试玩速查.md。
 set -euo pipefail
 
@@ -23,7 +27,7 @@ GO_BIN_DIR="${GO_BIN_DIR:-/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin}"
 export PATH="$GO_BIN_DIR:$PATH"
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 1
 }
 
@@ -116,6 +120,55 @@ log "编译服务端二进制"
   go build -o "$RUN_DIR/server-bin" ./cmd/server
 )
 
+# ---- 存档版本检查 / 自动重建 ----
+# 旧存档（如别的 worktree 留下的 .run/checkpoints）会被新二进制以「存档版本不受支持」
+# 拒绝读档，以前每个代理各自排查、手动跑 checkpointbuild。这里在起服务前按当前
+# worktree 的 Go 常量（gamedir.CurrentFormatVersion / snapshot.CurrentVersion）
+# 判断 --checkpoint 能否读；缺失/版本不符就自动重建该层（含父链），失败则报错退出，
+# 不静默起一个空局。
+checkpoint_status() {
+  node "$WORKTREE/scripts/checkpoint-version.mjs" "$CHECKPOINT_DIR" "$1" 2>&1 || true
+}
+
+ensure_checkpoint() {
+  local name="$1" status
+  status="$(checkpoint_status "$name")"
+  if [[ "$status" == OK* ]]; then
+    log "存档 $name 可读（$status）"
+    return 0
+  fi
+  case "$status" in
+    MISSING*) log "存档 $name 缺失，自动重建中…" ;;
+    MISMATCH*) log "存档 $name 版本不符（${status#MISMATCH }），自动重建中…" ;;
+    *)
+      echo "[playtest-up] 错误：存档 $name 无法解析：$status" >&2
+      echo "  删除 $CHECKPOINT_DIR/$name 后重跑，或手动：cd server && go run ./cmd/checkpointbuild -root .. -layer $name" >&2
+      exit 1
+      ;;
+  esac
+  [[ -f "$WORKTREE/docs/guide/checkpoints/$name.json" ]] || {
+    echo "[playtest-up] 错误：没有构建记录 docs/guide/checkpoints/$name.json，无法重建 $name" >&2
+    exit 1
+  }
+  local started=$SECONDS
+  log "  重建命令：go run ./cmd/checkpointbuild -root .. -checkpoint-dir $CHECKPOINT_DIR -layer $name"
+  if ! (cd "$WORKTREE/server" && go run ./cmd/checkpointbuild \
+        -root "$WORKTREE" -checkpoint-dir "$CHECKPOINT_DIR" -layer "$name"); then
+    echo "[playtest-up] 错误：存档 $name 自动重建失败（见上方 checkpointbuild 输出），环境未启动" >&2
+    exit 1
+  fi
+  status="$(checkpoint_status "$name")"
+  if [[ "$status" != OK* ]]; then
+    echo "[playtest-up] 错误：重建后存档 $name 仍不可读：$status" >&2
+    exit 1
+  fi
+  log "  存档 $name 重建完成（$((SECONDS - started)) 秒，$status）"
+}
+
+if [[ -n "$CHECKPOINT" ]]; then
+  ensure_checkpoint "$CHECKPOINT"
+fi
+
 log "生成临时配置 $SERVER_CONFIG"
 sed -e "s|^  port: .*|  port: $SERVER_PORT|" \
     -e "s|^  data_dir: .*|  data_dir: \"$RUN_DIR/data\"|" \
@@ -185,11 +238,22 @@ for name in server web driver; do
 done
 
 # ---- 可选：读档 ----
+load_checkpoint() {
+  curl -fsS -X POST -H 'Authorization: Bearer key_player_1' \
+    "http://127.0.0.1:$SERVER_PORT/checkpoints/$CHECKPOINT/load" >/dev/null
+}
 if [[ -n "$CHECKPOINT" ]]; then
   log "读档 $CHECKPOINT"
-  curl -fsS -X POST -H 'Authorization: Bearer key_player_1' \
-    "http://127.0.0.1:$SERVER_PORT/checkpoints/$CHECKPOINT/load" >/dev/null \
-    || log "警告：读档失败（存档点可能不存在）"
+  if ! load_checkpoint; then
+    # 预检漏掉的情况（例如起服务期间存档被别的进程改写）：再按版本检查重建一次，仍失败就退出，
+    # 不静默留一个空局让后续测试读到假象。
+    log "读档失败，重新检查/重建存档 $CHECKPOINT"
+    ensure_checkpoint "$CHECKPOINT"
+    if ! load_checkpoint; then
+      echo "[playtest-up] 错误：读档 $CHECKPOINT 失败，环境停在空局（服务端仍运行，可用 playtest-down.sh $N 停掉）" >&2
+      exit 1
+    fi
+  fi
 fi
 
 cat <<EOF
