@@ -512,8 +512,9 @@ describe('PlanetBuildBar', () => {
       buildingType: 'sorter_mk1',
       direction: 'auto',
     });
-    // 提示行给出朝向语义（虚线空心 = 取货端，实心 = 放货端，试玩 1016 U1），而不是传送带的「箭头 = 物流方向」。
-    expect(screen.getByText(/虚线空心箭头 = 取货端/)).toBeInTheDocument();
+    // 提示行给出朝向语义（第 18 轮：ghost 上是半透明机体 + 一条「取货端 → 放货端」绿色细箭头），
+    // 而不是传送带的「箭头 = 物流方向」。
+    expect(screen.getByText(/绿色箭头 = 取货端 → 放货端/)).toBeInTheDocument();
 
     // 默认朝向（rotation=0 → 北）就写中文方位 + 取/放端，不显示角度（试玩 1016 U3）。
     expect(screen.getByTestId('planet-build-direction')).toHaveTextContent('朝向 北（从南取 → 往北放）');

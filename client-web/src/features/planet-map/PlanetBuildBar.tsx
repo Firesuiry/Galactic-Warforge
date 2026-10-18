@@ -569,7 +569,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             ) : (
               <span className="planet-build-bar__hint">
                 {sorterMode
-                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上虚线空心箭头 = 取货端，实心箭头 = 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
+                  ? `放置 ${translateBuildingType(activeBuildingType ?? '')}：R 旋转（ghost 上的绿色箭头 = 取货端 → 放货端），移动鼠标预览，点击放置，右键/Esc 退出`
                   : `放置 ${translateBuildingType(activeBuildingType ?? '')}：移动鼠标预览（ghost 上的箭头 = 物流方向），点击放置，右键/Esc 退出`}
               </span>
             )}
