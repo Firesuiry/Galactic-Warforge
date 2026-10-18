@@ -475,6 +475,8 @@ func conveyorLinksTo(ws *model.WorldState, conveyors map[string]*model.Building,
 			continue
 		}
 		inputSide := nextDir.Opposite()
+		// 同层优先：同层有一个「会接货」的建筑时，坡道候选不会被选中；
+		// 但如果同层建筑不收这个方向，坡道仍然成立（与 conveyorDownstreamAt 同口径）。
 		target := conveyorDownstreamAt(ws, conveyors, from.OwnerID, next, level, inputSide, accepts)
 		if target != nil && target.ID == to.ID {
 			return true

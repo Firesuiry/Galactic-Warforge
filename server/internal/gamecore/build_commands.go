@@ -277,7 +277,18 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 			return res, nil
 		}
 		if p.Direction == nil && p.Rotation != nil {
-			conveyorDir = model.RotateDirection(model.ConveyorEast, rotation)
+			// 本游戏的 rotation 是「朝向」而不是 180° 旋转：0=北、90=东、
+			// 180=南、270=西（见 model.PlanRotationForDirection）。
+			switch rotation {
+			case model.PlanRotation90:
+				conveyorDir = model.ConveyorEast
+			case model.PlanRotation180:
+				conveyorDir = model.ConveyorSouth
+			case model.PlanRotation270:
+				conveyorDir = model.ConveyorWest
+			default:
+				conveyorDir = model.ConveyorNorth
+			}
 		}
 	}
 
