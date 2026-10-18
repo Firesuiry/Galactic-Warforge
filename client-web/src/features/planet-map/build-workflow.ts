@@ -18,7 +18,7 @@ import type {
 import type { Building } from "@shared/types";
 
 import type { PlanetRenderView } from "@/features/planet-map/model";
-import { beltElevation, clampBeltElevation, isLowLogisticsType } from "@/features/planet-map/logistics-tier";
+import { beltElevation, clampBeltElevation, isLowLogisticsType, occupiesGround } from "@/features/planet-map/logistics-tier";
 import {
   getResourceList,
   getTerrainTile,
@@ -497,7 +497,8 @@ function buildTileAssessment(input: {
       // 高架带脚下只能是空地或 LowLogistics：地面层压着非 LowLogistics 建筑（含地基）时
       // 服务端回 POSITION_OCCUPIED「高架传送带不能架在建筑上方」（M1，文案与服务端同字）。
       const groundOccupant = targetElevation > 0
-        ? buildings.find((building) => beltElevation(building) === 0 && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
+        // 服务端按 TileBuilding 判（地基/配送器/z>0 叠层不登记地面格），这里用同一口径。
+        ? buildings.find((building) => occupiesGround(building) && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
         : undefined;
       const blockingResource = findBlockingResource(resources, x, y);
       const blockingTask = constructionAt(x, y);
@@ -552,7 +553,7 @@ function buildTileAssessment(input: {
           buildingId: overheadBelt.id,
         });
       }
-      if (groundOccupant && groundOccupant.type !== "foundation" && !isLowLogisticsType(groundOccupant.type)) {
+      if (groundOccupant && !isLowLogisticsType(groundOccupant.type)) {
         blockedTiles.push({
           x,
           y,
