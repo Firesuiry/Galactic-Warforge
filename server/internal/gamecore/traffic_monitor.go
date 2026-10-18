@@ -25,6 +25,11 @@ func trafficMonitorTarget(ws *model.WorldState, monitor *model.Building, id stri
 	if !model.IsTrafficMonitorBelt(target) || target.OwnerID != monitor.OwnerID {
 		return nil
 	}
+	// 流速监测器只在地面层工作（契约 §3.1：监测器/分流器/集装机只在地面层），
+	// 不绑定高架带。
+	if target.BeltElevation() != 0 {
+		return nil
+	}
 	for _, pos := range ws.SurfaceNeighbors(monitor.Position) {
 		if pos == target.Position {
 			return target

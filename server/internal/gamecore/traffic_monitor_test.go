@@ -409,3 +409,35 @@ func TestTrafficMonitorDoesNotCallNewArrivalBlocked(t *testing.T) {
 		t.Fatal("existing cargo with no output failed to report blockage")
 	}
 }
+
+// 审查 P3：流速监测器只在地面层工作，不能绑定高架带（契约 §3.1）。
+func TestTrafficMonitorRejectsElevatedBeltTarget(t *testing.T) {
+	ws, m, _, _ := trafficFixture()
+	elevated := beltFixture(ws, "elevated", m.Position, model.ConveyorEast, 1)
+	// 高架带在监测器邻格（同一格也行：监测器在地面，带在第 1 层）。
+	if trafficMonitorTarget(ws, m, elevated.ID) != nil {
+		t.Fatal("elevated belt must not be a valid traffic monitor target")
+	}
+	// 配置命令同样拒绝，并保留原目标。
+	original := m.TrafficMonitor.TargetBeltID
+	command := model.Command{
+		Type:   model.CmdConfigureTrafficMonitor,
+		Target: model.CommandTarget{EntityID: m.ID},
+		Payload: map[string]any{
+			"target_belt_id": elevated.ID, "window_ticks": 3,
+			"minimum_items_per_tick": 0.5, "alerts_enabled": true,
+		},
+	}
+	gc := &GameCore{world: ws}
+	result, _ := execCommand(gc, model.CmdConfigureTrafficMonitor, ws, "p1", command)
+	if result.Status == model.StatusExecuted || result.Code != model.CodeInvalidTarget {
+		t.Fatalf("configuring an elevated belt must fail: %+v", result)
+	}
+	if m.TrafficMonitor.TargetBeltID != original {
+		t.Fatalf("failed configuration changed target: %q -> %q", original, m.TrafficMonitor.TargetBeltID)
+	}
+	// 地面带仍然可以绑。
+	if trafficMonitorTarget(ws, m, original) == nil {
+		t.Fatal("ground belt target must stay valid")
+	}
+}
