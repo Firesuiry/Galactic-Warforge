@@ -157,6 +157,8 @@ export interface BuildOptions {
   recipeId?: string;
   /** F4：显式落点行星；缺省落在玩家焦点行星。 */
   planetId?: string;
+  /** 第 19 轮多层传送带：只对 conveyor_belt_* 有效，0–4，缺省 0（地面）。 */
+  elevation?: number;
 }
 
 export interface LaunchSolarSailOptions {
@@ -619,6 +621,7 @@ export function createApiClient(options: ApiClientOptions) {
         ...(buildOptions.autoApproach !== undefined ? { auto_approach: buildOptions.autoApproach } : {}),
         ...(buildOptions.direction ? { direction: buildOptions.direction } : {}),
         ...(buildOptions.recipeId ? { recipe_id: buildOptions.recipeId } : {}),
+        ...(buildOptions.elevation ? { elevation: buildOptions.elevation } : {}),
       },
     });
   }

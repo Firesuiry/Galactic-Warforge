@@ -196,6 +196,8 @@ export interface BuildingConveyorState {
    * 清空或动过就归零）。达阈值（300 tick）时服务端另发 `belt_blocked` 告警。
    */
   blocked_ticks?: number;
+  /** 第 19 轮多层传送带：0 = 地面，1–4 = 高架层（服务端 omitempty，缺省 0）。 */
+  elevation?: number;
 }
 
 /** 服务端最近一次实际搬运；空转时保留旧记录，按 tick / sequence 判断工作动画。 */
