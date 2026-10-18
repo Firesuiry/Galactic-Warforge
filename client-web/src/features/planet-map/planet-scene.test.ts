@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { Building, BuildingFunctionModules, CatalogView } from '@shared/types';
 
+import { BELT_ITEM_MAX_DOTS } from '@/features/planet-map/planet-logistics-flow';
 import {
+  BELT_BLOCKED_VISUAL_TICKS,
+  beltDotDisplayProgress,
+  beltFlowBlocked,
+  beltItemDotProgress,
   buildDashArcSegments,
   buildDashSegments,
   buildingSortKey,
@@ -305,5 +310,57 @@ describe('工地进度与资源贴花', () => {
       expect(phase).toBeGreaterThanOrEqual(0);
       expect(phase).toBeLessThan(Math.PI * 2);
     }
+  });
+});
+
+describe('2D 传送带货流圆点（DSP 口径：间距随格容量收紧 / 堵塞堆在输出端）', () => {
+  it('从输出端往回排：第一个圆点永远贴着输出边，间距 = 1/格容量', () => {
+    // mk1/mk2 每格 2 件：两个点各占半格（输出端 .75、输入端 .25）。
+    expect(beltItemDotProgress(2, 2)).toEqual([.75, .25]);
+    // mk3 每格 3 件：三等分。
+    const three = beltItemDotProgress(3, 3);
+    expect(three[0]).toBeCloseTo(1 - .5 / 3, 9);
+    expect(three[1]).toBeCloseTo(1 - 1.5 / 3, 9);
+    expect(three[2]).toBeCloseTo(1 - 2.5 / 3, 9);
+    // 每个点都从输出端往回推，最后一个点不越过输入边。
+    for (const progress of three) {
+      expect(progress).toBeGreaterThanOrEqual(0);
+      expect(progress).toBeLessThan(1);
+    }
+    // 队首（buffer 队首 = 即将送出）在 output 侧：progress 最大。
+    expect(three[0]).toBeGreaterThan(three[2]);
+  });
+
+  it('间距随 buffer 收紧：满格时点与点之间是 1/格容量，半格时靠输出端', () => {
+    const full = beltItemDotProgress(2, 2);
+    expect(full[0] - full[1]).toBeCloseTo(.5, 9);
+    const single = beltItemDotProgress(1, 3);
+    expect(single).toHaveLength(1);
+    expect(single[0]).toBeCloseTo(1 - .5 / 3, 9);
+    // 0 件不产生圆点；超过上限时截断到 BELT_ITEM_MAX_DOTS。
+    expect(beltItemDotProgress(0, 2)).toEqual([]);
+    expect(beltItemDotProgress(99, 2)).toHaveLength(BELT_ITEM_MAX_DOTS);
+    // 数据异常（超出格容量）时也不越过输入边（progress ≥ 0）。
+    for (const progress of beltItemDotProgress(99, 2)) expect(progress).toBeGreaterThanOrEqual(0);
+  });
+
+  it('显示进度 = 排布偏移 + 共享流动相位（回卷到 [0,1)）', () => {
+    expect(beltDotDisplayProgress(.75, 0)).toBeCloseTo(.75, 9);
+    expect(beltDotDisplayProgress(.75, .5)).toBeCloseTo(.25, 9);
+    expect(beltDotDisplayProgress(.25, -.5)).toBeCloseTo(.75, 9);
+    expect(beltDotDisplayProgress(.9, .3)).toBeCloseTo(.2, 9);
+  });
+
+  it('堵塞判定：带上有货且 blocked_ticks 达阈值才算（空带/正常流动都不算）', () => {
+    expect(beltFlowBlocked(undefined)).toBe(false);
+    expect(beltFlowBlocked({})).toBe(false);
+    // 空带：即使计数残留也不算。
+    expect(beltFlowBlocked({ buffer: [], blocked_ticks: 99 })).toBe(false);
+    expect(beltFlowBlocked({ buffer: [{ quantity: 0 }], blocked_ticks: 99 })).toBe(false);
+    // 有货但还没到阈值：视为正常流动。
+    expect(beltFlowBlocked({ buffer: [{ quantity: 2 }], blocked_ticks: 0 })).toBe(false);
+    expect(beltFlowBlocked({ buffer: [{ quantity: 2 }], blocked_ticks: BELT_BLOCKED_VISUAL_TICKS - 1 })).toBe(false);
+    expect(beltFlowBlocked({ buffer: [{ quantity: 2 }], blocked_ticks: BELT_BLOCKED_VISUAL_TICKS })).toBe(true);
+    expect(BELT_BLOCKED_VISUAL_TICKS).toBeGreaterThan(0);
   });
 });

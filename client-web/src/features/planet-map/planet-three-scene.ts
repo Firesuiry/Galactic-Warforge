@@ -12,8 +12,8 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
-import { ghostArrowGeometry, ghostArrowTransform, ghostLabelOffset, GHOST_LABEL_SCALE } from './three/ghost-arrow';
-import { ghostArrowTexture, ghostRoleLabelMaterial, disposeGhostArrowTextures, type GhostArrowRole } from './three/ghost-arrow-texture';
+import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
+import { SORTER_GHOST_COLOR, sorterGhostGroup } from './three/ghost-sorter';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
@@ -24,7 +24,7 @@ import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logis
 import { beltItemSpeedTilesPerSec } from './planet-logistics-flow';
 import { beltDeadEnds } from './sorter-filter';
 import { blockedBeltMarks } from './belt-blocked-marks';
-import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isCardinalDirection, isSorterBuilding, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
+import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isCardinalDirection, sorterGhostDirections, type CardinalDirection } from './logistics-direction';
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
@@ -76,10 +76,10 @@ function refId(value: object | undefined | null) {
   return id;
 }
 const FRONT = new THREE.Vector3(0, 0, 1);
-/** 分拣器 ghost 的取货端（背面）箭头颜色：与放货端（琥珀）区分。 */
-const GHOST_TAKE_COLOR = '#6ee7f7';
-/** 建造 ghost 的默认箭头色（放货端 / 传送带流向）。 */
+/** 传送带 ghost 的流向箭头色（沿用旧版的琥珀色）。 */
 const GHOST_ARROW_COLOR = '#ffd76a';
+/** 传送带 ghost 箭头相对旧版缩小到 .5 倍：细箭头只作流向提示，不抢带体本身。 */
+const GHOST_BELT_ARROW_SCALE = .5;
 /** Presentation only: all entities and terrain are sourced from player-visible server views. */
 export class PlanetThreeScene {
   private readonly scene = new THREE.Scene();
@@ -847,7 +847,8 @@ export class PlanetThreeScene {
   private clearMarks(group: THREE.Group) {
     group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.Line) {
-        o.geometry.dispose();
+        // 共享几何（ghost 机体/箭头按模块缓存，见 three/ghost-sorter）不随重建释放。
+        if (!o.geometry.userData.shared) o.geometry.dispose();
         for (const material of Array.isArray(o.material) ? o.material : [o.material]) if (!material.userData.shared) material.dispose();
       } else if (o instanceof THREE.Sprite && !o.material.userData.shared) {
         o.material.map?.dispose();
@@ -989,30 +990,35 @@ export class PlanetThreeScene {
     this.updateBuildGhost();
   }
 
-  /** 建造预览的朝向箭头 + 拖拽铺带时每格路径方向。 */
+  /**
+   * 建造预览（DSP 口径）：**半透明建筑本体 + 贴地细箭头**。
+   *
+   * - 分拣器：半透明分拣器机体（`three/ghost-sorter`，位置/朝向与放置后一致，含 rotation）
+   *   + 一条从取货端（背面）贯穿到放货端（正面）的绿色细箭头。旧版的「取」「放」两支
+   *   大箭头 + 文字徽章已删除（文字说明在看板底部提示行）。
+   * - 传送带/其它有朝向的建筑：贴地细箭头（缩到 .5 倍），拖拽铺带时逐格画。
+   */
   private updateBuildGhost() {
     this.clearMarks(this.ghostMarks);
     const mode = this.interaction?.interactionMode;
     const hovered = this.interaction?.hoveredTile;
     if (!this.data || !this.interaction || !mode || mode.kind !== 'build' || !hovered) return;
-    // 分拣器：取（背面）→ 放（正面）两端箭头，方向由 rotation 决定（第 16 轮契约）。
+    // 分拣器：取（背面）→ 放（正面）方向由 rotation 决定（第 16 轮契约）。
     const sorterRoutes = sorterGhostDirections(mode.buildingType, mode.rotation);
     const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
     if (!direction && !sorterRoutes) return;
-    // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器 ghost 抬高一点压在顶面）。
+    // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器体积小，只画悬停格）。
     const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0 ? this.beltDragPath : [hovered];
-    const elevated = isSorterBuilding({ type: mode.buildingType });
     if (sorterRoutes) {
-      // 取货端（背面）与放货端（正面）各缩到 0.62 并沿各自方向推离格心 0.26 格，
-      // 两支箭头分开摆在前后半格——都压格心会糊成一个「叉」。
-      // 取货端走空心纹理、放货端实心，并各挂「取」「放」小字标签（试玩 1016 U1）。
+      const size = this.tileScale();
       for (const tile of tiles) {
-        this.ghostArrow(tile, sorterRoutes.from, elevated, GHOST_TAKE_COLOR, .62, .26, 'take', true);
-        this.ghostArrow(tile, sorterRoutes.to, elevated, GHOST_ARROW_COLOR, .62, .26, 'drop', true);
+        this.ghostMarks.add(this.placeGhost(sorterGhostGroup(), tile, mode.rotation, .02));
+        // 一条箭头贯穿前后各半格：从取货端指到放货端，绿色（可放置色）。
+        this.ghostMarks.add(this.ghostArrowMesh(tile, sorterRoutes.to, sorterGhostArrowGeometry(size), SORTER_GHOST_COLOR, .09, true));
       }
       return;
     }
-    for (const tile of tiles) this.ghostArrow(tile, direction!, elevated);
+    for (const tile of tiles) this.ghostArrow(tile, direction!);
   }
 
   /**
@@ -1146,70 +1152,54 @@ export class PlanetThreeScene {
   }
 
   /**
-   * 一个朝 direction 的箭头（贴格中心，指示物流输出侧）；分拣器取货端用另一色区分。
-   * `scale` 缩小整支箭头、`along` 沿 direction 把箭头推离格心——分拣器用这两个参数把
-   * 「背面取货 / 正面放货」两支箭头分开摆在格子的前后半格，叠在格心只会糊成一个叉。
-   * 平铺姿态与四向可见性见 `three/ghost-arrow`（PlaneGeometry 不转就会立起来侧对相机）。
+   * 传送带/朝向建筑的贴地细箭头（缩到 .5 倍）：指示铺带流向。
+   * 几何是「细杆 + 三角箭头」（`three/ghost-arrow`），不再有粗 chevron 纹理。
    */
+  private ghostArrow(tile: TilePoint, direction: CardinalDirection) {
+    const size = this.tileScale();
+    this.ghostMarks.add(this.ghostArrowMesh(tile, direction, ghostArrowGeometry(size, GHOST_BELT_ARROW_SCALE), GHOST_ARROW_COLOR, .1));
+  }
+
   /**
-   * 建造预览箭头（传送带流向 / 分拣器取放端）。
+   * 贴地细箭头 mesh：抬 `lift` 格、平铺在格平面、朝向 direction。
    *
-   * `role` 决定纹理：取货端空心描边、放货端实心（试玩 1016 U1——旧实现两端同一张实心
-   * 箭头，只靠青/琥珀两色区分，3D 近景里分不出来）。分拣器两端再各挂一枚「取」「放」
-   * 小字标签，颜色再分不出来也能读字。
+   * `overlay = true`（分拣器方向箭头）时关掉深度测试：箭头要压在**半透明机体**（立柱/横臂）
+   * 和地面上方，否则穿过立柱的那一段会被机体遮住、读不出「从取货端指向放货端」。
    */
-  private ghostArrow(
+  private ghostArrowMesh(
     tile: TilePoint,
     direction: CardinalDirection,
-    elevated = false,
-    color = '#ffd76a',
-    scale = 1,
-    along = 0,
-    role: GhostArrowRole = 'drop',
-    labeled = false,
+    geometry: THREE.BufferGeometry,
+    color: string,
+    lift: number,
+    overlay = false,
   ) {
-    const size = this.tileScale();
-    const mesh = new THREE.Mesh(
-      ghostArrowGeometry(size, scale),
-      new THREE.MeshBasicMaterial({ map: ghostArrowTexture(role), color, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
-    );
+    const mesh = new THREE.Mesh(geometry, overlay
+      ? new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .95, depthWrite: false, depthTest: false, toneMapped: false, side: THREE.DoubleSide })
+      : this.markMaterial(color, .92));
     const { position, quaternion } = ghostArrowTransform(tile, direction, this.data!.planet.surface.face_size, RADIUS, {
-      size,
-      lift: elevated ? .18 : .1,
-      along,
+      size: this.tileScale(),
+      lift,
     });
     mesh.position.copy(position);
     mesh.quaternion.copy(quaternion);
     mesh.renderOrder = 20;
-    this.ghostMarks.add(mesh);
-    if (!labeled) return;
-    // 标签放在**箭头尖端之外**（试玩 1017 K4-04）：旧版贴箭头中心、0.3 格大圆盘
-    // 把虚线取货箭头整个盖住，两支箭头都读成色块。现在缩到 0.17 格并沿箭头方向
-    // 越过尖端半个箭头 + 半个标签，箭头本体（虚线/实心）完整露出。
-    const sprite = new THREE.Sprite(this.ghostRoleLabelMaterial(role, color));
-    const outward = directionVector(direction);
-    const offset = ghostLabelOffset(size, scale, along);
-    const frame = tileFrame(tile, this.data!.planet.surface.face_size);
-    sprite.position.copy(position)
-      // 标签已在箭头外侧，不需要高抬：0.14 格即可避免被箭头面片遮住，
-      // 抬太高（旧版 0.3）在斜视角下会把标签推得离箭头很远。
-      .multiplyScalar((position.length() + size * .14) / Math.max(position.length(), 1e-6))
-      .addScaledVector(frame.east, outward.x * offset)
-      .addScaledVector(frame.south, outward.y * offset);
-    sprite.scale.set(size * GHOST_LABEL_SCALE, size * GHOST_LABEL_SCALE, 1);
-    sprite.renderOrder = 21;
-    this.ghostMarks.add(sprite);
+    return mesh;
   }
 
-  /** 取/放标签的共享材质（按角色 + 颜色缓存；清理 ghost 标记时不释放）。 */
-  private ghostRoleLabelMaterial(role: GhostArrowRole, color: string) {
-    const key = `ghost-role:${role}:${color}`;
-    const cached = this.spriteMaterials.get(key);
-    if (cached) return cached;
-    const material = ghostRoleLabelMaterial(role, color);
-    material.userData.shared = true;
-    this.spriteMaterials.set(key, material);
-    return material;
+  /**
+   * 把 ghost 机体贴到悬停格：与 `place()` 同一套基底（+X 东、+Y 法线、+Z 南），
+   * 抬离地面 `lift` 格（分拣器 .02），朝向与放置后一致（含 rotation）。
+   */
+  private placeGhost(group: THREE.Group, tile: TilePoint, rotation: number | undefined, lift: number) {
+    const size = this.tileScale();
+    const normal = this.normal(tile.x, tile.y);
+    const { east, south } = tileFrame(tile, this.data!.planet.surface.face_size);
+    group.position.copy(normal).multiplyScalar(RADIUS + size * lift);
+    group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
+    group.rotateY(-Number(rotation ?? 0) * Math.PI / 180);
+    group.scale.setScalar(size);
+    return group;
   }
 
   focus(tile: TilePoint, close = true) {
@@ -1413,7 +1403,6 @@ export class PlanetThreeScene {
     this.clearMarks(this.ghostMarks);
     this.ghostMarks.removeFromParent();
     disposeLogisticsTextures();
-    disposeGhostArrowTextures();
     this.combat.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
     this.spriteMaterials.clear();
