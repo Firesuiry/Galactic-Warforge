@@ -176,6 +176,16 @@ export function PlanetMapThree(props: Props) {
   const projectTile = useCallback((tile: { x: number; y: number }) => {
     return scene.current?.project({ x: Math.round(tile.x), y: Math.round(tile.y) }) ?? null;
   }, []);
+  /**
+   * 战区地面圆用的**不取整**投影（R20-A 试玩 1020 A3）：
+   * 圆周 48 个采样点是浮点格坐标，取整会全部吸到格心，贴地视角下轮廓变成锯齿台阶。
+   * `tileNormal` 里整数格坐标 = 格心（`(x + .5)`，见 shared-client surface.ts），
+   * 所以浮点格坐标直接投影即与服务端「中心格 + 半径」同一口径，不需要额外偏移。
+   * 小队/军团标记等按格心画的东西仍走 projectTile（取整），避免吸附变化。
+   */
+  const projectTileExact = useCallback((tile: { x: number; y: number }) => {
+    return scene.current?.project(tile) ?? null;
+  }, []);
   function handleSelectSquad(squad: CombatSquad, additive: boolean) {
     const store = usePlanetViewStore.getState();
     if (squad.owner_id !== session.playerId) {
@@ -785,16 +795,12 @@ export function PlanetMapThree(props: Props) {
     // 不依赖 ready：jsdom/测试环境里场景可能没有画布尺寸，但 project 仍可喂；
     // 场景不存在时 project 返回 null → ring 为 null，自然不画。
     if (!zoneDragGeometry) return null;
-    const project = (tile: { x: number; y: number }) => {
-      const point = scene.current?.project({ x: Math.round(tile.x), y: Math.round(tile.y) });
-      return point ? { x: point.x, y: point.y, visible: point.visible } : null;
-    };
-    const ring = projectTheaterZoneRing(project, { x: zoneDragGeometry.x, y: zoneDragGeometry.y }, zoneDragGeometry.radius);
+    const ring = projectTheaterZoneRing(projectTileExact, { x: zoneDragGeometry.x, y: zoneDragGeometry.y }, zoneDragGeometry.radius);
     if (!ring) return null;
     const color = theaterZoneColor(interactionMode.kind === 'theater_zone' ? interactionMode.zoneType : 'primary');
     return { ring, color };
     // projectionFrame 让相机转动/缩放后重算多边形。
-  }, [zoneDragGeometry, projectionFrame, interactionMode]);
+  }, [zoneDragGeometry, projectionFrame, interactionMode, projectTileExact]);
 
   /**
    * 悬停高亮（R20-A ⑦）：hoveredTile 落在哪个已建成战区圆内。
@@ -882,7 +888,7 @@ export function PlanetMapThree(props: Props) {
       offsetX={0}
       offsetY={0}
       planetId={props.planet.planet_id}
-      projectTile={projectTile}
+      projectTile={projectTileExact}
       theaters={props.theaters}
       tileSize={1}
       selectedTheaterId={selectedTheaterId}

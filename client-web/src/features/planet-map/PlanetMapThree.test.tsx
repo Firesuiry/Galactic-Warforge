@@ -16,6 +16,8 @@ let onMiss: (() => void) | undefined;
 let zoomCalls: number[] = [];
 /** 场景投影：默认返回 null（不可见）；需要时喂一个假的线性投影。 */
 let projectResult: ((tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null) | null = null;
+/** scene.project 收到的格坐标（验证战区地面圆用浮点、不取整）。 */
+let projectedTiles: { x: number; y: number }[] = [];
 /** clickTile 收到的选项（验证 button 透传 / 右键退回）。 */
 let clickTileCalls: ({ tile: { x: number; y: number }; options?: { button?: 0 | 2 } })[] = [];
 
@@ -41,7 +43,10 @@ vi.mock('./planet-three-scene', () => ({
     setTilt() {}
     pickAt() { return pickResult; }
     setBeltDragPath(path: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)) { dragPaths.push(path); }
-    project(tile: { x: number; y: number }) { return projectResult ? projectResult(tile) : null; }
+    project(tile: { x: number; y: number }) {
+      projectedTiles.push({ ...tile });
+      return projectResult ? projectResult(tile) : null;
+    }
     clickTile(tile: { x: number; y: number }, options?: { button?: 0 | 2 }) {
       clickTileCalls.push({ tile, options });
       return { dispatched: true, offscreen: false };
@@ -63,6 +68,7 @@ afterEach(() => {
   zoomCalls = [];
   projectResult = null;
   clickTileCalls = [];
+  projectedTiles = [];
 });
 
 /** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
@@ -755,6 +761,53 @@ describe('3D 战区拖拽（R20-A ③）', () => {
     expect(path!.getAttribute('stroke-width')).toBe('3');
     act(() => usePlanetViewStore.getState().setHoveredTile({ x: 40, y: 40 }));
     expect(layer.querySelector('path')!.getAttribute('stroke-width')).toBe('2');
+  });
+});
+
+describe('3D 战区地面圆投影精度（R20-A 1020 A3）', () => {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+    }
+  }
+  beforeEach(() => {
+    vi.stubGlobal('PointerEvent', PointerEventPolyfill);
+  });
+
+  it('已建成战区的圆周采样按浮点格坐标投影，不取整（否则轮廓是锯齿台阶）', () => {
+    const theaters = [{
+      id: 'th-1',
+      name: '北线',
+      zones: [{ zone_type: 'primary' as const, planet_id: 'planet-1-1', position: { x: 10, y: 10, z: 0 }, radius: 4, hostile_count: 0, alerted: false }],
+    }];
+    const { container } = render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} theaters={theaters} />);
+    projectResult = (tile) => ({ x: (tile.x + 1) * 4, y: (tile.y + 1) * 4, visible: true });
+    act(() => usePlanetViewStore.getState().setHoveredTile({ x: 11, y: 11 }));
+    expect(container.querySelector('.planet-theater-layer path')).not.toBeNull();
+    const fractional = projectedTiles.filter(
+      (tile) => !Number.isInteger(tile.x) || !Number.isInteger(tile.y),
+    );
+    // 48 个圆周采样点里至少 40 个是浮点格坐标（取整后一个都不会有）。
+    expect(fractional.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it('拖拽预览同样用浮点格坐标投影', () => {
+    const { container } = render(<PlanetMapThree planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    const surface = container.querySelector('.planet-three__surface') as HTMLElement;
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    projectResult = (tile) => ({ x: (tile.x + 1) * 4, y: (tile.y + 1) * 4, visible: true });
+    pickResult = { x: 10, y: 20 };
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    pickResult = { x: 30, y: 40 };
+    projectedTiles = [];
+    fireEvent.pointerMove(surface, { button: 0, pointerId: 1, clientX: 200, clientY: 180 });
+    expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
+    const fractional = projectedTiles.filter(
+      (tile) => !Number.isInteger(tile.x) || !Number.isInteger(tile.y),
+    );
+    expect(fractional.length).toBeGreaterThanOrEqual(40);
   });
 });
 
