@@ -373,7 +373,7 @@ export function PlanetMapThree(props: Props) {
         }
       }, tile => usePlanetViewStore.getState().setHoveredTile(tile), () => setPickNotice(PICK_MISS_NOTICE));
     } catch {
-      setError('无法启动 3D 画面，请启用浏览器硬件加速，或切换到平面战术视图。');
+      setError('无法启动 3D 画面，请启用浏览器硬件加速后重试。');
       return;
     }
     scene.current = renderer;

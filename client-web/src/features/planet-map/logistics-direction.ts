@@ -5,8 +5,7 @@
  * 分拣器往哪搬。这里把「方向从哪来、往哪去」收敛成一份事实来源，供：
  * - 3D 流向箭头（three/conveyor-geometry）、
  * - 3D 分拣器顶面箭头（planet-three-scene）、
- * - 3D/2D 建造 ghost 朝向箭头、
- * - 2D 平面战术图方向纹（planet-building-sprites）、
+ * - 3D 建造 ghost 朝向箭头、
  * - 选中详情「流向」行（PlanetPanels）
  * 共用，避免多套实现各自猜方向。
  *

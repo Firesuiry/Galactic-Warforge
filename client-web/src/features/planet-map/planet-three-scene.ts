@@ -161,7 +161,7 @@ export class PlanetThreeScene {
   private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
   /** C2 战斗演出：弹道/枪口/命中/飘字/护盾波纹/爆炸/残骸（挂 world 随星球旋转）。 */
   private readonly combat = new CombatEffects(this.world, () => this.tileScale());
-  /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次，同 2D planet-scene）。 */
+  /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次）。 */
   private lastBattleSeq = 0;
   /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
   private turretAims: { id: string; group: THREE.Group; barrel: THREE.Object3D; yaw: number; targetYaw: number }[] = [];

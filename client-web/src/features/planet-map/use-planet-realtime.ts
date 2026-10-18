@@ -165,7 +165,7 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       // 归属判定取当前行星 scene 缓存（任一窗口即可，取最新一份）。
       const scope = latestQueryScopeRef.current;
       const planetView = queryClient.getQueriesData<PlanetSceneView>({
-        queryKey: ['planet-scene', scope.serverUrl, scope.playerId, scope.planetId],
+        queryKey: ['planet-view', scope.serverUrl, scope.playerId, scope.planetId],
       }).find(([, data]) => data !== undefined)?.[1];
       notifyCombatAlert(event, {
         planet: planetView,

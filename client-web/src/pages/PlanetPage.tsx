@@ -262,7 +262,7 @@ export function PlanetPage() {
 
   const sceneQuery = useQuery({
     queryKey: [
-      "planet-scene",
+      'planet-view',
       session.serverUrl,
       session.playerId,
       planetId,
@@ -273,7 +273,7 @@ export function PlanetPage() {
     ],
     queryFn: () => {
       const knownPlanet = queryClient.getQueriesData<PlanetSceneView>({
-        queryKey: ["planet-scene", session.serverUrl, session.playerId, planetId],
+        queryKey: ['planet-view', session.serverUrl, session.playerId, planetId],
       }).find(([, data]) => data !== undefined)?.[1];
       return client.fetchPlanetScene(planetId, buildPlanetSceneRequest(sceneWindow, knownPlanet));
     },
