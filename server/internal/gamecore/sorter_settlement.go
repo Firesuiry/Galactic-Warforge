@@ -18,7 +18,8 @@ type sorterLink struct {
 //
 // 分拣器有朝向：背面取货、正面放货，沿朝向轴前后各扫 Range 格。
 // 节拍：一次往返搬 1 件（集装 / 叠层科技提高每次件数），往返周期 =
-// cycle_ticks × 两端点距离格数。没搬动就不推进周期，下一 tick 再试。
+// cycle_ticks × max(1, 取端步数 + 放端步数 − 1)（DSP 口径：最短布局
+// 「带 | 分拣器 | 机器」两端各 1 步算长度 1）。没搬动就不推进周期，下一 tick 再试。
 func settleSorters(ws *model.WorldState) {
 	if ws == nil {
 		return
@@ -90,9 +91,9 @@ func settleSorters(ws *model.WorldState) {
 			SourcePosition: source.Position, TargetPosition: target.Position,
 			ItemID: itemID, Quantity: qty,
 		}
-		// 往返周期 = cycle_ticks × 端点距离格数（两端点落在不同格子上才计距离，
-		// 两端同格时按 1 格算，避免零周期）。
-		sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*max(1, in.steps+out.steps))
+		// 往返周期 = cycle_ticks × max(1, 取端步数 + 放端步数 − 1)：两端各 1 步的
+		// 最短布局算 1 个长度单位；两端同格（steps 都是 0）也按 1 算，避免零周期。
+		sorter.NextTripTick = ws.Tick + int64(sorter.CycleTicks*max(1, in.steps+out.steps-1))
 	}
 }
 
