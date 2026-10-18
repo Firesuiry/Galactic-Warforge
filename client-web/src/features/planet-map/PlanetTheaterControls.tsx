@@ -196,8 +196,8 @@ export function PlanetTheaterControls({
         aria-label="战区划定"
         className={
           zoneModeActive
-            ? 'secondary-button planet-map-toolbar__button planet-theater-controls__button--active'
-            : 'secondary-button planet-map-toolbar__button'
+            ? 'secondary-button planet-three__nav-btn planet-theater-controls__button--active'
+            : 'secondary-button planet-three__nav-btn'
         }
         onClick={() => setPanelOpen((open) => !open)}
         title="战区划定"

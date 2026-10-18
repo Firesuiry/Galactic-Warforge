@@ -39,7 +39,6 @@
 .planet-three__quality select { width:140px; min-width:0; padding:4px 8px; border-radius:3px; }
 .planet-map-shell--3d .planet-view-switch { border-radius:4px; right:24px; top:64px; background:#10212ce8; border-color:#809da02b; z-index:16; }
 .planet-map-shell--3d .planet-view-switch button { border-radius:3px; padding:6px 12px; }
-.planet-map-shell--3d .planet-view-switch button[aria-pressed=true] { background:#e4c1831c; color:#ecd1a1; border-color:#ebc68250; }
 /* §3.2 复核：调试面板与 2D 同一口径——浮在左下竖排图标栏上方（PlanetMapToolbar 的
    --planet-hud-rail-top 实测值），不再在右上角挂一个「展开调试」文字按钮。 */
 .planet-map-shell--3d .debug-panel { left:24px; bottom:calc(var(--planet-hud-rail-top, 150px) + 8px); z-index:16; }

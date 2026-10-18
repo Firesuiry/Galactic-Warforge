@@ -424,24 +424,6 @@
 }
 .tick-pulse { animation: tick-pulse var(--dur) var(--ease); }
 
-/* 选中环呼吸：box-shadow 脉冲（accent），只用 box-shadow 避免冲突实体的 transform 定位 */
-@keyframes selection-ring {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(57, 230, 208, 0.5), 0 0 8px rgba(57, 230, 208, 0.3); }
-  50%      { box-shadow: 0 0 0 2px rgba(57, 230, 208, 0.95), 0 0 18px rgba(57, 230, 208, 0.65); }
-}
-.entity-node[data-selected] {
-  animation: selection-ring 1.6s var(--ease) infinite;
-  z-index: 6;
-}
-/* tile 选中的 DOM 呼吸环（canvas 高亮之外的叠加） */
-.entity-node--selection-tile {
-  background: transparent;
-  border: 2px solid rgba(57, 230, 208, 0.55);
-  border-radius: 2px;
-  pointer-events: none;
-  animation: selection-ring 1.6s var(--ease) infinite;
-}
-
 /* 告警闪烁：amber 闪烁+glow（2 次） */
 @keyframes alert-flash {
   0%   { background-color: rgba(255, 180, 84, 0.04); box-shadow: 0 0 0 rgba(255, 180, 84, 0); }
@@ -451,37 +433,6 @@
   100% { background-color: rgba(255, 180, 84, 0.04); box-shadow: 0 0 0 rgba(255, 180, 84, 0); }
 }
 .alert-flash { animation: alert-flash 1.1s var(--ease); }
-
-/* 建造完成：缩放回弹+绿光（工地节点用 left/top 定位，transform 安全） */
-@keyframes build-complete {
-  0%   { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(110, 231, 183, 0)); }
-  35%  { transform: scale(1.18); filter: drop-shadow(0 0 12px rgba(110, 231, 183, 0.85)); }
-  65%  { transform: scale(0.95); }
-  100% { transform: scale(1);    filter: drop-shadow(0 0 0 rgba(110, 231, 183, 0)); }
-}
-.entity-node.build-complete {
-  animation: build-complete var(--dur-slow) var(--ease);
-}
-
-/* V4：物流轨迹流光（蚂蚁线）。SVG line 的 stroke-dasharray 已由 buildLogisticsSegments 设置（drone/ship），
-   这里动画化 stroke-dashoffset 让虚线沿 target 方向流动；只动 stroke-dashoffset（合成友好）。
-   power/pipeline 连线静态（无 dash 或 dash 无动画）。prefers-reduced-motion 由全局兜底关闭。 */
-@keyframes logistics-flow {
-  to { stroke-dashoffset: -28; }
-}
-.entity-layer__svg--logistics line {
-  animation: logistics-flow 1s linear infinite;
-}
-
-/* V4：无人机/船节点轻微脉冲（opacity），强化"在途"感；仅 opacity，合成友好。 */
-@keyframes transit-pulse {
-  0%, 100% { opacity: 0.65; }
-  50%      { opacity: 1; }
-}
-.entity-node--drone,
-.entity-node--ship {
-  animation: transit-pulse 1.8s var(--ease) infinite;
-}
 
 /* 面板滑入 keyframes（animation 挂在上方 .panel 基础定义） */
 @keyframes panel-slide-in {

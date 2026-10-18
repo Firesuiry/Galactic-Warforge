@@ -957,9 +957,12 @@ export function PlanetPage() {
         />
         </Suspense>
         <BuildPlacementHint catalog={catalog} inventory={summary?.players?.[session.playerId]?.inventory} planet={planet} playerId={session.playerId} runtime={runtime} />
-        <div className="planet-view-switch" aria-label="地图视图">
-          {systemId && <Link className="secondary-button" to={`/system/${systemId}?planet=${planet.planet_id}`}>恒星系 ↗</Link>}
-        </div>
+        {/* 视图切换按钮组已随 2D「平面战术」视图删除（只剩 3D）；恒星系入口保留。 */}
+        {systemId ? (
+          <div className="planet-view-switch" aria-label="地图视图">
+            <Link className="secondary-button" to={`/system/${systemId}?planet=${planet.planet_id}`}>恒星系 ↗</Link>
+          </div>
+        ) : null}
         {/* 左上行星胶囊（§3.2）：默认一行「名称 · 电力 · 研究」，点开才展开原详情与「生产规划」。
             收起态不再压住左上角地图，展开态才铺开四张资源芯片。 */}
         <div
