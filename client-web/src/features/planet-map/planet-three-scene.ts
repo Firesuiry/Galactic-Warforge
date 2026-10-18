@@ -1459,7 +1459,11 @@ export class PlanetThreeScene {
       const tile = point ? this.tileFromNormal(this.world.worldToLocal(point).normalize()) : null;
       return tile ? { tile } : null;
     }
+    // 两遍拾取：**先看所有实体命中**（建筑/传送带/分拣器/资源），再看地形。
+    // 旧实现按射线距离取第一个命中——建筑底座/影子边缘没盖住的像素先打中地面，
+    // 于是 3×3/5×5 建筑点边角会落到相邻格，玩家感觉「要点两次」（试玩 1019 C）。
     const hits = this.raycaster.intersectObjects([this.surface, this.content], true);
+    let surfaceTile: TilePoint | null = null;
     for (const hit of hits) {
       if (!hit.object.visible) continue;
       let object: THREE.Object3D | null = hit.object;
@@ -1473,14 +1477,31 @@ export class PlanetThreeScene {
       // 批量实例（建筑/资源）按**实例所属建筑**回 id（不是实例所在格）：3×3/5×5 建筑点边角
       // 也要选中整栋，而不是落到相邻格或只给格坐标（试玩 1019 C：补给站要点两次）。
       const batchTile = this.staticBatches.resolveHit(hit) ?? this.dynamicBatches.resolveHit(hit);
-      if (batchTile) return { tile: batchTile, buildingId: this.buildingCoveringTile(batchTile) };
+      if (batchTile) {
+        // 资源点/装饰实例：只记格，等实体遍扫完仍无建筑时再用。
+        surfaceTile ??= batchTile;
+        continue;
+      }
       object = hit.object;
-      while (object && object !== this.world) { if (object.userData.tile) return { tile: object.userData.tile as TilePoint }; object = object.parent; }
+      while (object && object !== this.world) {
+        if (object.userData.tile) {
+          surfaceTile ??= object.userData.tile as TilePoint;
+          break;
+        }
+        object = object.parent;
+      }
       if (hit.object === this.surface || hit.object.userData.terrain) {
         const exact = this.raycaster.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(), RADIUS), new THREE.Vector3());
         const tile = this.tileFromNormal(this.world.worldToLocal(exact ?? hit.point.clone()).normalize());
-        return tile ? { tile } : null;
+        if (tile) surfaceTile ??= tile;
       }
+    }
+    // 遍扫完仍没有精确建筑命中：如果这次射线落点在某个建筑占地内（底座/影子没盖住的边角），
+    // 选整栋；否则退回最近的资源/地形格（点空地/资源仍要能选中）。
+    if (surfaceTile) {
+      const buildingId = this.buildingCoveringTile(surfaceTile);
+      if (buildingId) return { tile: surfaceTile, buildingId };
+      return { tile: surfaceTile };
     }
     return null;
   }
