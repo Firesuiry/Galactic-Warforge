@@ -24,6 +24,9 @@ import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { createPlanetInvalidationScheduler } from '@/features/planet-map/realtime-invalidation';
 
+/** 空闲产线场景心跳刷新间隔（ms）：比 SSE 事件刷新慢，但保证分拣器/带上物品数据不冻住。 */
+const SCENE_HEARTBEAT_MS = 1_200;
+
 interface UsePlanetRealtimeSyncOptions {
   client: ApiClient;
   fetchFn?: typeof fetch;
@@ -38,6 +41,13 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
   const queryClient = useQueryClient();
   const syncGenerationRef = useRef(0);
   const hasConnectedRef = useRef(false);
+  /**
+   * 场景「心跳刷新」节流：`tick_completed` 每 tick 都到，但只有 AI/战斗/建造类事件才会
+   * 让场景失效。挂机产线（分拣器搬运、带上物品、缓冲变化）不发这类事件，权威数据会一直
+   * 停在旧快照上——分拣器机械臂看起来永远不动（1018 联调实测）。这里按固定间隔
+   * （SCENE_HEARTBEAT_MS）给 scene 一次刷新，代价可控又让画面跟得上服务端。
+   */
+  const lastSceneHeartbeatRef = useRef(0);
   const latestQueryScopeRef = useRef({
     serverUrl: options.serverUrl,
     playerId: options.playerId,
@@ -174,8 +184,17 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       // 快进结束：快进期间的高频事件被服务端降采样过，这里一次性全量重拉
       //（与 pullMissedEvents 同一套 flag），把降采样丢掉的部分补齐。
       const refreshAll = shouldFullRefresh(event);
+      // 空闲产线的心跳刷新：只在没有事件驱动刷新时补一次（每 SCENE_HEARTBEAT_MS 最多一次）。
+      let heartbeat = false;
+      if (event.event_type === 'tick_completed' && !refreshAll) {
+        const now = Date.now();
+        if (now - lastSceneHeartbeatRef.current >= SCENE_HEARTBEAT_MS) {
+          lastSceneHeartbeatRef.current = now;
+          heartbeat = true;
+        }
+      }
       invalidations.schedule({
-        scene: refreshAll || refreshPlanet || shouldRefreshFog(event, options.planetId),
+        scene: heartbeat || refreshAll || refreshPlanet || shouldRefreshFog(event, options.planetId),
         runtime: refreshAll || refreshPlanet || refreshStats || refreshSummary,
         networks: refreshAll || refreshPlanet || event.event_type === 'building_state_changed',
         systemRuntime: refreshAll || refreshSummary || event.event_type === 'rocket_launched',
