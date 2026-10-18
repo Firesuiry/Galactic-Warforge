@@ -718,6 +718,22 @@ describe('3D 战区拖拽（R20-A ③）', () => {
     expect(screen.getByTestId('planet-three-zone-ring')).toBeInTheDocument();
   });
 
+  it('指针捕获后事件 target 是根节点：拖拽仍要结算（真机 1020 松手不提交的回归）', () => {
+    const onDefineZone = vi.fn();
+    const { container } = render(<PlanetMapThree onDefineZone={onDefineZone} planet={getFixtureScenario('baseline').planets['planet-1-1']} />);
+    const surface = container.querySelector('.planet-three__surface') as HTMLElement;
+    const root = container.querySelector('.planet-three') as HTMLElement;
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'theater_zone', theaterId: 'th-1', zoneType: 'primary' }));
+    projectResult = linearProjection;
+    pickResult = { x: 10, y: 20 };
+    fireEvent.pointerDown(surface, { button: 0, pointerId: 1, clientX: 100, clientY: 100 });
+    pickResult = { x: 30, y: 40 };
+    // 捕获指针后 move/up 派给根节点（React 的 currentTarget 也是根节点）。
+    fireEvent.pointerMove(root, { button: 0, pointerId: 1, clientX: 200, clientY: 180 });
+    fireEvent.pointerUp(root, { button: 0, pointerId: 1, clientX: 200, clientY: 180 });
+    expect(onDefineZone).toHaveBeenCalledWith({ position: { x: 20, y: 30, z: 0 }, radius: 10 });
+  });
+
   it('已建成战区在 3D 下以地面圆多边形显示，并带选中/悬停高亮', () => {
     const theaters = [{
       id: 'th-1',

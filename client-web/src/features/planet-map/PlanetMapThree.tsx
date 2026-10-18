@@ -819,7 +819,11 @@ export function PlanetMapThree(props: Props) {
   const isSurfaceTarget = (target: EventTarget | null) => {
     const element = target as HTMLElement | null;
     const surface = host.current;
-    return Boolean(surface && element && (element === surface || surface.contains(element)));
+    if (!surface || !element) return false;
+    // 指针捕获设在根节点（capture 阶段 currentTarget）：捕获后 move/up 的 target 是根节点本身，
+    // 不能把它当成 HUD 拦掉——否则战区拖拽松手永远结算不了（试玩 1020 真机复现）。
+    if (element === root.current) return true;
+    return element === surface || surface.contains(element);
   };
 
   return <div className="planet-three" ref={root}
