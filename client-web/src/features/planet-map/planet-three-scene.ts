@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
@@ -347,6 +347,8 @@ export class PlanetThreeScene {
 
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
+    // 图层「迷雾」：关闭时去掉未探索测绘面纱（R20-A D5；开关与 2D 的 layers.fog 同义）。
+    setPlanetSurfaceFog(this.surface, interaction.layers.fog);
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
     this.updateMarks();
     this.renderer.domElement.style.cursor = interaction.interactionMode.kind === 'inspect' ? 'grab' : 'crosshair';
@@ -444,13 +446,14 @@ export class PlanetThreeScene {
     const occupiedTiles = new Set<string>();
     // Only rendering inputs enter the signature. Production inventories, health,
     // research progress and network allocation do not change a model's structure.
-    const retain = (key: string, appearance: unknown[], create: () => THREE.Group) => {
+    const retain = (key: string, appearance: unknown[], create: () => THREE.Group | null) => {
       staticKeys.add(key);
       const signature = JSON.stringify([dimensions, ...appearance]);
       const previous = this.staticEntities.get(key);
       if (previous?.signature === signature) return;
       if (previous) this.removeModel(previous.group);
-      this.staticEntities.set(key, { signature, group: create() });
+      const group = create();
+      if (group) this.staticEntities.set(key, { signature, group });
     };
     const sorters: Building[] = [];
     for (const building of visibleBuildings) {
@@ -511,7 +514,9 @@ export class PlanetThreeScene {
     }
     for (const task of runtime?.construction_tasks ?? []) {
       if (!this.known(task.position)) continue;
-      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type], () => {
+      // 施工脚手架只画在**已探索**格：未探索区域连地形都没有，立柱会浮在测绘面纱上。
+      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type, this.known(task.position)], () => {
+        if (!this.known(task.position)) return null;
         const group = new THREE.Group();
         for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(group, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
         this.place(group, task.position, 'construction');

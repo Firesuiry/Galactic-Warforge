@@ -40,6 +40,8 @@ interface SurfaceState {
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewDimensions: { value: THREE.Vector2 };
     swTime: { value: number };
+    /** 迷雾/测绘面纱开关（R20-A 图层「迷雾」）：0 = 不盖面纱，未探索格按已知地形显示。 */
+    swFog: { value: number };
     swPatchBounds: {value: THREE.Vector4[]};
     swPatchUV: {value: THREE.Vector4[]};
   };
@@ -232,13 +234,14 @@ export const SHADER_COLOR = /* glsl */`
   // Fog frontier edge light: a soft band where the unknown region meets explored
   // land, so the boundary reads as a scan frontier instead of a hard cut.
   swVeil += vec3(0.055, 0.105, 0.115) * swKnownEdge * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
-  swAlbedo = mix(swVeil, swAlbedo, swKnown);
+  // layers.fog = off：不盖测绘面纱，未探索格按已知地形显示（图层开关语义与 2D 一致）。
+  swAlbedo = mix(mix(swAlbedo, swVeil, swFog), swAlbedo, swKnown);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
   float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
   // Unknown cells keep a shallow tile-scale relief so the close ground view has
   // horizon/relief cues (gated by (1 - swKnown), never leaks explored terrain).
-  swHeight += swVeilRelief * 0.010 * (1.0 - swKnown);
+  swHeight += swVeilRelief * 0.010 * (1.0 - swKnown) * swFog;
 `;
 
 export function createPlanetSurface(radius: number): PlanetSurface {
@@ -249,7 +252,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
     swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
-    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 },
+    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 }, swFog: { value: 1 },
   };
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
   material.onBeforeCompile = (shader) => {
@@ -269,7 +272,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v4';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v5';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';
@@ -347,6 +350,13 @@ export function disposePlanetSurface(mesh: PlanetSurface) {
 }
 
 /** Water motion is presentation time, independent of the authoritative simulation tick. */
+/** 迷雾图层开关（R20-A D5）：0 = 关闭测绘面纱/未探索遮罩，1 = 开启。 */
+export function setPlanetSurfaceFog(mesh: PlanetSurface, enabled: boolean) {
+  const state = states.get(mesh);
+  if (!state) return;
+  state.uniforms.swFog.value = enabled ? 1 : 0;
+}
+
 export function updatePlanetSurfaceTime(mesh: PlanetSurface, seconds: number) {
   const state = states.get(mesh);
   if (state) state.uniforms.swTime.value = seconds;
