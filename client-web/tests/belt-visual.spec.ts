@@ -29,6 +29,8 @@ const STORIES = [
   { name: 'belt-dsp-oblique', snapshot: 'belt-dsp-oblique.png' },
   // 跨格分拣器特写
   { name: 'belt-dsp-sorter', snapshot: 'belt-dsp-sorter.png' },
+  // 真死端带特写：(45,156..158) 带尾堆货、前方空、无分拣器
+  { name: 'belt-dsp-dead-end', snapshot: 'belt-dsp-dead-end.png' },
 ] as const;
 
 let startedStorybook = false;
@@ -93,8 +95,11 @@ async function waitForStableCanvas(page: Page) {
   // 故事壳在首次布局 effect 里写 `?freeze=1`（场景构造时读一次），所以场景必须已冻结；
   // 冻结后画面是时间的纯函数，连续两帧应逐字节一致。先确认冻结标志，避免把
   // 「动画恰好两帧相同」误当稳定帧。
-  await expect.poll(async () => page.evaluate(() => Boolean(
-    (window as unknown as { __planetThree?: { frozen?: boolean } }).__planetThree?.frozen,
+  // 冻结标志：故事壳在场景构造前把 ?freeze=1 写进 URL（场景在构造函数里读一次）。
+  // R20-A 起 `__planetThree` 是绑定方法的包装对象，不再暴露场景私有字段 `frozen`，
+  // 这里改断言 URL（写 URL 早于场景构造，等价保证）。
+  await expect.poll(async () => page.evaluate(() => (
+    new URLSearchParams(window.location.search).has('freeze')
   )), { timeout: 60_000 }).toBe(true);
   let previous: Buffer | null = null;
   await expect.poll(async () => {

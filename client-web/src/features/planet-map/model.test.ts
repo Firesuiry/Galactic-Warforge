@@ -5,8 +5,6 @@ import {
   buildSceneWindow,
   canReceiveTransferItems,
   canonicalTileIndex,
-  centerCameraAxisOffset,
-  clampCameraAxisOffset,
   constructionTaskLabel,
   describeConstructionWait,
   getBuildingDisplayName,
@@ -15,8 +13,6 @@ import {
   getViewportTileBounds,
   isTileUncharted,
   mergeRecentEvents,
-  resolveCameraAxisOffset,
-  resolveFocusCameraAxisOffset,
   resolveHomeTile,
   shouldFullRefresh,
   resolveSelectionAtTile,
@@ -24,6 +20,7 @@ import {
   summarizeEvent,
   wrapMod,
 } from '@/features/planet-map/model';
+import { getPlanetOverviewRequestStep as getOverviewStep, getPlanetZoomStatusLabel as getZoomStatusLabel } from '@/features/planet-map/store';
 
 function createPlanetFixture(): PlanetView {
   return {
@@ -357,33 +354,6 @@ describe('planet map model helpers', () => {
   });
 });
 
-describe('相机小图居中与钳位', () => {
-  it('centerCameraAxisOffset：小图轴取视口中心', () => {
-    expect(centerCameraAxisOffset(384, 1440)).toBe(528);
-    expect(centerCameraAxisOffset(384, 1080)).toBe(348);
-    // 大图轴公式同样成立（调用方只在 worldPx < viewportPx 时使用）
-    expect(centerCameraAxisOffset(2000, 1440)).toBe(-280);
-  });
-
-  it('clampCameraAxisOffset：小图轴钳在"地图中心不出视口"范围内', () => {
-    // 世界 384px < 视口 1440px：offset ∈ [center-720, center+720] = [-192, 1248]
-    expect(clampCameraAxisOffset(384, 1440, 528)).toBe(528); // 居中不动
-    expect(clampCameraAxisOffset(384, 1440, 62)).toBe(62); // 范围内保留拖拽结果
-    expect(clampCameraAxisOffset(384, 1440, -500)).toBe(-192); // 左向越界 → 钳住
-    expect(clampCameraAxisOffset(384, 1440, 2000)).toBe(1248); // 右向越界 → 钳住
-  });
-
-  it('clampCameraAxisOffset：大图轴不钳（自由拖拽）', () => {
-    expect(clampCameraAxisOffset(16000, 1440, -8000)).toBe(-8000);
-    expect(clampCameraAxisOffset(16000, 1440, 32)).toBe(32);
-  });
-
-  it('resolveFocusCameraAxisOffset：小图轴聚焦退化为居中，大图轴聚焦目标', () => {
-    expect(resolveFocusCameraAxisOffset(384, 1440, 900)).toBe(528);
-    expect(resolveFocusCameraAxisOffset(16000, 1440, -1200)).toBe(-1200);
-  });
-});
-
 describe('六面展开图边界', () => {
   it('wrapMod：非负取模', () => {
     expect(wrapMod(-4, 1000)).toBe(996);
@@ -392,11 +362,6 @@ describe('六面展开图边界', () => {
     expect(wrapMod(5, 1000)).toBe(5);
     expect(wrapMod(1005, 1000)).toBe(5);
     expect(wrapMod(7, 0)).toBe(7); // size<=0 原样返回（防御）
-  });
-
-  it('resolveCameraAxisOffset：展开图相机不跨面环绕', () => {
-    expect(resolveCameraAxisOffset(8000, 960, -9000)).toBe(clampCameraAxisOffset(8000, 960, -9000));
-    expect(resolveCameraAxisOffset(384, 1440, -500)).toBe(-192); // 小图轴旧钳位
   });
 
   it('canonicalTileIndex：映射到以 cut 为起点的周期内', () => {
@@ -643,5 +608,24 @@ describe('shouldFullRefresh：快进结束触发全量刷新', () => {
     expect(shouldFullRefresh(event('fast_forward_finished') as never)).toBe(true);
     expect(shouldFullRefresh(event('tick_completed') as never)).toBe(false);
     expect(shouldFullRefresh(event('production_alert') as never)).toBe(false);
+  });
+});
+
+describe('总览步长（3D 行星页的 overview 请求口径）', () => {
+  // 3D 行星页固定按 PLANET_ZOOM_LEVELS[2]（1px/12cell）请求总览；2D 缩放档按钮已随
+  // 「平面战术」视图下线，这组纯函数直接守住请求步长的钳制逻辑。
+  it('小图按缩放档请求 step，大图抬高到单轴不超过上限的步长', () => {
+    expect(getOverviewStep(2, 48, 32)).toBe(12);
+    expect(getOverviewStep(2, 2000, 2000)).toBe(16);
+    expect(getOverviewStep(2, 0, 0)).toBe(12);
+  });
+
+  it('非总览档返回 undefined（不请求总览）', () => {
+    expect(getOverviewStep(7, 48, 32)).toBeUndefined();
+  });
+
+  it('状态文案只在步长被抬高时追加「实际 1px/Ncell」', () => {
+    expect(getZoomStatusLabel(2, 48, 32)).toBe('1px/12cell');
+    expect(getZoomStatusLabel(2, 2000, 2000)).toBe('1px/12cell (实际 1px/16cell)');
   });
 });

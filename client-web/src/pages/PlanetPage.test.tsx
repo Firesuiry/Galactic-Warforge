@@ -6,7 +6,8 @@ import { renderApp, jsonResponse, sseResponse } from "@/test/utils";
 import { useSessionStore } from "@/stores/session";
 import { usePlanetViewStore } from "@/features/planet-map/store";
 
-// jsdom 无法真正运行 Pixi 渲染；行星地图的视觉由 planet-scene 承担，页面级断言只依赖 DOM。
+// jsdom 跑不起 WebGL：PixiStage 用空壳替换；3D 行星地图的渲染由 Playwright/视觉夹具回归，
+// 页面级断言只依赖 DOM（地图容器 role=application）。
 vi.mock("@/engine/PixiStage", () => ({
   PixiStage: () => <div data-testid="pixi-stage" />,
 }));
@@ -151,56 +152,6 @@ function createScenePayload() {
     building_count: Object.keys(planet.buildings ?? {}).length,
     unit_count: Object.keys(planet.units ?? {}).length,
     resource_count: planet.resources?.length ?? 0,
-  };
-}
-
-function createOverviewPayload(step = 100) {
-  return {
-    planet_id: "planet-1-1",
-    name: "Gaia",
-    discovered: true,
-    kind: "terrestrial",
-    map_width: 4,
-    map_height: 4,
-    tick: 120,
-    step,
-    cells_width: Math.max(1, Math.ceil(4 / step)),
-    cells_height: Math.max(1, Math.ceil(4 / step)),
-    terrain: [["buildable"]],
-    visible: [[true]],
-    explored: [[true]],
-    resource_counts: [[1]],
-    building_counts: [[1]],
-    unit_counts: [[1]],
-    building_count: 1,
-    unit_count: 1,
-    resource_count: 1,
-  };
-}
-
-function createLargeScenePayload() {
-  return {
-    planet_id: "planet-1-1",
-    name: "Gaia",
-    discovered: true,
-    kind: "terrestrial",
-    map_width: 2000,
-    map_height: 2000,
-    tick: 120,
-    bounds: { x: 0, y: 0, width: 96, height: 96 },
-    terrain: [],
-    environment: {
-      wind_factor: 0.8,
-      light_factor: 1.1,
-    },
-    visible: [],
-    explored: [],
-    buildings: {},
-    units: {},
-    resources: [],
-    building_count: 0,
-    unit_count: 0,
-    resource_count: 0,
   };
 }
 
@@ -717,7 +668,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     expect(await screen.findByText("当前路由行星")).toBeInTheDocument();
     expect(screen.getByText("服务端活动行星")).toBeInTheDocument();
@@ -841,10 +792,11 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
+    // 3D 行星地图容器（role=application）；2D 的 role="img" 画布已随视图下线。
     expect(
-      await screen.findByRole("img", { name: "行星地图" }),
+      await screen.findByRole("application", { name: "3D 行星地图" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "工作台" })).toHaveAttribute(
       "aria-selected",
@@ -959,12 +911,12 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "行星地图" })).toBeInTheDocument();
+    expect(screen.getByRole("application", { name: "3D 行星地图" })).toBeInTheDocument();
     // §3.2：行星胶囊默认收成一行，展开后才显示 hero 资源芯片
     await user.click(screen.getByRole("button", { name: "展开行星信息" }));
     // 第 16 轮契约：hero 资金位已删，只剩「电网结余」（只读）——背包矿石库存收进 title 提示
@@ -1097,7 +1049,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1203,7 +1155,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1317,7 +1269,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?view=2d&select=building:pls-1"]);
+    renderApp(["/planet/planet-1-1?select=building:pls-1"]);
 
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getByText("行星槽位")).toBeInTheDocument();
@@ -1448,7 +1400,7 @@ describe("PlanetPage", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderApp(["/planet/planet-1-1?view=2d&select=building:ils-1"]);
+    renderApp(["/planet/planet-1-1?select=building:ils-1"]);
 
     expect(await screen.findByText("建筑详情")).toBeInTheDocument();
     expect(screen.getByText("星际配置")).toBeInTheDocument();
@@ -1481,280 +1433,6 @@ describe("PlanetPage", () => {
     );
     expect(commandRequests[0]?.commands?.[0]?.payload?.mode).toBe("demand");
     expect(commandRequests[0]?.commands?.[0]?.payload?.local_storage).toBe(80);
-  });
-
-  it("切到 1px/12cell 缩放时，小地图会按 step=12 请求行星总览", async () => {
-    let overviewCalls = 0;
-    const fetchMock = vi.fn(
-      (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
-
-        if (url.endsWith("/state/summary")) {
-          return Promise.resolve(jsonResponse(createSummaryPayload()));
-        }
-        if (url.endsWith("/state/stats")) {
-          return Promise.resolve(jsonResponse(createStatsPayload()));
-        }
-        if (url.includes("/world/planets/planet-1-1/scene")) {
-          return Promise.resolve(jsonResponse(createScenePayload()));
-        }
-        if (url.includes("/world/planets/planet-1-1/overview")) {
-          overviewCalls += 1;
-          const parsedUrl = new URL(url);
-          expect(parsedUrl.searchParams.get("step")).toBe("12");
-          return Promise.resolve(jsonResponse(createOverviewPayload(12)));
-        }
-        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
-          return Promise.resolve(jsonResponse(createRuntimePayload()));
-        }
-        if (url.endsWith("/world/planets/planet-1-1/networks")) {
-          return Promise.resolve(jsonResponse(createNetworksPayload()));
-        }
-        if (url.endsWith("/catalog")) {
-          return Promise.resolve(jsonResponse(createCatalogPayload()));
-        }
-        if (url.includes("/events/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              event_types: ["building_state_changed"],
-              available_from_tick: 1,
-              next_event_id: "evt-10",
-              has_more: false,
-              events: [],
-            }),
-          );
-        }
-        if (url.includes("/alerts/production/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              available_from_tick: 1,
-              has_more: false,
-              alerts: [],
-            }),
-          );
-        }
-        if (url.includes("/events/stream")) {
-          return Promise.resolve(
-            sseResponse(
-              [
-                {
-                  event: "connected",
-                  data: {
-                    player_id: "p1",
-                    event_types: ["building_state_changed"],
-                  },
-                },
-              ],
-              init?.signal as AbortSignal,
-            ),
-          );
-        }
-
-        return Promise.reject(new Error(`unexpected url ${url}`));
-      },
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const user = userEvent.setup();
-
-    renderApp(["/planet/planet-1-1?view=2d"]);
-
-    expect(
-      await screen.findByRole("heading", { name: "Gaia" }),
-    ).toBeInTheDocument();
-
-    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
-    await user.click(screen.getByRole("button", { name: "图层与视角" }));
-    await user.click(screen.getByRole("button", { name: "1px/12cell" }));
-
-    expect(await screen.findByText("缩放 1px/12cell")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(overviewCalls).toBeGreaterThan(0);
-    });
-  });
-
-  it("大地图切到 1px/12cell 缩放时会抬高总览 step，避免单次响应过大", async () => {
-    let requestedOverviewStep = "";
-
-    const fetchMock = vi.fn(
-      (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
-
-        if (url.endsWith("/state/summary")) {
-          return Promise.resolve(jsonResponse(createSummaryPayload()));
-        }
-        if (url.endsWith("/state/stats")) {
-          return Promise.resolve(jsonResponse(createStatsPayload()));
-        }
-        if (url.includes("/world/planets/planet-1-1/scene")) {
-          return Promise.resolve(jsonResponse(createLargeScenePayload()));
-        }
-        if (url.includes("/world/planets/planet-1-1/overview")) {
-          const parsedUrl = new URL(url);
-          requestedOverviewStep = parsedUrl.searchParams.get("step") ?? "";
-          return Promise.resolve(
-            jsonResponse({
-              ...createOverviewPayload(16),
-              map_width: 2000,
-              map_height: 2000,
-              step: 16,
-              cells_width: 125,
-              cells_height: 125,
-            }),
-          );
-        }
-        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
-          return Promise.resolve(jsonResponse(createRuntimePayload()));
-        }
-        if (url.endsWith("/world/planets/planet-1-1/networks")) {
-          return Promise.resolve(jsonResponse(createNetworksPayload()));
-        }
-        if (url.endsWith("/catalog")) {
-          return Promise.resolve(jsonResponse(createCatalogPayload()));
-        }
-        if (url.includes("/events/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              event_types: ["building_state_changed"],
-              available_from_tick: 1,
-              next_event_id: "evt-10",
-              has_more: false,
-              events: [],
-            }),
-          );
-        }
-        if (url.includes("/alerts/production/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              available_from_tick: 1,
-              has_more: false,
-              alerts: [],
-            }),
-          );
-        }
-        if (url.includes("/events/stream")) {
-          return Promise.resolve(
-            sseResponse(
-              [
-                {
-                  event: "connected",
-                  data: {
-                    player_id: "p1",
-                    event_types: ["building_state_changed"],
-                  },
-                },
-              ],
-              init?.signal as AbortSignal,
-            ),
-          );
-        }
-
-        return Promise.reject(new Error(`unexpected url ${url}`));
-      },
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const user = userEvent.setup();
-
-    renderApp(["/planet/planet-1-1?view=2d"]);
-
-    expect(
-      await screen.findByRole("heading", { name: "Gaia" }),
-    ).toBeInTheDocument();
-
-    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里
-    await user.click(screen.getByRole("button", { name: "图层与视角" }));
-    await user.click(screen.getByRole("button", { name: "1px/12cell" }));
-
-    await waitFor(() => {
-      expect(requestedOverviewStep).toBe("16");
-    });
-    expect(
-      await screen.findByText("缩放 1px/12cell (实际 1px/16cell)"),
-    ).toBeInTheDocument();
-  });
-
-  it("大地图切到 1px 缩放时会显示低缩放简化提示", async () => {
-    const fetchMock = vi.fn(
-      (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
-
-        if (url.endsWith("/state/summary")) {
-          return Promise.resolve(jsonResponse(createSummaryPayload()));
-        }
-        if (url.endsWith("/state/stats")) {
-          return Promise.resolve(jsonResponse(createStatsPayload()));
-        }
-        if (url.includes("/world/planets/planet-1-1/scene")) {
-          return Promise.resolve(jsonResponse(createLargeScenePayload()));
-        }
-        if (url.endsWith("/world/planets/planet-1-1/runtime")) {
-          return Promise.resolve(jsonResponse(createRuntimePayload()));
-        }
-        if (url.endsWith("/world/planets/planet-1-1/networks")) {
-          return Promise.resolve(jsonResponse(createNetworksPayload()));
-        }
-        if (url.endsWith("/catalog")) {
-          return Promise.resolve(jsonResponse(createCatalogPayload()));
-        }
-        if (url.includes("/events/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              event_types: ["building_state_changed"],
-              available_from_tick: 1,
-              next_event_id: "evt-10",
-              has_more: false,
-              events: [],
-            }),
-          );
-        }
-        if (url.includes("/alerts/production/snapshot")) {
-          return Promise.resolve(
-            jsonResponse({
-              available_from_tick: 1,
-              has_more: false,
-              alerts: [],
-            }),
-          );
-        }
-        if (url.includes("/events/stream")) {
-          return Promise.resolve(
-            sseResponse(
-              [
-                {
-                  event: "connected",
-                  data: {
-                    player_id: "p1",
-                    event_types: ["building_state_changed"],
-                  },
-                },
-              ],
-              init?.signal as AbortSignal,
-            ),
-          );
-        }
-
-        return Promise.reject(new Error(`unexpected url ${url}`));
-      },
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const user = userEvent.setup();
-
-    renderApp(["/planet/planet-1-1?view=2d"]);
-
-    expect(
-      await screen.findByRole("heading", { name: "Gaia" }),
-    ).toBeInTheDocument();
-
-    // V3 全屏布局：缩放档位按钮在左下工具条的"图层与视角"浮层里；
-    // "网格"图层默认关闭，先手动勾开才能看到"细网格已简化"提示
-    await user.click(screen.getByRole("button", { name: "图层与视角" }));
-    await user.click(screen.getByRole("checkbox", { name: "网格" }));
-    await user.click(screen.getByRole("button", { name: "1px" }));
-
-    expect(await screen.findByText("低缩放简化")).toBeInTheDocument();
-    expect(await screen.findByText("细网格已简化")).toBeInTheDocument();
   });
 
   it("调试面板可以导出当前视角 JSON", async () => {
@@ -1835,7 +1513,7 @@ describe("PlanetPage", () => {
 
     const user = userEvent.setup();
 
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     expect(
       await screen.findByRole("heading", { name: "Gaia" }),
@@ -1962,7 +1640,7 @@ describe("PlanetPage", () => {
     );
 
     const user = userEvent.setup();
-    renderApp(["/planet/planet-1-1?view=2d"]);
+    renderApp(["/planet/planet-1-1"]);
 
     await screen.findByRole("tab", { name: /战斗与制造/ });
 
@@ -2071,7 +1749,7 @@ describe("PlanetPage", () => {
       }),
     );
 
-    const { queryClient } = renderApp(["/planet/planet-1-1?view=2d"]);
+    const { queryClient } = renderApp(["/planet/planet-1-1"]);
     await screen.findByRole("tab", { name: /工作台/ });
 
     // 模拟上一局残留的本地交互状态：建造模式、选中实体、建造栏已收起

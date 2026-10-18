@@ -51,7 +51,7 @@ async function snakeCaseHits(page: Page): Promise<string[]> {
 test('行星页/总览/大厅渲染文本无 snake_case 裸字段名', async ({ page }) => {
   test.setTimeout(120_000);
   await installSession(page);
-  await page.goto(`${webEntry()}/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`${webEntry()}/planet/${PLANET_ID}`);
   await expect(page.locator('.planet-build-card').first()).toBeVisible({ timeout: 30_000 });
   expect(await snakeCaseHits(page), '行星页初始').toEqual([]);
 
