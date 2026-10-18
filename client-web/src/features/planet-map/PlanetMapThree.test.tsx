@@ -872,7 +872,7 @@ describe('__planetThree 测试接口（R20-A ⑤）', () => {
     const { getFixtureScenario } = await import('@/fixtures');
     const scenario = getFixtureScenario('baseline');
     render(<PlanetMapThree initialZoom={300} planet={scenario.planets['planet-1-1']} />);
-    act(() => usePlanetViewStore.getState().requestFocus({ x: 12, y: 9, z: 0 }));
+    act(() => usePlanetViewStore.getState().requestFocus({ x: 12, y: 9 }));
     // 场景就绪时先设一次；首次聚焦（会压到贴地）之后再设一次。
     expect(altitudeCalls).toEqual([300, 300]);
   });
