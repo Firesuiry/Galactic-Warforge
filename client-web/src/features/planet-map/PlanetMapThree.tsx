@@ -136,6 +136,8 @@ export function PlanetMapThree(props: Props) {
   const zoneDragRef = useRef<{
     startX: number; startY: number; active: boolean;
     startTile: TilePoint | null; endTile: TilePoint | null;
+    /** 松手提交用的几何：与预览用**同一份**取整后的起止格换算，预览与提交不会差一格。 */
+    geometry: TheaterZoneGeometry | null;
   } | null>(null);
   /** 拖拽预览的地面圆几何（圆心 + 半径），null = 没有预览。 */
   const [zoneDragGeometry, setZoneDragGeometry] = useState<{ x: number; y: number; radius: number } | null>(null);
@@ -450,11 +452,9 @@ export function PlanetMapThree(props: Props) {
     });
   }, [ready]);
 
-  // 图层/选中/模式/悬停变化都走同一条 setInteraction（场景内部按签名短路叠加层重建）。
-  const interactionView = useMemo(() => ({ selected, selectedUnits, hoveredTile, interactionMode, layers: sceneLayerVisibility(layers) }), [selected, selectedUnits, hoveredTile, interactionMode, layers]);
   useEffect(() => {
-    scene.current?.setInteraction(interactionView);
-  }, [ready, interactionView]);
+    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers: sceneLayerVisibility(layers) });
+  }, [ready, selected, selectedUnits, hoveredTile, interactionMode, layers]);
 
   const initiallyFocused = useRef(false);
   useEffect(() => {
@@ -530,6 +530,7 @@ export function PlanetMapThree(props: Props) {
         startX: event.clientX, startY: event.clientY, active: false,
         startTile: scene.current?.pickAt(event.clientX, event.clientY) ?? null,
         endTile: null,
+        geometry: null,
       };
       capturePointer(event.currentTarget, event.pointerId);
       event.stopPropagation();
@@ -577,10 +578,12 @@ export function PlanetMapThree(props: Props) {
         // 地面圆预览（R20-A ⑥）：两角格子 → 圆心 + 半径（与服务端同一几何），
         // 不再画屏幕正矩形——倾斜球面上屏幕矩形与服务端战区圆对不上。
         if (zoneDrag.startTile && zoneDrag.endTile) {
+          // 取整后的两角格（与提交同一口径）；同一份几何既用于预览也用于松手提交。
           const zone = theaterZoneFromDragRect(
-            { x: zoneDrag.startTile.x, y: zoneDrag.startTile.y },
-            { x: zoneDrag.endTile.x, y: zoneDrag.endTile.y },
+            { x: Math.round(zoneDrag.startTile.x), y: Math.round(zoneDrag.startTile.y) },
+            { x: Math.round(zoneDrag.endTile.x), y: Math.round(zoneDrag.endTile.y) },
           );
+          zoneDrag.geometry = zone;
           setZoneDragGeometry({ x: zone.position.x, y: zone.position.y, radius: zone.radius });
         }
       }
@@ -646,14 +649,9 @@ export function PlanetMapThree(props: Props) {
       setZoneDragGeometry(null);
       releasePointer(event.currentTarget, event.pointerId);
       if (!zoneDrag.active) return;
-      // 两个角点都拾取成格子（指针离开球面时沿用上一次命中的格子）。
-      const start = zoneDrag.startTile ?? scene.current?.pickAt(zoneDrag.startX, zoneDrag.startY);
-      const end = zoneDrag.endTile ?? scene.current?.pickAt(event.clientX, event.clientY);
-      if (!start || !end) return;
-      latest.current.onDefineZone?.(theaterZoneFromDragRect(
-        { x: start.x, y: start.y },
-        { x: end.x, y: end.y },
-      ));
+      // 提交与预览同一份几何（取整后的起止格）；没有预览几何时不提交。
+      if (!zoneDrag.geometry) return;
+      latest.current.onDefineZone?.(zoneDrag.geometry);
       return;
     }
     const marquee = marqueeRef.current;

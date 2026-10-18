@@ -146,6 +146,8 @@ export class PlanetThreeScene {
   private dressingSignature = '';
   private localSurface: ReturnType<typeof createLocalSurface> = null;
   private localSurfaceKey = '';
+  /** 战术叠加层输入签名（悬停/选中/图层/数据未变时跳过重建）。 */
+  private tacticalOverlaySignature = '';
   private groundView = false;
   private tilt = .65;
   private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite } }>();
@@ -1057,9 +1059,27 @@ export class PlanetThreeScene {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
     const faceSize = data.planet.surface.face_size;
-    const circles: RangeCircleItem[] = [];
     const mode = interaction.interactionMode;
     const hovered = interaction.hoveredTile;
+    // 输入签名短路：updateMarks 在每次悬停/选中/数据刷新时都会调用，叠加层输入没变就
+    // 不重建（hover 变化只影响建造 ghost 的射程圈，其余两项与 hover 无关）。
+    const selectedBuilding = interaction.selected?.kind === 'building'
+      ? data.planet.buildings?.[interaction.selected.id]
+      : undefined;
+    const signature = JSON.stringify([
+      faceSize,
+      interaction.layers.selection, interaction.layers.threat, interaction.layers.construction,
+      mode.kind === 'build' ? mode.buildingType : null,
+      mode.kind === 'build' ? hovered : null,
+      interaction.selected?.kind === 'building' ? interaction.selected.id : null,
+      selectedBuilding?.position ?? null,
+      // runtime（侦测点/施工进度）与 catalog（射程圈）按引用比较：查询层结构共享，
+      // 未变时引用不变（2s 轮询/事件刷新才换引用）。
+      refId(data.runtime), refId(data.catalog), refId(selectedBuilding), refId(data.planet.buildings),
+    ]);
+    if (signature === this.tacticalOverlaySignature) return;
+    this.tacticalOverlaySignature = signature;
+    const circles: RangeCircleItem[] = [];
     if (mode.kind === 'build' && hovered && interaction.layers.selection) {
       const footprint = getBuildingCatalogEntry(data.catalog, mode.buildingType)?.footprint ?? { width: 1, height: 1 };
       const center = footprintCenterTile(hovered, footprint, faceSize);
@@ -1077,8 +1097,10 @@ export class PlanetThreeScene {
     }
     this.rangeCircles.sync(circles, faceSize);
 
+    // 侦测点/施工进度只画已探索格（与施工脚手架同一口径）：未探索区域连地形都没有。
     const detections = interaction.layers.threat
       ? (data.runtime?.available ? data.runtime.detections ?? [] : []).flatMap(detection => detection.detected_positions ?? [])
+        .filter(position => this.known(position))
       : [];
     this.detectionMarks.sync(detections, faceSize);
 
@@ -1086,7 +1108,7 @@ export class PlanetThreeScene {
       id: task.id,
       tile: { x: Math.round(task.position.x), y: Math.round(task.position.y) },
       progress: constructionBarProgress(task),
-    }));
+    })).filter(bar => this.known(bar.tile));
     this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
   }
 

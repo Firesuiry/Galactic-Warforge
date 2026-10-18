@@ -78,7 +78,8 @@ export function PlanetTheaterLayer({
           const label = `${theater.name || theater.id} · ${theaterZoneTypeLabel(zone.zone_type)} · 敌情 ${zone.hostile_count}${zone.alerted ? ' · 告警' : ''}`;
           if (ring) {
             // 3D：地面圆多边形 + 圆心十字 + 标签挂在圆心上方。
-            const center = ring.center ?? { x: 0, y: 0 };
+            // 圆心投影不可见（在球背面/视口外）时只画圆环，不把十字/标签回退到左上角。
+            const center = ring.center;
             return (
               <g key={`${theater.id}-zone-${index}`} data-testid={`theater-zone-ring-${theater.id}-${index}`}>
                 <path
@@ -90,19 +91,23 @@ export function PlanetTheaterLayer({
                   strokeDasharray={zone.zone_type === 'no_entry' ? '10 6' : undefined}
                   strokeWidth={highlighted ? 3 : 2}
                 />
-                <g className="planet-theater-zone__cross" stroke={color} strokeWidth={1.5}>
-                  <line x1={center.x - 6} x2={center.x + 6} y1={center.y} y2={center.y} />
-                  <line x1={center.x} x2={center.x} y1={center.y - 6} y2={center.y + 6} />
-                </g>
-                <text
-                  className="planet-theater-zone__label"
-                  fill={color}
-                  textAnchor="middle"
-                  x={center.x}
-                  y={center.y - 14}
-                >
-                  {label}
-                </text>
+                {center ? (
+                  <>
+                    <g className="planet-theater-zone__cross" stroke={color} strokeWidth={1.5}>
+                      <line x1={center.x - 6} x2={center.x + 6} y1={center.y} y2={center.y} />
+                      <line x1={center.x} x2={center.x} y1={center.y - 6} y2={center.y + 6} />
+                    </g>
+                    <text
+                      className="planet-theater-zone__label"
+                      fill={color}
+                      textAnchor="middle"
+                      x={center.x}
+                      y={center.y - 14}
+                    >
+                      {label}
+                    </text>
+                  </>
+                ) : null}
               </g>
             );
           }
