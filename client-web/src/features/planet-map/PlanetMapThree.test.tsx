@@ -396,6 +396,69 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     ]);
   });
 
+  it('B6 只有 pointerdown + pointerup（中间无 move）：按抬起坐标补齐笔迹，相距 5 格下 6 格', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    // 浏览器合并了所有 pointermove：路径里只有起点。抬起时指针已在 (8,3)。
+    pickResult = { x: 8, y: 3 };
+    drag(host, 'pointerUp');
+
+    const calls = onInteractTile.mock.calls.map(([tile, placement]) => ({ tile, ...placement }));
+    expect(calls.map(call => call.tile.x)).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(calls.every(call => call.tile.y === 3)).toBe(true);
+    expect(calls.every(call => call.direction === 'east')).toBe(true);
+  });
+
+  it('B6 松手点在画布外（pickAt 返回 null）：保持 move 已走过的路径，不丢已下格的单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    pickResult = null;
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile.mock.calls.map(([tile]) => tile.x)).toEqual([3, 4, 5, 6]);
+  });
+
+  it('B7 单格点击架高：上游地面带正对起点时仍按目标高度放 1 层（不被拽回地面）', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // 己方地面带 (3,3) 向东输出 → 起点 (4,3) 的上游。
+    planet.buildings = {
+      'belt-up': {
+        id: 'belt-up', type: 'conveyor_belt_mk1', owner_id: 'p1',
+        position: { x: 3, y: 3, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+        conveyor: { input: 'west', output: 'east', elevation: 0 },
+      } as never,
+    };
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 1 }));
+    const host = container.querySelector('.planet-three__surface') as HTMLElement;
+
+    pickResult = { x: 4, y: 3 };
+    drag(host, 'pointerDown');
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile).toHaveBeenCalledTimes(1);
+    expect(onInteractTile.mock.calls[0]).toEqual([{ x: 4, y: 3 }, { direction: 'east', elevation: 1 }]);
+  });
+
   it('B2 拖拽中按 Esc：清空预览且松手不下单', () => {
     const scenario = getFixtureScenario('baseline');
     const planet = scenario.planets['planet-1-1'];

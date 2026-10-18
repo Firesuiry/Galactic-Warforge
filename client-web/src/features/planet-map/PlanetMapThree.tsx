@@ -117,13 +117,6 @@ export function PlanetMapThree(props: Props) {
     path: BeltElevationPlacement[];
     /** 第一格高度（接现成上游带时是上游带的高度，否则取拖拽开始时的目标高度）。 */
     startElevation: number;
-    /**
-     * 建造模式没给明确四向朝向（direction === 'auto'）时为 true。
-     * 单格点击（没拖拽过）时方向交回建造模式——interactTile 用 `mode.direction` 兜底，
-     * 与旧的 placeBelt 口径一致（试玩 1015 §6-4：auto 带子不带货，不能偷偷替玩家定方向）；
-     * 目标高度 > 0 时除外（服务端要求明确方向，按 rotation 推出朝向下发）。
-     */
-    autoDirection: boolean;
   } | null>(null);
 
   /** 按当前目标高度重算整条拖拽路径（第一格高度固定，之后直行 ±1、转弯保持）。 */
@@ -523,7 +516,7 @@ export function PlanetMapThree(props: Props) {
           direction: isCardinalDirection(modeDirection) ? modeDirection : DEFAULT_BELT_DIRECTION,
           elevation: startElevation,
         };
-        beltDrag.current = { tile, path: [first], startElevation, autoDirection: !isCardinalDirection(modeDirection) };
+        beltDrag.current = { tile, path: [first], startElevation };
         scene.current?.setBeltDragPath([first]);
         capturePointer(event.currentTarget, event.pointerId);
         event.stopPropagation(); event.preventDefault();
@@ -619,19 +612,58 @@ export function PlanetMapThree(props: Props) {
       // 等真正对应的左键抬起再结算（B2：右键抬起不得下单）。
       if (event.button !== 0) return;
       const drag = beltDrag.current;
-      // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
-      // 单格点击（没拖拽过）且建造模式朝向为 auto：把朝向留空交回 interactTile 的
-      // `mode.direction` 兜底——与旧的单格 placeBelt 口径一致（B1）。
-      // 例外：目标高度 > 0 时服务端要求明确方向（INVALID_ELEVATION「高架传送带必须有明确的
-      // 输出方向」），这里用建造模式的 rotation 推出四向朝向（ROTATION_FACING）下发。
-      const singleClick = drag.path.length === 1 && drag.autoDirection;
-      if (singleClick) {
+      // 松手点本身也要进笔迹：浏览器会合并/丢弃最后几次 pointermove（并行 worker、
+      // 软渲染下实测 8 格只下 6 格），只按 `drag.path` 结算会让带子停在前半段。
+      // 用抬起事件坐标重新拾取再走一次与 move 相同的逐格逻辑（traceBeltStroke 会补齐中间格）；
+      // 拾取失败（指针已离开画布/落在 HUD 上）时保持原路径。
+      const upTile = scene.current?.pickAt(event.clientX, event.clientY);
+      if (upTile) {
+        const reconciled = applyBeltStrokeStep(drag.path, drag.tile, upTile, props.planet.surface.face_size);
+        if (reconciled) {
+          drag.path = reconciled;
+          drag.tile = drag.path.at(-1)?.tile ?? upTile;
+          scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
+          const tail = drag.path.at(-1)!;
+          const mode = usePlanetViewStore.getState().interactionMode;
+          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: tail.direction });
+        }
+      }
+      // 单格放置（按下即抬起，或按下后只点了一格就松手）：起点高度按「单格」口径重算一次
+      // （R20-E：上游带比目标高度低时取目标高度）。起点高度在 pointerdown 时按拖拽口径算，
+      // 那时还不知道会不会拖；这里路径只有一格时才纠正，拖拽过的不动（§3.5 第一格接上游）。
+      if (drag.path.length === 1) {
+        const mode = usePlanetViewStore.getState().interactionMode;
+        if (mode.kind === 'build') {
+          drag.path[0] = {
+            ...drag.path[0],
+            elevation: resolveBeltStartElevation(
+              drag.path[0].tile,
+              mode.elevation ?? 0,
+              Object.values(latest.current.planet.buildings ?? {}),
+              props.planet.surface.face_size,
+              session.playerId,
+              true,
+            ),
+          };
+        }
+      }
+      // 松手结算。
+      // - 路径只有一格（按下即抬起 / 点一格就松手）：高度已按单格口径重算；方向取建造模式——
+      //   四向照用（B1），auto 时留空交回 interactTile 的 `mode.direction` 兜底；
+      //   auto 且目标高度 > 0 时服务端要求明确方向（INVALID_ELEVATION「高架传送带必须有明确的
+      //   输出方向」），用建造模式的 rotation 推出四向朝向（ROTATION_FACING）。
+      // - 多格（拖拽过）：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
+      if (drag.path.length === 1) {
         const mode = usePlanetViewStore.getState().interactionMode;
         const rotation = mode.kind === 'build' ? mode.rotation : undefined;
-        const placement = drag.path[0].elevation > 0
-          ? { direction: ROTATION_FACING[rotationTurns(rotation)], elevation: drag.path[0].elevation }
-          : { elevation: drag.path[0].elevation };
-        latest.current.onInteractTile?.(drag.path[0].tile, placement);
+        const modeDirection = mode.kind === 'build' ? mode.direction : undefined;
+        const direction = isCardinalDirection(modeDirection)
+          ? modeDirection
+          : drag.path[0].elevation > 0 ? ROTATION_FACING[rotationTurns(rotation)] : undefined;
+        latest.current.onInteractTile?.(drag.path[0].tile, {
+          ...(direction ? { direction } : {}),
+          elevation: drag.path[0].elevation,
+        });
       } else {
         // 提交前再按格去重（拖拽预览已经保证不重复，这里是最后一道防线：
         // 同一格下两次单会让服务端第二次回 POSITION_OCCUPIED）。

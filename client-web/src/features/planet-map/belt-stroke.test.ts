@@ -56,6 +56,16 @@ describe('拖拽铺带高度（§3.5）', () => {
     expect(resolveBeltStartElevation({ x: 5, y: 2 }, 0, belts, 16)).toBe(2);
   });
 
+  it('单格架高（isSingle）目标高于上游时取目标高度（不被地面带拽回地面）', () => {
+    // 上游地面带 (4,0) → 本格 (5,0)，玩家目标 1 层：直接放 1 层（高架压地面带允许）。
+    expect(resolveBeltStartElevation({ x: 5, y: 0 }, 1, belts, 16, undefined, true)).toBe(1);
+    expect(resolveBeltStartElevation({ x: 5, y: 0 }, 2, belts, 16, 'p1', true)).toBe(2);
+    // 上游比目标高：仍接上游（不能从高架带掉到地面层）。
+    expect(resolveBeltStartElevation({ x: 5, y: 2 }, 0, belts, 16, undefined, true)).toBe(2);
+    // 拖拽（isSingle 缺省）保持 §3.5 的「第一格接上游」。
+    expect(resolveBeltStartElevation({ x: 5, y: 0 }, 2, belts, 16)).toBe(0);
+  });
+
   it('他人的带子不决定起始高度（只看己方上游带）', () => {
     const mixed: ExistingBeltLike[] = [
       { ...belts[0], owner_id: 'enemy' },      // (4,0) 向东输出，(5,0) 是别人的带子
