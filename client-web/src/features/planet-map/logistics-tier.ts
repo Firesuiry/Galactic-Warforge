@@ -47,6 +47,15 @@ export function beltElevation(building: Pick<Building, 'type' | 'conveyor'>): nu
   return clampBeltElevation(building.conveyor?.elevation ?? 0);
 }
 
+/**
+ * 是否登记地面格（服务端 `TileBuilding` 口径）：高架带走 `BeltLayers`；地基是地形修饰；
+ * 物流配送器与其它 `z > 0` 叠层挂在宿主上，都不占地面格。分拣器找端点、立柱判定都按这个口径。
+ */
+export function occupiesGround(building: Pick<Building, 'type' | 'position' | 'conveyor'>): boolean {
+  return beltElevation(building) === 0 && (building.position.z ?? 0) === 0
+    && building.type !== 'foundation' && building.type !== 'logistics_distributor';
+}
+
 /** 高度钳到 0–4（服务端 MaxBeltElevation 同口径）。 */
 export function clampBeltElevation(elevation: number): number {
   return Math.max(0, Math.min(MAX_BELT_ELEVATION, Math.round(elevation)));

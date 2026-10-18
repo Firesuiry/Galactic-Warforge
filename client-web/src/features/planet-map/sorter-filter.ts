@@ -12,6 +12,7 @@
 import type { Building, CatalogView } from '@shared/types';
 
 import { getBuildingFootprint, type TilePoint } from './model';
+import { occupiesGround } from './logistics-tier';
 import { DIRECTION_NAMES, OPPOSITE_DIRECTION, isCardinalDirection, logisticsArrows, stepTile, type CardinalDirection } from './logistics-direction';
 
 export interface SorterFilterOption {
@@ -129,7 +130,8 @@ export function sorterEndpointStatuses(
       const stepped = stepTile(cursor, direction, faceSize);
       cursor = stepped.tile;
       tile = cursor;
-      const hit = buildings.find((candidate) => candidate.id !== building.id && containsCell(candidate, cursor, faceSize));
+      // 只看登记地面格的建筑（服务端 TileBuilding 口径：高架带/地基/配送器/叠层不挡、也不算端点）。
+      const hit = buildings.find((candidate) => candidate.id !== building.id && occupiesGround(candidate) && containsCell(candidate, cursor, faceSize));
       if (hit) {
         endpoint = hit;
         break;

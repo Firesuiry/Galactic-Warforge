@@ -3,7 +3,7 @@ import { surfaceFace, surfaceOffset, surfaceStep, type SurfaceDirection } from '
 import type { Building, ConveyorDirection, PortDirection } from '@shared/types';
 import type { TilePoint } from '../model';
 import { getBuildingFootprint } from '../model';
-import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation, beltVisualSpeed, logisticsTier } from '../logistics-tier';
+import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation, beltVisualSpeed, logisticsTier, occupiesGround } from '../logistics-tier';
 import { beltDeckTexture } from './logistics-marks';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 
@@ -552,15 +552,6 @@ function tierOf(building: Pick<Building, 'type'>): 1 | 2 | 3 {
 }
 
 /** 地面被占的格（footprint 展开），高架带下不立柱用。 */
-/**
- * 是否登记地面格（服务端 `TileBuilding` 口径）：高架带走 `BeltLayers`；地基是地形修饰；
- * 物流配送器与其它 `z > 0` 叠层挂在宿主上，都不占地面格。
- */
-export function occupiesGround(building: Pick<Building, 'type' | 'position' | 'conveyor'>) {
-  return beltElevation(building) === 0 && (building.position.z ?? 0) === 0
-    && building.type !== 'foundation' && building.type !== 'logistics_distributor';
-}
-
 export function groundOccupancy(buildings: readonly Building[], faceSize: number) {
   const tiles = new Set<string>();
   for (const building of buildings) {
