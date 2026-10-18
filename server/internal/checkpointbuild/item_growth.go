@@ -31,7 +31,7 @@ func (r *Runner) runItemGrowth(core *gamecore.GameCore, step checkpoint.ItemGrow
 	if err := step.Validate(); err != nil {
 		return "", err
 	}
-	before, err := buildingItemCountAt(core, step.Position, step.ItemID)
+	before, err := buildingItemCountAtLayer(core, step.Position, step.Elevation, step.ItemID)
 	if err != nil {
 		return "", err
 	}
@@ -40,12 +40,12 @@ func (r *Runner) runItemGrowth(core *gamecore.GameCore, step checkpoint.ItemGrow
 	for core.CurrentTick() < deadline {
 		core.AdvanceTick()
 	}
-	after, err := buildingItemCountAt(core, step.Position, step.ItemID)
+	after, err := buildingItemCountAtLayer(core, step.Position, step.Elevation, step.ItemID)
 	if err != nil {
 		return "", err
 	}
-	message := fmt.Sprintf("item_growth %s @(%d,%d)：tick %d 的 %d → tick %d 的 %d（要求增长 ≥ %d）",
-		step.ItemID, step.Position.X, step.Position.Y, startTick, before, core.CurrentTick(), after, step.Growth)
+	message := fmt.Sprintf("item_growth %s @(%d,%d,%d)：tick %d 的 %d → tick %d 的 %d（要求增长 ≥ %d）",
+		step.ItemID, step.Position.X, step.Position.Y, step.Elevation, startTick, before, core.CurrentTick(), after, step.Growth)
 	if after-before < step.Growth {
 		return message, fmt.Errorf("产线没有流动：%s", message)
 	}
@@ -55,13 +55,23 @@ func (r *Runner) runItemGrowth(core *gamecore.GameCore, step checkpoint.ItemGrow
 // buildingItemCountAt 按落点找该玩家的建筑并数它存储里的物品总量
 // （主库存 + 输入缓冲 + 输出缓冲，与契约 building_item_at_gte 同口径）。
 func buildingItemCountAt(core *gamecore.GameCore, pos model.Position, itemID string) (int, error) {
+	return buildingItemCountAtLayer(core, pos, 0, itemID)
+}
+
+// buildingItemCountAtLayer 同 buildingItemCountAt，但可以指定高架层（elevation ≥ 1）。
+// 高架带不写 TileBuilding，必须按 BeltLayers 找。
+func buildingItemCountAtLayer(core *gamecore.GameCore, pos model.Position, elevation int, itemID string) (int, error) {
 	if core == nil {
 		return 0, fmt.Errorf("没有活动对局")
 	}
 	for _, ws := range core.Worlds() {
 		ws.RLock()
-		id := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]
-		building := ws.Buildings[id]
+		var building *model.Building
+		if elevation > 0 {
+			building = ws.Buildings[ws.BeltLayerAt(pos.X, pos.Y, elevation)]
+		} else {
+			building = ws.Buildings[ws.TileBuilding[model.TileKey(pos.X, pos.Y)]]
+		}
 		if building != nil && building.HP > 0 {
 			count := 0
 			if building.Storage != nil {
@@ -71,6 +81,9 @@ func buildingItemCountAt(core *gamecore.GameCore, pos model.Position, itemID str
 			return count, nil
 		}
 		ws.RUnlock()
+	}
+	if elevation > 0 {
+		return 0, fmt.Errorf("(%d,%d) 第 %d 层上没有建筑，无法做 item_growth", pos.X, pos.Y, elevation)
 	}
 	return 0, fmt.Errorf("(%d,%d) 上没有建筑，无法做 item_growth", pos.X, pos.Y)
 }

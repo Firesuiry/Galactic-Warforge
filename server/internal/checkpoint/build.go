@@ -233,6 +233,9 @@ type ItemGrowthStep struct {
 	Growth int `json:"growth"`
 	// AdvanceTicks 是观察窗口（tick）。缺省 600。
 	AdvanceTicks int64 `json:"advance_ticks,omitempty"`
+	// Elevation 是被观察建筑所在层：0 = 地面（TileBuilding），≥1 = 高架带
+	// （BeltLayers）。高架带不写 TileBuilding，必须显式给层号。
+	Elevation int `json:"elevation,omitempty"`
 }
 
 // Window 返回观察窗口的 tick 数（缺省 600）。
