@@ -118,6 +118,15 @@ export function PlanetMapThree(props: Props) {
     selected: s.selected, selectedUnits: s.selectedUnits, selectedSquads: s.selectedSquads, hoveredTile: s.hoveredTile, interactionMode: s.interactionMode,
     layers: s.layers, focusRequest: s.focusRequest, debugMode: s.debugMode, debugOpen: s.debugOpen,
   })));
+  // 拖拽中按 PageUp/PageDown 改目标高度：整条路径立刻按新目标重算（后面的格子自动起坡/落坡，
+  // §3.5 的「拖带时调高度」手感）。结算仍然只在松手时发生，这里只刷新预览。
+  const buildHeight = interactionMode.kind === 'build' ? (interactionMode.elevation ?? 0) : 0;
+  useEffect(() => {
+    const drag = beltDrag.current;
+    if (!drag) return;
+    scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
+    // 依赖只留 buildHeight：resolveBeltDragPath 自己从 store 读当前目标高度，beltDrag 是 ref。
+  }, [buildHeight]);
   // 悬停提示：hoveredTile 已由场景节流（格子变化才更新），这里只在格子/数据变化时重算文案。
   const hoverInfo = useMemo(() => (
     hoveredTile && interactionMode.kind !== 'build'

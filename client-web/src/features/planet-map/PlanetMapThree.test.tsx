@@ -458,4 +458,43 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     expect(tiles).toEqual(['3,3', '4,3', '5,3']);
     expect(new Set(tiles).size).toBe(tiles.length);
   });
+
+  it('L4 拖拽中改目标高度（PageUp/PageDown）：不移动指针也立刻按新目标重算预览', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // (2,3) 的己方地面带向东输出 → 起点 (3,3) 从 0 层起（固定起始高度，断言才有确定值）。
+    planet.buildings = {
+      ...(planet.buildings ?? {}),
+      'belt-up': {
+        id: 'belt-up', type: 'conveyor_belt_mk1', owner_id: 'p1',
+        position: { x: 2, y: 3, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+        conveyor: { input: 'west', output: 'east', elevation: 0 },
+      } as never,
+    };
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 0, 0, 0]);
+
+    // PageUp ×2（= adjustBuildElevation(+1)）：指针不动，预览整条立刻起坡。
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(1); });
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(1); });
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 1, 2, 2]);
+
+    // PageDown：落坡同样立刻生效。
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(-1); });
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 1, 1, 1]);
+
+    // 松手仍按当前目标高度整条结算（预览与下单同口径）。
+    drag(host, 'pointerUp');
+    const calls = onInteractTile.mock.calls.map(([, placement]) => placement.elevation);
+    expect(calls).toEqual([0, 1, 1, 1]);
+  });
 });
