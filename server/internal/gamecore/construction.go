@@ -710,8 +710,29 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 		return nil, err
 	}
 	if !stacked && task.BuildingType != model.BuildingTypeLogisticsDistributor {
-		if occupying := footprintOccupant(ws, tiles); occupying != nil {
-			return nil, fmt.Errorf("施工占地地块已被 %s 占用", occupying.ID)
+		if task.Elevation > 0 {
+			// 高架带不占地面：同层该格不能已有带子，地面占用只能是空地或 LowLogistics。
+			if len(tiles) != 1 {
+				return nil, fmt.Errorf("高架传送带只能占一格")
+			}
+			tile := tiles[0]
+			if id := ws.BeltLayerAt(tile.X, tile.Y, task.Elevation); id != "" {
+				return nil, fmt.Errorf("第 %d 层该格已有传送带", task.Elevation)
+			}
+			if groundID := ws.TileBuilding[model.TileKey(tile.X, tile.Y)]; groundID != "" {
+				if ground := ws.Buildings[groundID]; ground == nil || !model.IsLowLogistics(ground.Type) {
+					return nil, fmt.Errorf("高架传送带不能架在建筑上方")
+				}
+			}
+		} else {
+			if occupying := footprintOccupant(ws, tiles); occupying != nil {
+				return nil, fmt.Errorf("施工占地地块已被 %s 占用", occupying.ID)
+			}
+			if !model.IsLowLogistics(task.BuildingType) {
+				if overhead := ws.BeltLayerUnderBuilding(tiles); overhead != nil {
+					return nil, fmt.Errorf("上方有高架传送带")
+				}
+			}
 		}
 	}
 	for _, p := range tiles {
@@ -814,6 +835,9 @@ func (gc *GameCore) completeConstructionTask(ws *model.WorldState, task *model.C
 	if b.Conveyor != nil && b.Splitter == nil && task.ConveyorDirection.Valid() {
 		b.Conveyor.Output = task.ConveyorDirection
 		b.Conveyor.Input = task.ConveyorDirection.Opposite()
+	}
+	if b.Conveyor != nil && task.Elevation > 0 && model.SupportsElevation(task.BuildingType) {
+		b.Conveyor.Elevation = task.Elevation
 	}
 	ws.Buildings[id] = b
 	if err := ws.IndexBuilding(b); err != nil {

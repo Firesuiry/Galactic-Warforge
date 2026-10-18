@@ -64,8 +64,8 @@ var commandSpecs = []CommandStructureSpec{
 		Type:                  CmdBuild,
 		RequiredTargetFields:  []string{"position"},
 		RequiredPayloadFields: []string{"building_type"},
-		OptionalPayloadFields: []string{"recipe_id", "direction", "rotation", "auto_approach"},
-		Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。"},
+		OptionalPayloadFields: []string{"recipe_id", "direction", "rotation", "auto_approach", "elevation"},
+		Constraints:           []string{"F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。", "elevation 只对 conveyor_belt_mk1/2/3 有效（0–4，缺省 0 = 地面）；高架带必须有明确 direction（不能 auto），地面占用只能是空地或低矮物流建筑。"},
 		ExtraValidation: func(cmd Command) []CommandIssue {
 			if recipeID, ok := cmd.Payload["recipe_id"]; ok {
 				if strings.TrimSpace(fmt.Sprintf("%v", recipeID)) == "" {

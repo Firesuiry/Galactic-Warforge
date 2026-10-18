@@ -181,6 +181,7 @@ func applyWorldState(dst, src *model.WorldState) {
 	dst.Grid = src.Grid
 	dst.Resources = src.Resources
 	dst.TileBuilding = src.TileBuilding
+	dst.BeltLayers = src.BeltLayers
 	dst.TileUnits = src.TileUnits
 	dst.EntityCounter = src.EntityCounter
 	dst.Pipelines = src.Pipelines

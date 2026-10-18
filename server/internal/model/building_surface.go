@@ -133,6 +133,17 @@ func (ws *WorldState) FoundationAt(pos Position) *Building {
 
 // IndexBuilding atomically validates and indexes every occupied surface tile.
 func (ws *WorldState) IndexBuilding(b *Building) error {
+	// 高架传送带不进 TileBuilding（地面层照常），单独登记 BeltLayers；
+	// 地面单位因此能从它下面走过。同一格同一层只能有一条带子。
+	if b != nil && b.BeltElevation() > 0 {
+		if !SupportsElevation(b.Type) {
+			return fmt.Errorf("只有传送带可以架高")
+		}
+		if err := ws.IndexBeltLayer(b); err != nil {
+			return err
+		}
+		return nil
+	}
 	tiles, err := ws.BuildingTiles(b)
 	if err != nil {
 		return err
@@ -204,6 +215,10 @@ func (ws *WorldState) IndexBuilding(b *Building) error {
 
 // UnindexBuilding removes the entire footprint, including tiles on other faces.
 func (ws *WorldState) UnindexBuilding(b *Building) {
+	if b != nil && b.BeltElevation() > 0 {
+		ws.UnindexBeltLayer(b)
+		return
+	}
 	if b.Type == BuildingTypeFoundation || b.Type == BuildingTypeLogisticsDistributor || b.Position.Z > 0 {
 		return
 	}
@@ -219,6 +234,93 @@ func (ws *WorldState) UnindexBuilding(b *Building) {
 		}
 	}
 }
+
+// BeltElevation 返回传送带所在层（0 = 地面）。非传送带或没有传送带状态时为 0。
+func (b *Building) BeltElevation() int {
+	if b == nil || b.Conveyor == nil {
+		return 0
+	}
+	if b.Conveyor.Elevation < 0 {
+		return 0
+	}
+	return b.Conveyor.Elevation
+}
+
+// BeltLayerAt 返回高架层 (x,y,e) 上的建筑 ID（e ≥ 1）；没有时为空。
+// 地面层不走这个索引（用 TileBuilding）。
+func (ws *WorldState) BeltLayerAt(x, y, elevation int) string {
+	if ws == nil || elevation <= 0 {
+		return ""
+	}
+	return ws.BeltLayers[BeltLayerKey(x, y, elevation)]
+}
+
+// IndexBeltLayer 登记高架带占格（同一格同一层只能有一条带子）。
+// 地面层（e=0）不登记，返回 nil。
+func (ws *WorldState) IndexBeltLayer(b *Building) error {
+	if ws == nil || b == nil || b.BeltElevation() <= 0 {
+		return nil
+	}
+	if ws.BeltLayers == nil {
+		ws.BeltLayers = make(map[string]string)
+	}
+	key := BeltLayerKey(b.Position.X, b.Position.Y, b.Conveyor.Elevation)
+	if existing := ws.BeltLayers[key]; existing != "" && existing != b.ID {
+		return fmt.Errorf("belt layer already occupied by %s", existing)
+	}
+	ws.BeltLayers[key] = b.ID
+	return nil
+}
+
+// UnindexBeltLayer 移除高架带占格（地面带是 no-op）。
+func (ws *WorldState) UnindexBeltLayer(b *Building) {
+	if ws == nil || b == nil || b.BeltElevation() <= 0 {
+		return
+	}
+	key := BeltLayerKey(b.Position.X, b.Position.Y, b.Conveyor.Elevation)
+	if ws.BeltLayers[key] == b.ID {
+		delete(ws.BeltLayers, key)
+	}
+}
+
+// IsLowLogistics 判断建筑类型是否属于「低矮物流」：高架传送带可以架在它们上方
+// （第 19 轮契约 §3.1）。分拣器与带上设备都只有一层高。
+func IsLowLogistics(btype BuildingType) bool {
+	switch btype {
+	case BuildingTypeConveyorBeltMk1, BuildingTypeConveyorBeltMk2, BuildingTypeConveyorBeltMk3,
+		BuildingTypeSplitter, BuildingTypeAutomaticPiler, BuildingTypeTrafficMonitor,
+		BuildingTypeSorterMk1, BuildingTypeSorterMk2, BuildingTypeSorterMk3, BuildingTypePileSorter:
+		return true
+	default:
+		return false
+	}
+}
+
+// BeltLayerUnderBuilding 返回与建筑占地相交的高架带（按 building ID 稳定排序），
+// 供「地面非低矮物流建筑不能压在有高架带的格上」的放置校验使用。
+// 返回 nil 表示占地内没有高架带。
+func (ws *WorldState) BeltLayerUnderBuilding(tiles []Position) *Building {
+	if ws == nil || len(tiles) == 0 || len(ws.BeltLayers) == 0 {
+		return nil
+	}
+	bestID := ""
+	for _, tile := range tiles {
+		for elevation := 1; elevation <= MaxBeltElevation; elevation++ {
+			id := ws.BeltLayers[BeltLayerKey(tile.X, tile.Y, elevation)]
+			if id == "" {
+				continue
+			}
+			if bestID == "" || id < bestID {
+				bestID = id
+			}
+		}
+	}
+	if bestID == "" {
+		return nil
+	}
+	return ws.Buildings[bestID]
+}
+
 func (ws *WorldState) ConstructionTiles(task *ConstructionTask) ([]Position, error) {
 	def, ok := BuildingDefinitionByID(task.BuildingType)
 	if !ok {
@@ -244,6 +346,11 @@ func FootprintOf(btype BuildingType, rotation PlanRotation) (Footprint, bool) {
 func (ws *WorldState) BuildingRingCells(b *Building) ([]Position, error) {
 	if b == nil {
 		return nil, fmt.Errorf("建筑不存在")
+	}
+	if b.BeltElevation() > 0 {
+		// 高架带只有自己一格，且不属于任何地面 IO 环（分拣器/建筑直连 IO
+		// 只接地面层，契约 §3.1）。
+		return nil, nil
 	}
 	fp := ws.BuildingFootprint(b)
 	if fp.Width <= 0 || fp.Height <= 0 {
@@ -280,12 +387,20 @@ func (ws *WorldState) BuildingRingCells(b *Building) ([]Position, error) {
 	return ring, nil
 }
 
+// BuildingOccupiesTiles 返回建筑占地（高架带只有自己一格），供放置校验使用。
+func (ws *WorldState) BuildingOccupiesTiles(b *Building) ([]Position, error) {
+	if b != nil && b.BeltElevation() > 0 {
+		return []Position{b.Position}, nil
+	}
+	return ws.BuildingTiles(b)
+}
+
 // BuildingOccupies reports whether pos is one of the building's footprint cells.
 func (ws *WorldState) BuildingOccupies(b *Building, pos Position) bool {
 	if ws == nil || b == nil {
 		return false
 	}
-	tiles, err := ws.BuildingTiles(b)
+	tiles, err := ws.BuildingOccupiesTiles(b)
 	if err != nil {
 		return false
 	}
