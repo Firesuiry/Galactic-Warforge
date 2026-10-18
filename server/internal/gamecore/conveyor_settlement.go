@@ -583,7 +583,9 @@ func conveyorDownstreamAt(
 		if !model.SupportsElevation(candidate.Type) {
 			continue
 		}
-		if candidate.Conveyor.Output != inputSide {
+		// 坡道只认直行延续：B 自己的输出方向必须等于进入 N 后的前进方向 d'
+		// （= opposite(inputSide)），不许转弯、不许侧汇。
+		if candidate.Conveyor.Output != inputSide.Opposite() {
 			continue
 		}
 		if accepts(candidate.ID, inputSide) {
