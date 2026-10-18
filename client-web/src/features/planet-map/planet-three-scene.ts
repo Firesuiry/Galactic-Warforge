@@ -864,7 +864,7 @@ export class PlanetThreeScene {
   private clearMarks(group: THREE.Group) {
     group.traverse((o) => {
       if (o instanceof THREE.Mesh || o instanceof THREE.Line) {
-        // 共享几何（ghost 机体/箭头按模块缓存，见 three/ghost-sorter）不随重建释放。
+        // 共享几何（ghost 箭头等按模块缓存的几何）不随重建释放。
         if (!o.geometry.userData.shared) o.geometry.dispose();
         for (const material of Array.isArray(o.material) ? o.material : [o.material]) if (!material.userData.shared) material.dispose();
       } else if (o instanceof THREE.Sprite && !o.material.userData.shared) {
