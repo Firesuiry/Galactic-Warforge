@@ -109,8 +109,8 @@ async function visibleBuildCards(page: Page): Promise<HitReport[]> {
 test('行星页 1200×1000：抽屉页签、工作台与建造卡的中心点都命中自身', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 1000 });
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
+  await page.goto(`/planet/${PLANET_ID}`);
+  await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(2500);
   await dismissToasts(page);
 

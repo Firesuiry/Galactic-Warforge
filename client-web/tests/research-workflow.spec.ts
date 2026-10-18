@@ -481,7 +481,7 @@ test("默认新局在浏览器中展示推荐路径、分组研究列表并可�
     completedTechIds: ["dyson_sphere_program"],
   });
 
-  await page.goto("/planet/planet-1-1?view=2d");
+  await page.goto("/planet/planet-1-1");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();
@@ -512,7 +512,7 @@ test("midgame 在浏览器中按建筑上下文展示装料与射线接收站提
     completedTechIds: ["dyson_sphere_program", "electromagnetism", "energy_matrix"],
   });
 
-  await page.goto("/planet/planet-1-1?view=2d");
+  await page.goto("/planet/planet-1-1");
   await expect(page.getByRole("heading", { name: "Gaia" })).toBeVisible();
   await openWorkbenchDrawer(page);
   await page.getByRole("tab", { name: "研究与装料" }).click();

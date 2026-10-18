@@ -49,8 +49,8 @@ async function stackToasts(page: Page, count: number) {
 test('行星页宽屏：右上角 toast 栈不压顶栏、不碰右下角小地图，小地图右键仍到达 canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1080 });
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
-  await expect(page.locator('.planet-map-canvas__surface')).toBeVisible({ timeout: 20_000 });
+  await page.goto(`/planet/${PLANET_ID}`);
+  await expect(page.locator('.planet-three__surface canvas')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.planet-minimap__canvas')).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(1500);
 

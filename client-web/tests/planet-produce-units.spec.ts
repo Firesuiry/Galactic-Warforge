@@ -96,7 +96,7 @@ async function worldProduceUnits(request: APIRequestContext): Promise<CatalogUni
 
 test('行星工作台可纯 GUI 量产单位', async ({ page, request }) => {
   await installSession(page);
-  await page.goto(`/planet/${PLANET_ID}?view=2d`);
+  await page.goto(`/planet/${PLANET_ID}`);
 
   // 打开命令工作台抽屉并切到「战斗与制造」
   await page.getByRole('button', { name: '工作台' }).click();
