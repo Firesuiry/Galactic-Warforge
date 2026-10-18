@@ -32,12 +32,10 @@ vi.mock('./planet-three-scene', () => ({
     focus() {}
     orbit() {}
     zoom(factor: number) { zoomCalls.push(factor); }
-    getCameraState() { return { center: { x: 4, y: 4 }, altitude: 12, tilt: 0.65, groundView: true }; }
-    onZoom() { return () => {}; }
+    getCenterTile() { return { x: 4, y: 4 }; }
     setTilt() {}
     pickAt() { return pickResult; }
     setBeltDragPath(path: ({ tile: { x: number; y: number }; direction: string; elevation: number }[] | null)) { dragPaths.push(path); }
-    getCenterTile() { return null; }
     project() { return null; }
     clickTile() { return { dispatched: false, offscreen: false }; }
     capture() { return null; }

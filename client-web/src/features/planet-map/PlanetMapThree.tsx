@@ -17,7 +17,7 @@ import { PlanetTheaterLayer } from './PlanetTheaterLayer';
 import { PlanetThreeScene, type PickMeta } from './planet-three-scene';
 import { theaterZoneFromDragRect, type TheaterZoneGeometry } from './squad-commands';
 import { describePickNotice, offscreenPickNotice, PICK_MISS_NOTICE, type PickNotice } from './pick-feedback';
-import { buildPlanetThreeStatus, isTypingTarget, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
+import { buildPlanetThreeStatus, isTypingTarget, sceneLayerVisibility, toPagePoint, unitsInScreenRect, zoomFactorForKey, type DragModifiers } from './planet-three-status';
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
@@ -252,16 +252,6 @@ export function PlanetMapThree(props: Props) {
         const store = usePlanetViewStore.getState();
         const fog = current.fog;
         const kind = store.interactionMode.kind;
-        // 测试接口 clickTile(tile, 2)（R20-A ⑤）：与右键情境指令同一条路径——
-        // 非 inspect 模式先退出模式（右键语义），inspect 模式交给 onContextTile。
-        if (meta.button === 2) {
-          if (kind !== 'inspect') {
-            store.exitInteractionMode();
-            return;
-          }
-          current.onContextTile?.(tile);
-          return;
-        }
         // §3.5：命中高架带时场景给 buildingId——inspect 直接选它（地面按格兜底会选中脚下的建筑）。
         if (kind === 'inspect' && meta.buildingId) {
           const building = current.planet.buildings?.[meta.buildingId];
@@ -320,17 +310,18 @@ export function PlanetMapThree(props: Props) {
     }
     scene.current = renderer;
     setReady(true);
+    // 相机状态只经公开的 getCenterTile 读取（scene 属 R20-B 写域）：中心格 + 本组件的俯仰。
+    // zoom（相机高度）需要 scene 暴露 altitude 读取接口——已列入交接事项，当前用俯仰/中心格兜底。
     const reportViewport = () => {
-      const state = renderer.getCameraState();
+      const center = renderer.getCenterTile();
       latest.current.onViewportChange?.({
-        center: state.center ? { x: state.center.x, y: state.center.y } : null,
-        altitude: state.altitude,
-        tilt: state.tilt,
+        center: center ? { x: center.x, y: center.y } : null,
+        altitude: 0,
+        tilt,
         width: host.current?.clientWidth ?? 0,
         height: host.current?.clientHeight ?? 0,
       });
     };
-    const unsubscribeZoom = renderer.onZoom(reportViewport);
     reportViewport();
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
@@ -355,7 +346,6 @@ export function PlanetMapThree(props: Props) {
     }, 500);
     return () => {
       clearInterval(timer);
-      unsubscribeZoom();
       latest.current.onViewportChange?.(null);
       unsubscribeBattle();
       renderer.destroy();
@@ -385,7 +375,7 @@ export function PlanetMapThree(props: Props) {
   }, [ready, props.onCanvasReady]);
 
   useEffect(() => {
-    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers });
+    scene.current?.setInteraction({ selected, selectedUnits, hoveredTile, interactionMode, layers: sceneLayerVisibility(layers) });
   }, [ready, selected, selectedUnits, hoveredTile, interactionMode, layers]);
 
   const initiallyFocused = useRef(false);
@@ -647,7 +637,9 @@ export function PlanetMapThree(props: Props) {
         const entity = current.planet.buildings?.[id] ?? current.planet.units?.[id];
         return entity ? pagePos(entity.position) : null;
       },
-      clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
+      // 右键情境指令：scene 的 clickTile 只派发左键 tap（button 选项在 scene 侧，属 R20-B 写域），
+      // 这里先按左键语义派发；需要真右键时改用 dragTiles 或页面右键（见报告交接项）。
+      clickTile: (tile: TilePoint, _button: 0 | 2 = 0) => target.clickTile(tile),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);
         const end = pagePos(to);

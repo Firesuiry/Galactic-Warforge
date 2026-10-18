@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFogVisible } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
@@ -44,7 +44,7 @@ import type { PlanetInteractionMode } from './store';
  * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
  * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
  */
-export interface PickMeta { offscreen: boolean; buildingId?: string; /** 2 = 右键（测试接口 clickTile(tile, 2) 派发的情境指令）。 */ button?: 0 | 2 }
+export interface PickMeta { offscreen: boolean; buildingId?: string }
 
 export interface PlanetThreeData {
   planet: PlanetRenderView;
@@ -118,8 +118,6 @@ export class PlanetThreeScene {
   private frame = 0;
   private destroyed = false;
   private altitude = 300;
-  /** 缩放监听（PlanetMapThree 用它把相机状态写进调试面板的 3D 视口快照）。 */
-  private zoomListener?: (state: { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean }) => void;
   /** 左键按下/抬起与指针捕获（画布外抬起、捕获丢失等异常序列的兜底收尾）。 */
   private readonly press: PointerPress;
   private readonly composer: EffectComposer;
@@ -340,9 +338,6 @@ export class PlanetThreeScene {
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
-    // `layers.fog`（R20-A ④）：未探索区域的测绘面纱是地表着色器的一部分，不在 groupByLayer 里。
-    // 局部高精度表面与主球面共用同一个材质/ uniforms，改一次即可。
-    setPlanetSurfaceFogVisible(this.surface, interaction.layers.fog ?? true);
     this.updateMarks();
     this.renderer.domElement.style.cursor = interaction.interactionMode.kind === 'inspect' ? 'grab' : 'crosshair';
   }
@@ -1275,12 +1270,6 @@ export class PlanetThreeScene {
     if (this.altitude > 190) this.groundView = false;
     else if (this.altitude < 130) this.groundView = true;
     this.updateCamera();
-    this.zoomListener?.(this.getCameraState());
-  }
-  /** 订阅相机缩放状态（调试面板的 3D 视口快照）；返回退订函数。 */
-  onZoom(listener: (state: { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean }) => void) {
-    this.zoomListener = listener;
-    return () => { if (this.zoomListener === listener) this.zoomListener = undefined; };
   }
   private updateCamera() {
     this.camera.near = Math.max(0.0001, this.altitude * 0.05);
@@ -1325,24 +1314,14 @@ export class PlanetThreeScene {
    * 任何反馈，驱动脚本白丢过两次建造（试玩 1016 B4）。
    * 返回 `{ dispatched, offscreen }`，调用侧据此判断命令是否真的走了同一条点击路径。
    */
-  clickTile(tile: TilePoint, options: { focus?: boolean; button?: number } = {}): { dispatched: boolean; offscreen: boolean } {
+  clickTile(tile: TilePoint, options: { focus?: boolean } = {}): { dispatched: boolean; offscreen: boolean } {
     if (!this.data) return { dispatched: false, offscreen: false };
     const rounded = { x: Math.round(tile.x), y: Math.round(tile.y) };
     const projected = this.project(rounded);
     const offscreen = !projected?.visible;
     if (offscreen && options.focus !== false) this.focus(rounded);
-    // R20-A ⑤：浏览器测试需要「点右键」这条同路径入口（2D 的 data-entity DOM 层删除后，
-    // Playwright 只能经 __planetThree 派发）。默认仍是左键 tap。
-    if (options.button === 2) {
-      this.onPick(rounded, { offscreen, button: 2 });
-      return { dispatched: true, offscreen };
-    }
     this.onPick(rounded, { offscreen });
     return { dispatched: true, offscreen };
-  }
-  /** 相机快照（调试面板分享链接/视口 JSON 与测试接口用）：中心格 + 缩放高度 + 俯仰。 */
-  getCameraState(): { center: TilePoint | null; altitude: number; tilt: number; groundView: boolean } {
-    return { center: this.getCenterTile(), altitude: this.altitude, tilt: this.tilt, groundView: this.groundView };
   }
   private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
     return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
