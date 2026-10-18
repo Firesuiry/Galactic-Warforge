@@ -18,11 +18,11 @@ import { logisticsArrows, directionVector, type CardinalDirection } from '../log
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 import type { TilePoint } from '../model';
 
-/** 带面底色：DSP 传送带的深色带面（比机身石墨更深，衬得出浅色横向带条）。 */
-const BELT_DECK = '#161f24';
-/** 横向带条（slat）的受光面 / 阴影面。 */
-const SLAT_LIGHT = '#6b8088';
-const SLAT_DARK = '#3d4d54';
+/** 带面底色：DSP 传送带的深色带面（比机身石墨深一档，又不会黑成一片）。 */
+const BELT_DECK = '#2a363d';
+/** 横向带条（slat）：中景就能看清的浅灰蓝，滚动起来一条条滚过去。 */
+const SLAT = '#55656d';
+const SLAT_LIGHT = '#7d9199';
 /** 流向强调色（与传送带琥珀色系一致，分拣器箭头仍在用）。 */
 const CHEVRON = '#ffc76a';
 
@@ -43,6 +43,8 @@ function toTexture(key: string, element: HTMLCanvasElement, repeat = false): THR
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.generateMipmaps = true;
+  // 各向异性：带面在斜视角/中景下会把横向 slat 模糊掉，靠 anisotropy 保住带条。
+  texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   textures.set(key, texture);
   return texture;
@@ -66,11 +68,11 @@ export function beltChevronTexture(): THREE.CanvasTexture {
   ctx.fillStyle = BELT_DECK;
   ctx.fillRect(0, 0, 256, 120);
   // 每格 2 条横向 slat：.04 格宽 = 256 * .04 ≈ 10 px，中心落在 .25 / .75 处（等距）。
+  // 中景（带面只占几十像素）也要看得见，所以 slat 用中灰而不是深灰，并带一条下游受光边。
   for (const center of [.25, .75]) {
     const x = 256 * center, half = 256 * .04 / 2;
-    ctx.fillStyle = SLAT_DARK;
+    ctx.fillStyle = SLAT;
     ctx.fillRect(x - half, 0, half * 2, 120);
-    // 下游侧受光边：带条滚动时这条亮边就是方向提示。
     ctx.fillStyle = SLAT_LIGHT;
     ctx.fillRect(x + half - 2, 0, 2, 120);
   }
@@ -81,9 +83,9 @@ export function beltChevronTexture(): THREE.CanvasTexture {
     ctx.fillRect(0, inset, 256, 3);
     ctx.fillRect(0, 117 - inset, 256, 3);
   }
-  // 极弱中心 chevron（每格一个），低对比，只作流向辅助。
-  ctx.strokeStyle = 'rgba(214, 236, 242, .075)';
-  ctx.lineWidth = 5;
+  // 极弱中心 chevron（每格一个）：暗琥珀细线，只作流向辅助，不抢横向带条。
+  ctx.strokeStyle = 'rgba(196, 150, 80, .1)';
+  ctx.lineWidth = 2.5;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.beginPath();

@@ -195,13 +195,15 @@ export class ConveyorGeometry {
   readonly group = new THREE.Group();
   private signature = '';
   private tiles: TilePoint[] = [];
+  // 金属度都压得偏低：metalness 高的竖面背离太阳时会黑成一条缝（试玩 1018 反馈：
+  // 顶盖外侧被读成「弯道缺口」），这三块是结构件，颜色要稳定可读、只留一点金属光泽。
   private readonly materials = [
-    // 机身/内壁：深色石墨（略反光，近景有金属体积感）。
-    new THREE.MeshStandardMaterial({ color: '#26363e', roughness: .52, metalness: .45, side: THREE.DoubleSide }),
+    // 机身/内壁/端盖：深色石墨。
+    new THREE.MeshStandardMaterial({ color: '#26363e', roughness: .62, metalness: .22, side: THREE.DoubleSide }),
     // 护栏外侧：浅色陶瓷（DSP 的浅色护栏）。
-    new THREE.MeshStandardMaterial({ color: '#cfd8d2', roughness: .46, metalness: .16, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: '#b6c1bb', roughness: .5, metalness: .12, side: THREE.DoubleSide }),
     // 护栏顶盖/斜角：亮金属边（远景的第一识别特征）。
-    new THREE.MeshStandardMaterial({ color: '#9fb0b4', roughness: .28, metalness: .62, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: '#c6d0d2', roughness: .34, metalness: .26, side: THREE.DoubleSide }),
   ];
   /** 带面：深色底 + 每格 2 条横向浅色 slat + 极弱中心 chevron，沿带滚动 = 流向。 */
   private readonly surfaceMaterial = new THREE.MeshBasicMaterial({
