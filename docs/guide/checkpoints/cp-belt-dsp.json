@@ -1,6 +1,6 @@
 {
   "parent": "cp-base",
-  "note": "L5 cp-belt-dsp（第 19 轮 §5 多层传送带逻辑层）：从 cp-base 读档，只用玩家命令 + 快进（料全部来自自家产线：b-105 铁锭 / b-97 铜锭 / b-49 铁矿 / b-59 铜矿，手搓铁锭 64、齿轮 6、电路板 13），在基地南侧空地上搭一条立体交叉的物流场景：① 铜主线 y=153 从 x=48 到 x=56 向东，源头是补给站 C_src(44,152) 经两台分拣器上料（主线只放行 copper_ingot，侧汇支线只放行 copper_ore），终点由分拣器 (57,153) 卸进 C_dst(58,152)。② 侧汇支带 (48,152)(49,152) 向东 → (50,152) 转南，从北侧汇入地面主线 (50,153)。③ 铁线 (53,151)→(53,155) 向南：其中 (53,152) 升到 1 层、(53,153) 保持 1 层跨过同格的地面铜带、(53,154) 落回地面，起点是 I_src(51,147) 经分拣器 (53,150) 上料，终点由跨格分拣器 (53,157)（背面扫 2 格取 (53,155) 带、正面放 (53,158)）卸进 I_dst(52,158)。供电：新增电塔 (51,151) 接现有电网（离 b-57 曼哈顿 9 格），另补 2 台风机（新负载 13 > 现有余量）。契约：两条线终点各自只收到自己的物品（C_dst 有铜锭/铜矿、无铁锭；I_dst 有铁锭、无铜），11 台分拣器 / 6 座补给站 / 3 座电塔 running，并用 item_growth 证明高架铁线与铜主线此刻真的在走货 （item_growth 的料在窗口开始前才放进源站，存量断言不能只靠读档前攒下的量）。高架段走货的观察点取该线终点 I_dst 而不是高架带格 (53,153)e1：铁线上料分拣器每 6 tick 才放 1 件，带子 throughput=1、每格停留 1 tick，按 300/600 tick 窗口采样时该格为空的概率极高（实测两次计数都是 0，而同一时段 I_dst 收到了货）；I_dst 只可能由这条高架线喂货，其增长等价地证明整条线在走。",
+  "note": "L5 cp-belt-dsp（第 19 轮 §5 多层传送带逻辑层）：从 cp-base 读档，只用玩家命令 + 快进（料全部来自自家产线：b-105 铁锭 / b-97 铜锭 / b-49 铁矿 / b-59 铜矿，手搓铁锭 64、齿轮 6、电路板 13），在基地南侧空地上搭一条立体交叉的物流场景：① 铜主线 y=153 从 x=48 到 x=56 向东，源头是补给站 C_src(44,152) 经两台分拣器上料（主线只放行 copper_ingot，侧汇支线只放行 copper_ore），终点由分拣器 (57,153) 卸进 C_dst(58,152)。② 侧汇支带 (48,152)(49,152) 向东 → (50,152) 转南，从北侧汇入地面主线 (50,153)。③ 铁线 (53,151)→(53,155) 向南：其中 (53,152) 升到 1 层、(53,153) 保持 1 层跨过同格的地面铜带、(53,154) 落回地面，起点是 I_src(51,147) 经分拣器 (53,150) 上料，终点由跨格分拣器 (53,157)（背面扫 2 格取 (53,155) 带、正面放 (53,158)）卸进 I_dst(52,158)。供电：新增电塔 (51,151) 接现有电网（离 b-57 曼哈顿 9 格），另补 2 台风机（新负载 13 > 现有余量）。契约：两条线终点各自只收到自己的物品（C_dst 有铜锭/铜矿、无铁锭；I_dst 有铁锭、无铜），11 台分拣器 / 6 座补给站 / 3 座电塔 running，并用 item_growth 证明高架铁线与铜主线此刻真的在走货 （item_growth 的料在窗口开始前才放进源站，存量断言不能只靠读档前攒下的量）。高架段走货的观察点取该线终点 I_dst 而不是高架带格 (53,153)e1：铁线上料分拣器每 6 tick 才放 1 件，带子 throughput=1、每格停留 1 tick，按 300/600 tick 窗口采样时该格为空的概率极高（实测两次计数都是 0，而同一时段 I_dst 收到了货）；I_dst 只可能由这条高架线喂货，其增长等价地证明整条线在走。【2026-10-18 补丁】按主代理定稿的 plan2 在末尾追加：手搓磁铁/磁线圈/齿轮/电路板后补 2 台风机 (56,149)(58,149)（p1 电网发电 70 / 负载 43，余量 27）、死端带 (45,156)(45,157)(45,158) 向南 + 上料分拣器 (45,155) rot180（取 C_src 铜锭，allow copper_ingot），往 C_src 放铜锭 8 后带尾 (45,158) 堆货、blocked_ticks 持续增长（真死端样本：带上有货、前方 (45,159) 空、无分拣器）；另在走廊铺地面带 (44,161)..(44,165) 向南（空带）。契约 sorter running 11→12，新增 wind_turbine running 7。走廊 x36..52,y161..165 除 x=44 这一列外保持全空，为 UI 拖拽测试保留（沿 y=163 拖 1 层高架带从 x=38 到 x=50 跨过 x=44 的地面带）——以后别在这里建东西。",
   "build": [
     "机甲从 (49,134) 开到 (50,150)",
     "从 b-105 取铁锭 51、b-97 取铜锭 30、b-49 取铁矿 48、b-59 取铜矿 6（全是玩家命令，无管理员发料）",
@@ -12,7 +12,9 @@
     "铁线：x=53，y=151 地面 → y=152 升 1 层 → y=153 保持 1 层跨过地面铜带 → y=154 落回地面 → y=155 带尾",
     "5 台分拣器：(47,153) 铜主线上料、(47,152) 支线上料、(57,153) 铜收货、(53,150) 铁线上料、(53,157) 跨格铁收货",
     "configure_sorter 过滤：主线 allow copper_ingot、支线 allow copper_ore、铁线 allow iron_ingot",
-    "往 C_src 放铜锭 10 + 铜矿 6、往 I_src 放铁锭（分两批），item_growth 证明高架段与两条主线在走货"
+    "往 C_src 放铜锭 10 + 铜矿 6、往 I_src 放铁锭（分两批），item_growth 证明高架段与两条主线在走货",
+    "补丁（plan2）：风机 W3(56,149)、W4(58,149)；死端带 (45,156..158) + 分拣器 (45,155) allow copper_ingot；C_src 放铜锭 8 → 死端带尾堆货（blocked_ticks>0）",
+    "补丁：走廊地面带 (44,161)..(44,165) 向南（空带）；x36..52,y161..165 其余格保持全空供 UI 拖拽测试"
   ],
   "steps": [
     {
@@ -1077,9 +1079,454 @@
         "advance_ticks": 600
       },
       "note": "I_dst 铁锭继续增长（补 6 个后 600 tick 内至少再到 1 个），证明高架铁线持续流动"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 51,
+          "direction": "to_player"
+        }
+      },
+      "note": "补丁用料：取 b-105 铁锭 51（带 8×2 + 风机 2×6 + 分拣器 1 = 29，另 10 个手搓齿轮；余 12 留背包）"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-49",
+          "item_id": "iron_ore",
+          "quantity": 6,
+          "direction": "to_player"
+        }
+      },
+      "note": "补丁用料：取 b-49 铁矿 6，手搓磁铁 6 → 磁线圈 6（背包原有磁铁 2 + 磁线圈 2）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "iron_ingot",
+        "n": 51
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "smelt_magnet",
+          "quantity": 4
+        }
+      },
+      "note": "手搓磁铁 4（背包 2 + 铁矿 6 = 6，磁线圈 6 需磁铁 6）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnet",
+        "n": 6
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "magnetic_coil",
+          "quantity": 3
+        }
+      },
+      "note": "手搓磁线圈 3 批（每批 2 个，共 6 个；背包原有 2 个刚好够风机 2 台的 6 个）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnetic_coil",
+        "n": 8
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "gear",
+          "quantity": 10
+        }
+      },
+      "note": "手搓齿轮 10（带 8 条 + 风机 2 台各 1）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "gear",
+        "n": 10
+      },
+      "timeout_ticks": 1800
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-40"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 1
+        }
+      },
+      "note": "手搓电路板 1（死端分拣器 1 台）"
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "circuit_board",
+        "n": 1
+      },
+      "timeout_ticks": 900
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 56,
+            "y": 149,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      },
+      "note": "风机 W3 (56,149)（2×2，56..57,149..150）：+10 电，离 b-120 曼哈顿 7"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 6
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 58,
+            "y": 149,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "wind_turbine",
+          "direction": "auto"
+        }
+      },
+      "note": "风机 W4 (58,149)（2×2，58..59,149..150）：+10 电，离 b-120 曼哈顿 9"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 7
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 156,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "死端带 (45,156) 向南，elevation 0"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 157,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "死端带 (45,157) 向南，elevation 0"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 158,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "死端带 (45,158) 向南，elevation 0"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 24
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 161,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "走廊地面带 (44,161) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 162,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "走廊地面带 (44,162) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 163,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "走廊地面带 (44,163) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 164,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "走廊地面带 (44,164) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象"
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 44,
+            "y": 165,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "conveyor_belt_mk1",
+          "direction": "south"
+        }
+      },
+      "note": "走廊地面带 (44,165) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "conveyor_belt_mk1",
+        "n": 29
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "build",
+        "target": {
+          "layer": "planet",
+          "position": {
+            "x": 45,
+            "y": 155,
+            "z": 0
+          }
+        },
+        "payload": {
+          "building_type": "sorter_mk1",
+          "direction": "auto",
+          "rotation": 180
+        }
+      },
+      "note": "死端上料分拣器 (45,155) rot180：背取 (45,154)=C_src，前放 (45,156) 死端带"
+    },
+    {
+      "wait_until": {
+        "kind": "building_count_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 12
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "sorter_mk1",
+        "n": 12
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "wait_until": {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 7
+      },
+      "timeout_ticks": 3600
+    },
+    {
+      "cmd": {
+        "type": "configure_sorter",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-198"
+        },
+        "payload": {
+          "filter_mode": "allow",
+          "filter_items": [
+            "copper_ingot"
+          ]
+        }
+      },
+      "note": "死端分拣器只放行铜锭（取 C_src 的铜锭上死端带）"
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-126",
+          "item_id": "copper_ingot",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      },
+      "note": "C_src 放铜锭 8：死端带上料"
+    },
+    {
+      "item_growth": {
+        "position": {
+          "x": 45,
+          "y": 158,
+          "z": 0
+        },
+        "item_id": "copper_ingot",
+        "growth": 1,
+        "advance_ticks": 300
+      },
+      "note": "死端带尾 (45,158) 堆上铜锭（8 个足够填满 3 格带）：真死端 = 带上有货、前方 (45,159) 空、无分拣器"
     }
   ],
-  "end_tick": 13132,
+  "end_tick": 14832,
   "contract": {
     "checks": [
       {
@@ -1159,7 +1606,7 @@
         "kind": "building_running_gte",
         "player": "p1",
         "type": "sorter_mk1",
-        "n": 11
+        "n": 12
       },
       {
         "kind": "building_running_gte",
@@ -1172,6 +1619,12 @@
         "player": "p1",
         "type": "tesla_tower",
         "n": 3
+      },
+      {
+        "kind": "building_running_gte",
+        "player": "p1",
+        "type": "wind_turbine",
+        "n": 7
       }
     ]
   }

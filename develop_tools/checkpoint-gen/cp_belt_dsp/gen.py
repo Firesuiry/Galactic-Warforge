@@ -19,7 +19,7 @@ WITH_CONFIGURE = "--configure" in sys.argv and not PROBE
 IRON_BATCH = 30      # 第一次 item_growth 前补进 I_src 的铁锭
 IRON_BATCH2 = 6      # 第二次：背包里只余 6 个铁锭（建材已用掉其余）
 GROWTH_TICKS = 300
-END_TICK = 13132      # 本层落档 tick（重建实测：最后一条 item_growth 结束在 13132）
+END_TICK = 14832      # 本层落档 tick（重建实测：最后一条 item_growth 结束在 14832）
 
 STEPS = []
 
@@ -178,6 +178,63 @@ if not PROBE:
     transfer(i_src, "iron_ingot", IRON_BATCH2, "to_building", note="再补铁锭 %d 进 I_src" % IRON_BATCH2)
     item_growth(52, 158, "iron_ingot", 1, 600, note="I_dst 铁锭继续增长（补 6 个后 600 tick 内至少再到 1 个），证明高架铁线持续流动")
 
+# ---------------------------------------------------------------- 10. UI 操作测试余量补丁（plan2）
+# 第 19 轮 UI 操作测试 D/E：南侧资源点密集、没有干净拖拽走廊（D），电网满载（E），
+# 真死端红杠没有现成样本。新增内容全部追加在上面最后一条 item_growth 之后，
+# 现有建筑 ID 不变；走廊 x36..52,y161..165 除 x=44 一列外保持全空（以后别在这里建东西）。
+# 探路（--probe）也要把这些建造步骤跑一遍，才能读到新分拣器的建筑 ID；
+# 只有 configure / 放货 / item_growth 依赖 ids.json 或落档语义，探路时跳过。
+if True:
+    # 10.1 取料 + 手搓：风机 2（磁线圈 6）、带 8（齿轮 8）、分拣器 1（电路板 1、铁锭 1）
+    transfer("b-105", "iron_ingot", 51, note="补丁用料：取 b-105 铁锭 51（带 8×2 + 风机 2×6 + 分拣器 1 = 29，另 10 个手搓齿轮；余 12 留背包）")
+    transfer("b-49", "iron_ore", 6, note="补丁用料：取 b-49 铁矿 6，手搓磁铁 6 → 磁线圈 6（背包原有磁铁 2 + 磁线圈 2）")
+    wait({"kind": "item_gte", "player": "p1", "item_id": "iron_ingot", "n": 51}, 900)
+    craft("smelt_magnet", 4, "手搓磁铁 4（背包 2 + 铁矿 6 = 6，磁线圈 6 需磁铁 6）")
+    wait({"kind": "item_gte", "player": "p1", "item_id": "magnet", "n": 6}, 1800)
+    craft("magnetic_coil", 3, "手搓磁线圈 3 批（每批 2 个，共 6 个；背包原有 2 个刚好够风机 2 台的 6 个）")
+    wait({"kind": "item_gte", "player": "p1", "item_id": "magnetic_coil", "n": 8}, 1800)
+    craft("gear", 10, "手搓齿轮 10（带 8 条 + 风机 2 台各 1）")
+    wait({"kind": "item_gte", "player": "p1", "item_id": "gear", "n": 10}, 1800)
+    craft("circuit_board", 1, "手搓电路板 1（死端分拣器 1 台）")
+    wait({"kind": "item_gte", "player": "p1", "item_id": "circuit_board", "n": 1}, 900)
+
+    # 10.2 两台风机（基地 b-39 正下方；离电塔 b-120 (51,151) 曼哈顿 7 / 9，都在无线 12 格内）
+    build("wind_turbine", 56, 149, note="风机 W3 (56,149)（2×2，56..57,149..150）：+10 电，离 b-120 曼哈顿 7")
+    wcount("wind_turbine", 6)
+    build("wind_turbine", 58, 149, note="风机 W4 (58,149)（2×2，58..59,149..150）：+10 电，离 b-120 曼哈顿 9")
+    wcount("wind_turbine", 7)
+
+    # 10.3 8 条带：死端 3 条（(45,156)(45,157)(45,158) 向南）+ 走廊 5 条（(44,161)..(44,165) 向南）
+    for y in (156, 157, 158):
+        build("conveyor_belt_mk1", 45, y, direction="south",
+              note="死端带 (45,%d) 向南，elevation 0" % y)
+    wcount("conveyor_belt_mk1", 24)
+    for y in range(161, 166):
+        build("conveyor_belt_mk1", 44, y, direction="south",
+              note="走廊地面带 (44,%d) 向南：空带不上货，UI 沿 y=163 拖高架带从 x=38 到 x=50 时被跨的对象" % y)
+    wcount("conveyor_belt_mk1", 29)
+
+    # 10.4 死端上料分拣器 (45,155) rotation 180：取 (45,154)=C_src，放 (45,156) 带
+    build("sorter_mk1", 45, 155, rotation=180,
+          note="死端上料分拣器 (45,155) rot180：背取 (45,154)=C_src，前放 (45,156) 死端带")
+    wcount("sorter_mk1", 12)
+
+    # 10.5 等全部 running（死端分拣器断电就不算，契约同口径）
+    wait({"kind": "building_running_gte", "player": "p1", "type": "sorter_mk1", "n": 12}, 3600)
+    wait({"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 7}, 3600)
+
+    # 10.6 死端分拣器过滤配置（ID 由 --probe 实测回填 ids.json）
+    if not PROBE:
+        if not WITH_CONFIGURE:
+            raise SystemExit("补丁段需要 --configure（先 --probe 跑一遍读新分拣器 ID）")
+        ids = json.load(open(IDS, encoding="utf-8"))
+        configure(ids["deadend"], ["copper_ingot"], "死端分拣器只放行铜锭（取 C_src 的铜锭上死端带）")
+
+        # 10.7 往 C_src 放铜锭 8（死端带的料，放在分拣器落成 + 配置之后）
+        transfer(c_src, "copper_ingot", 8, "to_building", note="C_src 放铜锭 8：死端带上料")
+        item_growth(45, 158, "copper_ingot", 1, 300,
+                    note="死端带尾 (45,158) 堆上铜锭（8 个足够填满 3 格带）：真死端 = 带上有货、前方 (45,159) 空、无分拣器")
+
 CHECKS = [
     {"kind": "game_not_finished"},
     {"kind": "player_alive", "player": "p1"},
@@ -193,9 +250,10 @@ CHECKS = [
      "position": {"x": 52, "y": 158, "z": 0}},
     {"kind": "building_item_at_lt", "player": "p1", "item_id": "copper_ore", "n": 1,
      "position": {"x": 52, "y": 158, "z": 0}},
-    {"kind": "building_running_gte", "player": "p1", "type": "sorter_mk1", "n": 11},
+    {"kind": "building_running_gte", "player": "p1", "type": "sorter_mk1", "n": 12},
     {"kind": "building_running_gte", "player": "p1", "type": "supply_station", "n": 6},
     {"kind": "building_running_gte", "player": "p1", "type": "tesla_tower", "n": 3},
+    {"kind": "building_running_gte", "player": "p1", "type": "wind_turbine", "n": 7},
 ]
 if PROBE:
     CHECKS = [{"kind": "game_not_finished"}]
@@ -215,6 +273,12 @@ NOTE = (
     "高架段走货的观察点取该线终点 I_dst 而不是高架带格 (53,153)e1：铁线上料分拣器每 6 tick 才放 1 件，"
     "带子 throughput=1、每格停留 1 tick，按 300/600 tick 窗口采样时该格为空的概率极高（实测两次计数都是 0，"
     "而同一时段 I_dst 收到了货）；I_dst 只可能由这条高架线喂货，其增长等价地证明整条线在走。"
+    "【2026-10-18 补丁】按主代理定稿的 plan2 在末尾追加：手搓磁铁/磁线圈/齿轮/电路板后补 2 台风机 "
+    "(56,149)(58,149)（p1 电网发电 70 / 负载 43，余量 27）、死端带 (45,156)(45,157)(45,158) 向南 + "
+    "上料分拣器 (45,155) rot180（取 C_src 铜锭，allow copper_ingot），往 C_src 放铜锭 8 后带尾 (45,158) 堆货、"
+    "blocked_ticks 持续增长（真死端样本：带上有货、前方 (45,159) 空、无分拣器）；另在走廊铺地面带 "
+    "(44,161)..(44,165) 向南（空带）。契约 sorter running 11→12，新增 wind_turbine running 7。"
+    "走廊 x36..52,y161..165 除 x=44 这一列外保持全空，为 UI 拖拽测试保留（沿 y=163 拖 1 层高架带从 x=38 到 x=50 跨过 x=44 的地面带）——以后别在这里建东西。"
 )
 
 BUILD_SUMMARY = [
@@ -229,6 +293,8 @@ BUILD_SUMMARY = [
     "5 台分拣器：(47,153) 铜主线上料、(47,152) 支线上料、(57,153) 铜收货、(53,150) 铁线上料、(53,157) 跨格铁收货",
     "configure_sorter 过滤：主线 allow copper_ingot、支线 allow copper_ore、铁线 allow iron_ingot",
     "往 C_src 放铜锭 10 + 铜矿 6、往 I_src 放铁锭（分两批），item_growth 证明高架段与两条主线在走货",
+    "补丁（plan2）：风机 W3(56,149)、W4(58,149)；死端带 (45,156..158) + 分拣器 (45,155) allow copper_ingot；C_src 放铜锭 8 → 死端带尾堆货（blocked_ticks>0）",
+    "补丁：走廊地面带 (44,161)..(44,165) 向南（空带）；x36..52,y161..165 其余格保持全空供 UI 拖拽测试",
 ]
 
 spec = {
