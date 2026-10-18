@@ -107,3 +107,33 @@ func TestQueryConstructionTaskCarriesElevation(t *testing.T) {
 		t.Fatalf("ground construction task elevation should be 0: %+v", byID["c-ground"])
 	}
 }
+
+// 寻路预览必须和权威移动口径一致：高架带（elevation≥1）、叠层（Z>0）与地基
+// 都不占地面层，不能让预览误判为障碍（gamecore.tileWalkableForUnit 只看
+// Grid.BuildingID，高架带不写它）。契约 §3.1。
+func TestQueryPathPreviewIgnoresNonGroundBuildings(t *testing.T) {
+	ql, ws, _ := newPlanetQueryFixture(t, 16, 16)
+	start := model.Position{X: 8, Y: 8}
+	target := model.Position{X: 10, Y: 8}
+	ws.Units["u"] = &model.Unit{ID: "u", OwnerID: "p1", Position: start, VisionRange: 8, MoveRange: 4}
+
+	// 路径正中间放三层「不占地面」的建筑：1 层高架带、Z=1 叠层、地基。
+	for _, b := range []*model.Building{
+		{ID: "belt-e1", Type: model.BuildingTypeConveyorBeltMk1, OwnerID: "p1", Position: model.Position{X: 9, Y: 8}, Conveyor: &model.ConveyorState{Output: model.ConveyorEast, Elevation: 1}},
+		{ID: "stack-z1", Type: model.BuildingTypeConveyorBeltMk1, OwnerID: "p1", Position: model.Position{X: 9, Y: 8, Z: 1}},
+		{ID: "fnd", Type: model.BuildingTypeFoundation, OwnerID: "p1", Position: model.Position{X: 9, Y: 9}},
+	} {
+		ws.Buildings[b.ID] = b
+	}
+	route, err := ql.PlanetPath(ws, "p1", "u", target, 0)
+	if err != nil || !route.Reachable {
+		t.Fatalf("elevated belt/stack/foundation must not block the preview path: %+v %v", route, err)
+	}
+
+	// 对照：同格换成地面建筑就挡路（预览与权威一致的另一半）。
+	ws.Buildings["ground"] = &model.Building{ID: "ground", Type: model.BuildingTypeArcSmelter, OwnerID: "p1", Position: model.Position{X: 9, Y: 8}}
+	route, err = ql.PlanetPath(ws, "p1", "u", target, 0)
+	if err != nil || route.Reachable {
+		t.Fatalf("ground building must block the preview path: %+v %v", route, err)
+	}
+}
