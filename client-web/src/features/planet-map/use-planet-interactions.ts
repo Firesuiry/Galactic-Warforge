@@ -55,20 +55,12 @@ function reportLocalBlock(commandType: string, planetId: string, message: string
   reportLocalPreflightBlock(commandType, planetId, message, focus);
 }
 
-/** 点到的格子上属于哪个建筑（按 footprint 命中；多占建筑取第一个）。 */
-export function buildingAtTile(planet: PlanetRenderView, tile: TilePoint) {
-  const faceSize = planet.surface?.face_size ?? planet.map_width / 3;
-  return Object.values(planet.buildings ?? {}).find((building) =>
-    tileContainsBuilding(building, tile.x, tile.y, faceSize),
-  );
-}
-
 /**
- * 按格找地面建筑（§3.5 选中链路）：忽略高架带（elevation > 0）。
- * 高架带不写 TileBuilding 服务端侧，但场景/查询若一并返回，这里的兜底必须只认地面层，
- * 否则点高架带下方会选中「上面那条带」而不是脚下的建筑。
+ * 点到的格子上属于哪个建筑（按 footprint 命中；多占建筑取第一个）。
+ * §3.5：只认地面层——高架带（elevation > 0）由场景 onPick 的 buildingId 直接选中，
+ * 这里的按格兜底必须忽略它们，否则点高架带下方会选中「上面那条带」。
  */
-export function groundBuildingAtTile(planet: PlanetRenderView, tile: TilePoint) {
+export function buildingAtTile(planet: PlanetRenderView, tile: TilePoint) {
   const faceSize = planet.surface?.face_size ?? planet.map_width / 3;
   return Object.values(planet.buildings ?? {}).find((building) =>
     beltElevation(building) === 0 && tileContainsBuilding(building, tile.x, tile.y, faceSize),

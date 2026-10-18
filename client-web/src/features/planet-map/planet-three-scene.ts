@@ -28,6 +28,7 @@ import { logisticsArrows, stepTile, buildGhostDirection, directionVector, isCard
 import { logisticsFlightNormal } from './three/logistics-flight';
 import { syncSorterAnimation } from './three/sorter-animation';
 import { assessBuildTiles } from './build-workflow';
+import type { BeltElevationPlacement } from './belt-stroke';
 import { PointerPress } from './pointer-press';
 import type { AlertEntry, Building, CatalogView, FogMapView, ItemInventory, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, Position, Unit } from '@shared/types';
 import { getBuildingCatalogEntry, getBuildingFootprint, getFogState, getItemCatalogEntry, getItemDisplayName, getTerrainTile, type PlanetLayerVisibility, type PlanetRenderView, type SelectedEntity, type TilePoint } from './model';
@@ -40,6 +41,12 @@ import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
 import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
+
+/**
+ * 点选回调的附加信息（§3.5）：`offscreen` = 按格派发时目标格不在视野内（场景已聚焦）；
+ * `buildingId` = 命中的高架带（场景侧负责在拾取时给出，消费端直接按 id 选中）。
+ */
+export interface PickMeta { offscreen: boolean; buildingId?: string }
 
 export interface PlanetThreeData {
   planet: PlanetRenderView;
@@ -153,11 +160,11 @@ export class PlanetThreeScene {
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
   /** 建造 ghost 朝向箭头（传送带/分拣器/带旋转的建筑）：跟随悬停格，2D/3D 同一套方向推导。 */
   private readonly ghostMarks = new THREE.Group();
-  /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向，松手清空。 */
-  private beltDragPath: TilePoint[] = [];
+  /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：逐格带方向/高度，松手清空。 */
+  private beltDragPath: BeltElevationPlacement[] = [];
 
-  setBeltDragPath(tiles: readonly TilePoint[] | null) {
-    this.beltDragPath = tiles ? tiles.map(tile => ({ ...tile })) : [];
+  setBeltDragPath(path: readonly BeltElevationPlacement[] | null) {
+    this.beltDragPath = path ? path.map(part => ({ ...part, tile: { ...part.tile } })) : [];
     this.updateBuildGhost();
   }
   /** 悬停拾取节流：射线检测较重，指针移动只记录坐标，最多每 HOVER_PICK_MS 拾取一次。 */
@@ -174,7 +181,7 @@ export class PlanetThreeScene {
      * 点选回调。`offscreen` = 这次点击是「按格派发」（`clickTile`）且该格当时不在视野内，
      * 场景已把镜头聚焦过去；调用侧据此给玩家一条可见提示（试玩 1016 B4：不能静默丢弃）。
      */
-    private readonly onPick: (tile: TilePoint, meta: { offscreen: boolean }) => void,
+    private readonly onPick: (tile: TilePoint, meta: PickMeta) => void,
     private readonly onHover: (tile: TilePoint | null) => void,
     /** 点击处不在星球表面（射线没打中球面）：调用侧给提示，避免「点了没反应」。 */
     private readonly onMiss?: () => void,
@@ -1008,7 +1015,9 @@ export class PlanetThreeScene {
     const direction = buildGhostDirection(mode.buildingType, mode.direction, mode.rotation);
     if (!direction && !sorterRoutes) return;
     // 拖拽铺带：整条路径逐格画方向；否则只画悬停格（分拣器体积小，只画悬停格）。
-    const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0 ? this.beltDragPath : [hovered];
+    const tiles = mode.buildingType.startsWith('conveyor_belt') && this.beltDragPath.length > 0
+      ? this.beltDragPath.map(part => part.tile)
+      : [hovered];
     if (sorterRoutes) {
       const size = this.tileScale();
       for (const tile of tiles) {

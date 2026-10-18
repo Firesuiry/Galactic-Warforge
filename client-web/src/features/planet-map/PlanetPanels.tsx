@@ -61,6 +61,7 @@ import {
   type PlanetRenderView,
 } from "@/features/planet-map/model";
 import { describeLogisticsDetail, isSorterBuilding } from "@/features/planet-map/logistics-direction";
+import { beltElevation } from "@/features/planet-map/logistics-tier";
 import { beltBufferSummary } from "@/features/planet-map/planet-logistics-flow";
 import { getItemColorValue } from "@/features/planet-map/item-colors";
 import { HAUL_MODE_LABELS, describeHaul, isTransportRobot, transportHaulMode, transportHaulTask } from "@/features/planet-map/transport-haul";
@@ -1182,6 +1183,12 @@ export function PlanetEntityPanel({
               <dt>坐标</dt>
               <dd>{formatPosition(building.position)}</dd>
             </div>
+            {building.conveyor ? (
+              <div>
+                <dt>高度</dt>
+                <dd data-testid="planet-building-elevation">{beltElevation(building)} 层{beltElevation(building) === 0 ? '（地面）' : '（高架）'}</dd>
+              </div>
+            ) : null}
             {building.conveyor || isSorterBuilding(building) ? (
               <div>
                 <dt>流向</dt>

@@ -5,7 +5,7 @@ import { PlanetMapThree } from './PlanetMapThree';
 import { resetPlanetViewStore, usePlanetViewStore } from './store';
 
 // 捕获场景构造时注册的点击回调，让测试能直接喂 tile（jsdom 里没有 WebGL 拾取）。
-let onClick: ((tile: { x: number; y: number }, meta: { offscreen: boolean }) => void) | undefined;
+let onClick: ((tile: { x: number; y: number }, meta: { offscreen: boolean; buildingId?: string }) => void) | undefined;
 let onHover: ((tile: { x: number; y: number }) => void) | undefined;
 let onMiss: (() => void) | undefined;
 
@@ -13,7 +13,7 @@ vi.mock('./planet-three-scene', () => ({
   PlanetThreeScene: class {
     constructor(
       _host: HTMLElement,
-      click: (tile: { x: number; y: number }, meta: { offscreen: boolean }) => void,
+      click: (tile: { x: number; y: number }, meta: { offscreen: boolean; buildingId?: string }) => void,
       hover: (tile: { x: number; y: number }) => void,
       miss: () => void,
     ) {
@@ -47,7 +47,7 @@ afterEach(() => {
 });
 
 /** 场景点击回调：默认「目标格在视野内」（offscreen=false），与真实画布点击一致。 */
-function click(tile: { x: number; y: number }, meta: { offscreen: boolean } = { offscreen: false }) {
+function click(tile: { x: number; y: number }, meta: { offscreen: boolean; buildingId?: string } = { offscreen: false }) {
   onClick?.(tile, meta);
 }
 
@@ -177,5 +177,38 @@ describe('3D 地图点击语义（迷雾/资源）', () => {
     expect(screen.getByTestId('planet-three-pick-notice')).toBeInTheDocument();
     act(() => click({ x: 6, y: 4 }));
     expect(screen.queryByTestId('planet-three-pick-notice')).not.toBeInTheDocument();
+  });
+});
+
+
+describe('3D 地图点选高架带（第 19 轮 §3.5）', () => {
+  it('onPick 带 buildingId 时直接选中该建筑（优先于按格找地面建筑）', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const ground = Object.values(planet.buildings ?? {})[0]!;
+    // 在地面建筑同格放一条高架带（场景侧命中它时给 buildingId）。
+    const high = {
+      ...ground,
+      id: 'belt-high',
+      type: 'conveyor_belt_mk1',
+      position: { x: ground.position.x, y: ground.position.y, z: 0 },
+      conveyor: { input: 'west', output: 'east', elevation: 2 },
+    };
+    planet.buildings = { ...(planet.buildings ?? {}), 'belt-high': high as never };
+    render(<PlanetMapThree planet={planet} />);
+    act(() => click({ x: Math.round(ground.position.x), y: Math.round(ground.position.y) }, { offscreen: false, buildingId: 'belt-high' }));
+    expect(usePlanetViewStore.getState().selected).toMatchObject({ kind: 'building', id: 'belt-high' });
+  });
+
+  it('buildingAtTile 只认地面层（高架带不覆盖地面占用）', async () => {
+    const { buildingAtTile } = await import('./use-planet-interactions');
+    const planet = getFixtureScenario('baseline').planets['planet-1-1'];
+    const ground = Object.values(planet.buildings ?? {})[0]!;
+    const tile = { x: Math.round(ground.position.x), y: Math.round(ground.position.y) };
+    const high = { ...ground, id: 'belt-high', type: 'conveyor_belt_mk1', conveyor: { input: 'west', output: 'east', elevation: 2 } };
+    // 只有高架带：按格找不到建筑
+    expect(buildingAtTile({ ...planet, buildings: { 'belt-high': high as never } } as never, tile)).toBeUndefined();
+    // 地面建筑 + 高架带：返回地面建筑
+    expect(buildingAtTile({ ...planet, buildings: { ...(planet.buildings ?? {}), 'belt-high': high as never } } as never, tile)?.id).toBe(ground.id);
   });
 });

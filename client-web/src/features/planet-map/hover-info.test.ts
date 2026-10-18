@@ -41,3 +41,27 @@ describe('悬停提示文案', () => {
     expect(describeHover(context(false), { x: 9, y: 9 })).toBeNull();
   });
 });
+
+describe('悬停提示：高架带（第 19 轮 §3.5）', () => {
+  it('同格有地面建筑与高架带时优先显示高架带，并写高度层', () => {
+    const layered = {
+      ...planet,
+      buildings: {
+        ...(planet.buildings as Record<string, unknown>),
+        ground: { id: 'ground', type: 'sorter_mk1', owner_id: 'p1', position: { x: 6, y: 6, z: 0 }, hp: 100, max_hp: 100, sorter: {} },
+        high: { id: 'high', type: 'conveyor_belt_mk2', owner_id: 'p1', position: { x: 6, y: 6, z: 0 }, hp: 100, max_hp: 100, conveyor: { input: 'west', output: 'east', elevation: 3 } },
+      },
+    } as unknown as PlanetRenderView;
+    const info = describeHover({ planet: layered, playerId: 'p1', darkFogHostile: false }, { x: 6, y: 6 });
+    expect(info?.title).toContain('传送带');
+    expect(info?.detail).toContain('高度 3 层');
+    // 地面层带子不写高度后缀
+    const groundOnly = {
+      ...planet,
+      buildings: {
+        belt: { id: 'belt', type: 'conveyor_belt_mk1', owner_id: 'p1', position: { x: 6, y: 6, z: 0 }, hp: 100, max_hp: 100, conveyor: { input: 'west', output: 'east' } },
+      },
+    } as unknown as PlanetRenderView;
+    expect(describeHover({ planet: groundOnly, playerId: 'p1', darkFogHostile: false }, { x: 6, y: 6 })?.detail).toBe('血量 100/100');
+  });
+});
