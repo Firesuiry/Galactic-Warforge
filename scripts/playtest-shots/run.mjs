@@ -15,9 +15,23 @@ if (!N || !sceneName || !outDirArg) {
 }
 let compareDir = '';
 for (let i = 0; i < rest.length; i++) {
-  if (rest[i] === '--compare') compareDir = path.resolve(rest[++i] ?? '');
+  if (rest[i] === '--compare') {
+    const arg = rest[++i];
+    if (!arg) {
+      console.error('--compare 需要一个修前截图目录参数');
+      process.exit(2);
+    }
+    compareDir = path.resolve(arg);
+  } else {
+    console.error(`未知参数：${rest[i]}`);
+    process.exit(2);
+  }
 }
 const outDir = path.resolve(outDirArg);
+if (compareDir && !fs.existsSync(compareDir)) {
+  console.error(`--compare 目录不存在：${compareDir}`);
+  process.exit(2);
+}
 const server = `http://127.0.0.1:${Number(N) * 100}`;
 const web = `http://127.0.0.1:${Number(N) * 100 + 1}`;
 const driver = Number(N) * 100 + 2;
@@ -109,13 +123,14 @@ for (const shot of scene.shots) {
 if (compareDir) {
   const rows = [];
   for (const name of results) {
-    const before = `../${path.basename(compareDir)}/${name}.png`;
-    const after = `${name}.png`;
-    if (!fs.existsSync(path.join(compareDir, `${name}.png`))) {
-      rows.push(`| ${name} | （修前目录缺这张） | [${after}](${after}) |`);
+    const beforePath = path.join(compareDir, `${name}.png`);
+    if (!fs.existsSync(beforePath)) {
+      rows.push(`| ${name} | （修前目录缺这张） | [${name}.png](${name}.png) |`);
       continue;
     }
-    rows.push(`| ${name} | [${name}](${before}) | [${after}](${after}) |`);
+    // compare.md 写在 outDir，链接相对它计算（compareDir 可能在任意位置）。
+    const before = path.relative(outDir, beforePath).split(path.sep).join('/');
+    rows.push(`| ${name} | [${name}.png](${before}) | [${name}.png](${name}.png) |`);
   }
   const md = [
     `# 固定机位对比：${scene.title ?? sceneName}`,

@@ -15,7 +15,8 @@ set -euo pipefail
 WORKTREE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
-  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # 自动截取文件头的连续注释块（跳过 shebang），加行号也不用手改范围。
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   exit 1
 }
 
@@ -26,7 +27,12 @@ N="$1"; SCENE="$2"; OUT="$3"; shift 3
 COMPARE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --compare) COMPARE="$2"; shift 2 ;;
+    --compare)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "--compare 需要一个修前截图目录参数" >&2
+        usage
+      fi
+      COMPARE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "未知参数: $1" >&2; usage ;;
   esac

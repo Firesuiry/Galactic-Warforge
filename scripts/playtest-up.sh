@@ -42,10 +42,18 @@ TICK_RATE=4
 CHECKPOINT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --config) CONFIG="$2"; shift 2 ;;
-    --map-config) MAP_CONFIG="$2"; shift 2 ;;
-    --tick-rate) TICK_RATE="$2"; shift 2 ;;
-    --checkpoint) CHECKPOINT="$2"; shift 2 ;;
+    --config|--map-config|--tick-rate|--checkpoint)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "$1 需要一个参数" >&2
+        usage
+      fi
+      case "$1" in
+        --config) CONFIG="$2" ;;
+        --map-config) MAP_CONFIG="$2" ;;
+        --tick-rate) TICK_RATE="$2" ;;
+        --checkpoint) CHECKPOINT="$2" ;;
+      esac
+      shift 2 ;;
     -h|--help) usage ;;
     *) echo "未知参数: $1" >&2; usage ;;
   esac
