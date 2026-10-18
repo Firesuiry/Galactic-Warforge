@@ -128,4 +128,77 @@ describe('多层传送带本地预检（第 19 轮 §3.2）', () => {
     const sorterOk = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!;
     expect(sorterOk.buildable).toBe(true);
   });
+
+  it('M1 高架带不能架在建筑上方（地面层非 LowLogistics）', () => {
+    const scene = planet();
+    // 3×3 熔炉占 (6,6)..(8,8)：高架带压在它的任一格上都不可放。
+    scene.buildings = { 'b-smelter': buildingAt('b-smelter', 'arc_smelter', 6, 6, 3, 3) } as never;
+    const onFurnace = assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 7, y: 7, z: 0 }, 'p1', 0, undefined, undefined, 2)!;
+    expect(onFurnace.buildable).toBe(false);
+    expect(onFurnace.blockedTiles).toEqual([expect.objectContaining({ reason: 'elevated_ground_occupied', buildingId: 'b-smelter' })]);
+    // 文案与服务端 POSITION_OCCUPIED 同字
+    expect(describeBuildBlock(onFurnace, (id) => id, () => '电弧熔炉')).toBe('高架传送带不能架在建筑上方');
+    // 熔炉旁边一格：可以架高
+    expect(assessBuildTiles(catalog, 'conveyor_belt_mk1', scene as never, { x: 9, y: 9, z: 0 }, 'p1', 0, undefined, undefined, 2)!.buildable).toBe(true);
+    // 地面带（LowLogistics）上方仍可架高
+    const overBelt = planet();
+    overBelt.buildings = { 'b-ground': belt('b-ground', 6, 6, 0) } as never;
+    const overGround = assessBuildTiles(catalog, 'conveyor_belt_mk1', overBelt as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined, undefined, 2)!;
+    expect(overGround.buildable).toBe(true);
+    expect(overGround.blockedTiles).toEqual([]);
+  });
+
+  it('M3 施工任务按层比较：高架层施工不挡地面建造，反之亦然', () => {
+    const scene = planet();
+    const task = (elevation: number) => ({
+      id: 'task-1', player_id: 'p1', building_type: 'conveyor_belt_mk1',
+      position: { x: 6, y: 6, z: 0 }, state: 'in_progress', enqueue_tick: 1, elevation,
+    });
+    // 2 层的施工任务：地面建造不受影响（服务端按 `x:y@e` 分层预留）
+    scene.buildings = {};
+    const groundOverTask = assessBuildTiles(
+      catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined,
+      { construction_tasks: [task(2)] } as never, 0,
+    )!;
+    expect(groundOverTask.buildable).toBe(true);
+    // 同层（2 层）建造被这条施工任务挡住
+    const sameLayer = assessBuildTiles(
+      catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined,
+      { construction_tasks: [task(2)] } as never, 2,
+    )!;
+    expect(sameLayer.buildable).toBe(false);
+    expect(sameLayer.blockedTiles).toEqual([expect.objectContaining({
+      reason: 'building',
+      blockingConstruction: expect.objectContaining({ buildingType: 'conveyor_belt_mk1', own: true, state: 'in_progress' }),
+    })]);
+    // 缺省 elevation 的旧数据：按地面层算（保持原行为）
+    const groundTask = assessBuildTiles(
+      catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined,
+      { construction_tasks: [{ ...task(0), elevation: undefined }] } as never, 0,
+    )!;
+    expect(groundTask.buildable).toBe(false);
+    expect(assessBuildTiles(
+      catalog, 'conveyor_belt_mk1', scene as never, { x: 6, y: 6, z: 0 }, 'p1', 0, undefined,
+      { construction_tasks: [{ ...task(0), elevation: undefined }] } as never, 2,
+    )!.buildable).toBe(true);
+  });
+
+  it('L2 物流塔豁免「上方有高架传送带」（服务端 build_commands.go 明确跳过）', () => {
+    const scene = planet();
+    // 物流塔要建在己方仓库上；同一格上再放一条高架带。
+    scene.buildings = {
+      'b-depot': buildingAt('b-depot', 'depot_mk1', 6, 6),
+      'b-high': belt('b-high', 6, 6, 2),
+    } as never;
+    const distributor = {
+      buildings: [
+        ...(catalog as unknown as { buildings: unknown[] }).buildings,
+        { id: 'logistics_distributor', name: '物流配送器', buildable: true, footprint: { width: 1, height: 1 } },
+      ],
+    } as never;
+    const assessment = assessBuildTiles(distributor, 'logistics_distributor', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!;
+    expect(assessment.blockedTiles).toEqual([]);
+    // 同样位置的风机仍然被拦（豁免只给物流塔）
+    expect(assessBuildTiles(catalog, 'wind_turbine', scene as never, { x: 6, y: 6, z: 0 }, 'p1')!.buildable).toBe(false);
+  });
 });

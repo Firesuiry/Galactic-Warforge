@@ -234,7 +234,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     vi.stubGlobal('PointerEvent', PointerEventPolyfill);
   });
 
-  function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp') {
+  function drag(host: HTMLElement, type: 'pointerDown' | 'pointerMove' | 'pointerUp', init: Record<string, unknown> = {}) {
     // jsdom 没有 Pointer Events 的捕获 API；拖拽处理器会调用它们。
     const target = host as HTMLElement & { setPointerCapture?: () => void; releasePointerCapture?: () => void; hasPointerCapture?: () => boolean };
     target.setPointerCapture = () => {};
@@ -242,7 +242,7 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     target.hasPointerCapture = () => true;
     // jsdom 没有 PointerEvent 构造器：用 MouseEvent 派发 pointer* 事件并带上 pointerId。
     const fire = (fireEvent as unknown as Record<string, (el: HTMLElement, init: object) => void>)[type];
-    fire(host, { button: 0, pointerId: 1, clientX: 0, clientY: 0 });
+    fire(host, { button: 0, pointerId: 1, clientX: 0, clientY: 0, ...init });
   }
 
   it('第一格接现成上游带的高度；直行每格 ±1 走向目标；松手逐格带 elevation 下单', () => {
@@ -288,5 +288,216 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
       { tile: { x: 5, y: 3 }, direction: 'east', elevation: 0 },
       { tile: { x: 6, y: 3 }, direction: 'east', elevation: 0 },
     ]);
+  });
+
+  /** 造一条「己方地面带 output north，正对着 tile 输出」的 fixture 记录。 */
+  function upstreamNorthBelt(tile: { x: number; y: number }, ownerId = 'p1') {
+    return {
+      id: 'belt-up',
+      type: 'conveyor_belt_mk1',
+      owner_id: ownerId,
+      position: { x: tile.x, y: tile.y + 1, z: 0 },
+      hp: 100,
+      max_hp: 100,
+      level: 1,
+      vision_range: 0,
+      runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+      conveyor: { input: 'south', output: 'north', elevation: 0 },
+    } as never;
+  }
+
+  it('B1 单击建带（未拖拽）用 interactionMode.direction，而不是硬编码 east', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'north' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile).toHaveBeenCalledTimes(1);
+    expect(onInteractTile.mock.calls[0]).toEqual([{ x: 3, y: 3 }, { direction: 'north', elevation: 0 }]);
+  });
+
+  it('B1 单击且朝向为 auto 时不覆盖 direction（保持原 placeBelt 口径：由建造模式决定）', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'auto' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile).toHaveBeenCalledTimes(1);
+    expect(onInteractTile.mock.calls[0]).toEqual([{ x: 3, y: 3 }, { elevation: 0 }]);
+  });
+
+  it('B1 北向拖拽：第一格取首段方向并接上游带，其后直行每格 +1（不推迟一格）', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // 上游带在 (4,4) 朝北输出 → 起点 (4,3) 接它的 0 层。
+    planet.buildings = { 'belt-up': upstreamNorthBelt({ x: 4, y: 3 }) };
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    // 建造模式朝向故意给 east：拖拽第一格必须取实际首段方向（north），否则高度会推迟一格。
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 4, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 4, y: 1 };
+    drag(host, 'pointerMove');
+
+    const preview = dragPaths.at(-1)!;
+    expect(preview.map(part => part.tile)).toEqual([{ x: 4, y: 3 }, { x: 4, y: 2 }, { x: 4, y: 1 }]);
+    expect(preview.map(part => part.direction)).toEqual(['north', 'north', 'north']);
+    // 第一格 0（接上游），之后直行每格 +1 走向目标 2 层。
+    expect(preview.map(part => part.elevation)).toEqual([0, 1, 2]);
+
+    drag(host, 'pointerUp');
+    const calls = onInteractTile.mock.calls.map(([tile, placement]) => ({ tile, ...placement }));
+    expect(calls).toEqual([
+      { tile: { x: 4, y: 3 }, direction: 'north', elevation: 0 },
+      { tile: { x: 4, y: 2 }, direction: 'north', elevation: 1 },
+      { tile: { x: 4, y: 1 }, direction: 'north', elevation: 2 },
+    ]);
+  });
+
+  it('B2 拖拽中按 Esc：清空预览且松手不下单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)?.length).toBe(4);
+
+    act(() => { fireEvent.keyDown(document.body, { key: 'Escape' }); });
+    expect(dragPaths.at(-1)).toBeNull();
+
+    drag(host, 'pointerUp');
+    expect(onInteractTile).not.toHaveBeenCalled();
+  });
+
+  it('B2 拖拽中右键：清空预览且松手不下单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east', elevation: 2 }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)?.length).toBe(4);
+
+    act(() => { fireEvent.contextMenu(host); });
+    expect(dragPaths.at(-1)).toBeNull();
+
+    // 右键抬起（button 2）不得下单：handleMarqueeUp 只响应左键。
+    drag(host, 'pointerUp', { button: 2 });
+    expect(onInteractTile).not.toHaveBeenCalled();
+  });
+
+  it('B2 拖拽中右键抬起（button 2）不下单，左键抬起才下单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    drag(host, 'pointerUp', { button: 2 });
+    expect(onInteractTile).not.toHaveBeenCalled();
+
+    drag(host, 'pointerUp');
+    expect(onInteractTile).toHaveBeenCalledTimes(1);
+  });
+
+  it('B3 回拖到已有格：路径截断到该格，不追加反向格，每格只下一次单', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)!.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }]);
+
+    // 往回拖到 (4,3)：截断到该格（DSP 拖带往回拖是缩短），不追加反向格。
+    pickResult = { x: 4, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)!.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }]);
+    // 截断处不改方向：方向仍是「从这格出发走向下一格」（回拖的反向笔迹不能把末端格掉头，
+    // 否则 (3,3) 与 (4,3) 会互相指向、带子在两格间打转）。
+    expect(dragPaths.at(-1)!.map(part => part.direction)).toEqual(['east', 'east']);
+
+    // 再往前拖到 (5,3)：只补回新增格，路径按格去重。
+    pickResult = { x: 5, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)!.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }]);
+
+    drag(host, 'pointerUp');
+    const tiles = onInteractTile.mock.calls.map(([tile]) => `${tile.x},${tile.y}`);
+    expect(tiles).toEqual(['3,3', '4,3', '5,3']);
+    expect(new Set(tiles).size).toBe(tiles.length);
+  });
+
+  it('L4 拖拽中改目标高度（PageUp/PageDown）：不移动指针也立刻按新目标重算预览', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    // (2,3) 的己方地面带向东输出 → 起点 (3,3) 从 0 层起（固定起始高度，断言才有确定值）。
+    planet.buildings = {
+      ...(planet.buildings ?? {}),
+      'belt-up': {
+        id: 'belt-up', type: 'conveyor_belt_mk1', owner_id: 'p1',
+        position: { x: 2, y: 3, z: 0 }, hp: 100, max_hp: 100, level: 1, vision_range: 0,
+        runtime: { params: { footprint: { width: 1, height: 1 } }, state: 'running' },
+        conveyor: { input: 'west', output: 'east', elevation: 0 },
+      } as never,
+    };
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 0, 0, 0]);
+
+    // PageUp ×2（= adjustBuildElevation(+1)）：指针不动，预览整条立刻起坡。
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(1); });
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(1); });
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 1, 2, 2]);
+
+    // PageDown：落坡同样立刻生效。
+    act(() => { usePlanetViewStore.getState().adjustBuildElevation(-1); });
+    expect(dragPaths.at(-1)!.map(part => part.elevation)).toEqual([0, 1, 1, 1]);
+
+    // 松手仍按当前目标高度整条结算（预览与下单同口径）。
+    drag(host, 'pointerUp');
+    const calls = onInteractTile.mock.calls.map(([, placement]) => placement.elevation);
+    expect(calls).toEqual([0, 1, 1, 1]);
   });
 });

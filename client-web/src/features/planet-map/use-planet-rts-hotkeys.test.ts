@@ -208,13 +208,14 @@ describe('usePlanetRtsHotkeys 传送带高度（§3.5 PageUp/PageDown）', () =>
     expect(usePlanetViewStore.getState().interactionMode).toMatchObject({ elevation: 3 });
   });
 
-  it('非传送带建造模式/其它模式：PageUp/PageDown 不动作', () => {
+  it('非传送带建造模式/其它模式：PageUp/PageDown 不动作、也不拦截默认行为（L6）', () => {
     setup();
     usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' });
-    keydown('PageUp');
+    // 非传送带模式不 preventDefault：翻页键要保留浏览器/页面默认行为。
+    expect(keydown('PageUp').defaultPrevented).toBe(false);
     expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'build', buildingType: 'wind_turbine', direction: 'auto' });
     usePlanetViewStore.getState().setInteractionMode({ kind: 'inspect' });
-    keydown('PageDown');
+    expect(keydown('PageDown').defaultPrevented).toBe(false);
     expect(usePlanetViewStore.getState().interactionMode.kind).toBe('inspect');
   });
 

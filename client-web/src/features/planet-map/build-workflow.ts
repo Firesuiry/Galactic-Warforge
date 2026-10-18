@@ -4,6 +4,7 @@ import type { Direction } from "@shared/api";
 import type {
   BuildingCatalogEntry,
   CatalogView,
+  ConstructionTaskView,
   ItemAmount,
   ItemInventory,
   PlanetResource,
@@ -86,9 +87,13 @@ export interface BuildBlockedTile {
   x: number;
   y: number;
   terrain: string;
-  reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host" | "unexplored" | "overhead_belt" | "invalid_elevation";
+  reason: "terrain" | "building" | "resource" | "missing_resource" | "missing_host" | "unexplored" | "overhead_belt" | "invalid_elevation" | "elevated_ground_occupied";
   buildingId?: string;
   resourceId?: string;
+  /** 高架带脚下占位者（reason === 'elevated_ground_occupied' 时）：地面层建筑 id。 */
+  groundBuildingId?: string;
+  groundBuildingType?: string;
+  groundBuildingOwn?: boolean;
   /**
    * 占位者信息（reason === 'building' 时）：建筑类型与是否己方，用于本地文案与服务端
    * tileOccupiedMessage 完全同口径（「该格已有你的建筑：风力涡轮机」/「该格已有其他玩家的建筑：X」）。
@@ -132,13 +137,14 @@ export interface BuildTileAssessment {
  */
 const BLOCK_REASON_ORDER: Record<BuildBlockedTile["reason"], number> = {
   invalid_elevation: 0,
-  building: 1,
-  overhead_belt: 2,
-  resource: 3,
-  missing_host: 4,
-  terrain: 5,
-  missing_resource: 6,
-  unexplored: 7,
+  elevated_ground_occupied: 1,
+  building: 2,
+  overhead_belt: 3,
+  resource: 4,
+  missing_host: 5,
+  terrain: 6,
+  missing_resource: 7,
+  unexplored: 8,
 };
 
 /** 提示要报的那一格阻挡：锚点格优先，其次按原因优先级 + 坐标，保证确定性。 */
@@ -209,6 +215,8 @@ export function describeBuildBlock(
     case 'missing_host': return '需要建在己方仓库上';
     case 'overhead_belt': return '上方有高架传送带';
     case 'invalid_elevation': return '只有传送带可以架高';
+    // 与服务端 POSITION_OCCUPIED 同字（build_commands.go 高架带放置：地面占用只能是空地或 LowLogistics）。
+    case 'elevated_ground_occupied': return '高架传送带不能架在建筑上方';
     case 'unexplored': return '未探索区域，是否可建由服务器判定';
     default: return '需要建在资源点上';
   }
@@ -363,8 +371,16 @@ function buildReachability(
   } satisfies BuildReachability;
 }
 
-function findBlockingResource(
-  resources: PlanetResource[],
+/**
+ * 施工任务的层（第 19 轮 §3.2）：服务端施工任务带 `elevation`（高架传输带 >0），
+ * shared-client 的 `ConstructionTaskView` 还没收这个字段（本分支不动 shared-client），
+ * 所以在本地按可选字段读，缺省 0（旧数据/地面任务照旧按地面层算）。
+ */
+function constructionElevation(task: ConstructionTaskView): number {
+  return (task as ConstructionTaskView & { elevation?: number }).elevation ?? 0;
+}
+
+function findBlockingResource(  resources: PlanetResource[],
   x: number,
   y: number,
 ) {
@@ -412,13 +428,20 @@ function buildTileAssessment(input: {
   const canPrepareTerrain = (terrain: string) => isFoundation && ["water", "lava", "blocked"].includes(terrain);
   const blockedTiles: BuildBlockedTile[] = [];
   const resources = getResourceList(input.planet);
+  const isBelt = input.buildingType?.startsWith('conveyor_belt') === true;
+  // 非传送带给 elevation>0：服务端直接拒（INVALID_ELEVATION「只有传送带可以架高」），本地同口径。
+  const invalidElevation = !isBelt && (input.elevation ?? 0) > 0;
+  const targetElevation = isBelt ? clampBeltElevation(input.elevation ?? 0) : 0;
   // 施工任务（服务端权威）：同格已有施工预留时，占位回执必须说「施工任务」而不是「建筑」
   // （试玩 1011 E）。施工任务列表只含己方任务，别人的任务只能靠「同一格 + 类型不同」推断。
+  // 第 19 轮 §3.2：施工预留**按层**（服务端键 `x:y@e`），所以这里也只认同层的任务——
+  // 2 层的施工任务不挡 0 层的建造，反之亦然（M3）。
   const constructionTasks = input.runtime?.construction_tasks?.filter(
     (task) => task.state !== 'cancelled' && task.state !== 'completed',
   ) ?? [];
   const constructionAt = (x: number, y: number) => constructionTasks.find(
-    (task) => Math.round(task.position.x) === x && Math.round(task.position.y) === y,
+    (task) => Math.round(task.position.x) === x && Math.round(task.position.y) === y
+      && clampBeltElevation(constructionElevation(task)) === targetElevation,
   );
   const constructionBlocker = (task: NonNullable<ReturnType<typeof constructionAt>>) => ({
     buildingType: task.building_type,
@@ -458,10 +481,6 @@ function buildTileAssessment(input: {
     }
   }
   const footprintCellKeys = new Set(footprintCells.map((cell) => `${cell.x},${cell.y}`));
-  const isBelt = input.buildingType?.startsWith('conveyor_belt') === true;
-  // 非传送带给 elevation>0：服务端直接拒（INVALID_ELEVATION「只有传送带可以架高」），本地同口径。
-  const invalidElevation = !isBelt && (input.elevation ?? 0) > 0;
-  const targetElevation = isBelt ? clampBeltElevation(input.elevation ?? 0) : 0;
   // 高架带只压 LowLogistics；地面层带子/其它建筑照旧占格。
   const occupiesLayer = (building: Building) => targetElevation > 0
     ? beltElevation(building) === targetElevation
@@ -475,13 +494,22 @@ function buildTileAssessment(input: {
       const sameLayerBuilding = buildings.find((building) => occupiesLayer(building) && (isFoundation || building.type !== "foundation") && tileContainsBuilding(building, x, y, input.planet.map_width / 3));
       // 高架带（elevation>0）只看同层占用：地面带/分拣器等 LowLogistics 允许压在下面。
       const blockingBuilding = sameLayerBuilding;
+      // 高架带脚下只能是空地或 LowLogistics：地面层压着非 LowLogistics 建筑（含地基）时
+      // 服务端回 POSITION_OCCUPIED「高架传送带不能架在建筑上方」（M1，文案与服务端同字）。
+      const groundOccupant = targetElevation > 0
+        ? buildings.find((building) => beltElevation(building) === 0 && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
+        : undefined;
       const blockingResource = findBlockingResource(resources, x, y);
       const blockingTask = constructionAt(x, y);
       if (invalidElevation) {
         blockedTiles.push({ x, y, terrain, reason: "invalid_elevation" });
       }
       // 地面建筑（非 LowLogistics）不能建在有高架带的格子上：任一占地格有高架带即拒。
-      const overheadBelt = !invalidElevation && targetElevation === 0 && input.buildingType && !isLowLogisticsType(input.buildingType)
+      // 物流塔豁免：服务端 build_commands.go 对 logistics_distributor 明确跳过这条检查
+      //（它比地面带高，允许「下方穿带」，L2）。物流塔现在走上方的独立分支（只查宿主仓库），
+      // 本来到不了这里；这条显式豁免是与服务端对齐的护栏，免得以后分支合并回去又踩上。
+      const overheadBelt = !invalidElevation && targetElevation === 0 && input.buildingType
+        && !isLowLogisticsType(input.buildingType) && input.buildingType !== "logistics_distributor"
         ? buildings.find((building) => beltElevation(building) > 0 && tileContainsBuilding(building, x, y, input.planet.map_width / 3))
         : undefined;
 
@@ -522,6 +550,18 @@ function buildTileAssessment(input: {
           terrain,
           reason: "overhead_belt",
           buildingId: overheadBelt.id,
+        });
+      }
+      if (groundOccupant && groundOccupant.type !== "foundation" && !isLowLogisticsType(groundOccupant.type)) {
+        blockedTiles.push({
+          x,
+          y,
+          terrain,
+          reason: "elevated_ground_occupied",
+          buildingId: groundOccupant.id,
+          groundBuildingId: groundOccupant.id,
+          groundBuildingType: groundOccupant.type,
+          groundBuildingOwn: Boolean(input.playerId) && groundOccupant.owner_id === input.playerId,
         });
       }
       if (blockingResource && !requiresResourceNode) {
@@ -683,7 +723,8 @@ export const BELT_DIRECTION_CYCLE: Direction[] = ["east", "north", "south", "wes
  * 自动解析只在「相邻带已给出方向」时才成立，玩家第一次铺线必然踩坑（本段踩了两次）。
  * 单格放置默认用建造栏显示的方向（R 旋转），auto 只作显式选项。
  */
-export const DEFAULT_BELT_DIRECTION: Direction = "east";
+// 类型故意用字面量（不用 `Direction`）：拖拽铺带的第一格要把它当 `SurfaceDirection` 用。
+export const DEFAULT_BELT_DIRECTION = "east";
 
 /** 进入建造模式时的初始方向：传送带默认「东」，其他建筑的 direction 无意义（保持 auto）。 */
 export function initialBuildDirection(buildingType: string): Direction {
