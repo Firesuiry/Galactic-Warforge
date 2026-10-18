@@ -85,15 +85,12 @@ const pageReady = () =>
 export async function shoot3d(driver, shot, outDir) {
   const body = `
 ${pageReady()}
-// 鼠标移到右下角空白处，避免悬停提示挡住画面。
-await page.mouse.move(1150, 620);
+// 鼠标停在顶栏空白处（HUD 上不触发地块悬停），避免悬停提示挡住画面或贴边被裁。
+await page.mouse.move(1000, 26);
 await L.focus(page, { x: ${shot.focus.x}, y: ${shot.focus.y} }, true);
 ${shot.tilt != null ? `await page.evaluate(() => window.__planetThree.setTilt(${shot.tilt}));` : ''}
 ${shot.zoom != null ? `await page.evaluate(() => window.__planetThree.zoom(${shot.zoom}));` : ''}
-${shot.rotateZ ? `await page.evaluate((a) => {
-  const s = window.__planetThree; const Q = s.world.quaternion.constructor; const V = s.camera.position.constructor;
-  s.world.quaternion.premultiply(new Q().setFromAxisAngle(new V(0, 0, 1), a));
-}, ${shot.rotateZ});` : ''}
+${shot.rotateZ ? `await page.evaluate((a) => window.__planetThree.rotateView(a), ${shot.rotateZ});` : ''}
 await L.sleep(${shot.settleMs ?? 2200});
 await page.screenshot({ path: ${JSON.stringify(path.join(outDir, shot.name + '.png'))}, timeout: 120000 });
 return S.errors.slice(-5);

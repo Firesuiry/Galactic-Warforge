@@ -1350,6 +1350,11 @@ export class PlanetThreeScene {
     this.updateCamera();
   }
   orbit() { this.groundView = false; this.altitude = 300; this.updateCamera(); }
+  /** 绕视线轴（屏幕中心法线）转画面：固定机位脚本的侧视/斜视用。 */
+  rotateView(radians: number) {
+    this.world.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(FRONT, radians));
+    this.updateCamera();
+  }
   /** 是否处于地面视角（全球视角下不需要「未探索区域」这类贴地提示）。 */
   isGroundView() { return this.groundView; }
   setTilt(value: number) { this.tilt = THREE.MathUtils.clamp(value, 0, 1.1); this.groundView = true; this.updateCamera(); }
