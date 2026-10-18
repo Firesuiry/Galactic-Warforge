@@ -4,6 +4,9 @@ import * as THREE from 'three';
 import { tileFrame } from './projection';
 import {
   CONSTRUCTION_BAR_FG,
+  ConstructionProgressOverlay,
+  DetectionOverlay,
+  RangeCircleOverlay,
   CONSTRUCTION_BAR_HEIGHT_TILES,
   CONSTRUCTION_BAR_WIDTH_TILES,
   DETECTION_PULSE_SECONDS,
@@ -89,6 +92,57 @@ describe('3D 战术叠加层纯函数（R20-B）', () => {
       expect(phase).toBeLessThan(1);
     }
     expect(detectionPhase({ x: 5, y: 9 })).not.toBe(detectionPhase({ x: 9, y: 5 }));
+  });
+
+  it('DetectionOverlay：按格去重建环、空列表清空、dispose 后组里不留对象', () => {
+    const overlay = new DetectionOverlay(RADIUS);
+    overlay.sync([{ x: 5, y: 9 }, { x: 5, y: 9 }, { x: 6, y: 9 }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(2);
+    overlay.sync([{ x: 6, y: 9 }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    overlay.sync([], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(0);
+    overlay.dispose();
+    expect(overlay.group.children).toHaveLength(0);
+  });
+
+  it('RangeCircleOverlay：ghost 移动只改朝向（同 key 不重建 mesh），换半径重建、空列表清空', () => {
+    const overlay = new RangeCircleOverlay(RADIUS);
+    overlay.sync([{ key: 'ghost:combat', center: { x: 5, y: 5 }, spec: { kind: 'combat', radiusTiles: 5 } }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    const holder = overlay.group.children[0];
+    const before = holder.quaternion.clone();
+    overlay.sync([{ key: 'ghost:combat', center: { x: 7, y: 6 }, spec: { kind: 'combat', radiusTiles: 5 } }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    expect(overlay.group.children[0]).toBe(holder);
+    expect(holder.quaternion.equals(before)).toBe(false);
+    // 半径变化：同一个 key 也要换几何。
+    overlay.sync([{ key: 'ghost:combat', center: { x: 7, y: 6 }, spec: { kind: 'combat', radiusTiles: 8 } }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    expect(overlay.group.children[0]).not.toBe(holder);
+    // 攻击 + 供电两圈共存。
+    overlay.sync([
+      { key: 'ghost:combat', center: { x: 7, y: 6 }, spec: { kind: 'combat', radiusTiles: 5 } },
+      { key: 'ghost:power', center: { x: 7, y: 6 }, spec: { kind: 'power', radiusTiles: 12 } },
+    ], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(2);
+    overlay.sync([], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(0);
+    overlay.dispose();
+  });
+
+  it('ConstructionProgressOverlay：进度可算才出条，完成后移除', () => {
+    const overlay = new ConstructionProgressOverlay(RADIUS);
+    overlay.sync([
+      { id: 'c-1', tile: { x: 3, y: 4 }, progress: .25 },
+      { id: 'c-2', tile: { x: 5, y: 6 }, progress: null },
+    ], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    overlay.sync([{ id: 'c-1', tile: { x: 3, y: 4 }, progress: 1 }], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(1);
+    overlay.sync([], FACE_SIZE);
+    expect(overlay.group.children).toHaveLength(0);
+    overlay.dispose();
   });
 
   it('样式常量对齐契约：线宽 .06 格、线不透明度 .55、进度色 #7df7b0、脉冲 1.6s、进度条 .8×.08 格', () => {
