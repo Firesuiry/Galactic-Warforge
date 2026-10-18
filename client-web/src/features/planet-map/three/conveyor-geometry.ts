@@ -37,6 +37,8 @@ export const BELT_TOTAL_WIDTH = BELT_RAIL_OUTER * 2;
 export const BELT_BASE_LIFT = .045;
 /** 侧面汇入开口的半宽（= 支带外沿半宽）：主带侧栏在这段被切开。 */
 const MERGE_OPENING_HALF = BELT_RAIL_OUTER;
+/** 支带带面探进主带带面的长度（盖住主带带面边缘的深色边带）。 */
+const MERGE_DECK_TONGUE = .05;
 
 export interface ConveyorPath {
   building: Building;
@@ -373,8 +375,8 @@ export class ConveyorGeometry {
     }
     const groundTiles = groundOccupancy(buildings, faceSize);
     type Ribbon = { path: ConveyorPath; tile: number; steps: number; capStart: boolean; capEnd: boolean;
-      railCapEnd?: boolean; deck: number; uScale?: number; cut?: (local: THREE.Vector2) => boolean };
-    const ribbon = ({ path, tile, steps, capStart, capEnd, railCapEnd, deck, uScale = 1, cut }: Ribbon) => {
+      railCapEnd?: boolean; deck: number; uScale?: number; deckTongue?: number; cut?: (local: THREE.Vector2) => boolean };
+    const ribbon = ({ path, tile, steps, capStart, capEnd, railCapEnd, deck, uScale = 1, deckTongue = 0, cut }: Ribbon) => {
       const frames = Array.from({ length: steps + 1 }, (_, index) => {
         const t = index / steps, p = path.point(t);
         return { p, up: p.clone().normalize(), side: path.side(t) };
@@ -408,6 +410,14 @@ export class ConveyorGeometry {
           at(index, -BELT_DECK_HALF, BELT_DECK_TOP), at(index + 1, -BELT_DECK_HALF, BELT_DECK_TOP),
           at(index + 1, BELT_DECK_HALF, BELT_DECK_TOP), at(index, BELT_DECK_HALF, BELT_DECK_TOP),
           index / steps * uScale, (index + 1) / steps * uScale, 0, 1);
+      }
+      // 支带带面再往主带带面里探一小段（略抬高）：盖住主带带面边缘的深色边带，接缝处不留一道黑线。
+      if (deckTongue > 0) {
+        const last = frames[steps], forward = tangentAt(steps).multiplyScalar(deckTongue * size);
+        const edge = (lateral: number, ahead: boolean) => last.p.clone().add(ahead ? forward : new THREE.Vector3())
+          .addScaledVector(last.side, lateral * size).addScaledVector(last.up, (BELT_DECK_TOP + .002) * size);
+        append(decks[deck], tile, edge(-BELT_DECK_HALF, false), edge(-BELT_DECK_HALF, true), edge(BELT_DECK_HALF, true), edge(BELT_DECK_HALF, false),
+          uScale, uScale + deckTongue, 0, 1);
       }
       const capAt = (edge: number, shape: [number, number][], triangles: number[][], mirror: boolean) => {
         const frameAt = frames[edge], tangent = tangentAt(edge).multiplyScalar(edge === 0 ? -1 : 1);
@@ -451,7 +461,7 @@ export class ConveyorGeometry {
       const tile = indices.get(merge.path.building.id)!;
       // 支带：u 只走 .5 − .24 = .26 格，箭头尺寸与整格一致，并接上游带体的相位。
       ribbon({ path: merge.path, tile, steps: 4, capStart: false, capEnd: false, railCapEnd: true,
-        deck: DECK_TIERS.indexOf(tierOf(merge.path.building)), uScale: .5 - BELT_DECK_HALF });
+        deck: DECK_TIERS.indexOf(tierOf(merge.path.building)), uScale: .5 - BELT_DECK_HALF, deckTongue: MERGE_DECK_TONGUE });
     }
     // 高架带支撑柱：地面空着才立（被地面带/分拣器/建筑占着的格子不立）。
     function pillars(path: ConveyorPath, frames: { p: THREE.Vector3; up: THREE.Vector3; side: THREE.Vector3 }[], cell: number) {
