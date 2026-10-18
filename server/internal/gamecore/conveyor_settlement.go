@@ -199,6 +199,22 @@ func cloneSpray(state *model.SprayState) *model.SprayState {
 // All belt-like transport uses one simultaneous inventory settlement. Requests
 // reserve real stacks from the tick's initial buffers; receipts never move again
 // in the same tick and no item can be offered to multiple outputs.
+//
+// 吞吐模型（第 19 轮契约 §2 修订，2026-10-18）：
+// 传送带是流水线，一个 tick 内「从队首推出 f 件」与「从队尾收进 f 件」是同时发生的，
+// 推出腾出的空间当场就可以再收。所以每格的**可接收容量按「本 tick 送出后」的空位算**：
+//   capacities[X] = MaxStack − (tick 初持有 + 本 tick 已收进 − 本 tick 已送出)
+// 每成功送出一笔就把腾出的空位记回源格（capacities[source] += movedQty），
+// 于是稳态吞吐只受 throughput 约束（不再被 stack_limit/2 卡住），并且永远不会超容量：
+// 容量按「实际收进/送出」增量维护，等价于实时空位，只是把本 tick 收进的货记在 receipts
+// （tick 末才 AppendStacks）——本 tick 收到的货不会再被送出去，所以一件物品在同一
+// tick 里最多跨一格（receipts 里的货对 remaining[source] 不可见）。
+//
+// 分配顺序与收敛：目标格可能在源格之后才处理，所以空位是随着「送出」在循环里往回传播的；
+// 外层 for 循环反复扫描直到没有新的搬运（每个目标每轮最多一笔），链长 N 的带子最多
+// 需要 N 轮把尾端的空位传到链首。循环一定收敛：每笔搬运都消耗一个 offer，而 offer 总数
+// 有界（每格每 tick ≤ throughput）。分流器的「每 tick 最多收进 throughput 件」是配额
+// （splitterIntake），不随腾出的空间放宽。
 func settleConveyors(ws *model.WorldState) {
 	if ws == nil {
 		return
@@ -229,8 +245,20 @@ func settleConveyors(ws *model.WorldState) {
 	remaining := make(map[string]*model.ConveyorState, len(ids))
 	offers := make(map[string]int, len(ids))
 	capacities := make(map[string]int, len(ids))
+	splitterIntake := make(map[string]int, len(ids))
 	receipts := make(map[string][]model.ItemStack, len(ids))
 	grants := make(map[string]map[string]int, len(ids))
+	// canAccept 报告目标格本 tick 还能不能收进一件货：既要物理上有空位，也不能超过
+	// 分流器的每 tick 入口配额（配额不因为自己送出了货而放宽）。
+	canAccept := func(targetID string) bool {
+		if capacities[targetID] <= 0 {
+			return false
+		}
+		if quota, ok := splitterIntake[targetID]; ok && quota <= 0 {
+			return false
+		}
+		return true
+	}
 	for _, id := range ids {
 		building := conveyors[id]
 		remaining[id] = building.Conveyor.Clone()
@@ -238,6 +266,7 @@ func settleConveyors(ws *model.WorldState) {
 		offers[id] = min(building.Conveyor.Throughput, building.Conveyor.TotalItems())
 		capacities[id] = conveyorInsertCapacity(ws, building)
 		if building.Splitter != nil {
+			splitterIntake[id] = building.Conveyor.Throughput
 			capacities[id] = min(capacities[id], building.Conveyor.Throughput)
 		}
 	}
@@ -251,7 +280,7 @@ func settleConveyors(ws *model.WorldState) {
 					continue
 				}
 				for _, link := range orderConveyorLinks(conveyors[id], links[id]) {
-					if capacities[link.targetID] <= 0 {
+					if !canAccept(link.targetID) {
 						continue
 					}
 					index := conveyorRequestStack(conveyors[id], conveyors[link.targetID], remaining[id], link.output, diverse)
@@ -306,6 +335,11 @@ func settleConveyors(ws *model.WorldState) {
 				receipts[targetID] = append(receipts[targetID], moved...)
 				offers[request.sourceID]--
 				capacities[targetID] -= movedQty
+				if _, isSplitter := splitterIntake[targetID]; isSplitter {
+					splitterIntake[targetID] -= movedQty
+				}
+				// 流水线口径：送出腾出的空位本 tick 立刻可以再收（见函数头注释）。
+				capacities[request.sourceID] += movedQty
 				grants[targetID][request.sourceID]++
 				recordConveyorDeparture(ws, source, movedQty)
 				if source.Splitter != nil {

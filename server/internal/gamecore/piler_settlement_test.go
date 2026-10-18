@@ -80,6 +80,8 @@ func TestAutomaticPilerIntegrationTechRaisesPileHeightToFour(t *testing.T) {
 // Inserting a piler into a belt line must raise the line's sustained
 // throughput: the piler carries whole piles per throughput unit while the
 // plain belt segment carries single items.
+// 流水线口径下普通带子（throughput 2）每 tick 就推 2 件，不再被 stack_limit/2 腰斩，
+// 所以集装机的增益是「同 throughput 下每单位搬一整堆」：正好 pileHeight(=2) 倍。
 func TestAutomaticPilerRaisesLineThroughput(t *testing.T) {
 	runLine := func(withPiler bool, ticks int) int {
 		ws := pilerWorld(t)
@@ -114,8 +116,8 @@ func TestAutomaticPilerRaisesLineThroughput(t *testing.T) {
 
 	beltLine := runLine(false, 10)
 	pilerLine := runLine(true, 10)
-	if pilerLine <= beltLine*2 {
-		t.Fatalf("piler line throughput %d not meaningfully above belt line %d", pilerLine, beltLine)
+	if pilerLine < beltLine*2 {
+		t.Fatalf("piler line throughput %d should be at least 2x belt line %d (pile height 2)", pilerLine, beltLine)
 	}
 }
 
