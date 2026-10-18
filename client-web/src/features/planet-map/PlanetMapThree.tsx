@@ -407,9 +407,22 @@ export function PlanetMapThree(props: Props) {
             drag.path[0] = { ...drag.path[0], direction: segment[0].direction };
             drag.moved = true;
           }
-          // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只接后面新增的格。
-          drag.path.push(...segment.slice(1).map(part => ({ ...part, elevation: drag.startElevation })));
-          drag.tile = tile;
+          // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只处理后面新增的格。
+          // 回拖（DSP 拖带回拖 = 把带子缩短）时指针会回到路径里已有的格：截断到指针所在格
+          //（含），既不追加反向格，也不会把同一格下单两次（B3）。
+          const last = segment[segment.length - 1];
+          const revisited = drag.path.findIndex(part => part.tile.x === last.tile.x && part.tile.y === last.tile.y);
+          if (revisited >= 0) {
+            drag.path.length = revisited + 1;
+            drag.path[revisited] = { ...drag.path[revisited], direction: last.direction };
+          } else {
+            for (const part of segment.slice(1)) {
+              // 防御性按格去重：自交的笔迹可能再次经过路径里的格。
+              if (drag.path.some(entry => entry.tile.x === part.tile.x && entry.tile.y === part.tile.y)) continue;
+              drag.path.push({ ...part, elevation: drag.startElevation });
+            }
+          }
+          drag.tile = drag.path.at(-1)?.tile ?? tile;
           scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
           const mode = usePlanetViewStore.getState().interactionMode;
           if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: segment[segment.length-1].direction });
@@ -448,7 +461,13 @@ export function PlanetMapThree(props: Props) {
       if (singleClick) {
         latest.current.onInteractTile?.(drag.path[0].tile, { elevation: drag.path[0].elevation });
       } else {
+        // 提交前再按格去重（拖拽预览已经保证不重复，这里是最后一道防线：
+        // 同一格下两次单会让服务端第二次回 POSITION_OCCUPIED）。
+        const seen = new Set<string>();
         for (const part of resolveBeltDragPath(drag)) {
+          const key = `${part.tile.x},${part.tile.y}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
           latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
         }
       }
