@@ -204,6 +204,23 @@ describe('authoritative sorter arm swing', () => {
     f.assets.dispose();
   });
 
+  it('plays a late-but-new transfer (scene data refreshes on SSE events, may lag dozens of ticks)', () => {
+    // 1018 联调：数据层只在 SSE 事件后刷新场景，挂机产线里 last_transfer 迟到几十 tick 很常见。
+    // 旧实现把「tick 差 > 20」当历史记录跳过 → 机械臂永远不动。
+    const f = fixture();
+    f.building.sorter!.last_transfer!.tick = 99;
+    syncSorterAnimation(f.model, f.building, 100, 48);
+    expect(sample(f, 1.6).some(item => item.visible)).toBe(true);
+    // 中间若干次没有新记录的刷新（sequence 不变，提前返回但 snapshotTick 前进）。
+    for (const tick of [140, 160, 180]) syncSorterAnimation(f.model, f.building, tick, 48);
+    // 新记录迟到 50 tick 才到客户端：仍然要播一次。
+    f.building.sorter!.last_transfer!.sequence = 2;
+    f.building.sorter!.last_transfer!.tick = 150;
+    syncSorterAnimation(f.model, f.building, 200, 48);
+    expect(sample(f, 1.6).some(item => item.visible)).toBe(true);
+    f.assets.dispose();
+  });
+
   it('rejects stale/future/zero-quantity records like the previous implementation', () => {
     for (const [tick, quantity] of [[80, 1], [49, 1], [50, 0]]) {
       const f = fixture();

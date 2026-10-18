@@ -151,9 +151,11 @@ export function syncSorterAnimation(model: THREE.Group, building: Building, tick
   }
   const transfer = building.sorter?.last_transfer;
   if (!transfer || transfer.quantity <= 0 || transfer.sequence <= motion.observedSequence || tick < transfer.tick) return;
-  // 历史记录/慢帧漏掉的记录不重放：只把空闲姿态对准真实取货端（不播整段搬运）。
-  // 观察过一次活动记录后，两条快照之间发生的新记录仍然有效（慢帧也能播）。
-  if (tick - transfer.tick > RECENT_TICKS && (previousTick === undefined || transfer.tick <= previousTick)) {
+  // 只有**首次**观察到的历史记录不重放（读档/首次进场时 last_transfer 可能是几十秒前的，
+  // 播出来像「凭空搬一次」）。之后只看 sequence 是否前进：数据层只在 SSE 事件后才刷新场景，
+  // 挂机产线里 last_transfer 可能迟到十几~几十 tick，再按 tick 新旧判历史会导致
+  // **机械臂永远不动**（1018 联调实测）。sequence 单调已经足够防重放。
+  if (motion.observedSequence === 0 && tick - transfer.tick > RECENT_TICKS) {
     motion.pickup = motion.nextPickup; motion.drop = motion.nextDrop;
     if (motion.elapsed >= motion.cycle) pose(arm, motion, motion.pickup, 1, false);
     return;
