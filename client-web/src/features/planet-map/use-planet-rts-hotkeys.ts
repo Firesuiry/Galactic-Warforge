@@ -59,7 +59,10 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, interactions }: Use
       }
 
       // 第 19 轮 §3.5：PageUp/PageDown 升降传送带建造目标高度（先查过：未被其它快捷键占用）。
-      // 只在传送带建造模式下生效；输入框/下拉框聚焦时上面的守卫已提前返回。
+      // 只在传送带建造模式下生效，且**只在这种模式下 preventDefault**：非传送带模式
+      //（勘查/其它建造/其它交互）PageUp/PageDown 必须保留浏览器与页面的默认行为
+      //（滚动页面等），不能因为本快捷键把翻页键吞掉（L6 回归断言）。
+      // 输入框/下拉框聚焦时上面的守卫已提前返回。
       if (key === 'PageUp' || key === 'PageDown') {
         if (store.interactionMode.kind === 'build' && store.interactionMode.buildingType.startsWith('conveyor_belt')) {
           store.adjustBuildElevation(key === 'PageUp' ? 1 : -1);
