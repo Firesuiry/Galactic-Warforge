@@ -146,7 +146,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		if ws.Construction != nil {
 			if key := model.BeltLayerKey(tile.X, tile.Y, p.Elevation); ws.Construction.IsTileReserved(key) {
 				res.Code = model.CodePositionOccupied
-				res.Message = "该层已有施工任务"
+				res.Message = constructionReservationMessage(ws, playerID, key)
 				return res, nil
 			}
 		}

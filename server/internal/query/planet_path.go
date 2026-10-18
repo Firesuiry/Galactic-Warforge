@@ -42,6 +42,12 @@ func (ql *Layer) PlanetPath(ws *model.WorldState, playerID, unitID string, targe
 	}
 	blocked := map[model.Position]bool{}
 	for _, b := range ql.vis.FilterBuildings(ws, playerID) {
+		// 与权威移动口径一致（gamecore.tileWalkableForUnit 只看 Grid.BuildingID）：
+		// 不占地面层的建筑不挡路——高架带（elevation≥1）、叠层（Z>0）、地基。
+		// 高架带若在这里被当成地面障碍，预览会给出「走不通」而服务端其实放行。
+		if b.BeltElevation() > 0 || b.Position.Z > 0 || b.Type == model.BuildingTypeFoundation {
+			continue
+		}
 		tiles, err := ws.BuildingTiles(b)
 		if err != nil {
 			return nil, fmt.Errorf("building %s has invalid surface footprint: %w", b.ID, err)

@@ -120,7 +120,10 @@ type ConstructionTaskView struct {
 	ConveyorDirection model.ConveyorDirection `json:"conveyor_direction,omitempty"`
 	RecipeID          string                  `json:"recipe_id,omitempty"`
 	// MiningItem：采集类施工任务唯一开采的矿种（目录物品 ID，排产时定下）。
-	MiningItem        string                  `json:"mining_item,omitempty"`
+	MiningItem string `json:"mining_item,omitempty"`
+	// Elevation：传送带施工任务的目标层（第 19 轮契约 §3.2）：0 = 地面（omitempty
+	// 下不下发），1..MaxBeltElevation = 高架。前端本地预检读 task.elevation。
+	Elevation         int                     `json:"elevation,omitempty"`
 	Cost              model.BuildCost         `json:"cost,omitempty"`
 	State             model.ConstructionState `json:"state"`
 	WaitReason        string                  `json:"wait_reason,omitempty"`
@@ -523,6 +526,7 @@ func collectConstructionTasks(ws *model.WorldState, playerID string) []Construct
 			ConveyorDirection: task.ConveyorDirection,
 			RecipeID:          task.RecipeID,
 			MiningItem:        task.MiningItem,
+			Elevation:         task.Elevation,
 			Cost: model.BuildCost{
 				Items: costItems,
 			},
