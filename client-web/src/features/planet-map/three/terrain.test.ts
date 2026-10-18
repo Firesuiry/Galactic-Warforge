@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
-import { SHADER_COLOR, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
+import { SHADER_COLOR, SHADER_HEADER, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
 
 function scene(): PlanetSceneView {
   return {
@@ -94,8 +94,12 @@ describe('3D player-visible terrain', () => {
     expect(SHADER_COLOR).toContain('* swKnown;');
     expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown) * swFog');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v6');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
     disposePlanetSurface(mesh);
+  });
+
+  it('迷雾开关 uniform 在着色器里声明（漏声明会让整个片元着色器编译失败）', () => {
+    expect(SHADER_HEADER).toContain('uniform float swFog;');
   });
 
   it('迷雾图层开关：swFog uniform 默认 1，setPlanetSurfaceFog(false) 后未探索格不再盖测绘面纱', () => {
@@ -119,7 +123,7 @@ describe('3D player-visible terrain', () => {
     expect(edgeBlock).not.toContain('swLocalColor');
     expect(SHADER_COLOR).toContain('swKnownEdge *');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v6');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
     disposePlanetSurface(mesh);
   });
 

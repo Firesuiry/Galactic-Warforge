@@ -94,7 +94,7 @@ function coastAt(x: number, y: number, faceSize: number, sample: (x: number, y: 
   });
 }
 
-const SHADER_HEADER = /* glsl */`
+export const SHADER_HEADER = /* glsl */`
   varying vec3 swSurfacePosition;
   uniform sampler2D swOverviewColor;
   uniform sampler2D swOverviewProperties;
@@ -106,6 +106,7 @@ const SHADER_HEADER = /* glsl */`
   uniform vec2 swLocalDimensions;
   uniform vec2 swOverviewDimensions;
   uniform float swTime;
+  uniform float swFog;
   uniform vec4 swPatchBounds[7];
   uniform vec4 swPatchUV[7];
   float swHash(vec3 p) {
@@ -274,7 +275,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         normal = normalize(abs(swDet) * normal - swGradient);
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v6';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v7';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
   mesh.receiveShadow = true;
   mesh.name = 'player-visible-planet-surface';
