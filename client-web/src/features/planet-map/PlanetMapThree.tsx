@@ -88,39 +88,21 @@ export function PlanetMapThree(props: Props) {
   const railRef = useRef<HTMLDivElement | null>(null);
   useHudRailTop(railRef, [props.layerPanel, props.onSelectEntity]);
   // Shift+左键拖动 = 屏幕矩形框选（左键拖动保持球面旋转）。
-  // 拖拽铺带（第 19 轮 §3.5）：path 逐格带 direction/elevation，松手前每格已按拖拽起点
-  // 重新结算过高度（拖拽中按 PageUp/PageDown 改目标高度，后面的格子自动起坡/落坡）。
+  // 拖拽铺带（第 19 轮 §3.5）：path 逐格带 direction/elevation；拖拽中按 PageUp/PageDown
+  // 改目标高度时整条路径重新结算（后面的格子自动起坡/落坡），松手时一次性逐格下单。
+  // 不在拖拽过程中下单：高度是「目标高度」的函数，中途下发会先在旧高度上落一批带子。
   const beltDrag = useRef<{
     tile: TilePoint;
-    placed: Set<string>;
     path: BeltElevationPlacement[];
     /** 第一格高度（接现成上游带时是上游带的高度，否则取拖拽开始时的目标高度）。 */
     startElevation: number;
-    /** 已下单的格数（后续格子的高度变化要补下单）。 */
-    placedCount: number;
   } | null>(null);
-  /** 已下单格子的签名：方向/高度变化时补发 build 命令（服务端按 id 去重不了重复位置，只能少发）。 */
-  const placedSignature = useRef(new Map<string, string>());
 
-  function placeBelt(part: BeltElevationPlacement) {
-    const store = usePlanetViewStore.getState();
-    const mode = store.interactionMode;
-    if (mode.kind !== 'build' || !beltDrag.current) return;
-    const key = part.tile.x + ':' + part.tile.y;
-    const signature = `${part.direction}@${part.elevation}`;
-    if (beltDrag.current.placed.has(key)) {
-      if (placedSignature.current.get(key) === signature) return;
-      // 拖拽中改了目标高度：同一格的高度变了，补一条 build（服务端对已占格会拒绝，不影响其它格）。
-      placedSignature.current.set(key, signature);
-      latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
-      return;
-    }
-    beltDrag.current.placed.add(key);
-    placedSignature.current.set(key, signature);
-    // 与其它建筑同一口径：地形未知的格子客户端没有数据，是否可建由服务端判定，
-    // 命令照常下发（本地预检统一在 use-planet-interactions 的 shouldBlockBuildLocally）。
-    // 早期这里直接 return，传送带在未探索区被静默丢弃（试玩 1010 B）。
-    latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
+  /** 按当前目标高度重算整条拖拽路径（第一格高度固定，之后直行 ±1、转弯保持）。 */
+  function resolveBeltDragPath(drag: NonNullable<typeof beltDrag.current>): BeltElevationPlacement[] {
+    const mode = usePlanetViewStore.getState().interactionMode;
+    const targetElevation = mode.kind === 'build' ? (mode.elevation ?? 0) : 0;
+    return assignBeltElevations(drag.path, drag.startElevation, targetElevation);
   }
   const marqueeRef = useRef<{ startX: number; startY: number; active: boolean } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -372,8 +354,7 @@ export function PlanetMapThree(props: Props) {
           props.planet.surface.face_size,
         );
         const first: BeltElevationPlacement = { tile, direction: 'east', elevation: startElevation };
-        beltDrag.current = { tile, placed: new Set(), path: [first], startElevation, placedCount: 0 };
-        placedSignature.current.clear();
+        beltDrag.current = { tile, path: [first], startElevation };
         scene.current?.setBeltDragPath([first]);
         event.currentTarget.setPointerCapture(event.pointerId);
         event.stopPropagation(); event.preventDefault();
@@ -396,25 +377,11 @@ export function PlanetMapThree(props: Props) {
         const drag = beltDrag.current;
         const segment = traceBeltStroke(drag.tile, tile, props.planet.surface.face_size);
         if (segment.length > 0) {
-          // 逐格接上方向/高度（第一格是拖拽起点，只接已算好的高度）。
-          const targetElevation = (() => {
-            const mode = usePlanetViewStore.getState().interactionMode;
-            return mode.kind === 'build' ? (mode.elevation ?? 0) : 0;
-          })();
-          const next: BeltElevationPlacement[] = segment.map((part, index) => {
-            if (drag.path.length === 0 && index === 0) return { ...part, elevation: drag.startElevation };
-            const previous = drag.path[drag.path.length - 1];
-            const elevation = previous
-              ? assignBeltElevations([previous, part], previous.elevation, targetElevation).at(-1)!.elevation
-              : drag.startElevation;
-            return { ...part, elevation };
-          });
-          for (const part of next.slice(0, -1)) placeBelt(part);
-          drag.path.push(...next);
-          scene.current?.setBeltDragPath(drag.path);
+          drag.path.push(...segment.map(part => ({ ...part, elevation: drag.startElevation })));
           drag.tile = tile;
+          scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
           const mode = usePlanetViewStore.getState().interactionMode;
-          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: next[next.length-1].direction });
+          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: segment[segment.length-1].direction });
         }
       }
       return;
@@ -439,8 +406,10 @@ export function PlanetMapThree(props: Props) {
     if (beltDrag.current) {
       event.stopPropagation();
       const drag = beltDrag.current;
-      const last = drag.path.at(-1);
-      if (last) placeBelt(last);
+      // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
+      for (const part of resolveBeltDragPath(drag)) {
+        latest.current.onInteractTile?.(part.tile, { direction: part.direction, elevation: part.elevation });
+      }
       beltDrag.current = null;
       scene.current?.setBeltDragPath(null);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
