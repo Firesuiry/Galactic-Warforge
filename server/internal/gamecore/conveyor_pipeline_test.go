@@ -193,3 +193,93 @@ func TestSplitterThreeWayOutputsConserveItems(t *testing.T) {
 		}
 	}
 }
+
+// TestConveyorOversizedLegacyCellDrainsToMaxStack 回归 A1：旧存档里带格件数
+// 可能超过新 stack_limit（第 19 轮把 mk2 从 5 改回 3、mk3 从 11 改回 6）。
+// 上游满料、下游畅通时，超量格必须「只出不进」直到回落到 MaxStack 以内，
+// 不能因为「送出即腾位」而送多少补多少、永远停在超量值上。
+// 同时断言全程件数守恒（不丢件、不复制件）。
+func TestConveyorOversizedLegacyCellDrainsToMaxStack(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 4)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+
+	source := newConveyorBuildingOfType("source", model.BuildingTypeConveyorBeltMk3, model.Position{X: 0, Y: 0}, model.ConveyorEast)
+	source.Conveyor.MaxStack = 64
+	source.Conveyor.Throughput = 8
+	// 旧档超量格：mk2 新 MaxStack=3，存档里 5 件。
+	over := newConveyorBuildingOfType("over", model.BuildingTypeConveyorBeltMk2, model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	if over.Conveyor.MaxStack != 3 {
+		t.Fatalf("mk2 MaxStack = %d, want 3", over.Conveyor.MaxStack)
+	}
+	over.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 5}})
+	sink := newConveyorBuildingOfType("sink", model.BuildingTypeConveyorBeltMk3, model.Position{X: 2, Y: 0}, model.ConveyorEast)
+	sink.Conveyor.MaxStack = 64
+	sink.Conveyor.Throughput = 8
+
+	attachBuilding(ws, source)
+	attachBuilding(ws, over)
+	attachBuilding(ws, sink)
+
+	inserted := 5 // 预置的 5 件也算进账。
+	drained := 0
+	settled := false
+	const ticks = 60
+	for tick := int64(0); tick < ticks; tick++ {
+		ws.Tick = tick
+		for {
+			accepted, _, err := source.Conveyor.Insert(model.ItemIronOre, 1)
+			if err != nil {
+				t.Fatalf("insert into source: %v", err)
+			}
+			if accepted <= 0 {
+				break
+			}
+			inserted += accepted
+		}
+		settleConveyors(ws)
+		if held := over.Conveyor.TotalItems(); held > 5 {
+			t.Fatalf("tick %d: oversized cell grew to %d items (duplication)", tick, held)
+		}
+		if tick >= 30 {
+			if held := over.Conveyor.TotalItems(); held > over.Conveyor.MaxStack {
+				t.Fatalf("tick %d: oversized cell still holds %d > MaxStack %d", tick, held, over.Conveyor.MaxStack)
+			}
+			settled = true
+		}
+		drained += countStacks(sink.Conveyor.Take(sink.Conveyor.TotalItems()))
+	}
+	if !settled {
+		t.Fatal("test did not reach the settled window")
+	}
+	onBelt := source.Conveyor.TotalItems() + over.Conveyor.TotalItems() + sink.Conveyor.TotalItems()
+	if inserted != drained+onBelt {
+		t.Fatalf("oversized cell lost/duplicated items: inserted=%d drained=%d onBelt=%d", inserted, drained, onBelt)
+	}
+	if held := over.Conveyor.TotalItems(); held > over.Conveyor.MaxStack {
+		t.Fatalf("final oversized cell holds %d > MaxStack %d", held, over.Conveyor.MaxStack)
+	}
+}
+
+// TestConveyorSettlementCapacityKeepsNegativeHeadroom 直接守住 A1 的修法：
+// 结算容量允许为负（超量格），插入容量（分拣器/建筑 IO 用）仍然钳 0。
+func TestConveyorSettlementCapacityKeepsNegativeHeadroom(t *testing.T) {
+	ws := model.NewWorldState("planet-1", 4)
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	belt := newConveyorBuildingOfType("over", model.BuildingTypeConveyorBeltMk2, model.Position{X: 1, Y: 0}, model.ConveyorEast)
+	belt.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: 5}})
+	attachBuilding(ws, belt)
+
+	if got := conveyorSettlementCapacity(ws, belt); got != -2 {
+		t.Fatalf("settlement capacity for 5 items on MaxStack 3 = %d, want -2", got)
+	}
+	if got := conveyorInsertCapacity(ws, belt); got != 0 {
+		t.Fatalf("insert capacity must stay clamped at 0, got %d", got)
+	}
+	// 分流器配额取 min(容量, throughput)，负容量保持负值 → canAccept 继续拒收。
+	splitter := newConveyorBuildingOfType("splitter", model.BuildingTypeSplitter, model.Position{X: 2, Y: 0}, model.ConveyorAuto)
+	splitter.Conveyor.AppendStacks([]model.ItemStack{{ItemID: model.ItemIronOre, Quantity: splitter.Conveyor.MaxStack + 4}})
+	attachBuilding(ws, splitter)
+	if got := conveyorSettlementCapacity(ws, splitter); got != -4 {
+		t.Fatalf("splitter settlement capacity = %d, want -4", got)
+	}
+}

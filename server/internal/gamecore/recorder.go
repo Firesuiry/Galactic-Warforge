@@ -83,14 +83,14 @@ type recorderStateUnit struct {
 }
 
 type recorderStateBuilding struct {
-	ID     string `json:"id"`
-	Owner  string `json:"o"`
-	Type   string `json:"t"`
-	X      int    `json:"x"`
-	Y      int    `json:"y"`
-	HP     int    `json:"hp"`
-	MaxHP  int    `json:"mhp"`
-	State  string `json:"s,omitempty"`
+	ID    string `json:"id"`
+	Owner string `json:"o"`
+	Type  string `json:"t"`
+	X     int    `json:"x"`
+	Y     int    `json:"y"`
+	HP    int    `json:"hp"`
+	MaxHP int    `json:"mhp"`
+	State string `json:"s,omitempty"`
 }
 
 type recorderPlanetState struct {

@@ -311,8 +311,8 @@ func TestAutoHaulCapsRobotsPerDemand(t *testing.T) {
 	}
 }
 
-// 5) 缺料停工的优先于远近：0.5 倍距离让远处「已经停工」的熔炉压过近处
-//    「只是偏低」的熔炉（近 30 cell 未停工 vs 远 40 cell 停工 → 20 < 30）。
+//  5. 缺料停工的优先于远近：0.5 倍距离让远处「已经停工」的熔炉压过近处
+//     「只是偏低」的熔炉（近 30 cell 未停工 vs 远 40 cell 停工 → 20 < 30）。
 func TestAutoHaulPrefersStarvedBuildingOverNearby(t *testing.T) {
 	core, ws := haulTestCoreWithFace(t, 64)
 	depot := placeAutoBuilding(t, ws, "b-depot", model.BuildingTypeDepotMk1, model.Position{X: 10, Y: 30})
