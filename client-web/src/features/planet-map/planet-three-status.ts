@@ -222,8 +222,7 @@ export function unitsInScreenRect(
  *
  * 3D 里不是独立图层的项在这里收敛：
  * - `terrain` 在 3D 与测绘面纱同一张贴图（面板在 3D 下不显示这个开关）；
- * - `fog` 的测绘面纱由 `three/terrain.ts` 着色器负责，scene 目前没有面纱开关方法
- *   （已列为需要 R20-B/主代理协调的接口，见报告）；这里先原样透传，不伪造效果。
+ * - `fog` 由 `three/terrain.ts` 的 swFog uniform 消费（scene.setInteraction 调 setPlanetSurfaceFog）；
  * - `selection`/`grid` 等其余键直接透传（scene 的 groupByLayer 会按同名分组消费）。
  */
 export function sceneLayerVisibility(layers: PlanetLayerVisibility): PlanetLayerVisibility {

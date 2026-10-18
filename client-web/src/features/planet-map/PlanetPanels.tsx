@@ -1941,8 +1941,7 @@ export function buildThreeShareUrl(options: {
 
 /**
  * 3D 视口快照按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时调用 `capture.getViewport()`，
- * 不在挂载时上报一次。scene 没有 `getCameraState` 时 `getViewport` 退化为中心格 + 当前 tilt
- * （altitude 0）；capture 未就绪时返回 null。
+ * 不在挂载时上报一次。capture 未就绪时返回 null。
  */
 export function readThreeViewport(capture: PlanetMapCapture | null | undefined): PlanetThreeViewportSnapshot | null {
   if (!capture?.getViewport) return null;
@@ -1988,7 +1987,7 @@ export function PlanetDebugPanel({
   runtime,
 }: PlanetDebugPanelProps) {
   // 3D 视口快照**不**在渲染期读取：只在面板打开/点「复制链接」/导出 JSON 时现拉
-  // （R20-A ⑥，旧实现挂载时上报一次，scene 没就绪时快照永远是 altitude 0）。
+  // （R20-A ⑥，旧实现挂载时上报一次，scene 没就绪时快照永远不可用）。
   const readViewportNow = () => (threeDimensional ? readThreeViewport(capture) : null);
   const {
     camera,

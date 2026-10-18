@@ -90,7 +90,7 @@ export function PlanetMapThree(props: Props) {
   /** 深链 `?zoom=` 的绝对高度：首次聚焦后重新落回该高度（分享链接的视角优先）。 */
   const initialZoomRef = useRef(props.initialZoom);
   initialZoomRef.current = props.initialZoom;
-  /** 最近一次读到的相机高度（R20-A ⑥：scene 没有 getCameraState 时省略 zoomLabel）。 */
+  /** 最近一次读到的相机高度（R20-A ⑥）：场景就绪前为 null，状态行省略缩放档。 */
   const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
   const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
@@ -380,7 +380,6 @@ export function PlanetMapThree(props: Props) {
     setReady(true);
     // 相机状态按需读取（R20-A ⑥）：调试面板打开/点「复制链接」时经 capture.getViewport 拉，
     // 不再在挂载时上报一次。scene 有 getCameraState 就用它（中心格 + 高度 + 俯仰），
-    // 没有时退化到 getCenterTile() + 本组件的 tilt（高度记 0，界面标为不可用）。
     const readViewport = (): PlanetThreeViewportSnapshot => {
       const state = readPlanetThreeCameraState(renderer);
       return {
