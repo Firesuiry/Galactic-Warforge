@@ -103,6 +103,12 @@ export function isCardinalDirection(direction: string | undefined): direction is
  *
  * `playerId` 给了就只看**自己的**带子（别人的带子不决定起始高度：场景数据里含敌方/中立建筑，
  * 接着敌人的带子定高会算出一个自己铺不出来的坡）。缺省（undefined）保持旧行为，只按几何判定。
+ *
+ * 例外（R20-E 单格架高）：单格放置（`isSingle`，单击、没有拖拽笔迹）时上游带的高度**低于**
+ * 目标高度就取目标高度——玩家意图是「在这个高度放一格」，它不会成为任何坡道的一部分
+ * （服务端坡道要求直行延续，单格没有下游）；按上游定高会悄悄把玩家点的 1 层带落到地面层，
+ * 压在地面上时再被本地预检以「该格已有你的建筑」拦下。拖拽铺带仍按上游定高起坡
+ * （§3.5 的「第一格接上游」），否则长距离拖拽会整条跳过坡道。
  */
 export function resolveBeltStartElevation(
   tile: SurfacePoint,
@@ -110,6 +116,7 @@ export function resolveBeltStartElevation(
   belts: readonly ExistingBeltLike[],
   size: number,
   playerId?: string,
+  isSingle = false,
 ): number {
   let upstream: number | undefined;
   for (const belt of belts) {
@@ -122,7 +129,9 @@ export function resolveBeltStartElevation(
     const elevation = clampBeltElevation(belt.conveyor?.elevation ?? 0);
     upstream = upstream === undefined ? elevation : Math.max(upstream, elevation);
   }
-  return clampBeltElevation(upstream ?? targetElevation);
+  const target = clampBeltElevation(targetElevation);
+  if (upstream === undefined) return target;
+  return isSingle && target > upstream ? target : upstream;
 }
 
 /**
