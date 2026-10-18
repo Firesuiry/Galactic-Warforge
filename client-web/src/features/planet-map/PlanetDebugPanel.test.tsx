@@ -221,12 +221,13 @@ describe("PlanetDebugPanel 3D 视口（R20-A ④）", () => {
     const getViewport = vi.fn(() => ({ center: { x: 42, y: 17 }, altitude: 3.5, tilt: 0.65, width: 1200, height: 800 }));
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    // 面板打开时渲染会读一次（相机行）；「复制链接」再按需拉一次当前状态。
     renderPanel({ capture: { clientWidth: 1200, clientHeight: 800, captureScreenshot: () => null, getViewport } });
-    // 挂载时面板不主动拉（旧实现是组件挂载时上报一次）。
-    expect(getViewport).not.toHaveBeenCalled();
+    getViewport.mockClear();
     fireEvent.click(screen.getByText("复制视角链接"));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
-    expect(getViewport).toHaveBeenCalledTimes(1);
+    // 复制时至少拉一次（相机行渲染 + 复制各拉一次；关键是没有用挂载时的旧快照）。
+    expect(getViewport).toHaveBeenCalled();
     const copied = new URL(writeText.mock.calls[0][0] as string);
     expect(copied.searchParams.get("x")).toBe("42");
     expect(copied.searchParams.get("y")).toBe("17");

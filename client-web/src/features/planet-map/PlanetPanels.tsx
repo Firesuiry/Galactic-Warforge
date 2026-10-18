@@ -2369,22 +2369,49 @@ export function PlanetDebugPanel({
               <dt>最近全量同步</dt>
               <dd>{formatTimestamp(lastFullSyncAt)}</dd>
             </div>
-            <div>
-              <dt>相机</dt>
-              <dd>
-                {Math.round(camera.offsetX)}, {Math.round(camera.offsetY)}
-              </dd>
-            </div>
-            <div>
-              <dt>缩放</dt>
-              <dd>
-                {getPlanetZoomStatusLabel(
-                  camera.zoomIndex,
-                  planet.map_width,
-                  planet.map_height,
-                )}
-              </dd>
-            </div>
+            {threeDimensional ? (
+              // 3D（R20-A ⑥）：相机是「中心格 + 高度 + 俯仰」，2D 的 offset/zoomIndex 不适用。
+              <>
+                <div>
+                  <dt>相机</dt>
+                  <dd>
+                    {(() => {
+                      const view = readThreeViewport(capture);
+                      return view?.center ? `${view.center.x}, ${view.center.y}` : "-";
+                    })()}
+                  </dd>
+                </div>
+                <div>
+                  <dt>缩放 / 俯仰</dt>
+                  <dd>
+                    {(() => {
+                      const view = readThreeViewport(capture);
+                      if (!view) return "-";
+                      return `${view.altitude > 0 ? view.altitude.toFixed(1) : "-"} / ${view.tilt.toFixed(2)}`;
+                    })()}
+                  </dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt>相机</dt>
+                  <dd>
+                    {Math.round(camera.offsetX)}, {Math.round(camera.offsetY)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>缩放</dt>
+                  <dd>
+                    {getPlanetZoomStatusLabel(
+                      camera.zoomIndex,
+                      planet.map_width,
+                      planet.map_height,
+                    )}
+                  </dd>
+                </div>
+              </>
+            )}
             <div>
               <dt>Hover</dt>
               <dd>
