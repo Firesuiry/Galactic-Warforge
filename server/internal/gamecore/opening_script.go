@@ -299,7 +299,8 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		pos = *spot
 	}
 	s.awaiting = true
-	return BuildCommand(pos.X, pos.Y, step.btype, step.recipe, model.ConveyorAuto), true}
+	return BuildCommand(pos.X, pos.Y, step.btype, step.recipe, model.ConveyorAuto), true
+}
 
 // linkedTargetType 返回「这条产线通向哪栋建筑」（带子那一步的 linkTo 角色之后的
 // 下游建筑那一步的类型），PlanBeltLink 需要它来算下游落位。

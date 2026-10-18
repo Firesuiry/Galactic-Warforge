@@ -369,3 +369,94 @@ func TestBuildElevationLayerConflictMessages(t *testing.T) {
 		t.Fatalf("same-layer construction conflict message: %+v", res)
 	}
 }
+
+// 跨层施工预留互查（审查 P2 / 契约 §3.2）：高架带与地面施工任务必须互斥，
+// 低矮物流地面任务与高架预留可共存。两个顺序都要覆盖。
+func TestConstructionReservationCrossLayerConflicts(t *testing.T) {
+	enqueue := func(t *testing.T, ws *model.WorldState, id string, btype model.BuildingType, pos model.Position, elevation int) error {
+		t.Helper()
+		return ws.Construction.Enqueue(ws, &model.ConstructionTask{
+			ID: id, PlayerID: "p1", BuildingType: btype, Position: pos,
+			Elevation: elevation, State: model.ConstructionPending,
+		})
+	}
+
+	t.Run("ground-building-then-elevated-belt-rejected", func(t *testing.T) {
+		core := newConstructionTestCore(t, 2, 2)
+		ws := core.world
+		pos, _ := findTwoOpenTiles(ws)
+		ws.Construction = model.NewConstructionQueue()
+		if err := enqueue(t, ws, "ground", model.BuildingTypeArcSmelter, pos, 0); err != nil {
+			t.Fatalf("enqueue ground task: %v", err)
+		}
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+			Target:  model.CommandTarget{Position: &pos},
+			Payload: map[string]any{"building_type": "conveyor_belt_mk1", "direction": "east", "elevation": 1},
+		})
+		if res.Code != model.CodePositionOccupied || !strings.Contains(res.Message, "第 1 层") || !strings.Contains(res.Message, "下方有地面施工任务") {
+			t.Fatalf("elevated belt over ground construction task: %+v", res)
+		}
+	})
+
+	t.Run("elevated-belt-then-ground-building-rejected", func(t *testing.T) {
+		core := newConstructionTestCore(t, 2, 2)
+		ws := core.world
+		pos, _ := findTwoOpenTiles(ws)
+		ws.Construction = model.NewConstructionQueue()
+		if err := enqueue(t, ws, "over", model.BuildingTypeConveyorBeltMk1, pos, 2); err != nil {
+			t.Fatalf("enqueue elevated task: %v", err)
+		}
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+			Target:  model.CommandTarget{Position: &pos},
+			Payload: map[string]any{"building_type": "arc_smelter", "recipe_id": "smelt_iron"},
+		})
+		if res.Code != model.CodePositionOccupied || !strings.Contains(res.Message, "第 2 层") || !strings.Contains(res.Message, "已有传送带施工任务") {
+			t.Fatalf("ground building under elevated construction task: %+v", res)
+		}
+	})
+
+	t.Run("low-logistics-ground-task-coexists", func(t *testing.T) {
+		core := newConstructionTestCore(t, 2, 2)
+		ws := core.world
+		pos, _ := findTwoOpenTiles(ws)
+		ws.Construction = model.NewConstructionQueue()
+		if err := enqueue(t, ws, "ground-belt", model.BuildingTypeConveyorBeltMk1, pos, 0); err != nil {
+			t.Fatalf("enqueue ground belt: %v", err)
+		}
+		res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{
+			Target:  model.CommandTarget{Position: &pos},
+			Payload: map[string]any{"building_type": "conveyor_belt_mk1", "direction": "east", "elevation": 1},
+		})
+		if res.Status != model.StatusExecuted {
+			t.Fatalf("elevated belt over ground belt construction task should be allowed: %+v", res)
+		}
+		// 反过来：高架预留不妨碍地面低矮物流任务。
+		ws2 := core.world
+		ws2.Construction = model.NewConstructionQueue()
+		pos2 := pos
+		if err := enqueue(t, ws2, "over-2", model.BuildingTypeConveyorBeltMk1, pos2, 1); err != nil {
+			t.Fatalf("enqueue elevated task: %v", err)
+		}
+		res, _ = execCommand(core, model.CmdBuild, ws2, "p1", model.Command{
+			Target:  model.CommandTarget{Position: &pos2},
+			Payload: map[string]any{"building_type": "splitter"},
+		})
+		if res.Status != model.StatusExecuted {
+			t.Fatalf("ground low-logistics building under elevated construction task should be allowed: %+v", res)
+		}
+	})
+
+	t.Run("queue-enqueue-enforces-cross-layer", func(t *testing.T) {
+		ws := model.NewWorldState("planet-1", 8)
+		ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+		ws.Construction = model.NewConstructionQueue()
+		pos := model.Position{X: 2, Y: 2}
+		if err := enqueue(t, ws, "ground", model.BuildingTypeArcSmelter, pos, 0); err != nil {
+			t.Fatalf("enqueue ground: %v", err)
+		}
+		err := enqueue(t, ws, "over", model.BuildingTypeConveyorBeltMk1, pos, 1)
+		if err == nil || !strings.Contains(err.Error(), "第 1 层") || !strings.Contains(err.Error(), "地面施工任务") {
+			t.Fatalf("Enqueue must reject elevated belt over ground construction task, got %v", err)
+		}
+	})
+}

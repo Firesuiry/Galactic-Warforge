@@ -127,7 +127,6 @@ func newConveyorBuildingOfType(id string, btype model.BuildingType, pos model.Po
 	return b
 }
 
-
 // TestConveyorTierThroughputRatio 固化分档吞吐比例 1 : 2 : 5。
 func TestConveyorTierThroughputRatio(t *testing.T) {
 	mk1 := measureBeltThroughput(t, model.BuildingTypeConveyorBeltMk1, false)

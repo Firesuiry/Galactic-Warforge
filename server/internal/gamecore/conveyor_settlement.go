@@ -58,6 +58,30 @@ func conveyorInsertCapacity(ws *model.WorldState, target *model.Building) int {
 	return target.Conveyor.AvailableCapacity()
 }
 
+// conveyorSettlementCapacity 是结算内部用的初始容量，允许为负：
+//
+//	MaxStack − 当前件数（不钳 0）
+//
+// 旧存档里带格可能超过新 MaxStack（第 19 轮把 mk2 的 stack_limit 从 5 改回 3，
+// mk3 从 11 改回 6）。若像 conveyorInsertCapacity 那样把负值钳成 0，超量格在
+// 上游满料时「送多少补多少」——每 tick 送出 1 件就记回 1 个空位，件数永远停在
+// 超量值上（mk2 存档 5 件、MaxStack 3 会一直保持 5 件）。保留负值后，canAccept
+// 仍要求容量 > 0，超量格先只出不进，直到回落到 MaxStack 以内才重新收货。
+// 结算全程用增量维护容量（送出 +=、收进 -=），所以负值只影响「什么时候重新
+// 开始收货」，不会让格子超收。
+func conveyorSettlementCapacity(ws *model.WorldState, target *model.Building) int {
+	if isAutomaticPiler(target) {
+		return pilerFreeCapacity(ws, target)
+	}
+	if target == nil || target.Conveyor == nil {
+		return 0
+	}
+	if target.Conveyor.MaxStack <= 0 {
+		return int(^uint(0) >> 1)
+	}
+	return target.Conveyor.MaxStack - target.Conveyor.TotalItems()
+}
+
 // beltBlockedWarnTicks 是「带上有货却一件都动不出去」多久后报警的阈值。
 // 按 tick 计，10 tps 下 30 秒；试玩里传送带堵死是几 tick 内就发生的事，
 // 这个阈值只用来滤掉换配方/开机瞬间的正常停顿。
@@ -203,7 +227,9 @@ func cloneSpray(state *model.SprayState) *model.SprayState {
 // 吞吐模型（第 19 轮契约 §2 修订，2026-10-18）：
 // 传送带是流水线，一个 tick 内「从队首推出 f 件」与「从队尾收进 f 件」是同时发生的，
 // 推出腾出的空间当场就可以再收。所以每格的**可接收容量按「本 tick 送出后」的空位算**：
-//   capacities[X] = MaxStack − (tick 初持有 + 本 tick 已收进 − 本 tick 已送出)
+//
+//	capacities[X] = MaxStack − (tick 初持有 + 本 tick 已收进 − 本 tick 已送出)
+//
 // 每成功送出一笔就把腾出的空位记回源格（capacities[source] += movedQty），
 // 于是稳态吞吐只受 throughput 约束（不再被 stack_limit/2 卡住），并且永远不会超容量：
 // 容量按「实际收进/送出」增量维护，等价于实时空位，只是把本 tick 收进的货记在 receipts
@@ -264,7 +290,7 @@ func settleConveyors(ws *model.WorldState) {
 		remaining[id] = building.Conveyor.Clone()
 		grants[id] = make(map[string]int)
 		offers[id] = min(building.Conveyor.Throughput, building.Conveyor.TotalItems())
-		capacities[id] = conveyorInsertCapacity(ws, building)
+		capacities[id] = conveyorSettlementCapacity(ws, building)
 		if building.Splitter != nil {
 			splitterIntake[id] = building.Conveyor.Throughput
 			capacities[id] = min(capacities[id], building.Conveyor.Throughput)

@@ -34,13 +34,13 @@ type BuildingCatalogEntry struct {
 	// CoverageRadius：采集建筑占地外再覆盖几圈（服务端 ValidateCollectorSite /
 	// CollectorCoverageCells 的同一数值）。客户端本地预检用它判断「锚点附近有没有矿」，
 	// 否则 3×3 矿机的锚点落在矿脉外圈时会被本地误拦（试玩 1015 实测）。
-	CoverageRadius int `json:"coverage_radius,omitempty"`
-	CanProduceUnits      bool                      `json:"can_produce_units,omitempty"`
-	UnlockTech           []string                  `json:"unlock_tech,omitempty"`
-	CombatRange          int                       `json:"combat_range,omitempty"`
-	PowerRange           int                       `json:"power_range,omitempty"`
-	IconKey              string                    `json:"icon_key"`
-	Color                string                    `json:"color"`
+	CoverageRadius  int      `json:"coverage_radius,omitempty"`
+	CanProduceUnits bool     `json:"can_produce_units,omitempty"`
+	UnlockTech      []string `json:"unlock_tech,omitempty"`
+	CombatRange     int      `json:"combat_range,omitempty"`
+	PowerRange      int      `json:"power_range,omitempty"`
+	IconKey         string   `json:"icon_key"`
+	Color           string   `json:"color"`
 }
 
 type ItemCatalogEntry struct {
