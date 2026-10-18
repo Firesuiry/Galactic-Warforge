@@ -38,6 +38,7 @@ import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
 import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
+import { buildingCoveringTile } from './three/pick-targets';
 import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
 import type { BattleEvent } from '@/engine/battle-events';
 import type { PlanetInteractionMode } from './store';
@@ -1429,19 +1430,7 @@ export class PlanetThreeScene {
    */
   private buildingCoveringTile(tile: TilePoint): string | undefined {
     const planet = this.data?.planet;
-    if (!planet) return undefined;
-    const faceSize = planet.surface.face_size;
-    let best: { id: string; distance: number } | undefined;
-    for (const building of Object.values(planet.buildings ?? {})) {
-      const footprint = getBuildingFootprint(building);
-      for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-        const cell = surfaceOffset(building.position, dx, dy, faceSize);
-        if (cell.x !== tile.x || cell.y !== tile.y) continue;
-        const distance = Math.abs(building.position.x - tile.x) + Math.abs(building.position.y - tile.y);
-        if (!best || distance < best.distance) best = { id: building.id, distance };
-      }
-    }
-    return best?.id;
+    return planet ? buildingCoveringTile(planet.buildings, tile, planet.surface.face_size) : undefined;
   }
   private pickAtCoords(clientX: number, clientY: number): TilePoint | null {
     return this.pickTargetAtCoords(clientX, clientY)?.tile ?? null;
