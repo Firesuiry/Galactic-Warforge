@@ -48,7 +48,6 @@ function renderPanel(overrides: {
   return render(
     <PlanetDebugPanel
       capture={overrides.capture ?? null}
-      captureVersion={overrides.capture ? 1 : 0}
       threeDimensional={overrides.threeDimensional ?? Boolean(overrides.capture)}
       currentTick={overrides.currentTick ?? 120}
       game={overrides.game ?? adminGame()}

@@ -1888,17 +1888,14 @@ export function PlanetActivityPanel({
 /**
  * 3D 相机视口快照：调试面板的分享链接/视口 JSON 在 3D 下按
  * 「中心格 + zoom + tilt」导出，不再用 2D 的 tileSize/offset 视口矩形。
- * 类型定义在 `planet-map-capture.ts`（与 capture.getViewport 同处），这里转出保持旧 import 可用。
+ * 类型定义在 `planet-map-capture.ts`（与 capture.getViewport 同处）。
  */
 import type { PlanetThreeViewportSnapshot } from "./planet-map-capture";
-export type { PlanetThreeViewportSnapshot };
 
 interface PlanetDebugPanelProps {
   catalog?: CatalogView;
   /** 行星地图截图捕获句柄（Pixi extract / 3D 画布）；尚未就绪时为 null。 */
   capture: PlanetMapCapture | null;
-  /** capture 版本号：3D 场景就绪后重渲染面板，拿到 getViewport 句柄（R20-A ⑥）。 */
-  captureVersion?: number;
   /** 是否 3D 视图：分享链接/视口 JSON 走 3D 口径（中心格 + zoom + tilt）。 */
   threeDimensional?: boolean;
   currentTick: number;
@@ -1980,7 +1977,6 @@ export function parseThreeViewLink(href: string): ThreeViewLinkParams {
 export function PlanetDebugPanel({
   catalog,
   capture,
-  captureVersion,
   threeDimensional,
   currentTick,
   game,
@@ -1991,7 +1987,6 @@ export function PlanetDebugPanel({
   planet,
   runtime,
 }: PlanetDebugPanelProps) {
-  void captureVersion;
   // 3D 视口快照**不**在渲染期读取：只在面板打开/点「复制链接」/导出 JSON 时现拉
   // （R20-A ⑥，旧实现挂载时上报一次，scene 没就绪时快照永远是 altitude 0）。
   const readViewportNow = () => (threeDimensional ? readThreeViewport(capture) : null);

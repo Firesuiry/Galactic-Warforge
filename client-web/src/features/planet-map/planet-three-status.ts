@@ -144,64 +144,50 @@ export function bindSceneMethods<T extends object>(target: T): Record<string, un
 }
 
 /**
- * 3D 相机状态（R20-A ④ / ⑥）：scene 的 `getCameraState()` 由 R20-B 提供；
- * 本分支按「有就调用、没有就退化」写——没有时用 `getCenterTile()` + 组件自己的 tilt 兜底。
+ * 高度 → 地面视角判定：`scene.zoom()` / `setAltitude()` 共用同一套阈值
+ * （>190 全球视角，<130 贴地；中间保持原状态，避免边界抖动）。
  */
+export function groundViewAtAltitude(altitude: number, current: boolean): boolean {
+  if (altitude > 190) return false;
+  if (altitude < 130) return true;
+  return current;
+}
+
+/** 3D 相机状态（R20-A ④ / ⑥）：由 scene 的 `getCameraState()` 提供。 */
 export interface PlanetThreeCameraState {
   center: { x: number; y: number } | null;
-  /** 相机高度（zoom 量纲）；scene 没有该接口时为 null（不是 0，避免伪造）。 */
-  altitude: number | null;
+  /** 相机高度（zoom 量纲）。 */
+  altitude: number;
   tilt: number;
-  /** 是否地面视角；scene 没暴露时按 altitude 推断，再退化到 true。 */
+  /** 是否地面视角。 */
   groundView: boolean;
 }
 
 interface CameraStateSource {
-  getCameraState?: () => {
-    center?: { x: number; y: number } | null;
-    altitude?: number;
-    zoom?: number;
-    tilt?: number;
-    groundView?: boolean;
-  } | null;
-  getCenterTile?: () => { x: number; y: number } | null;
-  isGroundView?: () => boolean;
+  getCameraState: () => {
+    center: { x: number; y: number } | null;
+    altitude: number;
+    zoom: number;
+    tilt: number;
+    groundView: boolean;
+  };
 }
 
-/**
- * 读取相机状态：优先 `scene.getCameraState()`；没有该方法时退化为
- * `getCenterTile()` + 当前 tilt（altitude 记 null）。
- */
-export function readPlanetThreeCameraState(
-  scene: CameraStateSource | null | undefined,
-  tiltFallback: number,
-): PlanetThreeCameraState {
-  const state = typeof scene?.getCameraState === 'function' ? scene.getCameraState() : null;
-  const center = state?.center
-    ?? (typeof scene?.getCenterTile === 'function' ? scene.getCenterTile() : null)
-    ?? null;
-  const altitudeRaw = state?.altitude ?? state?.zoom;
-  const altitude = typeof altitudeRaw === 'number' && Number.isFinite(altitudeRaw) ? altitudeRaw : null;
-  const tilt = typeof state?.tilt === 'number' && Number.isFinite(state.tilt) ? state.tilt : tiltFallback;
-  const groundView = typeof state?.groundView === 'boolean'
-    ? state.groundView
-    : typeof scene?.isGroundView === 'function'
-      ? scene.isGroundView()
-      : altitude === null || altitude < 130;
+/** 读取相机状态（调试面板 / 状态行 / 深链分享）。 */
+export function readPlanetThreeCameraState(scene: CameraStateSource): PlanetThreeCameraState {
+  const state = scene.getCameraState();
   return {
-    center: center ? { x: center.x, y: center.y } : null,
-    altitude,
-    tilt,
-    groundView,
+    center: state.center,
+    altitude: state.altitude,
+    tilt: state.tilt,
+    groundView: state.groundView,
   };
 }
 
 /**
- * 状态行缩放档文案：只有拿到相机高度（scene 有 `getCameraState`）时显示，
- * 否则省略（null）。档位与导航列一致：贴地 / 近景 / 全球。
+ * 状态行缩放档文案。档位与导航列一致：贴地 / 近景 / 全球。
  */
-export function cameraZoomLabel(altitude: number | null | undefined): string | null {
-  if (typeof altitude !== 'number' || !Number.isFinite(altitude)) return null;
+export function cameraZoomLabel(altitude: number): string {
   const level = altitude >= 190 ? '全球' : altitude >= 60 ? '近景' : '贴地';
   return `缩放 ${level} · 高度 ${altitude.toFixed(1)}`;
 }

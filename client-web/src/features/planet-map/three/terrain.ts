@@ -8,6 +8,8 @@ export interface PlanetSurfaceData {
   planet: PlanetRenderView;
   overview?: PlanetOverviewView;
   fog?: FogMapView | PlanetSceneView;
+  /** 图层「迷雾」开关（与 `setPlanetSurfaceFog` 同一个值）：建面/刷新时同步到 uniform。 */
+  fogLayer?: boolean;
 }
 
 // These are surface finishes, not generated terrain. Every biome and fog bit
@@ -283,9 +285,11 @@ export function createPlanetSurface(radius: number): PlanetSurface {
   return mesh;
 }
 
-export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog }: PlanetSurfaceData) {
+export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog, fogLayer }: PlanetSurfaceData) {
   const state = states.get(mesh);
   if (!state || planet.map_width < 1 || planet.map_height < 1) return;
+  // 迷雾开关是 uniform，不受地形源签名短路影响（局部曲面每次 setData 重建也靠这里接上）。
+  if (fogLayer !== undefined) state.uniforms.swFog.value = fogLayer ? 1 : 0;
   const bounds = 'bounds' in planet ? planet.bounds : { x: 0, y: 0, width: planet.map_width, height: planet.map_height };
   const effectiveFog = fog ?? ('bounds' in planet ? planet : undefined);
   const source = [planet.terrain, planet.map_width, planet.map_height, bounds.x, bounds.y, effectiveFog?.explored, effectiveFog?.visible,

@@ -142,10 +142,14 @@ export function PlanetPage() {
   );
   const { planetId = "" } = useParams();
   const captureRef = useRef<PlanetMapCapture | null>(null);
+  /** 在途的战区刷新订阅：卸载/换行星时统一取消。 */
+  const pendingTheaterRefetches = useRef(new Set<() => void>());
+  // capture 句柄稳定（getViewport 按需现读相机），调试面板直接读 ref，不需要版本号重渲染。
+  const handleCanvasReady = useCallback((capture: PlanetMapCapture | null) => {
+    captureRef.current = capture;
+  }, []);
   // 3D 深链（R20-A ⑥）：分享链接里的 `tilt` / `zoom` 在 3D 视图打开时还原相机。
-  // 3D 相机状态按需读取（调试面板打开/复制链接时经 capture.getViewport 拉），
-  // 不再维护挂载时上报一次的快照 state。
-  const [captureVersion, setCaptureVersion] = useState(0);
+  // 3D 相机状态按需读取（调试面板打开/复制链接时经 capture.getViewport 拉）。
   const threeInitialTilt = parseTiltParam(searchParams.get("tilt"), 0.65);
   const threeInitialZoom = (() => {
     const raw = searchParams.get("zoom");
@@ -409,8 +413,6 @@ export function PlanetPage() {
     }, { replace: true });
   }
 
-  const theatersQueryKey = ["war-theaters", session.serverUrl, session.playerId] as const;
-
   /**
    * 战区类命令（划定/新建）结算后刷新战区列表。
    *
@@ -419,24 +421,22 @@ export function PlanetPage() {
    * 画面 3.5s 仍是旧圆，要等 15s 兜底轮询）。改为等 journal 条目拿到权威回写
    * （SSE command_result / 快照补拉）再刷新，另带一次延迟兜底（见 settled-refetch.ts）。
    */
-  function refetchTheatersAfterCommand(commandType: string) {
-    refetchAfterCommandSettles(queryClient, {
-      commandType,
-      queryKey: theatersQueryKey,
+  const refetchTheatersAfterCommand = useCallback((requestId: string) => {
+    // 卸载/换行星时统一取消（下面的 cleanup），避免订阅与定时器泄漏。
+    const cancel = refetchAfterCommandSettles(queryClient, {
+      requestId,
+      queryKey: ["war-theaters", session.serverUrl, session.playerId],
     });
-  }
-
-  /**
-   * PlanetTheaterControls 的 onChanged（theater_create 提交返回后才触发）：
-   * 同样等它结算，否则新建的战区要等 15s 兜底轮询才出现在地图上。
-   */
-  function refetchTheatersAfterCreate() {
-    refetchAfterCommandSettles(queryClient, {
-      commandType: "theater_create",
-      queryKey: theatersQueryKey,
-      trackLatestExisting: true,
-    });
-  }
+    // 已结束的订阅再取消一次是空操作，集合随页面卸载一起清空。
+    pendingTheaterRefetches.current.add(cancel);
+  }, [queryClient, session.serverUrl, session.playerId]);
+  useEffect(() => {
+    const pending = pendingTheaterRefetches.current;
+    return () => {
+      for (const cancel of pending) cancel();
+      pending.clear();
+    };
+  }, [planetId, session.serverUrl, session.playerId]);
 
   /** C4：theater_zone 拖拽落点 → theater_define_zone（planet_id+position+radius）。 */
   function handleDefineZone(zone: TheaterZoneGeometry) {
@@ -444,7 +444,6 @@ export function PlanetPage() {
     if (mode.kind !== "theater_zone" || !planetId) {
       return;
     }
-    refetchTheatersAfterCommand("theater_define_zone");
     void submitPlanetCommand({
       commandType: "theater_define_zone",
       planetId,
@@ -459,6 +458,8 @@ export function PlanetPage() {
         event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
         limit: 50,
       }),
+    }).then((response) => {
+      if (response) refetchTheatersAfterCommand(response.request_id);
     });
     // 保持划定模式，便于连续画多个区域（右键/Esc 退出，对齐建造模式）
   }
@@ -954,11 +955,7 @@ export function PlanetPage() {
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
-          onCanvasReady={(capture) => {
-            captureRef.current = capture;
-            // 3D capture 就绪后让调试面板重渲染，拿到 getViewport 句柄（R20-A ⑥）。
-            setCaptureVersion(version => version + 1);
-          }}
+          onCanvasReady={handleCanvasReady}
           onContextTile={interactions.contextTile}
           onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
@@ -977,7 +974,7 @@ export function PlanetPage() {
           layerPanel={<PlanetLayerPanel networks={networks} planet={planet} runtime={runtime} threeDimensional />}
           theaterControls={(
             <PlanetTheaterControls
-              onChanged={refetchTheatersAfterCreate}
+              onChanged={refetchTheatersAfterCommand}
               planetId={planet.planet_id}
               theaters={theatersQuery.data?.theaters ?? []}
             />
@@ -989,9 +986,7 @@ export function PlanetPage() {
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
-          onCanvasReady={(capture) => {
-            captureRef.current = capture;
-          }}
+          onCanvasReady={handleCanvasReady}
           onContextTile={interactions.contextTile}
           onDefineZone={handleDefineZone}
           onInteractTile={interactions.interactTile}
@@ -1140,7 +1135,6 @@ export function PlanetPage() {
         />
         <PlanetDebugPanel
           capture={captureRef.current}
-          captureVersion={captureVersion}
           threeDimensional={isThree}
           catalog={catalog}
           currentTick={planet.tick}
@@ -1180,7 +1174,7 @@ export function PlanetPage() {
           runtime={runtime}
         >
           <PlanetTheaterControls
-            onChanged={refetchTheatersAfterCreate}
+            onChanged={refetchTheatersAfterCommand}
             planetId={planet.planet_id}
             theaters={theatersQuery.data?.theaters ?? []}
           />

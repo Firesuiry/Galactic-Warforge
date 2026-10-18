@@ -34,7 +34,8 @@ const ZONE_TYPES: WarTheaterZoneType[] = [
 interface PlanetTheaterControlsProps {
   planetId: string;
   theaters: WarTheaterView[];
-  onChanged?: () => void;
+  /** 命令已拿到服务端回执：参数是该条命令的 `response.request_id`，调用方据此等结算后刷新。 */
+  onChanged?: (requestId: string) => void;
 }
 
 export function PlanetTheaterControls({
@@ -87,7 +88,9 @@ export function PlanetTheaterControls({
         event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES],
         limit: 50,
       }),
-    }).then(() => onChanged?.());
+    }).then((response) => {
+      if (response) onChanged?.(response.request_id);
+    });
     setCreateId('');
     setCreateName('');
   }

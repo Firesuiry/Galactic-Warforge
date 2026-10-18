@@ -12,6 +12,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
+import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
@@ -327,7 +328,9 @@ export class PlanetThreeScene {
 
   setData(data: PlanetThreeData) {
     this.data = data;
-    updatePlanetSurface(this.surface, data);
+    // 大行星的局部曲面与全球球面共用 surface.material（同一个 swFog uniform），
+    // 这里把图层开关一起喂进去，重建局部曲面后迷雾开关同样生效。
+    updatePlanetSurface(this.surface, { ...data, fogLayer: this.interaction?.layers.fog });
     const localKey = JSON.stringify([data.planet.map_width, data.planet.map_height, 'bounds' in data.planet ? [data.planet.bounds, data.planet.surface_patches?.map(p => [p.bounds, p.height?.length ?? 0]), data.planet.height?.length ?? 0] : null]);
     if (localKey !== this.localSurfaceKey) {
       if (this.localSurface) { this.world.remove(this.localSurface); this.localSurface.geometry.dispose(); }
@@ -354,6 +357,7 @@ export class PlanetThreeScene {
   setInteraction(interaction: PlanetThreeInteraction) {
     this.interaction = interaction;
     // 图层「迷雾」：关闭时去掉未探索测绘面纱（R20-A D5；开关与 2D 的 layers.fog 同义）。
+    // 局部曲面与全球球面共用同一份材质/uniform，这一处同时覆盖两者。
     setPlanetSurfaceFog(this.surface, interaction.layers.fog);
     for (const [layer, group] of this.groupByLayer) group.visible = interaction.layers[layer as keyof PlanetLayerVisibility] ?? true;
     this.updateMarks();
@@ -1335,9 +1339,16 @@ export class PlanetThreeScene {
   }
   zoom(factor: number) {
     if (!(factor > 0)) return;
-    this.altitude = THREE.MathUtils.clamp(this.altitude / factor, Math.max(this.tileScale() * 2.5, 0.03), 430);
-    if (this.altitude > 190) this.groundView = false;
-    else if (this.altitude < 130) this.groundView = true;
+    this.setAltitude(this.altitude / factor);
+  }
+  /**
+   * 绝对高度入口（深链 `?zoom=`）：与 `zoom(factor)` 同一套 190/130 阈值决定地面视角，
+   * 全球高度（300）读回 `groundView === false`，贴地高度读回 true。
+   */
+  setAltitude(altitude: number) {
+    if (!Number.isFinite(altitude)) return;
+    this.altitude = THREE.MathUtils.clamp(altitude, Math.max(this.tileScale() * 2.5, 0.03), 430);
+    this.groundView = groundViewAtAltitude(this.altitude, this.groundView);
     this.updateCamera();
   }
   private updateCamera() {

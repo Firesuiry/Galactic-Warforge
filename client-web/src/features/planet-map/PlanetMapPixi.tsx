@@ -63,7 +63,6 @@ import {
 import { useSessionSnapshot } from '@/hooks/use-session';
 import type { PlanetMapCapture } from '@/features/planet-map/planet-map-capture';
 
-export type { PlanetMapCapture } from '@/features/planet-map/planet-map-capture';
 
 
 interface PlanetMapPixiProps {
