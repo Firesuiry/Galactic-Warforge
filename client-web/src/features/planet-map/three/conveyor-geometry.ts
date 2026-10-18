@@ -310,9 +310,10 @@ export class ConveyorGeometry {
         // 机身/内斜面/底面/端盖：深石墨。
         new THREE.MeshStandardMaterial({ color: '#2a3338', roughness: .6, metalness: .25, side: THREE.DoubleSide }),
         // 侧壁 + 支撑柱：中灰金属。
-        new THREE.MeshStandardMaterial({ color: '#6f7d84', roughness: .48, metalness: .32, side: THREE.DoubleSide }),
-        // 侧栏顶边：亮金属（远景的识别线）。
-        new THREE.MeshStandardMaterial({ color: '#c5cfd2', roughness: .32, metalness: .35, side: THREE.DoubleSide }),
+        new THREE.MeshStandardMaterial({ color: '#6f7d84', roughness: .58, metalness: .28, side: THREE.DoubleSide }),
+        // 侧栏顶边：亮色哑光（远景的识别线）。不能太光滑：太阳镜面高光会冲过 bloom 阈值，
+        // 屏幕一侧（背着太阳的那半边视线）的整段带栏会糊成一片白光。
+        new THREE.MeshStandardMaterial({ color: '#b9c4c8', roughness: .62, metalness: .12, side: THREE.DoubleSide }),
       ];
     this.deckMaterials = DECK_TIERS.map(tier => {
       const map = beltDeckTexture(tier);

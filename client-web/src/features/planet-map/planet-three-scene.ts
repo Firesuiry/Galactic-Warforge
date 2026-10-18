@@ -20,7 +20,7 @@ import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { BELT_BASE_LIFT, BELT_DECK_TOP, ConveyorGeometry } from './three/conveyor-geometry';
-import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION } from './logistics-tier';
+import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
 import { beltDeadEnds } from './sorter-filter';
 import { blockedBeltMarks } from './belt-blocked-marks';
@@ -953,7 +953,8 @@ export class PlanetThreeScene {
           .addScaledVector(south, offset * vector.x)
           .addScaledVector(east, -offset * vector.y)
           .normalize());
-        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .07, Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
+        // 高架带：短杠抬到该层带面高度（悬在带尾前方），不贴地。
+        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * (.07 + deadEnd.elevation * BELT_LEVEL_HEIGHT), Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
         mesh.renderOrder = 13;
         this.marks.add(mesh);
       }
@@ -974,7 +975,7 @@ export class PlanetThreeScene {
           .addScaledVector(south, offset * vector.x)
           .addScaledVector(east, -offset * vector.y)
           .normalize());
-        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .07, Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
+        const mesh = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * (.07 + beltElevation(mark.belt) * BELT_LEVEL_HEIGHT), Math.max(ts * .07, .02)), this.markMaterial('#ff5757', .95));
         mesh.renderOrder = 14;
         this.marks.add(mesh);
       }

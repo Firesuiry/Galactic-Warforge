@@ -221,13 +221,14 @@ export class SorterRigs {
     this.materials = {
       graphite: solid({ color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
       ceramic: solid({ color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
-      alloy: solid({ color: '#8d9da4', roughness: .32, metalness: .68 }, '#45c987', .7),
+      // 粗糙度压到 .46：太光滑时太阳高光会冲过 bloom 阈值，屏幕某一侧的机械臂整片发白。
+      alloy: solid({ color: '#8d9da4', roughness: .46, metalness: .6 }, '#45c987', .7),
       // 档位灯：不受光照，按实例色（档位色）显示，亮度压在 bloom 阈值下。
       light: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, transparent: ghost, opacity: ghost ? .8 : 1, depthWrite: !ghost }),
       // 端点小座：实例色（正常 = 合金灰；ghost = 绿/黄/红表示端点接没接上）。
       dock: ghost
         ? new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: .75, depthWrite: false, toneMapped: false })
-        : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .34, metalness: .6 }),
+        : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .48, metalness: .5 }),
       payload: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .72, metalness: .05, transparent: ghost, opacity: ghost ? .6 : 1 }),
     };
   }
@@ -414,6 +415,9 @@ export class SorterRigs {
       // 双平行摆臂：合金套筒（定长）+ 石墨伸缩杆（到腕轴），套筒顶上一道档位色灯条。
       const along = (distance: number): [number, number] => [Math.cos(arm.angle) * distance, SORTER_PIVOT_Y + Math.sin(arm.angle) * distance];
       const rodStart = .3, rodEnd = Math.max(rodStart + .01, arm.length - .02);
+      // 跨格长臂（2–3 格）按长度加粗伸缩杆，否则远看只剩一根细线；相邻格的短臂保持原截面。
+      const reachBeyond = Math.min(1.6, Math.max(0, arm.length - 1));
+      const rodHeight = .04 + reachBeyond * .016, rodDepth = .026 + reachBeyond * .01;
       const liftX = -Math.sin(arm.angle) * .035, liftY = Math.cos(arm.angle) * .035;
       for (const [pair, z] of [[0, .05], [1, -.05]] as const) {
         const [sx, sy] = along(.18);
@@ -421,7 +425,7 @@ export class SorterRigs {
         this.put('stripe', index, pair, [sx + liftX, sy + liftY, z], [.22, .008, .022], arm.angle);
         this.color('stripe', index, pair, light);
         const [rx, ry] = along((rodStart + rodEnd) / 2);
-        this.put('rod', index, pair, [rx, ry, z], [rodEnd - rodStart, .04, .026], arm.angle);
+        this.put('rod', index, pair, [rx, ry, z], [rodEnd - rodStart, rodHeight, rodDepth], arm.angle);
       }
       // 腕轴 + 始终朝下的夹爪（壳体 + 两指），物品挂在两指之间。
       const { wrist } = arm;

@@ -12,7 +12,7 @@
 import type { Building, CatalogView } from '@shared/types';
 
 import { getBuildingFootprint, type TilePoint } from './model';
-import { occupiesGround } from './logistics-tier';
+import { MAX_BELT_ELEVATION, beltElevation, occupiesGround } from './logistics-tier';
 import { DIRECTION_NAMES, OPPOSITE_DIRECTION, isCardinalDirection, logisticsArrows, stepTile, type CardinalDirection } from './logistics-direction';
 
 export interface SorterFilterOption {
@@ -228,20 +228,28 @@ function tileInBounds(tile: TilePoint, bounds: { x: number; y: number; width: nu
     && tile.y >= bounds.y && tile.y < bounds.y + bounds.height;
 }
 
-/** 建筑是否占着这一格（按 footprint 展开）。 */
-function containsCell(building: Building, tile: TilePoint, faceSize: number): boolean {
+/** 建筑占地展开成格（按 footprint，跨面走 stepTile）。 */
+function footprintCells(building: Building, faceSize: number): TilePoint[] {
   const { width, height } = getBuildingFootprint(building);
+  const cells: TilePoint[] = [];
   let row: TilePoint = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
   for (let dy = 0; dy < height; dy += 1) {
     let cell = row;
     for (let dx = 0; dx < width; dx += 1) {
-      if (cell.x === tile.x && cell.y === tile.y) return true;
+      cells.push(cell);
       cell = stepTile(cell, 'east', faceSize).tile;
     }
     row = stepTile(row, 'south', faceSize).tile;
   }
-  return false;
+  return cells;
 }
+
+/** 建筑是否占着这一格（按 footprint 展开）。 */
+function containsCell(building: Building, tile: TilePoint, faceSize: number): boolean {
+  return footprintCells(building, faceSize).some((cell) => cell.x === tile.x && cell.y === tile.y);
+}
+
+const tileKey = (tile: TilePoint) => `${tile.x},${tile.y}`;
 
 export interface BeltDeadEnd {
   id: string;
@@ -250,33 +258,76 @@ export interface BeltDeadEnd {
   /** 朝向轴上的邻格（死端时是空的；也是短杠朝向）。 */
   aheadTile: TilePoint;
   direction: CardinalDirection;
+  /** 带子所在层（3D 把短杠抬到这一层的带面高度）。 */
+  elevation: number;
 }
 
 /**
- * 传送带死端（试玩 1016 U7）：带子按自己的输出方向看过去，**前方一格不是任何建筑**
+ * 传送带死端（试玩 1016 U7）：带子按自己的输出方向看过去**接不上任何下游**，
  * 且带上还压着货——货推到带尾就走不动了，只会堆满后堵回上游（玩家看到的是「熔炉产物
  * 阻塞」，其实问题在带尾没接东西）。这里只报「有货 + 死端」，空带子不算问题。
  *
- * 判定按输出方向的**相邻一格**（不是占地扫描）：传送带是 1×1，能不能收下货只取决于
- * 正前方那一格。
+ * 判定按输出方向的**相邻一格**，分层口径同服务端 `conveyorDownstreamAt`（第 19 轮 §3.3）：
+ * - 同层有带子 → 接上；
+ * - ±1 层有**直行延续**的纯传送带（坡道）→ 接上；
+ * - 地面带（0 层）前方是任何地面建筑也算接上（物流站/分馏塔等直接从带上收货，保持宽松）；
+ *   高架带只接带子，前方的地面建筑收不到它的货。
+ *
+ * 另外，被分拣器当**取货端**的带子不报：「带尾 + 分拣器夹货」是 DSP 最常见的收货口，
+ * 分拣器隔着空格跨格取货时带尾前方本来就是空的（扫法同 `sorterEndpointStatuses`）。
  */
 export function beltDeadEnds(
   buildings: readonly Building[],
   faceSize: number,
 ): BeltDeadEnd[] {
+  // 地面格（服务端 TileBuilding 口径）与高架层（BeltLayers `x,y@e`）各建一张索引。
+  const ground = new Map<string, Building>();
+  const elevated = new Map<string, Building>();
+  for (const building of buildings) {
+    if (occupiesGround(building)) {
+      for (const cell of footprintCells(building, faceSize)) ground.set(tileKey(cell), building);
+    } else if (building.conveyor && beltElevation(building) > 0) {
+      elevated.set(`${tileKey({ x: Math.round(building.position.x), y: Math.round(building.position.y) })}@${beltElevation(building)}`, building);
+    }
+  }
+  const beltAt = (tile: TilePoint, level: number) => {
+    const hit = level === 0 ? ground.get(tileKey(tile)) : elevated.get(`${tileKey(tile)}@${level}`);
+    return hit?.conveyor ? hit : undefined;
+  };
+  const picked = new Set<string>();
+  for (const sorter of buildings) {
+    if (!sorter.sorter) continue;
+    const arrow = logisticsArrows(sorter).arrows[0];
+    if (!arrow) continue;
+    let cursor: TilePoint = { x: Math.round(sorter.position.x), y: Math.round(sorter.position.y) };
+    for (let step = 0; step < (sorter.sorter.range ?? 1); step += 1) {
+      cursor = stepTile(cursor, arrow.from ?? arrow.to, faceSize).tile;
+      const hit = ground.get(tileKey(cursor));
+      if (!hit || hit.id === sorter.id) continue;
+      if (hit.conveyor && !hit.splitter) picked.add(hit.id);
+      break;
+    }
+  }
   const result: BeltDeadEnd[] = [];
   for (const building of buildings) {
-    if (!building.conveyor || building.splitter) continue;
+    if (!building.conveyor || building.splitter || picked.has(building.id)) continue;
     if (building.runtime?.state && building.runtime.state !== 'running') continue;
     const output = building.conveyor.output;
     if (output !== 'north' && output !== 'east' && output !== 'south' && output !== 'west') continue;
     const cargo = (building.conveyor.buffer ?? []).reduce((sum, stack) => sum + (stack.quantity ?? 0), 0);
     if (cargo <= 0) continue;
     const tile: TilePoint = { x: Math.round(building.position.x), y: Math.round(building.position.y) };
-    const aheadTile = stepTile(tile, output, faceSize).tile;
-    const blocked = buildings.some((candidate) => candidate.id !== building.id && containsCell(candidate, aheadTile, faceSize));
-    if (blocked) continue;
-    result.push({ id: building.id, tile, aheadTile, direction: output });
+    const { tile: aheadTile, direction: aheadDirection } = stepTile(tile, output, faceSize);
+    const level = beltElevation(building);
+    const linked = (level === 0 ? ground.has(tileKey(aheadTile)) : Boolean(beltAt(aheadTile, level)))
+      || [level - 1, level + 1].some((ramp) => {
+        if (ramp < 0 || ramp > MAX_BELT_ELEVATION) return false;
+        const candidate = beltAt(aheadTile, ramp);
+        return Boolean(candidate && !candidate.splitter && candidate.type.startsWith('conveyor_belt_')
+          && candidate.conveyor!.output === aheadDirection);
+      });
+    if (linked) continue;
+    result.push({ id: building.id, tile, aheadTile, direction: output, elevation: level });
   }
   return result;
 }
