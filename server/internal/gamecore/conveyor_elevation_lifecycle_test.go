@@ -178,3 +178,58 @@ func TestElevatedBeltCompletionRejectsGroundBuilding(t *testing.T) {
 		t.Fatalf("failed completion must not index the belt, got %s", got)
 	}
 }
+
+// 契约 §3.2：拆除高架带按 building id，照常退料、从 BeltLayers 删除，
+// 地面同格的分拣器/地面带不受影响（高架与地面是两条独立实体）。
+func TestElevatedBeltDemolishRefundsAndKeepsGroundBuilding(t *testing.T) {
+	core, ws := buildElevatedWorld(t)
+	pos := model.Position{X: 20, Y: 21}
+	buildAndComplete(t, core, ws, map[string]any{
+		"building_type": "conveyor_belt_mk1", "direction": "east", "elevation": 2,
+	}, pos)
+	beltID := ws.BeltLayerAt(pos.X, pos.Y, 2)
+	if beltID == "" {
+		t.Fatal("elevated belt missing from BeltLayers")
+	}
+	belt := ws.Buildings[beltID]
+
+	// 地面同格放一台分拣器（低矮物流，允许高架带压在上面）。
+	sorterProfile := model.BuildingProfileFor(model.BuildingTypeSorterMk1, 1)
+	sorter := &model.Building{
+		ID: "b-sorter-under", Type: model.BuildingTypeSorterMk1, OwnerID: "p1",
+		Position: pos, Level: 1, Runtime: sorterProfile.Runtime,
+		HP: sorterProfile.MaxHP, MaxHP: sorterProfile.MaxHP,
+	}
+	ws.Buildings[sorter.ID] = sorter
+	if err := ws.IndexBuilding(sorter); err != nil {
+		t.Fatalf("index ground sorter: %v", err)
+	}
+	ws.Construction = model.NewConstructionQueue()
+	ws.Players["p1"].Inventory = model.ItemInventory{}
+
+	refund := model.BuildingDemolishRefundWithRate(belt.Type, belt.Level, model.BuildingDemolishRuleFor(belt.Type).RefundRate)
+	if len(refund.Items) == 0 {
+		t.Fatal("belt should refund materials")
+	}
+	res, _ := execCommand(core, model.CmdDemolish, ws, "p1", model.Command{
+		Target: model.CommandTarget{EntityID: beltID},
+	})
+	if res.Status != model.StatusExecuted {
+		t.Fatalf("demolish elevated belt failed: %+v", res)
+	}
+	for _, item := range refund.Items {
+		if got := ws.Players["p1"].Inventory[item.ItemID]; got < item.Quantity {
+			t.Fatalf("refund %s: got %d, want >= %d", item.ItemID, got, item.Quantity)
+		}
+	}
+	if ws.Buildings[beltID] != nil || ws.BeltLayerAt(pos.X, pos.Y, 2) != "" {
+		t.Fatal("demolished elevated belt still indexed")
+	}
+	// 地面同格的分拣器必须原样保留（高架带被摧毁不影响地面层）。
+	if ws.Buildings[sorter.ID] == nil {
+		t.Fatal("ground sorter removed by elevated belt demolition")
+	}
+	if got := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]; got != sorter.ID {
+		t.Fatalf("ground tile index lost after elevated demolition: %q", got)
+	}
+}
