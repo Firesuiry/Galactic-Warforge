@@ -385,6 +385,8 @@ export function PlanetMapThree(props: Props) {
       const current = readPlanetThreeCameraState(renderer, tiltRef.current).altitude;
       if (current && current > 0) renderer.zoom(current / props.initialZoom);
     }
+    // 场景初始俯仰固定 0.65：用户改过滑杆（tiltRef 与默认不同）时补设一次。
+    if (Math.abs(tiltRef.current - 0.65) > 1e-6) renderer.setTilt(tiltRef.current);
     // Projection helper for browser tests (dev build, or a production build made with VITE_E2E=1).
     const exposeHook = exposeTestHook();
     if (exposeHook) installTestApi(renderer);
