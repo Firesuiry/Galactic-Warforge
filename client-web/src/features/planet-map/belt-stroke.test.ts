@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { surfaceStep } from '@shared/surface';
 
 import {
+  applyBeltStrokeStep,
   assignBeltElevations,
   resolveBeltStartElevation,
   stepBeltElevation,
   traceBeltStroke,
+  type BeltElevationPlacement,
   type BeltPlacement,
   type ExistingBeltLike,
 } from './belt-stroke';
@@ -100,5 +102,73 @@ describe('拖拽铺带高度（§3.5）', () => {
   it('每格最多 ±1：从 0 到 4 需要 4 格直行', () => {
     const path = assignBeltElevations(straightEast(5), 0, 4);
     expect(path.map(part => part.elevation)).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+/**
+ * 回拖/自交（第 19 轮 §3.5 验收 1–2、R19-WEB-FIX2）：逐格笔迹更新路径。
+ * 每个用例都断言 tiles 序列、每格方向，并校验相邻性（surfaceStep(dir) 必须走到下一格）。
+ */
+describe('拖拽笔迹逐格更新路径（回拖/自交）', () => {
+  const SIZE = 8;
+  /** 每格方向必须能步进到下一格（末格方向不参与相邻性校验）。 */
+  function expectConnected(path: BeltPlacement[]) {
+    for (let index = 0; index < path.length - 1; index++) {
+      expect(surfaceStep(path[index].tile, path[index].direction, SIZE).tile).toEqual(path[index + 1].tile);
+    }
+  }
+  /** 从 (3,3) 向东拖到 (6,3) 的路径（与 3D 组件里的逐格笔迹同口径）。 */
+  function eastLine(): BeltElevationPlacement[] {
+    let path: BeltElevationPlacement[] = [{ tile: { x: 3, y: 3 }, direction: 'east', elevation: 0 }];
+    const grown = applyBeltStrokeStep(path, { x: 3, y: 3 }, { x: 6, y: 3 }, SIZE);
+    expect(grown).not.toBeNull();
+    return grown!;
+  }
+
+  it('复现 1：回拖笔迹跨过已有格时截断到该格，不生成跳格路径', () => {
+    const path = eastLine();
+    expect(path.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }]);
+    // 指针移到 (5,2)：笔迹经过已有的 (5,3)，旧实现会得到 3,3→4,3→5,3→6,3→5,2 的跳格。
+    const next = applyBeltStrokeStep(path, { x: 6, y: 3 }, { x: 5, y: 2 }, SIZE)!;
+    expect(next.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 5, y: 2 }]);
+    expect(next.map(part => part.direction)).toEqual(['east', 'east', 'north', 'north']);
+    expectConnected(next);
+  });
+
+  it('复现 2a：回拖到 (4,3) 后转向北：截断处方向刷新，不留指向已截掉格的断链', () => {
+    const backed = applyBeltStrokeStep(eastLine(), { x: 6, y: 3 }, { x: 4, y: 3 }, SIZE)!;
+    expect(backed.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }]);
+    expect(backed.map(part => part.direction)).toEqual(['east', 'east']);
+    const north = applyBeltStrokeStep(backed, { x: 4, y: 3 }, { x: 4, y: 1 }, SIZE)!;
+    expect(north.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 4, y: 2 }, { x: 4, y: 1 }]);
+    // 旧实现留在 (4,3) 的 east 会指向已截掉的 (5,3)；这里必须刷新成 north。
+    expect(north.map(part => part.direction)).toEqual(['east', 'north', 'north', 'north']);
+    expectConnected(north);
+  });
+
+  it('复现 2b：回拖越过起点到 (2,3)：截断到起点后向前延伸，不跳格', () => {
+    const over = applyBeltStrokeStep(eastLine(), { x: 6, y: 3 }, { x: 2, y: 3 }, SIZE)!;
+    expect(over.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 2, y: 3 }]);
+    expect(over.map(part => part.direction)).toEqual(['west', 'west']);
+    expectConnected(over);
+  });
+
+  it('U 形绕回穿过自己：穿过已有 (4,3) 后继续到 (4,2)，路径保持首尾相接', () => {
+    let path = eastLine();
+    path = applyBeltStrokeStep(path, { x: 6, y: 3 }, { x: 6, y: 5 }, SIZE)!;   // 南下
+    path = applyBeltStrokeStep(path, { x: 6, y: 5 }, { x: 4, y: 5 }, SIZE)!;   // 西折
+    expect(path.map(part => part.tile)).toEqual([
+      { x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 6, y: 4 }, { x: 6, y: 5 }, { x: 5, y: 5 }, { x: 4, y: 5 },
+    ]);
+    // 北上，经过已有的 (4,3)（截断）再走到新格 (4,2)。
+    const crossed = applyBeltStrokeStep(path, { x: 4, y: 5 }, { x: 4, y: 2 }, SIZE)!;
+    expect(crossed.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 4, y: 2 }]);
+    expect(crossed.map(part => part.direction)).toEqual(['east', 'north', 'north']);
+    expectConnected(crossed);
+  });
+
+  it('指针没动（笔迹为空）时返回 null，调用方保持原路径', () => {
+    const path = eastLine();
+    expect(applyBeltStrokeStep(path, { x: 6, y: 3 }, { x: 6, y: 3 }, SIZE)).toBeNull();
   });
 });

@@ -447,8 +447,8 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     pickResult = { x: 4, y: 3 };
     drag(host, 'pointerMove');
     expect(dragPaths.at(-1)!.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }]);
-    // 截断处不改方向：方向仍是「从这格出发走向下一格」（回拖的反向笔迹不能把末端格掉头，
-    // 否则 (3,3) 与 (4,3) 会互相指向、带子在两格间打转）。
+    // 截断处的方向 = 从上一格进入它的方向（仍是 east）：不能照抄回拖的反向笔迹，
+    // 否则 (3,3) 与 (4,3) 会互相指向、带子在两格间打转。
     expect(dragPaths.at(-1)!.map(part => part.direction)).toEqual(['east', 'east']);
 
     // 再往前拖到 (5,3)：只补回新增格，路径按格去重。
@@ -460,6 +460,55 @@ describe('3D 拖拽铺带逐格高度（第 19 轮 §3.5）', () => {
     const tiles = onInteractTile.mock.calls.map(([tile]) => `${tile.x},${tile.y}`);
     expect(tiles).toEqual(['3,3', '4,3', '5,3']);
     expect(new Set(tiles).size).toBe(tiles.length);
+  });
+
+  it('B3 回拖后转向：截断处方向刷新成实际前进方向，路径保持连通', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'east' }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    pickResult = { x: 6, y: 3 };
+    drag(host, 'pointerMove');
+    // 回拖到 (4,3) 再向北到 (4,1)：旧实现会把 (4,3) 留在 east，指向已截掉的 (5,3)。
+    pickResult = { x: 4, y: 3 };
+    drag(host, 'pointerMove');
+    pickResult = { x: 4, y: 1 };
+    drag(host, 'pointerMove');
+
+    const preview = dragPaths.at(-1)!;
+    expect(preview.map(part => part.tile)).toEqual([{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 4, y: 2 }, { x: 4, y: 1 }]);
+    expect(preview.map(part => part.direction)).toEqual(['east', 'north', 'north', 'north']);
+
+    drag(host, 'pointerUp');
+    const calls = onInteractTile.mock.calls.map(([tile, placement]) => ({ tile, ...placement }));
+    expect(calls).toEqual([
+      { tile: { x: 3, y: 3 }, direction: 'east', elevation: 0 },
+      { tile: { x: 4, y: 3 }, direction: 'north', elevation: 0 },
+      { tile: { x: 4, y: 2 }, direction: 'north', elevation: 0 },
+      { tile: { x: 4, y: 1 }, direction: 'north', elevation: 0 },
+    ]);
+  });
+
+  it('B5 单击 auto 方向 + 目标高度 > 0：用建造模式 rotation 推出明确方向（服务端要求）', () => {
+    const scenario = getFixtureScenario('baseline');
+    const planet = scenario.planets['planet-1-1'];
+    const onInteractTile = vi.fn();
+    const { container } = render(<PlanetMapThree fog={scenario.fogByPlanet['planet-1-1']} onInteractTile={onInteractTile} planet={planet} />);
+    // rotation 90 = 东（ROTATION_FACING 锚点与服务端 SorterFacing 一致）。
+    act(() => usePlanetViewStore.getState().setInteractionMode({ kind: 'build', buildingType: 'conveyor_belt_mk1', direction: 'auto', rotation: 90, elevation: 2 }));
+    const host = container.querySelector('.planet-three') as HTMLElement;
+
+    pickResult = { x: 3, y: 3 };
+    drag(host, 'pointerDown');
+    drag(host, 'pointerUp');
+
+    expect(onInteractTile).toHaveBeenCalledTimes(1);
+    expect(onInteractTile.mock.calls[0]).toEqual([{ x: 3, y: 3 }, { direction: 'east', elevation: 2 }]);
   });
 
   it('L4 拖拽中改目标高度（PageUp/PageDown）：不移动指针也立刻按新目标重算预览', () => {

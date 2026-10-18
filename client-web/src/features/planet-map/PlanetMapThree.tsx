@@ -4,8 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import type { AlertEntry, CatalogView, ItemInventory, CombatSquad, FogMapView, PlanetNetworksView, PlanetOverviewView, PlanetRuntimeView, PlanetSceneView, WarTheaterView } from '@shared/types';
 import type { PlanetMapCapture } from './PlanetMapPixi';
 import { getFogState, isTileUncharted, resolveHomeTile, resolveSelectionAtTile, type PlanetRenderView, type TilePoint } from './model';
-import { assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, traceBeltStroke, type BeltElevationPlacement } from './belt-stroke';
+import { applyBeltStrokeStep, assignBeltElevations, isCardinalDirection, resolveBeltStartElevation, type BeltElevationPlacement } from './belt-stroke';
 import { DEFAULT_BELT_DIRECTION, isConveyorBeltBuilding } from './build-workflow';
+import { ROTATION_FACING, rotationTurns } from './logistics-direction';
 import { sameTypeOwnUnitsInView } from './rts-commands';
 import { usePlanetViewStore } from './store';
 import { PlanetLegionLayer } from './PlanetLegionLayer';
@@ -99,11 +100,10 @@ export function PlanetMapThree(props: Props) {
     /**
      * 建造模式没给明确四向朝向（direction === 'auto'）时为 true。
      * 单格点击（没拖拽过）时方向交回建造模式——interactTile 用 `mode.direction` 兜底，
-     * 与旧的 placeBelt 口径一致（试玩 1015 §6-4：auto 带子不带货，不能偷偷替玩家定方向）。
+     * 与旧的 placeBelt 口径一致（试玩 1015 §6-4：auto 带子不带货，不能偷偷替玩家定方向）；
+     * 目标高度 > 0 时除外（服务端要求明确方向，按 rotation 推出朝向下发）。
      */
     autoDirection: boolean;
-    /** 是否已经发生过指针移动：第一格的方向要等第一次移动才能按实际笔迹回填。 */
-    moved: boolean;
   } | null>(null);
 
   /** 按当前目标高度重算整条拖拽路径（第一格高度固定，之后直行 ±1、转弯保持）。 */
@@ -387,7 +387,7 @@ export function PlanetMapThree(props: Props) {
           direction: isCardinalDirection(modeDirection) ? modeDirection : DEFAULT_BELT_DIRECTION,
           elevation: startElevation,
         };
-        beltDrag.current = { tile, path: [first], startElevation, autoDirection: !isCardinalDirection(modeDirection), moved: false };
+        beltDrag.current = { tile, path: [first], startElevation, autoDirection: !isCardinalDirection(modeDirection) };
         scene.current?.setBeltDragPath([first]);
         event.currentTarget.setPointerCapture(event.pointerId);
         event.stopPropagation(); event.preventDefault();
@@ -408,35 +408,18 @@ export function PlanetMapThree(props: Props) {
       const tile = scene.current?.pickAt(event.clientX, event.clientY);
       if (tile) {
         const drag = beltDrag.current;
-        const segment = traceBeltStroke(drag.tile, tile, props.planet.surface.face_size);
-        if (segment.length > 0) {
-          // 第一格方向：指针按下时的方向只是占位（auto 时是默认方向），第一次移动才知道
-          // 玩家真正的走向——用笔迹首段方向回填第一格。不回填的话第一格会被判成「转弯」，
-          // 高度就按「转弯保持」处理，整条线的高度会推迟一格（验收 B1）。
-          if (!drag.moved) {
-            drag.path[0] = { ...drag.path[0], direction: segment[0].direction };
-            drag.moved = true;
-          }
-          // traceBeltStroke 的第一格是拖拽起点（已在 path 里），只处理后面新增的格。
-          // 回拖（DSP 拖带回拖 = 把带子缩短）时指针会回到路径里已有的格：截断到指针所在格
-          //（含），既不追加反向格，也不会把同一格下单两次（B3）。截断处**不改方向**——
-          // 每格的方向是「从这格出发走向下一格」，回拖时用的是反向笔迹，照着改会让
-          // 末端格掉头指回上一格（同层互指成环），带子会在两格之间打转。
-          const lastTile = segment[segment.length - 1].tile;
-          const revisited = drag.path.findIndex(part => part.tile.x === lastTile.x && part.tile.y === lastTile.y);
-          if (revisited >= 0) {
-            drag.path.length = revisited + 1;
-          } else {
-            for (const part of segment.slice(1)) {
-              // 防御性按格去重：自交的笔迹可能再次经过路径里的格。
-              if (drag.path.some(entry => entry.tile.x === part.tile.x && entry.tile.y === part.tile.y)) continue;
-              drag.path.push({ ...part, elevation: drag.startElevation });
-            }
-          }
+        // 逐格处理从上一格到当前格的笔迹（§3.5 / B3–B5）：回拖跨过已有格时截断到该格、
+        // 刷新截断处的方向，追加时把末端格与新格的方向都设成实际步进方向，
+        // 结果始终是相邻格首尾相接的连通路径。高度由 resolveBeltDragPath 统一重算。
+        const nextPath = applyBeltStrokeStep(drag.path, drag.tile, tile, props.planet.surface.face_size);
+        if (nextPath) {
+          drag.path = nextPath;
           drag.tile = drag.path.at(-1)?.tile ?? tile;
           scene.current?.setBeltDragPath(resolveBeltDragPath(drag));
+          // 建造模式朝向跟随实际步进方向（下一次单击/ghost 用它）。
+          const tail = drag.path.at(-1)!;
           const mode = usePlanetViewStore.getState().interactionMode;
-          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: segment[segment.length-1].direction });
+          if (mode.kind === 'build') usePlanetViewStore.getState().setInteractionMode({ ...mode, direction: tail.direction });
         }
       }
       return;
@@ -466,11 +449,18 @@ export function PlanetMapThree(props: Props) {
       if (event.button !== 0) return;
       const drag = beltDrag.current;
       // 松手：按当前目标高度整条结算，逐格下单（每格自带 direction/elevation）。
-      // 单格点击（没拖拽过）且建造模式朝向外 auto：只带高度，方向交回 interactTile 的
+      // 单格点击（没拖拽过）且建造模式朝向为 auto：把朝向留空交回 interactTile 的
       // `mode.direction` 兜底——与旧的单格 placeBelt 口径一致（B1）。
+      // 例外：目标高度 > 0 时服务端要求明确方向（INVALID_ELEVATION「高架传送带必须有明确的
+      // 输出方向」），这里用建造模式的 rotation 推出四向朝向（ROTATION_FACING）下发。
       const singleClick = drag.path.length === 1 && drag.autoDirection;
       if (singleClick) {
-        latest.current.onInteractTile?.(drag.path[0].tile, { elevation: drag.path[0].elevation });
+        const mode = usePlanetViewStore.getState().interactionMode;
+        const rotation = mode.kind === 'build' ? mode.rotation : undefined;
+        const placement = drag.path[0].elevation > 0
+          ? { direction: ROTATION_FACING[rotationTurns(rotation)], elevation: drag.path[0].elevation }
+          : { elevation: drag.path[0].elevation };
+        latest.current.onInteractTile?.(drag.path[0].tile, placement);
       } else {
         // 提交前再按格去重（拖拽预览已经保证不重复，这里是最后一道防线：
         // 同一格下两次单会让服务端第二次回 POSITION_OCCUPIED）。
