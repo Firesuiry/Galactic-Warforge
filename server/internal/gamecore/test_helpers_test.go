@@ -46,6 +46,10 @@ func grantAllItems(ws *model.WorldState, playerID string, qty int) {
 	}
 	record := player.MechaByOperator(player.PlayerID)
 	if record == nil {
+		// 未绑定（例如非出生星球上的开局机甲）：退回该行星上第一台机甲。
+		record = mechaOnPlanet(ws, player.PlayerID, ws.PlanetID)
+	}
+	if record == nil {
 		record = starterMecha(ws, player.PlayerID)
 	}
 	grantAllItemsToMecha(record, qty)

@@ -59,7 +59,11 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	return ws
 }
 
-func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig) {
+// seedPlayerOutposts 在每颗行星给每个玩家建基地与一台开局机甲。开局机甲是
+// 玩家级唯一的一台：只有出生星球（starterPlanetID）上的那台绑定
+// Operator = PlayerID 并领取 bootstrap，其它行星上的机甲保持空闲（契约 §2.2
+// 「一个 issuer 至多绑一台机甲」）。
+func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig, starterPlanetID string) {
 	if ws == nil || len(players) == 0 {
 		return
 	}
@@ -125,11 +129,15 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)
-		// 开局机甲：Operator = PlayerID（人类 GUI / 未设代理名的 CLI 直接用玩家身份发令），
-		// bootstrap 物资进它的背包。
-		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID, Operator: p.PlayerID}
+		// 开局机甲：只有出生星球上的那台 Operator = PlayerID（人类 GUI / 未设
+		// 代理名的 CLI 直接用玩家身份发令），bootstrap 物资也只进它的背包；
+		// 其它行星的开局机甲保持空闲，由玩家用 assign_mecha 分配给代理。
+		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID}
+		if ws.PlanetID == starterPlanetID {
+			record.Operator = p.PlayerID
+			applyPlayerBootstrap(ps, record, p.Bootstrap)
+		}
 		ps.EnsureMechas()[execID] = record
-		applyPlayerBootstrap(ps, record, p.Bootstrap)
 	}
 }
 
@@ -394,6 +402,10 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 			activePlanet = candidate
 		}
 	}
+	activePlanetID := ""
+	if activePlanet != nil {
+		activePlanetID = activePlanet.ID
+	}
 	players := buildSharedPlayers(cfg)
 	spaceRuntime := model.NewSpaceRuntimeState()
 
@@ -420,7 +432,7 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 			continue
 		}
 		planet, _ := maps.Planet(planetID)
-		seedPlayerOutposts(ws, planet, cfg.Players)
+		seedPlayerOutposts(ws, planet, cfg.Players, activePlanetID)
 		// bootstrap 还会注入开局矿簇并整地，基线必须在这之后重建一次，
 		// 否则读档会把 bootstrap 注入的矿当成「相对基线的差异」丢掉。
 		ws.SetResourceBaseline()
@@ -431,10 +443,6 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	}
 	seedWarIndustryAnchors(worlds)
 
-	activePlanetID := ""
-	if activePlanet != nil {
-		activePlanetID = activePlanet.ID
-	}
 	for _, ps := range players {
 		// F4：新玩家的初始焦点 = 其出生行星（即全局默认活动行星）。
 		ps.FocusPlanetID = activePlanetID
