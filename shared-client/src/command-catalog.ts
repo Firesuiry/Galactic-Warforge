@@ -211,6 +211,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "required",
   },
   {
+    id: "assign_mecha",
+    apiCommandName: "assign_mecha",
+    cliCommandName: "mecha",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
     id: "configure_logistics_slot",
     apiCommandName: "configure_logistics_slot",
     cliCommandName: "configure_logistics_slot",
@@ -659,7 +669,6 @@ export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPerm
   fog: { category: "observe" },
   checkpoint: { category: "management" },
   save: { category: "management" },
-  mecha: { category: "management" },
 };
 
 /** 智能体命令白名单：额外命令 + 公开命令的 CLI 别名。 */

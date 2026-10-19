@@ -27,7 +27,6 @@ import { usePlanetViewStore } from '@/features/planet-map/store';
 import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_RANGE, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
-import { sendMechaCommand } from '@/features/mecha/commands';
 import { selectMyMecha } from '@/features/mecha/model';
 import { translateBuildingState, translateUnitType } from '@/i18n/translate';
 
@@ -246,7 +245,7 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
         setMiningPending(true);
         try {
           await submitPlanetCommand({ commandType: 'mine_resource', planetId: planet.planet_id, focus: { entityId: mecha.id },
-            execute: () => sendMechaCommand(client, 'mine_resource', planet.planet_id, { resource_id: resource.id, quantity: count }),
+            execute: () => client.cmdMineResource(resource.id, count, planet.planet_id),
             fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
           });
         } finally { setMiningPending(false); }

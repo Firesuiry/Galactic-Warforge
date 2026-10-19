@@ -822,10 +822,10 @@ export function createApiClient(options: ApiClientOptions) {
   }
 
   /** assign_mecha：把本方机甲绑给某个发令者；operator 为空字符串 = 解绑。 */
-  function cmdAssignMecha(mechaId: string, operator: string) {
+  function cmdAssignMecha(mechaId: string, operator: string, planetId?: string) {
     return sendSingleCommand({
       type: 'assign_mecha',
-      target: { layer: 'planet', entity_id: mechaId },
+      target: { layer: 'planet', entity_id: mechaId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { operator },
     });
   }

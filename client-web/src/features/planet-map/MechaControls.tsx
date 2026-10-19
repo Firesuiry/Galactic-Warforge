@@ -9,7 +9,6 @@ import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/
 import { MechaLogisticsControls } from './MechaLogisticsControls';
 import { mechaCraftEnergyPerBatch, MECHA_MINE_RANGE } from './mecha-costs';
 import { usePlanetViewStore } from './store';
-import { sendAssignMecha, sendMechaCommand } from '@/features/mecha/commands';
 import type { MechaView } from '@/features/mecha/model';
 import { mechaOperatorLabel, mechaSlotUsage } from '@/features/mecha/model';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -175,7 +174,7 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
         commandType: 'assign_mecha',
         planetId,
         focus: { entityId: unit.id },
-        execute: () => sendAssignMecha(client, mecha?.unit_id ?? unit.id, playerId, planetId),
+        execute: () => client.cmdAssignMecha(mecha?.unit_id ?? unit.id, playerId, planetId),
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
       });
     } finally { setAssignPending(false); }
@@ -234,12 +233,12 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
         </div>
         <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks, tickRate)}</p>
         <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? `距离矿点过远，回到 ${MECHA_MINE_RANGE} 格内继续采集。` : job.state === 'inventory_full' ? '背包已满（按格计：每格可堆叠该物品的堆叠上限），装不下的产出不会丢失：腾出空位后自动继续。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
-        {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => sendMechaCommand(client, 'cancel_mecha_job', planetId))}>取消机甲任务</button> : null}
+        {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(planetId))}>取消机甲任务</button> : null}
       </section> : null}
       {canControl ? <form onSubmit={async event => {
         event.preventDefault();
         if (!fuel || full || pending || fillQuantity <= 0) return;
-        await submit('refuel_mecha', () => sendMechaCommand(client, 'refuel_mecha', planetId, { item_id: fuel.id, count: fillQuantity }));
+        await submit('refuel_mecha', () => client.cmdRefuelMecha(fuel.id, fillQuantity, planetId));
       }}>
         <label>背包燃料
           <select aria-label="机甲燃料" value={fuel?.id ?? ''} onChange={event => setFuelId(event.target.value)}>
@@ -251,7 +250,7 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
             {pending ? '提交中…' : fillQuantity > 0 ? `补满（${fillQuantity} 个）` : '补满'}
           </button>
           <button className="secondary-button" type="button" disabled={!fuel || full || pending || fuelOwned <= 0}
-            onClick={() => { if (fuel) void submit('refuel_mecha', () => sendMechaCommand(client, 'refuel_mecha', planetId, { item_id: fuel.id, count: 1 })); }}>
+            onClick={() => { if (fuel) void submit('refuel_mecha', () => client.cmdRefuelMecha(fuel.id, 1, planetId)); }}>
             补 1 个
           </button>
         </div>
@@ -260,7 +259,7 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
       {canControl ? <form aria-label="个人制造" onSubmit={event => {
         event.preventDefault();
         if (!recipe || missingTech || missingItems || job || pending || !mecha) return;
-        void submit('craft_item', () => sendMechaCommand(client, 'craft_item', planetId, { recipe_id: recipe.id, quantity: count }));
+        void submit('craft_item', () => client.cmdCraftItem(recipe.id, count, planetId));
       }}>
         <div className="section-title">个人制造</div>
         <label>个人制造配方
