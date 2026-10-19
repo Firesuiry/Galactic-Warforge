@@ -7,6 +7,8 @@ export interface AgentCommandRuntimeContext {
   currentPlayer: string;
   serverUrl: string;
   playerKey: string;
+  /** 发令者 ID；缺省 = 玩家本人（issuer_type=player）。agent-gateway 传智能体 ID。 */
+  issuerId?: string;
 }
 
 export interface AgentMilitaryCommandRuntimePolicy {
@@ -248,12 +250,17 @@ export async function runCommandLine(line: string, context: AgentCommandRuntimeC
     }
   }
 
-  // 每次执行独立建客户端：网关并发跑多个智能体时互不串号
+  // 每次执行独立建客户端：网关并发跑多个智能体时互不串号。
+  // 智能体的命令以 agent 身份发令（issuer_type=agent、issuer_id=智能体 ID），服务端按它找绑定的机甲。
+  const issuer = context.issuerId
+    ? { issuerType: 'agent' as const, issuerId: context.issuerId }
+    : undefined;
   const api = createApiClient({
     serverUrl: context.serverUrl,
     auth: {
       playerId: context.currentPlayer,
       playerKey: context.playerKey,
+      ...(issuer ?? {}),
     },
   });
 
@@ -261,5 +268,5 @@ export async function runCommandLine(line: string, context: AgentCommandRuntimeC
     await validateMilitaryCommand(metadata, api, policy?.military);
   }
 
-  return dispatchCommand(line, { api });
+  return dispatchCommand(line, { api, issuerId: context.issuerId });
 }

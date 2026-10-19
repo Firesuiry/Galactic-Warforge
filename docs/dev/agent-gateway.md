@@ -97,6 +97,18 @@ agent provider 以 typed `game.command` 作为唯一游戏动作入口，同时�
 - 新建 agent 的角色不能高于创建者角色
 - agent 向其他 agent 发私聊或委派消息时，目标必须在 `managedAgentIds`，或命中 `canDispatchAgentIds / canDirectMessageAgentIds`
 
+### 3.1.2 发令者与机甲
+
+每个智能体的 `game.command` 都以 `issuer_type=agent`、`issuer_id=<agentId>` 发给服务端（`runCommandLine` 的 `issuerId`，经 shared-client 的 api client 写入 `POST /commands`）。玩家自己操作（GUI / 未设代理名的 CLI）用 `issuer_type=player`。
+
+一个智能体对应一台机甲：
+
+- 机甲在战场分析基站制造（`produce <hq_id> executor`），出厂时 `operator=""`（空闲）。
+- manager 用 `assign_mecha` 把空闲机甲绑给智能体：CLI `mecha assign <mecha_id> <agent_id>`，API `assign_mecha {target.entity_id: <mecha_id>, payload: {operator: <agent_id>}}`；`operator: ""` 解绑。
+- 需要机甲的命令（`build` / `upgrade` / `demolish` / `transfer_item` / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / 安装物流载具 / 军工排产）由服务端按 `issuer_id` 找绑定的机甲执行，不再传 `<executor_id>`。
+- 智能体未绑定机甲时，这些命令返回 `EXECUTOR_UNAVAILABLE`（消息：「<issuer> 还没有绑定机甲：先用 assign_mecha 接管一台」）；机甲不在目标星球或阵亡时同样是 `EXECUTOR_UNAVAILABLE`，原因写在消息里。`move`/`attack` 选中别人绑定的机甲时该单位返回 `NOT_OPERATOR`，其余单位照常。
+- 智能体可用 `mecha list` 查看本方机甲与操作者（agent 白名单已含 `mecha`）。
+
 ### 3.2 会话与消息
 
 会话对象分两类：
