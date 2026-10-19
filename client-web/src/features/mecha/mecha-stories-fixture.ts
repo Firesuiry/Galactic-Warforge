@@ -6,8 +6,9 @@ import type { MechaView } from './model';
  * 视觉夹具（第 21 轮契约 §7.3 第 6 条）：MechaControls 三态 / 总览机甲卡片 / HUD chip
  * 用的固定数据。不起服务端、不登录，Storybook 直接渲染组件。
  *
- * 机甲：u-3（我的）、u-4（agent builder-a 的）、u-5（空闲）；另有 u-6（阵亡，复活于 tick 512）
- * 只出现在总览卡片里，用来核对「复活于 tick N」。
+ * 机甲：u-3（我的）、u-4（agent builder-a 的）、u-5（空闲）；另有 u-6（agent builder-b 的，
+ * 阵亡，复活于 tick 512）只出现在总览卡片里，用来核对「复活于 tick N」。
+ * 一个发令者只绑一台机甲，所以 u-6 不能也挂在 p1 名下。
  */
 
 const mechaBase = {
@@ -54,7 +55,7 @@ export const deadMecha: MechaView = {
   ...mechaBase,
   unit_id: 'u-6',
   planet_id: 'planet-1-2',
-  operator: 'p1',
+  operator: 'builder-b',
   alive: false,
   respawn_at_tick: 512,
   inventory: { gear: 2 },

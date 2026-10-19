@@ -507,7 +507,7 @@ describe('顶栏背包 chip（契约 §7.3）', () => {
     expect(screen.queryByRole('button', { name: '背包库存' })).toBeNull();
   });
 
-  it('已绑定：文案带机甲 ID', async () => {
+  it('已绑定：可见「背包 used/total 格 · 机甲ID」chip + 关键物品 chip，点击展开完整面板', async () => {
     stubSummary({
       p1: {
         player_id: 'p1',
@@ -519,8 +519,36 @@ describe('顶栏背包 chip（契约 §7.3）', () => {
       },
     });
     renderTopNav();
-    // 背包为空时 chip 显示「背包空」，标题里仍有格数与机甲 ID。
+    const user = userEvent.setup();
     const button = await screen.findByTitle('背包库存 · 1/40 格 · 机甲 u-7（点击展开全部）');
+    // 格数与机甲 ID 是可见文字 chip（契约 §7.3 第 1 条），排在关键物品 chip 之前。
+    expect(button).toHaveTextContent('背包 1/40 格 · u-7');
+    const summaryChip = button.querySelector('.top-nav__chip--inventory-summary');
+    expect(summaryChip).not.toBeNull();
+    expect(summaryChip).toHaveTextContent('背包 1/40 格 · u-7');
+    // 关键物品 chip 保留。
     expect(button).toHaveTextContent('铁块9');
+    // 点格数 chip 与点关键物品 chip 一样展开完整面板。
+    await user.click(summaryChip as HTMLElement);
+    expect(await screen.findByRole('dialog', { name: '完整库存' })).toHaveTextContent('背包库存 · 1 种 · 已用 1/40 格 · 机甲 u-7');
+    await user.click(screen.getByRole('button', { name: '背包库存' }));
+    expect(screen.queryByRole('dialog', { name: '完整库存' })).toBeNull();
+  });
+
+  it('已绑定但背包为空：仍显示格数 chip，并保留「背包空」', async () => {
+    stubSummary({
+      p1: {
+        player_id: 'p1',
+        resources: { energy: 1 },
+        is_alive: true,
+        mechas: [{ unit_id: 'u-8', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
+      },
+    });
+    renderTopNav();
+    const button = await screen.findByTitle('背包库存 · 0/40 格 · 机甲 u-8（点击展开全部）');
+    expect(button).toHaveTextContent('背包 0/40 格 · u-8');
+    expect(button).toHaveTextContent('背包空');
   });
 });

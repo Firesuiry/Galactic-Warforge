@@ -40,9 +40,12 @@ export function MechaFleetCard({ mechas, playerId, planetNames }: {
                     <td className="command-mechas__id">{mecha.unit_id}</td>
                     <td>{planetNames?.[mecha.planet_id] ?? mecha.planet_id}</td>
                     <td>
-                      {mecha.operator
-                        ? <strong className={mine ? 'command-mechas__operator--me' : undefined}>{mechaOperatorLabel(mecha.operator, playerId)}</strong>
-                        : <span className="command-mechas__idle">空闲</span>}
+                      {!mecha.operator
+                        ? <span className="command-mechas__idle">空闲</span>
+                        : mine
+                          // 只有「我」加粗并保留青色；别人的操作者名用正常字重
+                          ? <strong className="command-mechas__operator--me">{mechaOperatorLabel(mecha.operator, playerId)}</strong>
+                          : <span>{mechaOperatorLabel(mecha.operator, playerId)}</span>}
                     </td>
                     <td className={mecha.alive ? undefined : 'command-mechas__dead'}>{mechaStatusLabel(mecha)}</td>
                     <td className="command-mechas__num">{slots ? `${slots.used}/${slots.total}` : '—'}</td>

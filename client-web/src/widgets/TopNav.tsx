@@ -382,6 +382,11 @@ export function TopNavInventoryChips({ catalog, inventory, mechaId, slots }: {
         title={`背包库存 · ${slotText} · 机甲 ${mechaId}（点击展开全部）`}
         onClick={() => setOpen(!open)}
       >
+        {/* 格数 + 机甲 ID：契约 §7.3 第 1 条要求可见文案；与关键物品 chip 同属一个按钮，
+            点它同样展开完整背包面板。 */}
+        <span className="top-nav__chip top-nav__chip--inventory-summary">
+          <span>背包 {slots ? `${slots.used}/${slots.total} 格` : '格数未知'} · {mechaId}</span>
+        </span>
         {keyItems.length === 0 ? <span className="top-nav__chip">背包空</span> : keyItems.map((item) => (
           <span className="top-nav__chip" key={item.id} title={getItemDisplayName(catalog, item.id)}>
             <Icon iconKey={item.id} size={14} />
