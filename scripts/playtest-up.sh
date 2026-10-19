@@ -97,6 +97,9 @@ for port in "$SERVER_PORT" "$WEB_PORT" "$DRIVER_PORT"; do
   fi
 done
 
+# 每次起环境都清掉上一轮的对局目录：旧存档版本不符会让服务端拒绝启动，
+# 而本环境的局面总由 --checkpoint 读档或新开局决定，不需要保留。
+rm -rf "$RUN_DIR/data"
 mkdir -p "$RUN_DIR/data" "$RUN_DIR/pt" "$CHECKPOINT_DIR"
 : >"$PIDS_FILE"
 
