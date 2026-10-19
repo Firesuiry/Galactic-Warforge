@@ -6,6 +6,7 @@ import type {
   MechaView,
   CommandCatalogView,
   CommandResponse,
+  ExecutionOutcome,
   FleetDetailView,
   FleetRuntimeView,
   GalaxyView,
@@ -457,6 +458,28 @@ export function fmtCommandResponse(r: CommandResponse): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * 非交互模式在 ACCEPTED 之后追加的执行结果行：每个 command_index 一行。
+ * `outcomes` 只含已执行的 index；超时时缺的 index 打印「未在 Ns 内执行」。
+ */
+export function fmtExecutionOutcomes(
+  outcomes: ExecutionOutcome[],
+  expectedIndexes: number[],
+  timeoutSeconds: number,
+): string[] {
+  const byIndex = new Map(outcomes.map((outcome) => [outcome.command_index, outcome]));
+  return expectedIndexes.map((index) => {
+    const outcome = byIndex.get(index);
+    if (!outcome) {
+      return `  [${index}] … 未在 ${timeoutSeconds}s 内执行（tick 是否在走？）`;
+    }
+    if (outcome.status === 'executed') {
+      return `  [${index}] ${chalk.green('✓')} OK: ${outcome.message}`;
+    }
+    return `  [${index}] ${chalk.red('✗')} ${outcome.code}: ${outcome.message}`;
+  });
 }
 
 export function fmtFleetList(fleets: FleetDetailView[]): string {

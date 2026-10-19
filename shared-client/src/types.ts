@@ -869,6 +869,14 @@ export interface CommandResponse {
   results: CommandResult[];
 }
 
+/** 下一 tick 执行后的真实结果（来自审计 `stage=execute` 的记录）。 */
+export interface ExecutionOutcome {
+  command_index: number;
+  status: string;
+  code: string;
+  message: string;
+}
+
 export interface Resources {
   /** 电网结余（只读展示，不再是可以花的货币；建造消耗只走物品背包）。 */
   energy: number;

@@ -16,6 +16,7 @@ import type {
   CommandRequest,
   CommandResponse,
   EventSnapshotResponse,
+  ExecutionOutcome,
   FleetDetailView,
   FormationType,
   GalaxyView,
@@ -85,6 +86,27 @@ export interface ApiClientOptions {
   defaultGalaxyId?: string;
   defaultPlanetId?: string;
   defaultSystemId?: string;
+  /**
+   * 每次 `POST /commands` 成功后回调原始响应。非交互入口靠它拿 request_id 去等执行结果，
+   * 不必从格式化文本里反解。返回 REJECTED 也回调（结构校验失败，未入队）。
+   */
+  onCommandResponse?: (response: CommandResponse) => void;
+}
+
+export interface AwaitExecutionOptions {
+  /** 等执行结果的总超时（毫秒），默认 8000。 */
+  timeoutMs?: number;
+  /** 轮询审计的间隔（毫秒），默认 100。 */
+  pollIntervalMs?: number;
+  /** 测试注入：等待与时钟。 */
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+export interface AwaitExecutionResult {
+  /** executed = 每个 command_index 都拿到了 execute 记录；timeout = 到期仍缺。 */
+  status: 'executed' | 'timeout';
+  outcomes: ExecutionOutcome[];
 }
 
 export interface AuditQueryParams {
@@ -310,6 +332,7 @@ export function createApiClient(options: ApiClientOptions) {
 
   const fetchFn: typeof fetch = options.fetchFn
     ?? ((input, init) => globalThis.fetch(input, init));
+  let commandResponseHandler = options.onCommandResponse;
   const defaultGalaxyId = options.defaultGalaxyId ?? DEFAULT_GALAXY_ID;
   const defaultPlanetId = options.defaultPlanetId ?? DEFAULT_PLANET_ID;
   const defaultSystemId = options.defaultSystemId ?? DEFAULT_SYSTEM_ID;
@@ -370,6 +393,11 @@ export function createApiClient(options: ApiClientOptions) {
 
   function setServerUrl(nextServerUrl: string) {
     serverUrl = nextServerUrl;
+  }
+
+  /** 每次 `POST /commands` 后的回调（非交互入口用来拿 request_id 等执行结果）；undefined 取消。 */
+  function setCommandResponseHandler(handler?: (response: CommandResponse) => void) {
+    commandResponseHandler = handler;
   }
 
   function getServerUrl(): string {
@@ -541,7 +569,57 @@ export function createApiClient(options: ApiClientOptions) {
     return apiFetch<CommandResponse>('/commands', {
       method: 'POST',
       body: JSON.stringify(request),
+    }).then((response) => {
+      commandResponseHandler?.(response);
+      return response;
     });
+  }
+
+  /**
+   * 等 `request_id` 的每个 command_index 都出现审计 `stage=execute` 记录（即真正执行过），
+   * 返回 code/message；到期仍缺的 index 不返回。只用于已被服务端受理（ACCEPTED）的请求。
+   */
+  async function awaitExecution(
+    requestId: string,
+    expectedCount: number,
+    awaitOptions: AwaitExecutionOptions = {},
+  ): Promise<AwaitExecutionResult> {
+    const timeoutMs = awaitOptions.timeoutMs ?? 8000;
+    const pollIntervalMs = awaitOptions.pollIntervalMs ?? 100;
+    const sleep = awaitOptions.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)));
+    const now = awaitOptions.now ?? (() => Date.now());
+    const deadline = now() + timeoutMs;
+    const { playerId } = auth;
+
+    for (;;) {
+      const { entries } = await fetchAudit({ request_id: requestId, player_id: playerId });
+      const outcomes: ExecutionOutcome[] = [];
+      const seen = new Set<number>();
+      for (const entry of entries) {
+        if (entry.action !== 'command' || entry.details?.stage !== 'execute') {
+          continue;
+        }
+        const index = Number(entry.details.command_index);
+        if (!Number.isInteger(index) || seen.has(index)) {
+          continue;
+        }
+        seen.add(index);
+        outcomes.push({
+          command_index: index,
+          status: String(entry.details.status ?? ''),
+          code: String(entry.details.code ?? ''),
+          message: String(entry.details.message ?? ''),
+        });
+      }
+      outcomes.sort((a, b) => a.command_index - b.command_index);
+      if (outcomes.length >= expectedCount) {
+        return { status: 'executed', outcomes };
+      }
+      if (now() >= deadline) {
+        return { status: 'timeout', outcomes };
+      }
+      await sleep(pollIntervalMs);
+    }
   }
 
   function fetchAudit(params: AuditQueryParams = {}): Promise<AuditResponse> {
@@ -1438,12 +1516,14 @@ export function createApiClient(options: ApiClientOptions) {
     sendAdvance,
     sendCommandRequest,
     sendCommands,
+    awaitExecution,
     sendReplay,
     sendRollback,
     sendSave,
     setAuth,
     setIssuer,
     setServerUrl,
+    setCommandResponseHandler,
     cmdAssignMecha,
   };
 }

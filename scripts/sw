@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 非交互入口：给 AI 代理用。游戏命令默认等到「下一 tick 执行完」再返回结果行。
+#
+#   scripts/sw <命令行>                 # 执行一条，例如 scripts/sw build 60 140 wind_turbine
+#   scripts/sw -                        # 从 stdin 逐行执行（空行 / # 注释跳过），失败不中止
+#
+# 环境变量：
+#   SW_SERVER        默认 http://127.0.0.1:18080
+#   SW_PLAYER        默认 p1
+#   SW_KEY           默认 key_player_1
+#   SW_ISSUER        可选；设了则以 agent 身份发令（同 REPL）
+#   SW_WAIT          默认 1；0 = 只发不等执行结果
+#   SW_WAIT_TIMEOUT  等执行结果的秒数，默认 8
+#
+# 退出码：全部成功 0；有失败 1；配置/连接错误 2。
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TSX="$ROOT/node_modules/.bin/tsx"
+if [[ ! -x "$TSX" ]]; then
+  echo "scripts/sw: 缺少 $TSX（先在仓库根 npm install）" >&2
+  exit 2
+fi
+
+cd "$ROOT"
+if [[ "${1:-}" == "-" ]]; then
+  exec "$TSX" "$ROOT/client-cli/src/once-main.ts" --stdin
+fi
+if [[ $# -eq 0 ]]; then
+  echo "用法: scripts/sw <命令行> | scripts/sw -（从 stdin 逐行执行）" >&2
+  exit 2
+fi
+exec "$TSX" "$ROOT/client-cli/src/once-main.ts" "$@"
