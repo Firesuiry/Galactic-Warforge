@@ -235,7 +235,7 @@ as                                     # 临时恢复为玩家本人发令
 | `blueprint_set_component` | `blueprint_set_component <blueprint_id> <slot_id> <component_id>` | `blueprint_set_component` | management | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | `blueprint_validate <blueprint_id>` | `blueprint_validate` | management | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | `blueprint_variant <parent_blueprint_id> <blueprint_id> <allowed_slot_ids_csv> [--name <name>]` | `blueprint_variant` | management | Create a controlled variant from a preset or player blueprint |
-| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0\|90\|180\|270] [--elevation 0-4] [--approach]` | `build` | build | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
+| `build` | `build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0\|90\|180\|270] [--elevation 0-4] [--approach]` | `build` | build | Build any server-side buildable structure。x,y 是**占地左上角**（不是中心）：占地大小查 catalog.buildings[].footprint，rotation 90/270 时宽高互换；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | `build_dyson_frame <system_id> <layer_index> <node_a_id> <node_b_id>` | `build_dyson_frame` | build | Build a Dyson sphere frame |
 | `build_dyson_node` | `build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | `build_dyson_node` | build | Build a Dyson sphere node |
 | `build_dyson_shell` | `build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | `build_dyson_shell` | build | Build a Dyson sphere shell |
@@ -250,7 +250,7 @@ as                                     # 临时恢复为玩家本人发令
 | `configure_sorter` | `configure_sorter <building_id> [--mode allow\|deny] [--items iron_ore] [--planet <id>]` | `configure_sorter` | management | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | `configure_splitter <building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]` | `configure_splitter` | management | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | `configure_traffic_monitor <building_id> <belt_id\|none> --window <1..600> --minimum <0..60> --alerts <on\|off>` | `configure_traffic_monitor` | management | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
-| `craft_item` | `craft_item <recipe_id> <quantity> [--planet <planet_id>]` | `craft_item` | management | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算） |
+| `craft_item` | `craft_item <recipe_id> <quantity> [--planet <planet_id>]` | `craft_item` | management | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算）；可用配方见 help craft_item（读 /catalog 的 handcraft_allowed） |
 | `demolish` | `demolish <entity_id> [--planet <planet_id>]` | `demolish` | build | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | `demolish_dyson <system_id> <node\|frame\|shell> <component_id>` | `demolish_dyson` | build | Demolish a Dyson sphere component |
 | `deploy_squad` | `deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]` | `deploy_squad` | combat | Consume a squad payload from a hub and create a combat squad |
@@ -264,8 +264,8 @@ as                                     # 临时恢复为玩家本人发令
 | `install_logistics_vehicle` | `install_logistics_vehicle <station_id> <logistics_drone\|logistics_vessel> <quantity> [--source player\|station]` | `install_logistics_vehicle` | management | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | `launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]` | `launch_rocket` | management | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | `launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]` | `launch_solar_sail` | management | Launch loaded solar sails from an EM Rail Ejector |
-| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | `assign_mecha` | management | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
-| `mine_resource` | `mine_resource <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算） |
+| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | `assign_mecha` | management | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
+| `mine_resource` | `mine_resource <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）。resource_id 取自 scene 的 resources[].id（资源节点 id，如 r-12），不是物品 id；矿点须在机甲 6 格内 |
 | `move` | `move <entity_id> <x> <y> [--z <z>]` | `move` | combat | Move entity to position |
 | `order` | `order <entity_id[,entity_id...]> <attack_move\|patrol\|guard\|hold\|follow\|retreat\|stop> [x y] [--target <entity_id>] [--planet <planet_id>]` | `unit_order` | combat | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
 | `produce` | `produce <entity_id> <unit_type> [--planet <planet_id>]` | `produce` | build | Produce a server-public world unit（按建筑所在行星结算） |
@@ -302,13 +302,13 @@ as                                     # 临时恢复为玩家本人发令
 | `metrics` | — | Runtime metrics |
 | `summary` | — | Game summary (resources, players, map) |
 | `stats` | — | Current player statistics |
-| `briefing` | `briefing [alert_limit]` | One-shot agent briefing (self/war/fleets/alerts/commands) |
+| `briefing` | `briefing [alert_limit]` | One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands |
 | `catalog` | `catalog <buildings [关键词]\|building <id>\|recipes [--handcraft] [--building <type>] [关键词]\|items [关键词]\|techs [--available\|--done]\|units>` | 紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog） |
 | `galaxy` | — | Galaxy list |
 | `system` | `system [system_id]` | System details (default: sys-1) |
 | `system_runtime` | `system_runtime [system_id]` | System runtime state including fleets, contacts, blockades and battle reports |
 | `planet` | `planet [planet_id]` | Planet summary (default: planet-1-1) |
-| `planet_runtime` | `planet_runtime [planet_id]` | Planet runtime state including contacts, frontlines and ground task forces |
+| `planet_runtime` | `planet_runtime [planet_id] [--mine]` | Planet runtime: 施工队列（state/wait_reason/剩余 tick）、物流摘要、contacts / frontlines / ground task forces；--mine 只看自己机甲的施工任务 |
 | `blueprints` | `blueprints [blueprint_id]` | List player warfare blueprints or inspect one blueprint in detail |
 | `war_industry` | — | Military production, refit, deployment hub and supply node status |
 | `task_forces` | — | Player-owned task force list with supply and command capacity |

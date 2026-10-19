@@ -23,6 +23,98 @@ func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAm
 	return model.ItemAmount{}, false
 }
 
+// queuedConstructionCommitment 汇总本机甲未落成施工任务的物料承诺（跨所有已
+// 加载行星）。skipTaskID 用来排除刚下单、正在生成回执的那条任务。
+//
+// 施工在落成时才扣料，下单只校验当前背包；同一台机甲连发多条 build 时，每条
+// 下单瞬间背包都够，但前几条落成后背包就见底，后面的会停在
+// pending/insufficient_materials。这里把「已排队、尚未扣料」的任务按物品累加，
+// 让成功回执如实提示哪些料已被前面的任务占用。
+//
+// 只统计尚未扣料（MaterialsDeducted=false）的任务：已扣料的任务已经从背包拿走了。
+func queuedConstructionCommitment(gc *GameCore, mechaID, skipTaskID string) map[string]int {
+	if gc == nil || mechaID == "" {
+		return nil
+	}
+	committed := make(map[string]int)
+	for _, ws := range gc.sortedWorlds() {
+		if ws == nil || ws.Construction == nil {
+			continue
+		}
+		for _, task := range ws.Construction.Tasks {
+			if task == nil || task.MechaID != mechaID || task.ID == skipTaskID || task.MaterialsDeducted {
+				continue
+			}
+			if task.State != model.ConstructionPending &&
+				task.State != model.ConstructionInProgress &&
+				task.State != model.ConstructionPaused {
+				continue
+			}
+			for _, item := range task.Cost.Items {
+				committed[item.ItemID] += item.Quantity
+			}
+		}
+	}
+	return committed
+}
+
+// addQueuedMaterialHint 在成功回执后追加「等料」提示：当前背包扣掉本机甲其它
+// 未落成任务的物料承诺后不够本任务时，写明将等料及缺口。语义不变（仍允许排队
+// 等料），只是不再让「连发 build 全 OK」误导代理以为材料都够。
+func addQueuedMaterialHint(gc *GameCore, mechaID, skipTaskID string, inventory model.ItemInventory, cost []model.ItemAmount, message string) string {
+	committed := queuedConstructionCommitment(gc, mechaID, skipTaskID)
+	if len(committed) == 0 {
+		return message
+	}
+	// 口径：当前背包 − 本机甲其它未落成任务的承诺，是否够本任务。
+	short := make([]model.ItemAmount, 0, len(cost))
+	for _, item := range cost {
+		if item.Quantity <= 0 {
+			continue
+		}
+		have := 0
+		if inventory != nil {
+			have = inventory[item.ItemID]
+		}
+		if free := have - committed[item.ItemID]; free < item.Quantity {
+			short = append(short, model.ItemAmount{ItemID: item.ItemID, Quantity: item.Quantity - free})
+		}
+	}
+	if len(short) == 0 {
+		return message
+	}
+	gaps := make([]string, 0, len(short))
+	for _, item := range short {
+		gaps = append(gaps, fmt.Sprintf("%s %d", itemDisplayName(item.ItemID), item.Quantity))
+	}
+	return message + "；背包料已被前面的施工任务占用，本任务将等料（缺：" + strings.Join(gaps, "、") + "）"
+}
+
+// queuedConstructionShortageNote 报告「当前背包已经不够支付已排队的施工任务」。
+// 升级会立即扣料，升级本身不会等料，但它可能把前面排队的 build 所需材料花掉；
+// 这时在升级成功回执后追加提示，代理就知道后面的施工会停在缺料。
+func queuedConstructionShortageNote(gc *GameCore, mechaID string, inventory model.ItemInventory) string {
+	committed := queuedConstructionCommitment(gc, mechaID, "")
+	if len(committed) == 0 {
+		return ""
+	}
+	gaps := make([]string, 0, len(committed))
+	for itemID, need := range committed {
+		have := 0
+		if inventory != nil {
+			have = inventory[itemID]
+		}
+		if have < need {
+			gaps = append(gaps, fmt.Sprintf("%s %d", itemDisplayName(itemID), need-have))
+		}
+	}
+	if len(gaps) == 0 {
+		return ""
+	}
+	sort.Strings(gaps)
+	return "；背包已不足以支付前面排队的施工任务，它们将等料（缺：" + strings.Join(gaps, "、") + "）"
+}
+
 // missingItemMessage 统一的「缺料」回执文案：一次列出全部缺口（物品名 + 缺几个）。
 // 建造/升级/手搓/施工预留共用，玩家与 bot 都靠它判断该去手搓还是去取货。
 func missingItemMessage(inv model.ItemInventory, cost []model.ItemAmount) (string, bool) {
@@ -408,6 +500,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		// 较小者）：写进回执，玩家不用等落成才知道（试玩 1016 报告 B2）。
 		res.Message += fmt.Sprintf("，将开采「%s」", itemDisplayName(task.MiningItem))
 	}
+	// 连发 build：后面的任务下单时背包还够，但前面的任务落成会扣走材料。
+	// 如实提示将等料，避免「全 OK」被当成「都会按时建成」。
+	res.Message = addQueuedMaterialHint(gc, task.MechaID, task.ID, mecha.Record.Inventory, task.Cost.Items, res.Message)
 	return res, nil
 }
 
@@ -1355,7 +1450,8 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		}
 		res.Status = model.StatusExecuted
 		res.Code = model.CodeOK
-		res.Message = fmt.Sprintf("建筑 %s 开始升级（等级 %d -> %d，%d tick）", entityID, building.Level, nextLevel, rule.DurationTicks)
+		res.Message = fmt.Sprintf("建筑 %s 开始升级（等级 %d -> %d，%d tick）", entityID, building.Level, nextLevel, rule.DurationTicks) +
+			queuedConstructionShortageNote(gc, mecha.Record.UnitID, mecha.Record.Inventory)
 		return res, events
 	}
 
@@ -1363,7 +1459,8 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("建筑 %s 已升级到 %d 级", entityID, building.Level)
+	res.Message = fmt.Sprintf("建筑 %s 已升级到 %d 级", entityID, building.Level) +
+		queuedConstructionShortageNote(gc, mecha.Record.UnitID, mecha.Record.Inventory)
 	return res, events
 }
 

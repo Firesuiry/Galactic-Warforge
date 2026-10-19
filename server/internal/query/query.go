@@ -58,6 +58,33 @@ type MechaView struct {
 	ConcurrentTasks     int                 `json:"concurrent_tasks"`
 	ConstructionActive  int                 `json:"construction_active"`
 	ConstructionPending int                 `json:"construction_pending"`
+	// Job 是机甲当前的异步作业（手搓/采矿）；没有作业时省略。
+	Job *MechaJobView `json:"job,omitempty"`
+}
+
+// MechaJobView 是机甲作业的代理视图：只给判断"机甲忙不忙、在做什么、还要多久"
+// 需要的字段，完整的 ReservedInputs 等细节走 inspect <planet> unit <mecha_id>。
+type MechaJobView struct {
+	Kind             string `json:"kind"`
+	RecipeID         string `json:"recipe_id,omitempty"`
+	ResourceID       string `json:"resource_id,omitempty"`
+	RemainingBatches int    `json:"remaining_batches"`
+	State            string `json:"state"`
+	Paused           bool   `json:"paused,omitempty"`
+}
+
+func newMechaJobView(job *model.MechaJob) *MechaJobView {
+	if job == nil {
+		return nil
+	}
+	return &MechaJobView{
+		Kind:             job.Kind,
+		RecipeID:         job.RecipeID,
+		ResourceID:       job.ResourceID,
+		RemainingBatches: job.RemainingBatches,
+		State:            job.State,
+		Paused:           job.Paused,
+	}
 }
 
 // MechaViews 汇总玩家所有机甲的视图：存活状态、位置、背包与施工占用。
@@ -86,6 +113,7 @@ type constructionTaskSnapshot struct {
 type unitSnapshot struct {
 	position model.Position
 	alive    bool
+	job      *model.MechaJob
 }
 
 // mechaWorldSnapshots 依次对每个世界单独加读锁取快照。各世界的锁不嵌套：
@@ -127,7 +155,11 @@ func snapshotMechaWorld(ws *model.WorldState, playerID string) mechaWorldSnapsho
 		if unit == nil {
 			continue
 		}
-		snap.units[id] = unitSnapshot{position: unit.Position, alive: unit.HP > 0}
+		var job *model.MechaJob
+		if unit.Mecha != nil {
+			job = unit.Mecha.Job.Clone()
+		}
+		snap.units[id] = unitSnapshot{position: unit.Position, alive: unit.HP > 0, job: job}
 	}
 	return snap
 }
@@ -166,6 +198,7 @@ func mechaViewsFrom(player *model.PlayerState, snapshots map[string]mechaWorldSn
 				view.Alive = true
 				pos := unit.position
 				view.Position = &pos
+				view.Job = newMechaJobView(unit.job)
 			}
 		}
 		views = append(views, view)

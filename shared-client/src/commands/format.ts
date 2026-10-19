@@ -183,15 +183,26 @@ export function fmtMetrics(m: MetricsSnapshot): string {
  * 玩家自己的背包行（第 21 轮：背包挂在机甲上）。
  * `mecha` = 当前发令者绑定的机甲；未绑定时给统一提示。
  */
-export function fmtMechaInventory(mecha: MechaView | undefined): string {
+export function fmtMechaInventory(mecha: MechaView | undefined, limit = 8): string {
   if (!mecha) {
     return chalk.yellow(NO_MECHA_HINT);
   }
   const slots = mecha.inventory_slots_total
     ? ` [${mecha.inventory_slots_used}/${mecha.inventory_slots_total} slots]`
     : '';
-  const preview = fmtInventoryPreview(mecha.inventory, 8) || chalk.dim('空');
+  const preview = fmtInventoryPreview(mecha.inventory, limit) || chalk.dim('空');
   return `Inventory ${mecha.unit_id}${slots}: ${preview}`;
+}
+
+/** 机甲作业一行：`craft circuit_board ×3（running）` / `mine iron_ore ×5（paused）`。 */
+export function fmtMechaJob(mecha: MechaView | undefined): string {
+  const job = mecha?.job;
+  if (!job) {
+    return '';
+  }
+  const target = job.kind === 'mine' ? (job.resource_id ?? '?') : (job.recipe_id ?? '?');
+  const paused = job.paused ? '，已暂停（防御中）' : '';
+  return `${job.kind} ${target} ×${job.remaining_batches}（${job.state}${paused}）`;
 }
 
 export function fmtSummary(s: StateSummary): string {
@@ -277,14 +288,26 @@ export function fmtAgentBriefing(b: AgentBriefing, issuerId = b.self.player_id):
   lines.push(
     `  energy=${b.self.resources?.energy ?? 0}（电网结余）`,
   );
-  lines.push(`  ${fmtMechaInventory(selectMyMecha(b.self, issuerId))}`);
+  const myMecha = selectMyMecha(b.self, issuerId);
+  // 背包完整列出（不截断前 8 种）：缺料判断要靠这一行。
+  lines.push(`  ${fmtMechaInventory(myMecha, Number.POSITIVE_INFINITY)}`);
+  const job = fmtMechaJob(myMecha);
+  if (job) {
+    lines.push(`  job ${job}`);
+  }
   if (b.self.tech) {
     lines.push(
       `  tech completed=${b.self.tech.completed_count} queue=${b.self.tech.research_queue_len} researched=${b.self.tech.total_researched}`,
     );
+    const completed = b.self.tech.completed_techs ?? [];
+    if (completed.length > 0) {
+      lines.push(`  completed techs: ${completed.join(', ')}`);
+    }
     if (b.self.tech.current_research) {
       const r = b.self.tech.current_research;
       lines.push(`  research ${r.tech_id} progress=${r.progress}/${r.total_cost} state=${r.state}`);
+    } else {
+      lines.push('  research: (none)');
     }
   }
   lines.push('');
@@ -306,7 +329,9 @@ export function fmtAgentBriefing(b: AgentBriefing, issuerId = b.self.player_id):
   for (const a of b.recent_alerts ?? []) {
     // 中文口径走 shared alerts：枚举 id（如 belt_blocked）不上界面，
     // 传送带堵塞带上位置/件数/停顿时长。
-    lines.push(`  [t${a.tick}] ${a.severity ?? '-'} ${formatAlertText(a)}`);
+    // 带 alert_type 与 building_id：中文短句看不出枚举值，定位建筑也缺 id。
+    const where = a.building_id ? ` ${a.building_id}` : '';
+    lines.push(`  [t${a.tick}] ${a.severity ?? '-'} ${chalk.dim(a.alert_type ?? '-')}${where} ${formatAlertText(a)}`);
   }
   lines.push('');
   lines.push(chalk.bold(`Available commands (${b.available_commands?.length ?? 0})`));
@@ -518,7 +543,86 @@ export function fmtFleetDetail(fleet: FleetDetailView | FleetRuntimeView): strin
   return lines.join('\n');
 }
 
-export function fmtPlanetRuntime(runtime: PlanetRuntimeView): string {
+/** 施工任务表：代理最该看的一栏（wait_reason 说明为什么还没开工）。 */
+function fmtConstructionTasks(runtime: PlanetRuntimeView, mineOnly: boolean, myMechaId?: string): string[] {
+  const all = runtime.construction_tasks ?? [];
+  const tasks = mineOnly
+    ? all.filter((task) => myMechaId !== undefined && task.mecha_id === myMechaId)
+    : all;
+  const lines: string[] = [chalk.bold(`Construction tasks (${tasks.length}${mineOnly ? ` mine, ${all.length} total` : ''})`)];
+  if (tasks.length === 0) {
+    lines.push(chalk.dim(mineOnly ? '  none for my mecha' : '  none'));
+    return lines;
+  }
+  lines.push(table(
+    ['ID', 'Type', 'Position', 'Mecha', 'State', 'Wait', 'Remaining'],
+    tasks.map((task) => [
+      task.id,
+      task.building_name ?? task.building_type,
+      fmtPosition(task.position),
+      task.mecha_id ?? '-',
+      task.state,
+      task.wait_reason ?? '-',
+      task.state === 'pending' || task.state === 'paused' ? '-' : String(task.remaining_ticks ?? '-'),
+    ]),
+  ));
+  return lines;
+}
+
+/** 物流摘要：站点/运输器/机器人按状态计数，站点表给库存总量。 */
+function fmtLogistics(runtime: PlanetRuntimeView): string[] {
+  const stations = runtime.logistics_stations ?? [];
+  const drones = runtime.logistics_drones ?? [];
+  const ships = runtime.logistics_ships ?? [];
+  const bots = runtime.logistics_bots ?? [];
+  const distributors = runtime.logistics_distributors ?? [];
+  const countByStatus = (items: Array<{ status?: string }>): string => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const status = item.status ?? '-';
+      counts.set(status, (counts.get(status) ?? 0) + 1);
+    }
+    return counts.size === 0
+      ? '-'
+      : [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([status, n]) => `${status}:${n}`).join(' ');
+  };
+  const lines: string[] = [chalk.bold('Logistics')];
+  lines.push(
+    `  stations=${stations.length}  drones=${drones.length}  ships=${ships.length}  ` +
+    `distributors=${distributors.length}  bots=${bots.length}`,
+  );
+  if (drones.length > 0) {
+    lines.push(`  drones ${countByStatus(drones)}`);
+  }
+  if (ships.length > 0) {
+    lines.push(`  ships ${countByStatus(ships)}`);
+  }
+  if (bots.length > 0) {
+    lines.push(`  bots ${countByStatus(bots)}`);
+  }
+  if (stations.length > 0) {
+    lines.push(table(
+      ['Station', 'Type', 'Position', 'Drones', 'Ships', 'Inventory'],
+      stations.map((station) => [
+        station.building_id,
+        station.building_type,
+        fmtPosition(station.position),
+        String(station.drone_ids?.length ?? 0),
+        String(station.ship_ids?.length ?? 0),
+        fmtInventoryPreview(station.state?.inventory, 6) || '-',
+      ]),
+    ));
+  }
+  return lines;
+}
+
+export interface PlanetRuntimeFormatOptions {
+  /** 只看这台机甲的施工任务（`planet_runtime --mine`）。 */
+  myMechaId?: string;
+  mineOnly?: boolean;
+}
+
+export function fmtPlanetRuntime(runtime: PlanetRuntimeView, options: PlanetRuntimeFormatOptions = {}): string {
   if (!runtime.discovered) {
     return `Planet Runtime: ${chalk.bold(runtime.planet_id)}  ${chalk.dim('undiscovered')}`;
   }
@@ -527,6 +631,11 @@ export function fmtPlanetRuntime(runtime: PlanetRuntimeView): string {
     `Available: ${runtime.available ? chalk.green('yes') : chalk.dim('no')}  Tick: ${chalk.cyan(runtime.tick)}`,
     `Contacts=${runtime.contacts?.length ?? 0}  EnemyForces=${runtime.enemy_forces?.length ?? 0}  Frontlines=${runtime.frontlines?.length ?? 0}`,
   ];
+
+  lines.push('');
+  lines.push(...fmtConstructionTasks(runtime, options.mineOnly ?? false, options.myMechaId));
+  lines.push('');
+  lines.push(...fmtLogistics(runtime));
 
   const contacts = runtime.contacts ?? [];
   lines.push('');

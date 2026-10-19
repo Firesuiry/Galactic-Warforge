@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
-import { cmdAlertSnapshot, runSaveCommand } from './debug.js';
+import { cmdAlertSnapshot, cmdAudit, runSaveCommand } from './debug.js';
 
 describe('save command', () => {
   it('shows help', async () => {
@@ -112,5 +112,74 @@ describe('alert_snapshot 中文文案', () => {
     } as never);
     assert.match(out, /产物阻塞/);
     assert.match(out, /alert_type=output_blocked building=b-1/);
+  });
+});
+
+describe('audit 输出', () => {
+  function fakeApi(paramsSeen: Array<Record<string, unknown>>) {
+    return {
+      getAuth: () => ({ playerId: 'p1', issuerId: 'builder-a' }),
+      fetchAudit: async (params: Record<string, unknown>) => {
+        paramsSeen.push(params);
+        return {
+          count: 2,
+          entries: [
+            {
+              timestamp: '', tick: 100, player_id: 'p1', role: 'admin',
+              issuer_type: 'agent', issuer_id: 'builder-a', request_id: 'r-1',
+              action: 'command', permission: 'build', permission_granted: true, permissions: [],
+              details: {
+                command_index: 2, stage: 'execute', status: 'failed', code: 'INSUFFICIENT_RESOURCE',
+                message: '背包缺：铁块 2', command: { type: 'build', payload: {} },
+              },
+            },
+            {
+              timestamp: '', tick: 101, player_id: 'p1', role: 'admin',
+              issuer_type: 'agent', issuer_id: 'builder-a', request_id: 'r-2',
+              action: 'command', permission: 'craft_item', permission_granted: true, permissions: [],
+              details: {
+                command_index: 0, stage: 'execute', status: 'executed', code: 'OK',
+                message: '已开始手工制造，原料已预留', command: { type: 'craft_item', payload: {} },
+              },
+            },
+          ],
+        };
+      },
+    };
+  }
+
+  it('每条带 stage / command_index / code / 命令类型', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const out = await cmdAudit([], { api: fakeApi(calls) } as never);
+    assert.match(out, /\[t100\] execute #2 build INSUFFICIENT_RESOURCE failed/);
+    assert.match(out, /背包缺：铁块 2/);
+    assert.match(out, /\[t101\] execute #0 craft_item OK executed/);
+  });
+
+  it('默认只看当前发令者，--limit 默认 20', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    await cmdAudit([], { api: fakeApi(calls) } as never);
+    assert.equal(calls[0].issuer_id, 'builder-a');
+    assert.equal(calls[0].limit, 20);
+  });
+
+  it('--limit / --issuer / --request / --all-issuers 生效', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const api = fakeApi(calls);
+    await cmdAudit(['--limit', '5'], { api } as never);
+    assert.equal(calls[0].limit, 5);
+    await cmdAudit(['--issuer', 'builder-b'], { api } as never);
+    assert.equal(calls[1].issuer_id, 'builder-b');
+    await cmdAudit(['--request', 'r-9'], { api } as never);
+    assert.equal(calls[2].request_id, 'r-9');
+    await cmdAudit(['--all-issuers'], { api } as never);
+    assert.equal(calls[3].issuer_id, undefined);
+  });
+
+  it('--help 列出 --limit / --issuer / --request', async () => {
+    const out = await cmdAudit(['--help'], { api: fakeApi([]) } as never);
+    assert.match(out, /--limit <n>/);
+    assert.match(out, /--issuer <id>/);
+    assert.match(out, /--request <rid>/);
   });
 });

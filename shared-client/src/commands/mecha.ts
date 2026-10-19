@@ -27,8 +27,20 @@ async function emptyMechaHint(api: CommandContext['api']): Promise<string> {
   return lines.join('\n');
 }
 
+/** 作业列：`craft circuit_board ×3` / `mine iron_ore ×5（paused）`；无作业显示 `-`。 */
+function fmtJobColumn(mecha: MechaView): string {
+  const job = mecha.job;
+  if (!job) {
+    return '-';
+  }
+  const target = job.kind === 'mine' ? (job.resource_id ?? '?') : (job.recipe_id ?? '?');
+  return `${job.kind} ${target} ×${job.remaining_batches}${job.paused ? '（paused）' : ''}`;
+}
+
 function fmtMechaTable(mechas: MechaView[], issuerId: string): string {
-  const headers = ['ID', 'Planet', 'Operator', 'Alive', 'Slots', 'Construction'];
+  // Construction = 施工 active/pending。施工通常 1–2 tick 落成，active 几乎恒 0；
+  // pending 才是真正的排队/缺料，`planet_runtime` 的 wait_reason 说明原因。
+  const headers = ['ID', 'Planet', 'Operator', 'Alive', 'Slots', 'Construction', 'Job'];
   // 单元格先给纯文本算列宽，着色在补齐之后（见 format.table）。
   const rows = mechas.map((mecha) => [
     mecha.unit_id,
@@ -37,14 +49,17 @@ function fmtMechaTable(mechas: MechaView[], issuerId: string): string {
     mecha.alive ? 'yes' : `no (respawn tick ${mecha.respawn_at_tick})`,
     `${mecha.inventory_slots_used}/${mecha.inventory_slots_total}`,
     `${mecha.construction_active}/${mecha.construction_pending}`,
+    fmtJobColumn(mecha),
   ]);
-  return table(headers, rows, (col, value, rowIndex) => {
+  const rendered = table(headers, rows, (col, value, rowIndex) => {
     const mecha = mechas[rowIndex];
     if (col === 0) return mecha.operator === issuerId ? chalk.bold(value) : value;
     if (col === 2) return mecha.operator ? value : chalk.dim(value);
     if (col === 3) return mecha.alive ? chalk.green(value) : chalk.red(value);
+    if (col === 5) return mecha.construction_pending > 0 ? chalk.yellow(value) : value;
     return value;
   });
+  return `${rendered}\n${chalk.dim('Construction = 施工 active/pending：active 通常为 0（1–2 tick 落成），pending 才是排队/缺料（见 planet_runtime --mine 的 wait_reason）')}`;
 }
 
 /** 回执里是否真的执行成功：以服务端结论为准，客户端预期不能替代它。 */

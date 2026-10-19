@@ -187,7 +187,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 | 命令 | 层级 | target 必填 | payload | CLI 动词 | 说明 |
 |---|---|---|---|---|---|
-| `assign_mecha` | planet | `entity_id` | `operator` | `mecha` | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
+| `assign_mecha` | planet | `entity_id` | `operator` | `mecha` | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
 | `attack` | planet | — | `target_entity_id` | `attack` | Attack target entity |
 | `blockade_planet` | planet | — | `task_force_id`, `planet_id` | `blockade_planet` | Issue a blockade intent against one planet |
 | `blueprint_create` | planet | — | `blueprint_id`, `domain`, `name?`, `base_frame_id?`, `base_hull_id?` | `blueprint_create` | Create a draft warfare blueprint |
@@ -195,7 +195,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `blueprint_set_component` | planet | — | `blueprint_id`, `slot_id`, `component_id` | `blueprint_set_component` | Set one component on a draft or validated warfare blueprint |
 | `blueprint_validate` | planet | — | `blueprint_id` | `blueprint_validate` | Validate a warfare blueprint and receive structured legality issues |
 | `blueprint_variant` | planet | — | `parent_blueprint_id`, `blueprint_id`, `allowed_slot_ids`, `name?` | `blueprint_variant` | Create a controlled variant from a preset or player blueprint |
-| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?`, `elevation?` | `build` | Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0） |
+| `build` | planet | `position` | `building_type`, `recipe_id?`, `direction?`, `rotation?`, `auto_approach?`, `elevation?` | `build` | Build any server-side buildable structure。x,y 是**占地左上角**（不是中心）：占地大小查 catalog.buildings[].footprint，rotation 90/270 时宽高互换；传送带可用 --elevation 架高（0-4，缺省 0） |
 | `build_dyson_frame` | system | — | `system_id`, `layer_index`, `node_a_id`, `node_b_id` | `build_dyson_frame` | Build a Dyson sphere frame |
 | `build_dyson_node` | system | — | `system_id`, `layer_index`, `latitude`, `longitude`, `orbit_radius?` | `build_dyson_node` | Build a Dyson sphere node |
 | `build_dyson_shell` | system | — | `system_id`, `layer_index`, `latitude_min`, `latitude_max`, `coverage` | `build_dyson_shell` | Build a Dyson sphere shell |
@@ -210,7 +210,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `configure_sorter` | planet | `entity_id` | `filter_mode?`, `filter_items?` | `configure_sorter` | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | planet | `entity_id` | `input_directions`, `output_directions`, `input_priority?`, `output_priority?`, `output_filters?` | `configure_splitter` | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | planet | `entity_id` | `target_belt_id`, `window_ticks`, `minimum_items_per_tick`, `alerts_enabled` | `configure_traffic_monitor` | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
-| `craft_item` | planet | — | `recipe_id`, `quantity` | `craft_item` | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算） |
+| `craft_item` | planet | — | `recipe_id`, `quantity` | `craft_item` | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算）；可用配方见 help craft_item（读 /catalog 的 handcraft_allowed） |
 | `demolish` | planet | `entity_id` | — | `demolish` | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | system | — | `system_id`, `component_type`, `component_id` | `demolish_dyson` | Demolish a Dyson sphere component |
 | `deploy_squad` | planet | — | `member_ids?`, `name?`, `building_id?`, `blueprint_id?`, `count?`, `planet_id?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
@@ -224,7 +224,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `install_logistics_vehicle` | planet | `entity_id` | `item_id`, `quantity`, `source?` | `install_logistics_vehicle` | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | planet | — | `building_id`, `system_id`, `layer_index?`, `count?` | `launch_rocket` | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | planet | — | `building_id`, `count?`, `orbit_radius?`, `inclination?` | `launch_solar_sail` | Launch loaded solar sails from an EM Rail Ejector |
-| `mine_resource` | planet | — | `resource_id`, `quantity` | `mine_resource` | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算） |
+| `mine_resource` | planet | — | `resource_id`, `quantity` | `mine_resource` | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）。resource_id 取自 scene 的 resources[].id（资源节点 id，如 r-12），不是物品 id；矿点须在机甲 6 格内 |
 | `move` | planet | `position` | — | `move` | Move entity to position |
 | `produce` | planet | `entity_id` | `unit_type` | `produce` | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | planet | — | `building_id`, `deployment_hub_id`, `blueprint_id`, `count` | `queue_military_production` | Queue military production and deliver ready payloads into a deployment hub |
@@ -458,7 +458,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 **`GET /state/summary`**
 - `tick`、`active_planet_id`（全局兜底行星）、`map_width` / `map_height` / `surface`；已宣判时 `winner` / `victory_reason` / `victory_rule`。
 - `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive` / `dark_fog`（`{hostile: bool, hostile_until_tick: int}`，黑雾对该玩家的敌对状态，不敌对时 `hostile_until_tick=0`）；仅自己返回完整状态：`resources`、`permissions`、`focus_planet_id`、`mechas`、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
-- `mechas`（仅自己，按 `unit_id` 排序）：每项 `{unit_id, planet_id, operator, alive, respawn_at_tick, position?, inventory, inventory_slots_used, inventory_slots_total, operate_range, concurrent_tasks, construction_active, construction_pending}`；`operator=""` = 空闲，`position` 只在 `alive` 时给。玩家的原始 `mechas` map 不下发。客户端按自己的 `issuer_id` 找 `operator` 相同的机甲。
+- `mechas`（仅自己，按 `unit_id` 排序）：每项 `{unit_id, planet_id, operator, alive, respawn_at_tick, position?, inventory, inventory_slots_used, inventory_slots_total, operate_range, concurrent_tasks, construction_active, construction_pending, job?}`；`operator=""` = 空闲，`position` 只在 `alive` 时给。`job` 是机甲当前的异步作业（`craft_item` / `mine_resource`），有作业时才下发：`{kind, recipe_id?, resource_id?, remaining_batches, state, paused?}`（`kind` = `craft` / `mine`，`state` = `running` 等，`paused=true` 表示被自动防御暂停、进度与预留原料都保留）；没有作业时整个字段省略。完整作业（含 `remaining_ticks` / `reserved_inputs`）仍走 `inspect` 的 `unit.mecha.job`。玩家的原始 `mechas` map 不下发。客户端按自己的 `issuer_id` 找 `operator` 相同的机甲。
 - `tech`：`completed_techs`（`{tech_id: level}`）、`current_research`、`research_queue`、`total_researched`。研究条目字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason`（`waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`）/ `speed_multiplier`（供电倍率，1 = 满速）/ `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`。矩阵 ID 统一为 `electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
 - `combat_tech`：`unlocked_techs` / `current_research` / `research_progress`。
 - `resources` 只有 `energy` 一个字段（第 16 轮删除了 `minerals`）：它是电网结余的**只读展示**，不再参与建造/升级/发射的扣费。`resources.energy`、`/state/stats.energy_stats`、`/networks` 共用同一 tick 的 `PowerSettlementSnapshot`。

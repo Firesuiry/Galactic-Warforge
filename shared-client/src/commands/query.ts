@@ -145,10 +145,24 @@ export async function cmdFleetStatus(args: string[], { api }: CommandContext): P
   }
 }
 
-export async function cmdPlanetRuntime(args: string[], { api }: CommandContext): Promise<string> {
-  const planetId = args[0] ?? DEFAULT_PLANET_ID;
+export async function cmdPlanetRuntime(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
+  const parsed = parseArgs(args);
+  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
   try {
-    return fmtPlanetRuntime(await api.fetchPlanetRuntime(planetId));
+    const runtime = await api.fetchPlanetRuntime(planetId);
+    if (!hasFlag(parsed, 'mine')) {
+      return fmtPlanetRuntime(runtime);
+    }
+    // --mine：只看自己机甲的施工任务。先按发令者找机甲（跨行星都算），
+    // 找不到再退回「本行星上 operator 是我的机甲」。
+    const summary = await api.fetchSummary();
+    const issuerId = resolveIssuerId(ctx);
+    const mecha = selectMyMecha(summary.players?.[api.getAuth().playerId], issuerId);
+    if (!mecha) {
+      return `${fmtPlanetRuntime(runtime, { mineOnly: true })}\n${fmtError(`当前发令者 ${issuerId} 未绑定机甲：mecha list / mecha assign <id>`)}`;
+    }
+    return fmtPlanetRuntime(runtime, { mineOnly: true, myMechaId: mecha.unit_id });
   } catch (e) {
     return fmtError(String(e));
   }

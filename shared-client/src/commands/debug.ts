@@ -27,42 +27,102 @@ function formatCursor(afterId: string | undefined, sinceTick: number | undefined
   return fallback;
 }
 
-export async function cmdAudit(args: string[], { api }: CommandContext): Promise<string> {
+const AUDIT_DEFAULT_LIMIT = 20;
+
+/** 审计 details 的字段名以服务端为准（details.stage / command_index / code …）。 */
+function auditDetail(entry: { details?: Record<string, unknown> }, key: string): string | undefined {
+  const value = entry.details?.[key];
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function auditCommandType(entry: { permission?: string; details?: Record<string, unknown> }): string {
+  const command = entry.details?.command;
+  if (command && typeof command === 'object' && typeof (command as { type?: unknown }).type === 'string') {
+    return (command as { type: string }).type;
+  }
+  return entry.permission ?? '-';
+}
+
+/** 一条审计记录：tick、stage、command_index、命令类型、code、状态、发令者、message。 */
+function fmtAuditEntry(entry: {
+  tick: number;
+  player_id: string;
+  issuer_type: string;
+  issuer_id: string;
+  request_id: string;
+  permission: string;
+  permission_granted: boolean;
+  details?: Record<string, unknown>;
+}): string[] {
+  const stage = auditDetail(entry, 'stage') ?? '-';
+  const index = entry.details?.command_index;
+  const indexText = typeof index === 'number' ? `#${index}` : '#-';
+  const status = auditDetail(entry, 'status') ?? '-';
+  const code = auditDetail(entry, 'code') ?? '-';
+  const commandType = auditCommandType(entry);
+  const grantedText = entry.permission_granted ? chalk.green('GRANTED') : chalk.red('DENIED');
+  const ok = code === 'OK' && status !== 'failed' && status !== 'rejected';
+  const codeText = ok ? chalk.green(code) : chalk.red(code);
+  const lines = [
+    `[t${entry.tick}] ${chalk.yellow(stage)} ${indexText} ${chalk.bold(commandType)} ${codeText} ${status} ` +
+    `${grantedText} by ${entry.player_id} (${entry.issuer_type}:${entry.issuer_id}) request=${entry.request_id}`,
+  ];
+  const message = auditDetail(entry, 'message');
+  if (message) {
+    lines.push(`    ${chalk.dim(message)}`);
+  }
+  return lines;
+}
+
+export async function cmdAudit(args: string[], { api, issuerId }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
 
   if (hasFlag(parsed, 'help')) {
     return `audit [options]
+  --limit <n>         Max entries (default ${AUDIT_DEFAULT_LIMIT})
+  --issuer <id>       Filter by issuer ID（默认只看当前发令者）
+  --request <rid>     Filter by request ID
+  --all-issuers       Do not filter by the current issuer
   --player <id>       Filter by player ID
   --issuer-type <t>   Filter by issuer type
-  --issuer-id <id>    Filter by issuer ID
+  --issuer-id <id>    Filter by issuer ID (alias of --issuer)
   --action <a>        Filter by action (command)
-  --request-id <rid>  Filter by request ID
-  --permission <p>    Filter by permission type
+  --request-id <rid>  Filter by request ID (alias of --request)
+  --permission <p>    Filter by command type
   --granted <bool>    Filter by permission granted (true/false)
   --from-tick <n>     From tick
   --to-tick <n>       To tick
   --from-time <ts>    From RFC3339 timestamp
   --to-time <ts>      To RFC3339 timestamp
-  --limit <n>         Max entries
-  --order <dir>       asc or desc`;
+  --order <dir>       asc or desc
+每条记录显示 stage（precheck/execute）、command_index、命令类型、code 与 status。`;
   }
 
   try {
     const granted = getStringOption(parsed, 'granted');
     const order = getStringOption(parsed, 'order');
+    const explicitIssuer = getStringOption(parsed, 'issuer') ?? getStringOption(parsed, 'issuer-id');
+    // 默认只看当前发令者（玩家本人或代理名）；--all-issuers 看本玩家所有发令者。
+    const issuerFilter = explicitIssuer ?? (hasFlag(parsed, 'all-issuers')
+      ? undefined
+      : (issuerId || api.getAuth().issuerId || undefined));
+    const limit = parseOptionalInteger(getStringOption(parsed, 'limit'), 'limit') ?? AUDIT_DEFAULT_LIMIT;
+    if (limit < 0) {
+      throw new Error('--limit 必须是非负整数');
+    }
     const result = await api.fetchAudit({
       player_id: getStringOption(parsed, 'player'),
       issuer_type: getStringOption(parsed, 'issuer-type'),
-      issuer_id: getStringOption(parsed, 'issuer-id'),
+      issuer_id: issuerFilter,
       action: getStringOption(parsed, 'action'),
-      request_id: getStringOption(parsed, 'request-id'),
+      request_id: getStringOption(parsed, 'request') ?? getStringOption(parsed, 'request-id'),
       permission: getStringOption(parsed, 'permission'),
       permission_granted: granted !== undefined ? granted === 'true' : undefined,
       from_tick: parseOptionalInteger(getStringOption(parsed, 'from-tick'), 'from-tick'),
       to_tick: parseOptionalInteger(getStringOption(parsed, 'to-tick'), 'to-tick'),
       from_time: getStringOption(parsed, 'from-time'),
       to_time: getStringOption(parsed, 'to-time'),
-      limit: parseOptionalInteger(getStringOption(parsed, 'limit'), 'limit'),
+      limit,
       order: order === 'asc' || order === 'desc' ? order : undefined,
     });
 
@@ -70,20 +130,13 @@ export async function cmdAudit(args: string[], { api }: CommandContext): Promise
       return chalk.dim('No audit entries found.');
     }
 
-    const lines: string[] = [`Found ${chalk.cyan(result.count)} entries:`, ''];
-    for (const entry of result.entries.slice(0, 20)) {
-      const grantedText = entry.permission_granted ? chalk.green('GRANTED') : chalk.red('DENIED');
-      lines.push(
-        `[t${entry.tick}] ${chalk.yellow(entry.permission)} ${grantedText} by ${entry.player_id} ` +
-        `(${entry.issuer_type}:${entry.issuer_id}) request=${entry.request_id}`
-      );
-      const detail = entry.details?.message;
-      if (typeof detail === 'string' && detail) {
-        lines.push(`    ${chalk.dim(detail)}`);
-      }
+    const scope = issuerFilter ? `issuer=${chalk.cyan(issuerFilter)}` : 'all issuers';
+    const lines: string[] = [`Found ${chalk.cyan(result.count)} entries (${scope}, limit ${limit}):`, ''];
+    for (const entry of result.entries) {
+      lines.push(...fmtAuditEntry(entry));
     }
-    if (result.count > 20) {
-      lines.push(chalk.dim(`... and ${result.count - 20} more entries`));
+    if (result.count > result.entries.length) {
+      lines.push(chalk.dim(`... and ${result.count - result.entries.length} more entries`));
     }
     return lines.join('\n');
   } catch (e) {

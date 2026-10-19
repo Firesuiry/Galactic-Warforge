@@ -9,19 +9,19 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   install_logistics_bot: { usage: '<id> <quantity> [--source player|storage]', desc: '消耗背包或绑定仓库的机器人安装至配送器' },
   uninstall_logistics_bot: { usage: '<id> <quantity>', desc: '回收空载停靠的配送机器人至背包' },
   configure_mecha_logistics: { usage: '<item:min:max,...|none>', desc: '替换本发令者机甲（我的机甲）的配送请求，最多 8 项，none 清空' },
-  mecha: { usage: '<list|assign <mecha_id> [operator]|assign <mecha_id> --release>', desc: '列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑）' },
+  mecha: { usage: '<list|assign <mecha_id> [operator]|assign <mecha_id> --release>', desc: '列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑）' },
   health: { desc: 'Server status and current tick' },
   metrics: { desc: 'Runtime metrics' },
   summary: { desc: 'Game summary (resources, players, map)' },
   stats: { desc: 'Current player statistics' },
-  briefing: { usage: '[alert_limit]', desc: 'One-shot agent briefing (self/war/fleets/alerts/commands)' },
+  briefing: { usage: '[alert_limit]', desc: 'One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands' },
   catalog: { usage: '<buildings [关键词]|building <id>|recipes [--handcraft] [--building <type>] [关键词]|items [关键词]|techs [--available|--done]|units>', desc: '紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog）' },
   catalog_commands: { desc: 'Public command structure catalog (GET /catalog/commands)' },
   galaxy: { desc: 'Galaxy list' },
   system: { usage: '[system_id]', desc: 'System details (default: sys-1)' },
   system_runtime: { usage: '[system_id]', desc: 'System runtime state including fleets, contacts, blockades and battle reports' },
   planet: { usage: '[planet_id]', desc: 'Planet summary (default: planet-1-1)' },
-  planet_runtime: { usage: '[planet_id]', desc: 'Planet runtime state including contacts, frontlines and ground task forces' },
+  planet_runtime: { usage: '[planet_id] [--mine]', desc: 'Planet runtime: 施工队列（state/wait_reason/剩余 tick）、物流摘要、contacts / frontlines / ground task forces；--mine 只看自己机甲的施工任务' },
   blueprints: { usage: '[blueprint_id]', desc: 'List player warfare blueprints or inspect one blueprint in detail' },
   war_industry: { desc: 'Military production, refit, deployment hub and supply node status' },
   task_forces: { desc: 'Player-owned task force list with supply and command capacity' },
@@ -34,7 +34,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   scan_galaxy: { usage: '[galaxy_id]', desc: '登记星系到星图（不改地表迷雾）' },
   scan_system: { usage: '<system_id>', desc: '登记恒星系到星图（不改地表迷雾）' },
   scan_planet: { usage: '<planet_id>', desc: '登记星球到星图（不改地表迷雾）' },
-  build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0|90|180|270] [--elevation 0-4] [--approach]', desc: 'Build any server-side buildable structure；传送带可用 --elevation 架高（0-4，缺省 0）' },
+  build: { usage: '<x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--rotation 0|90|180|270] [--elevation 0-4] [--approach]', desc: 'Build any server-side buildable structure。x,y 是**占地左上角**（不是中心）：占地大小查 catalog.buildings[].footprint，rotation 90/270 时宽高互换；传送带可用 --elevation 架高（0-4，缺省 0）' },
   move: { usage: '<entity_id> <x> <y> [--z <z>]', desc: 'Move entity to position' },
   attack: { usage: '<entity_id> <target_id>', desc: 'Attack target entity' },
   order: { usage: '<entity_id[,entity_id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <entity_id>] [--planet <planet_id>]', desc: 'R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧）' },
@@ -74,8 +74,8 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   theater_set_objective: { usage: '<theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]', desc: 'Set a theater objective anchor and description' },
   blockade_planet: { usage: '<task_force_id> <planet_id>', desc: 'Issue a blockade intent against one planet' },
   transfer: { usage: '<building_id> <item_id> <quantity> [--take] [--planet <planet_id>]', desc: '装料：默认把机甲背包物品装进建筑本地存储；加 --take 从建筑取进背包（受背包容量限制，按建筑所在行星结算）' },
-  mine_resource: { usage: '<resource_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）' },
-  craft_item: { usage: '<recipe_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算）' },
+  mine_resource: { usage: '<resource_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）。resource_id 取自 scene 的 resources[].id（资源节点 id，如 r-12），不是物品 id；矿点须在机甲 6 格内' },
+  craft_item: { usage: '<recipe_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算）；可用配方见 help craft_item（读 /catalog 的 handcraft_allowed）' },
   configure_traffic_monitor: { usage: '<building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>', desc: '监测相邻皮带真实流出量；none 清绑定，配置重置采样' },
   form_squad: { usage: '<entity_id...> [--name <name>] [--planet <id>]', desc: '选中单位编成军团（可含补给车）' },
   squad_order: { usage: '<squad_id> <attack|defend|retreat|resupply> [<x> <y>] [--planet <id>]', desc: '军团指令；resupply 自动前往最近补给站' },
@@ -132,7 +132,7 @@ const HELP_TEXT = [
   '    system [id]     System details',
   '    system_runtime [id]  System runtime with fleets, contacts and battle reports',
   '    planet [id]     Planet summary',
-  '    planet_runtime [id]  Planet runtime with contacts and frontlines',
+  '    planet_runtime [id] [--mine]  Planet runtime: 施工队列 / 物流摘要 / contacts / frontlines',
   '    blueprints [id] List warfare blueprints or inspect one blueprint',
   '    war_industry    Military production, refit and supply nodes',
   '    task_forces     Task force status, members and supply',
@@ -153,7 +153,7 @@ const HELP_TEXT = [
   '    install_logistics_bot <id> <quantity> [--source player|storage]',
   '    uninstall_logistics_bot <id> <quantity>',
   '    configure_mecha_logistics <item:min:max,...|none> [--planet <id>]',
-  '    build <x> <y> <type> [--z <z>] [--direction <dir>] [--recipe <id>] [--planet <id>]',
+  '    build <x> <y> <type> [--z <z>] [--direction <dir>] [--rotation 0|90|180|270] [--elevation 0-4] [--approach] [--recipe <id>] [--planet <id>]',
   '    move <entity_id> <x> <y> [--z <z>] [--planet <id>]',
   '    attack <entity_id> <target> [--planet <id>]',
   '    order <entity_id[,id...]> <attack_move|patrol|guard|hold|follow|retreat|stop> [x y] [--target <id>] [--planet <id>]',
@@ -254,6 +254,33 @@ async function getProduceHelp(api: ApiClient): Promise<string> {
   return `${chalk.bold('produce')} ${chalk.dim(usage)}\n  Produce a server-public world unit; available ids come from /catalog.world_units when the server is reachable`;
 }
 
+/** 可手搓配方从 /catalog.recipes[handcraft_allowed] 动态列（同 help produce 的做法）。 */
+async function getCraftItemHelp(api: ApiClient): Promise<string> {
+  const usage = '<recipe_id> <quantity> [--planet <planet_id>]';
+  const head = `${chalk.bold('craft_item')} ${chalk.dim(usage)}\n  用我的机甲背包原料进行个人制造，quantity 为批数（按发令者机甲所在行星结算）。`;
+  try {
+    const catalog = await api.fetchCatalog();
+    const names = new Map((catalog.items ?? []).map((item) => [item.id, item.name]));
+    const recipes = (catalog.recipes ?? []).filter((recipe) => recipe.handcraft_allowed);
+    if (recipes.length === 0) {
+      return `${head}\n  /catalog 里没有可手搓配方。`;
+    }
+    const lines = [head, `  可手搓配方（${recipes.length}，来自 /catalog.recipes）：`];
+    for (const recipe of recipes) {
+      const inputs = (recipe.inputs ?? [])
+        .map((item) => `${names.get(item.item_id) ?? item.item_id}×${item.quantity}`)
+        .join('+');
+      const outputs = (recipe.outputs ?? [])
+        .map((item) => `${names.get(item.item_id) ?? item.item_id}×${item.quantity}`)
+        .join('+');
+      lines.push(`    ${recipe.id}  ${inputs} -> ${outputs}  (${recipe.duration} tick)`);
+    }
+    return lines.join('\n');
+  } catch {
+    return `${head}\n  可手搓配方（handcraft_allowed=true）在服务端可达时从 /catalog 动态列出。`;
+  }
+}
+
 function getCommandHelp(cmd: string, api: ApiClient): string | Promise<string> {
   const entry = HELP_ENTRIES[cmd];
   if (!entry) {
@@ -261,6 +288,9 @@ function getCommandHelp(cmd: string, api: ApiClient): string | Promise<string> {
   }
   if (cmd === 'produce') {
     return getProduceHelp(api);
+  }
+  if (cmd === 'craft_item') {
+    return getCraftItemHelp(api);
   }
   return `${chalk.bold(cmd)} ${chalk.dim(entry.usage ?? '')}\n  ${entry.desc}`;
 }

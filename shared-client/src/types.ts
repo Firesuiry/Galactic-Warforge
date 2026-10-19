@@ -987,6 +987,19 @@ export interface MechaView {
   concurrent_tasks: number;
   construction_active: number;
   construction_pending: number;
+  /** 当前异步作业（手搓/采矿）；没有作业时服务端省略该字段。 */
+  job?: MechaJobView;
+}
+
+/** 机甲作业的代理视图（完整作业见 inspect 的 `unit.mecha.job`）。 */
+export interface MechaJobView {
+  kind: 'craft' | 'mine' | string;
+  recipe_id?: string;
+  resource_id?: string;
+  remaining_batches: number;
+  state: string;
+  /** 被自动防御暂停：进度与预留原料都保留。 */
+  paused?: boolean;
 }
 
 export interface PlayerState {

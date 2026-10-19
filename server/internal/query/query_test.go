@@ -288,6 +288,67 @@ func TestStateSummaryExposesMechas(t *testing.T) {
 	}
 }
 
+func TestStateSummaryMechaViewCarriesJob(t *testing.T) {
+	ql, ws, planetID := newPlanetQueryFixture(t, 20, 20)
+	p1 := &model.PlayerState{PlayerID: "p1", TeamID: "p1", IsAlive: true}
+	p1.EnsureMechas()["u-craft"] = &model.MechaRecord{UnitID: "u-craft", PlanetID: planetID, Operator: "builder-a"}
+	p1.EnsureMechas()["u-idle"] = &model.MechaRecord{UnitID: "u-idle", PlanetID: planetID, Operator: "builder-b"}
+	ws.Players["p1"] = p1
+	ws.Units["u-craft"] = &model.Unit{
+		ID: "u-craft", OwnerID: "p1", Type: model.UnitTypeExecutor, HP: 100, Position: model.Position{X: 5, Y: 6},
+		Mecha: &model.MechaState{Job: &model.MechaJob{
+			Kind: "craft", RecipeID: "craft_circuit_board", RemainingBatches: 3, State: "running",
+			ReservedInputs: []model.ItemAmount{{ItemID: "iron_ingot", Quantity: 2}},
+		}},
+	}
+	ws.Units["u-idle"] = &model.Unit{
+		ID: "u-idle", OwnerID: "p1", Type: model.UnitTypeExecutor, HP: 100, Position: model.Position{X: 7, Y: 8},
+		Mecha: &model.MechaState{},
+	}
+
+	summary := ql.Summary(ws, "p1", model.VictoryState{}, map[string]*model.WorldState{planetID: ws})
+	byID := map[string]MechaView{}
+	for _, view := range summary.Players["p1"].Mechas {
+		byID[view.UnitID] = view
+	}
+	craft := byID["u-craft"]
+	if craft.Job == nil {
+		t.Fatalf("expected job on busy mecha, got %+v", craft)
+	}
+	if craft.Job.Kind != "craft" || craft.Job.RecipeID != "craft_circuit_board" ||
+		craft.Job.RemainingBatches != 3 || craft.Job.State != "running" {
+		t.Fatalf("unexpected job view: %+v", craft.Job)
+	}
+	if idle := byID["u-idle"]; idle.Job != nil {
+		t.Fatalf("idle mecha must not carry a job, got %+v", idle.Job)
+	}
+
+	// 没有作业时 JSON 里连 job 字段都不出现（代理据此判断"空闲"）。
+	raw, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Players map[string]struct {
+			Mechas []map[string]json.RawMessage `json:"mechas"`
+		} `json:"players"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for _, mecha := range decoded.Players["p1"].Mechas {
+		var unitID string
+		_ = json.Unmarshal(mecha["unit_id"], &unitID)
+		_, hasJob := mecha["job"]
+		if unitID == "u-idle" && hasJob {
+			t.Fatalf("idle mecha JSON must omit job, got %s", raw)
+		}
+		if unitID == "u-craft" && !hasJob {
+			t.Fatalf("busy mecha JSON must include job, got %s", raw)
+		}
+	}
+}
+
 func TestFleetListReturnsNonNilEmptySlice(t *testing.T) {
 	ql, _, _ := newPlanetQueryFixture(t, 16, 16)
 	spaceRuntime := model.NewSpaceRuntimeState()
