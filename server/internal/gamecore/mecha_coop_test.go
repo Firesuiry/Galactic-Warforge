@@ -394,14 +394,18 @@ func TestMechaCoop_05_AssignMechaCases(t *testing.T) {
 	if starter.Operator != "" {
 		t.Fatalf("previous mecha A must become idle, got operator %q", starter.Operator)
 	}
-	released := false
+	released := 0
 	for _, evt := range events {
-		if evt.EventType == model.EvtEntityUpdated && evt.Payload["released_mecha_id"] == starter.UnitID {
-			released = true
+		if evt.EventType != model.EvtEntityUpdated {
+			continue
+		}
+		released++
+		if evt.Payload["released_mecha_id"] != starter.UnitID || evt.Payload["mecha_id"] != unitB.ID {
+			t.Fatalf("single event must carry mecha_id=%s released_mecha_id=%s, got %+v", unitB.ID, starter.UnitID, evt.Payload)
 		}
 	}
-	if !released {
-		t.Fatalf("event must carry released_mecha_id=%s, got %+v", starter.UnitID, events)
+	if released != 1 {
+		t.Fatalf("assign_mecha must emit exactly one entity_updated, got %d: %+v", released, events)
 	}
 
 	// operator: "" 解绑。

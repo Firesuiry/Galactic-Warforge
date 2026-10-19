@@ -58,25 +58,21 @@ func (gc *GameCore) execAssignMecha(ws *model.WorldState, playerID string, cmd m
 		res.Message = "operator 只允许 1–64 位字母、数字与 _ . : -"
 		return res, nil
 	}
+	// 契约 §2.2：一次 assign_mecha 只产出一条 entity_updated；抢占时旧机甲
+	// 的释放写在 released_mecha_id 里，不另发第二条事件。
 	payload := map[string]any{"mecha_id": record.UnitID, "operator": operator}
-	events := []*model.GameEvent{}
 	if operator != "" {
 		if previous := player.MechaByOperator(operator); previous != nil && previous.UnitID != record.UnitID {
 			previous.Operator = ""
 			payload["released_mecha_id"] = previous.UnitID
-			events = append(events, &model.GameEvent{
-				EventType:       model.EvtEntityUpdated,
-				VisibilityScope: playerID,
-				Payload:         map[string]any{"mecha_id": previous.UnitID, "operator": ""},
-			})
 		}
 	}
 	record.Operator = operator
-	events = append(events, &model.GameEvent{
+	events := []*model.GameEvent{{
 		EventType:       model.EvtEntityUpdated,
 		VisibilityScope: playerID,
 		Payload:         payload,
-	})
+	}}
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
 	if operator == "" {
