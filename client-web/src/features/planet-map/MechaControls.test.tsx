@@ -1,15 +1,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { CatalogView, PlayerState, Unit } from '@shared/types';
+import type { MechaView } from '@/features/mecha/model';
+import { useSessionStore } from '@/stores/session';
 import { MechaControls, craftBlockReason, refuelFullQuantity } from './MechaControls';
 import { shouldRefreshPlanet, shouldRefreshSummary } from './model';
 import { usePlanetViewStore } from './store';
 
 const { client } = vi.hoisted(() => ({ client: {
-  cmdRefuelMecha: vi.fn().mockResolvedValue({ accepted: false, request_id: 'refuel' }),
+  sendCommands: vi.fn().mockResolvedValue({ accepted: false, request_id: 'command' }),
   fetchEventSnapshot: vi.fn(),
-  cmdCraftItem: vi.fn().mockResolvedValue({ accepted: false, request_id: 'craft' }),
-  cmdCancelMechaJob: vi.fn().mockResolvedValue({ accepted: false, request_id: 'cancel' }),
 } }));
 vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
 const unit: Unit = {
@@ -25,11 +25,32 @@ const catalog = { items: [
 ] } as CatalogView;
 beforeEach(() => {
   vi.clearAllMocks();
+  useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
   // 手搓配方选择存在行星视图 store 里（跨面板卸载保留），逐测试重置避免串场。
   usePlanetViewStore.getState().resetForPlanet('planet-1-1');
 });
 
-const fuelPlayer: PlayerState = { player_id: 'p1', is_alive: true, inventory: { coal: 10, custom_fuel: 1 } };
+/** 这台机甲的档案（operator = p1 即「我的」）。背包挂在档案上，不在玩家上。 */
+function mechaRecord(overrides: Partial<MechaView> = {}): MechaView {
+  return {
+    unit_id: 'u-1',
+    planet_id: 'planet-1-1',
+    operator: 'p1',
+    alive: true,
+    respawn_at_tick: 0,
+    position: { x: 3, y: 2, z: 0 },
+    inventory: {},
+    inventory_slots_used: 0,
+    inventory_slots_total: 40,
+    operate_range: 18,
+    concurrent_tasks: 2,
+    construction_active: 0,
+    construction_pending: 0,
+    ...overrides,
+  };
+}
+
+const fuelMecha = mechaRecord({ inventory: { coal: 10, custom_fuel: 1 }, inventory_slots_used: 2 });
 
 it('refuelFullQuantity rounds the gap up and is capped by stock', () => {
   expect(refuelFullQuantity(70, 25, 10)).toBe(3);
@@ -38,24 +59,29 @@ it('refuelFullQuantity rounds the gap up and is capped by stock', () => {
 });
 
 it('uses server fuel metadata and submits the selected fuel for this mecha', async () => {
-  render(<MechaControls unit={unit} catalog={catalog} planetId="planet-1-1" canControl player={fuelPlayer} />);
+  render(<MechaControls unit={unit} catalog={catalog} planetId="planet-1-1" mecha={fuelMecha} />);
   expect(screen.getByRole('meter', { name: '核心能量' })).toHaveAttribute('value', '40');
   expect(screen.queryByRole('option', { name: /铁块/ })).toBeNull();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '补满（3 个）' })); });
-  await vi.waitFor(() => expect(client.cmdRefuelMecha).toHaveBeenCalledWith('u-1', 'coal', 3));
+  await vi.waitFor(() => expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'refuel_mecha', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { item_id: 'coal', count: 3 } }]));
   fireEvent.change(screen.getByRole('combobox', { name: '机甲燃料' }), { target: { value: 'custom_fuel' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '补 1 个' })); });
-  await vi.waitFor(() => expect(client.cmdRefuelMecha).toHaveBeenCalledWith('u-1', 'custom_fuel', 1));
+  await vi.waitFor(() => expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'refuel_mecha', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { item_id: 'custom_fuel', count: 1 } }]));
 });
 
 it('prevents refuel when full or fuel remains and exposes no controls on another player', () => {
-  const { rerender } = render(<MechaControls unit={{ ...unit, mecha: { ...unit.mecha!, fuel_energy: 50 } }} catalog={catalog} planetId="planet-1-1" canControl player={fuelPlayer} />);
+  const { rerender } = render(<MechaControls unit={{ ...unit, mecha: { ...unit.mecha!, fuel_energy: 50 } }} catalog={catalog} planetId="planet-1-1" mecha={fuelMecha} />);
   expect(screen.getByRole('button', { name: /^补满/ })).toBeDisabled();
   expect(screen.getByRole('button', { name: '补 1 个' })).toBeDisabled();
-  rerender(<MechaControls unit={{ ...unit, mecha: { ...unit.mecha!, energy: 110 } }} catalog={catalog} planetId="planet-1-1" canControl player={fuelPlayer} />);
+  rerender(<MechaControls unit={{ ...unit, mecha: { ...unit.mecha!, energy: 110 } }} catalog={catalog} planetId="planet-1-1" mecha={fuelMecha} />);
   expect(screen.getByRole('button', { name: /^补满/ })).toBeDisabled();
-  rerender(<MechaControls unit={unit} catalog={catalog} planetId="planet-1-1" canControl={false} />);
+  // 不是自己的机甲（别人玩家）：只读，没有接管按钮。
+  rerender(<MechaControls unit={{ ...unit, owner_id: 'p2' }} catalog={catalog} planetId="planet-1-1" />);
   expect(screen.queryByRole('button')).toBeNull();
+  // 自己的空闲机甲（没有档案 / operator 为空）：只读信息 + 「接管」。
+  rerender(<MechaControls unit={unit} catalog={catalog} planetId="planet-1-1" mecha={mechaRecord({ operator: '' })} />);
+  expect(screen.getByRole('button', { name: '接管' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '开始制造' })).toBeNull();
 });
 
 it('refreshes authoritative scene data on mecha state events', () => {
@@ -72,46 +98,46 @@ const craftingCatalog = { ...catalog, recipes: [
   { id: 'locked', name: '锁定配方', handcraft_allowed: true, inputs: [], outputs: [], duration: 4, tech_unlock: ['advanced'] },
   { id: 'factory_only', name: '工厂限定', inputs: [], outputs: [], duration: 4 },
 ] } as CatalogView;
-const player: PlayerState = { player_id: 'p1', is_alive: true, inventory: { iron_ingot: 5 } };
+const craftMecha = mechaRecord({ inventory: { iron_ingot: 5 }, inventory_slots_used: 1 });
 
 it('shows actual backpack stock, computes batches and submits personal crafting', async () => {
-  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" canControl player={player} />);
+  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={craftMecha} />);
   expect(screen.queryByRole('option', { name: '工厂限定' })).toBeNull();
   fireEvent.change(screen.getByLabelText('制造批数'), { target: { value: '3' } });
   expect(screen.getByText('原料：铁块 3（背包 5）')).toBeInTheDocument();
   expect(screen.getByText('耗时 12 tick · 核心耗能 3（每批 1）')).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '开始制造' })); });
-  expect(client.cmdCraftItem).toHaveBeenCalledWith('u-1', 'gear', 3);
+  expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'craft_item', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { recipe_id: 'gear', quantity: 3 } }]);
 });
 
 it('blocks locked recipes and insufficient ingredients before submitting', () => {
-  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" canControl player={player} />);
+  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={craftMecha} />);
   fireEvent.change(screen.getByLabelText('制造批数'), { target: { value: '6' } });
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
   fireEvent.change(screen.getByLabelText('个人制造配方'), { target: { value: 'locked' } });
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('需要科技');
-  expect(client.cmdCraftItem).not.toHaveBeenCalled();
+  expect(client.sendCommands).not.toHaveBeenCalled();
 });
 
 it('shows paused job progress, cancels it and hides all controls on another player', async () => {
   const busy: Unit = { ...unit, mecha: { ...unit.mecha!, job: { kind: 'craft', recipe_id: 'gear', remaining_ticks: 2, ticks_per_batch: 4, remaining_batches: 2, completed_batches: 1, energy_per_batch: 3, state: 'no_energy' } } };
-  const { rerender } = render(<MechaControls unit={busy} catalog={craftingCatalog} planetId="planet-1-1" canControl player={player} />);
+  const { rerender } = render(<MechaControls unit={busy} catalog={craftingCatalog} planetId="planet-1-1" mecha={craftMecha} />);
   expect(screen.getByText('核心能量不足，补能后自动继续。')).toBeInTheDocument();
   // 批量进度：已完成 1 / 总数 3（1 已完成 + 2 剩余）
   expect(screen.getByRole('progressbar', { name: '批量进度' })).toHaveAttribute('value', '1');
   expect(screen.getByText('已完成 1 / 3')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '取消机甲任务' })); });
-  expect(client.cmdCancelMechaJob).toHaveBeenCalledWith('u-1');
-  rerender(<MechaControls unit={busy} catalog={craftingCatalog} planetId="planet-1-1" canControl={false} />);
+  expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'cancel_mecha_job', target: { layer: 'planet', planet_id: 'planet-1-1' } }]);
+  rerender(<MechaControls unit={{ ...busy, owner_id: 'p2' }} catalog={craftingCatalog} planetId="planet-1-1" />);
   expect(screen.queryByRole('button')).toBeNull();
   expect(screen.queryByRole('combobox')).toBeNull();
 });
 
-it('treats omitted inventory in a fresh player snapshot as an empty backpack', () => {
-  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" canControl player={{ player_id: 'p1', is_alive: true }} />);
+it('treats omitted inventory in a fresh mecha snapshot as an empty backpack', () => {
+  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ inventory: undefined })} />);
   expect(screen.getByText('原料：铁块 1（背包 0）')).toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
   expect(screen.getByRole('status')).toHaveTextContent('缺少：铁块（背包 0 / 需要 1）');
@@ -125,7 +151,7 @@ it('回归（试玩 1013 D）：缺料时保持玩家选中的配方，并在按
     ...(craftingCatalog.recipes ?? []),
     { id: 'smelt_magnet', name: '磁铁', handcraft_allowed: true, inputs: [{ item_id: 'iron_ingot', quantity: 9 }], outputs: [{ item_id: 'magnet', quantity: 1 }], duration: 4, energy_cost: 20 },
   ] } as CatalogView;
-  render(<MechaControls unit={unit} catalog={shortCatalog} planetId="planet-1-1" canControl player={player} />);
+  render(<MechaControls unit={unit} catalog={shortCatalog} planetId="planet-1-1" mecha={craftMecha} />);
   const select = screen.getByLabelText('个人制造配方') as HTMLSelectElement;
   expect(select.value).toBe('gear');
   fireEvent.change(select, { target: { value: 'smelt_magnet' } });
@@ -133,7 +159,7 @@ it('回归（试玩 1013 D）：缺料时保持玩家选中的配方，并在按
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
   expect(screen.getByRole('status')).toHaveTextContent('缺少：铁块（背包 5 / 需要 9）');
-  expect(client.cmdCraftItem).not.toHaveBeenCalled();
+  expect(client.sendCommands).not.toHaveBeenCalled();
 });
 
 it('explains the busy job instead of claiming the backpack is short', () => {
@@ -145,7 +171,7 @@ it('explains the busy job instead of claiming the backpack is short', () => {
       job: { kind: 'craft', recipe_id: 'gear', remaining_ticks: 30, ticks_per_batch: 100, remaining_batches: 15, completed_batches: 14, energy_per_batch: 3, state: 'running' },
     },
   };
-  render(<MechaControls unit={busy} catalog={craftingCatalog} planetId="planet-1-1" canControl player={{ player_id: 'p1', is_alive: true, inventory: { iron_ingot: 20 } }} />);
+  render(<MechaControls unit={busy} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ inventory: { iron_ingot: 20 }, inventory_slots_used: 1 })} />);
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   const status = screen.getByRole('status');
   expect(status).toHaveTextContent('机甲正在手搓 齿轮');
@@ -185,11 +211,65 @@ it('任务名取 job.recipe_id 的显示名，而不是下拉框选中的配方�
       job: { kind: 'craft', recipe_id: 'smelt_magnet', remaining_ticks: 30, ticks_per_batch: 100, remaining_batches: 15, completed_batches: 14, energy_per_batch: 3, state: 'running' },
     },
   };
-  render(<MechaControls unit={busy} catalog={magnetCatalog} planetId="planet-1-1" canControl player={{ player_id: 'p1', is_alive: true, inventory: { iron_ingot: 20 } }} />);
+  render(<MechaControls unit={busy} catalog={magnetCatalog} planetId="planet-1-1" mecha={mechaRecord({ inventory: { iron_ingot: 20 }, inventory_slots_used: 1 })} />);
   // 下拉框切到玻璃（默认选中第一个可手搓配方 = gear；显式切到 glass）
   fireEvent.change(screen.getByLabelText('个人制造配方'), { target: { value: 'glass' } });
   expect(screen.getByRole('status')).toHaveTextContent('机甲正在手搓 磁铁');
   expect(screen.getByRole('status')).not.toHaveTextContent('机甲正在手搓 玻璃');
   // 任务面板标题同样取 job.recipe_id
   expect(screen.getByLabelText('机甲任务')).toHaveTextContent('制造 磁铁');
+});
+
+describe('操作者行（契约 §7.3）', () => {
+  it('我的机甲：显示「操作者 我」与全部控件，背包读机甲档案', () => {
+    render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={craftMecha} />);
+    expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('操作者我');
+    expect(screen.getByText('原料：铁块 1（背包 5）')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始制造' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '接管' })).toBeNull();
+  });
+
+  it('空闲机甲：只读 + 「接管」，无手搓/补能控件', () => {
+    render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ operator: '', inventory: { iron_ingot: 2 } })} />);
+    expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('空闲机甲');
+    expect(screen.getByRole('button', { name: '接管' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '开始制造' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: '机甲燃料' })).toBeNull();
+    expect(screen.queryByLabelText('机甲物流请求')).toBeNull();
+  });
+
+  it('别人的机甲：显示操作者与只读背包，隐藏控件；已有绑定时提示旧机甲变空闲', () => {
+    render(
+      <MechaControls
+        boundMecha={mechaRecord({ unit_id: 'u-old' })}
+        catalog={craftingCatalog}
+        mecha={mechaRecord({ operator: 'builder-a', inventory: { iron_ingot: 3 }, inventory_slots_used: 1 })}
+        planetId="planet-1-1"
+        unit={unit}
+      />,
+    );
+    expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('builder-a');
+    expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('背包 1/40 格');
+    expect(screen.getByText('接管后 u-old 变为空闲')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '开始制造' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '补 1 个' })).toBeNull();
+  });
+
+  it('接管发 assign_mecha：target.entity_id = 机甲 ID，payload.operator = 自己', async () => {
+    render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ operator: 'builder-a' })} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '接管' })); });
+    expect(client.sendCommands).toHaveBeenCalledWith([{
+      type: 'assign_mecha',
+      target: { layer: 'planet', entity_id: 'u-1', planet_id: 'planet-1-1' },
+      payload: { operator: 'p1' },
+    }]);
+  });
+});
+
+it('背包格数读这台机甲的档案（不是玩家）', () => {
+  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ inventory: { iron_ingot: 5 }, inventory_slots_used: 1 })} />);
+  expect(screen.getByText('原料：铁块 1（背包 5）')).toBeInTheDocument();
+  // 换一台背包不同的档案（模拟改绑后选中另一台机甲）
+  render(<MechaControls unit={{ ...unit, id: 'u-2' }} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ unit_id: 'u-2', inventory: { iron_ingot: 1 }, inventory_slots_used: 1 })} />);
+  expect(screen.getByText('原料：铁块 1（背包 1）')).toBeInTheDocument();
 });

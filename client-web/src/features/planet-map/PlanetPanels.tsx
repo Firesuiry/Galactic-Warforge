@@ -88,6 +88,7 @@ import {
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
+import { selectMechaById, selectMyMecha } from "@/features/mecha/model";
 import { isInIsolatedNetwork } from "./power-status";
 import { LogisticsStationControls } from "./LogisticsStationControls";
 import { DistributorControls } from "./DistributorControls";
@@ -992,6 +993,7 @@ export function PlanetEntityPanel({
   onCommandSettled,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
+  const myMecha = selectMyMecha(summary, session.playerId);
   const { selected } = usePlanetViewStore(
     useShallow((state) => ({
       selected: state.selected,
@@ -1533,7 +1535,15 @@ export function PlanetEntityPanel({
             <p className="subtle-text">单位不在当前镜头窗口：下面显示的是最后一次见到的状态，面板保持可用。</p>
           </section>
         ) : null}
-        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} tickRate={tickRate} />
+        <MechaControls
+          boundMecha={myMecha}
+          catalog={catalog}
+          mecha={selectMechaById(summary, session.playerId, unit.id)}
+          planetId={planet.planet_id}
+          player={summary?.players?.[session.playerId]}
+          tickRate={tickRate}
+          unit={unit}
+        />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>
           <UnitCard card={unitCardFromRuntimeUnit(unit, translateUnitType(unit.type), catalog)} />
