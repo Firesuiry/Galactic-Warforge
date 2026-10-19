@@ -5,6 +5,7 @@ import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { getItemDisplayName } from './model';
+import { sendMechaCommand } from '@/features/mecha/commands';
 
 type RequestRow = MechaLogisticsRequest & { item: string };
 export function MechaLogisticsControls({ unit, catalog, planetId, inventory }: {
@@ -29,7 +30,9 @@ export function MechaLogisticsControls({ unit, catalog, planetId, inventory }: {
     setPending(true);
     try {
       await submitPlanetCommand({ commandType: 'configure_mecha_logistics', planetId, focus: { entityId: unit.id },
-        execute: () => client.cmdConfigureMechaLogistics(unit.id, Object.fromEntries(rows.map(({ item, min, max }) => [item, { min, max }]))),
+        execute: () => sendMechaCommand(client, 'configure_mecha_logistics', planetId, {
+          requests: Object.fromEntries(rows.map(({ item, min, max }) => [item, { min, max }])),
+        }),
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
       });
     } finally { setPending(false); }

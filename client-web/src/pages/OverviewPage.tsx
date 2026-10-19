@@ -6,7 +6,9 @@ import { Link } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
 import { resolveEarlyGameNextAction } from '@/features/early-game-next';
-import { formatInventorySummary, inventorySlotUsage } from '@/features/inventory-summary';
+import { formatInventorySummary } from '@/features/inventory-summary';
+import { mechaSlotUsage, selectMyMecha, selectPlayerMechas } from '@/features/mecha/model';
+import { MechaFleetCard } from '@/features/mecha/MechaFleetCard';
 import { isResearchStationAlertNoise } from '@/features/production-alerts';
 import { MiniGalaxyMap } from '@/features/starmap/MiniGalaxyMap';
 import { planetColorOf } from '@/features/starmap/model';
@@ -262,9 +264,12 @@ export function OverviewPage() {
 
   const currentPlayer = summary.players[session.playerId];
   const resources = currentPlayer?.resources;
-  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
-  const inventoryTotal = Object.values(currentPlayer?.inventory ?? {}).reduce((sum, quantity) => sum + quantity, 0);
-  const slotUsage = inventorySlotUsage(currentPlayer);
+  // 背包读「我的机甲」（契约 §7.3）；未绑定时没有背包，资源卡片显示「未绑定机甲」。
+  const myMecha = selectMyMecha(summary, session.playerId);
+  const myMechas = selectPlayerMechas(summary, session.playerId);
+  const inventorySummary = formatInventorySummary(myMecha?.inventory);
+  const inventoryTotal = Object.values(myMecha?.inventory ?? {}).reduce((sum, quantity) => sum + quantity, 0);
+  const slotUsage = mechaSlotUsage(myMecha);
   const currentResearch = currentPlayer?.tech?.current_research;
   const researchPercent = currentResearch && currentResearch.total_cost > 0
     ? Math.min(100, Math.round((currentResearch.progress / currentResearch.total_cost) * 100))
@@ -280,6 +285,7 @@ export function OverviewPage() {
   const nextAction = resolveEarlyGameNextAction({
     activePlanetId,
     player: currentPlayer,
+    myMecha,
     energy: energyStats,
     alerts,
   });
@@ -441,7 +447,7 @@ export function OverviewPage() {
                 </div>
                 <strong className="command-resource__value">{formatNumber(inventoryTotal)}</strong>
                 <span className="command-resource__meta">
-                  {slotUsage ? `已用 ${slotUsage.used}/${slotUsage.total} 格` : '容量未知'} · 产出 +{stats.production_stats.total_output}/t
+                  {slotUsage ? `已用 ${slotUsage.used}/${slotUsage.total} 格` : '未绑定机甲'} · 产出 +{stats.production_stats.total_output}/t
                 </span>
                 <span className="command-resource__meta command-resource__meta--dim">{inventorySummary}</span>
               </article>
@@ -495,6 +501,12 @@ export function OverviewPage() {
               </article>
             </div>
           </section>
+
+          <MechaFleetCard
+            mechas={myMechas}
+            planetNames={Object.fromEntries(planetEntries.map((entry) => [entry.planetId, entry.name]))}
+            playerId={session.playerId}
+          />
 
           <section className="panel command-planets" aria-label="行星态势">
             <div className="section-title">行星态势</div>

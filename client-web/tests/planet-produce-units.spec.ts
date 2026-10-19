@@ -1,5 +1,6 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
+import { fetchPlayerInventory } from './support/player-mecha';
 import { backendEntry, webEntry } from './support/scenario';
 import { requireScenario } from './support/scenario-gate';
 
@@ -34,14 +35,9 @@ interface SceneBuilding {
   owner_id?: string;
 }
 
-/** p1 背包（补料用：并行规格会把兵营库存花光）。 */
+/** p1 背包 = 我的机甲背包（契约 §6；并行规格会把兵营库存花光）。 */
 async function playerInventory(request: APIRequestContext): Promise<Record<string, number>> {
-  const response = await request.get('/state/summary', {
-    headers: { Authorization: 'Bearer key_player_1' },
-  });
-  expect(response.ok()).toBe(true);
-  const summary = await response.json();
-  return (summary.players?.p1?.inventory ?? {}) as Record<string, number>;
+  return fetchPlayerInventory(request, 'key_player_1');
 }
 
 async function sendCommand(request: APIRequestContext, command: Record<string, unknown>) {

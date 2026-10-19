@@ -63,7 +63,7 @@
   .app-shell:has(.planet-three, .system-orbit) .top-nav__icon-btn { width:26px; height:30px; padding:3px; }
   .app-shell:has(.planet-three, .system-orbit) .top-nav__status { grid-column:1 / 3; grid-row:2; flex-wrap:nowrap; gap:4px; width:auto; }
   .app-shell:has(.planet-three, .system-orbit) .top-nav__chip { padding:3px 5px; font-size:10px; }
-  .app-shell:has(.planet-three, .system-orbit) .top-nav__chip:first-child { display:none; }
+  .app-shell:has(.planet-three, .system-orbit) .top-nav__status > .top-nav__chip:first-child { display:none; }
   .planet-map-shell--3d .planet-title-chip { max-width:calc(100% - 24px); padding:8px 12px; }
   .planet-map-shell--3d .planet-title-chip__head h1 { font-size:14px; }
   .planet-map-shell--3d .planet-view-switch { top:148px; }

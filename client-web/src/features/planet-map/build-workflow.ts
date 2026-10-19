@@ -33,6 +33,7 @@ import {
 } from "@/features/planet-commands/error-hints";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
+import { selectMyMecha, type MechaView } from "@/features/mecha/model";
 import {
   isBuildingUnlocked,
   isRecipeUnlocked,
@@ -77,6 +78,8 @@ export interface BuildCatalogGroup {
 export interface BuildReachability {
   executorUnitId?: string;
   executorPosition?: Position;
+  /** 我的机甲档案（未绑定 / 不在本星球时为 undefined）。 */
+  executorMecha?: MechaView;
   moveRange?: number;
   operateRange?: number;
   distance?: number;
@@ -350,11 +353,13 @@ function buildReachability(
   playerId: string,
   selectedPosition?: Position,
 ) {
-  const executorState = summary?.players?.[playerId]?.executor;
-  const executorUnitId = executorState?.unit_id;
+  // 契约 §7.3：建造扣料/走位按「我的机甲」（summary.mechas 里 operator = 自己），
+  // 不再读 players[me].executor。档案自带 operate_range（units.yaml executor.mecha）。
+  const myMecha = selectMyMecha(summary, playerId);
+  const executorUnitId = myMecha?.unit_id;
   const executor = executorUnitId ? planet.units?.[executorUnitId] : undefined;
   const moveRange = executor?.move_range;
-  const operateRange = executorState?.operate_range;
+  const operateRange = myMecha?.operate_range;
   const distance = executor?.position && selectedPosition
     ? surfaceDistanceWithin(executor.position, selectedPosition, planet.surface.face_size, operateRange ?? DEFAULT_OPERATE_RANGE)
     : undefined;
@@ -362,6 +367,7 @@ function buildReachability(
   return {
     executorUnitId,
     executorPosition: executor?.position,
+    executorMecha: myMecha,
     moveRange,
     operateRange,
     distance,
@@ -620,6 +626,15 @@ function buildApproachPlan(path?: PlanetPathView): BuildApproachPlan | undefined
 }
 
 function buildPreflightHints(reachability: BuildReachability) {
+  // 未绑定机甲：建造无从扣料/走位（服务端回 EXECUTOR_UNAVAILABLE），先提示去接管。
+  if (!reachability.executorUnitId && !reachability.executorMecha) {
+    return [{
+      tone: "warning" as const,
+      title: "还没有绑定机甲",
+      detail: "建造由你的机甲执行：在行星上选中一台机甲 → 接管。",
+      suggestedAction: "move_executor" as const,
+    }];
+  }
   if (
     !reachability.executorUnitId
     || !reachability.executorPosition

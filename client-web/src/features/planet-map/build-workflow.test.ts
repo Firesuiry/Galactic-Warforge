@@ -130,13 +130,21 @@ function createSummary() {
       p1: {
         player_id: "p1",
         is_alive: true,
-        executor: {
+        mechas: [{
           unit_id: "exec-1",
-          build_efficiency: 1,
+          planet_id: "planet-1-1",
+          operator: "p1",
+          alive: true,
+          respawn_at_tick: 0,
+          position: { x: 1, y: 1, z: 0 },
+          inventory: {},
+          inventory_slots_used: 0,
+          inventory_slots_total: 40,
           operate_range: 6,
           concurrent_tasks: 1,
-          research_boost: 0,
-        },
+          construction_active: 0,
+          construction_pending: 0,
+        }],
         tech: {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program"],

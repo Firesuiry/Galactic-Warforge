@@ -42,6 +42,7 @@ import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { selectMyMecha } from '@/features/mecha/model';
 import { translateBuildingCategory, translateBuildingType } from '@/i18n/translate';
 
 interface PlanetBuildBarProps {
@@ -228,7 +229,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildMode, setInteractionMode]);
 
-  const inventory = summary?.players?.[session.playerId]?.inventory;
+  // 背包读「我的机甲」档案（契约 §7.3）；未绑定时没有可扣料的背包，缺料清单按空背包算。
+  const inventory = selectMyMecha(summary, session.playerId)?.inventory;
   const activeShortage = useMemo(() => {
     if (!activeBuildingType) {
       return '';

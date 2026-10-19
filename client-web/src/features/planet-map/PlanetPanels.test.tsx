@@ -191,6 +191,23 @@ describe("PlanetActivityPanel", () => {
   });
 });
 
+/** 契约 §6：背包挂在机甲档案上；summary 里的玩家不再有 inventory。 */
+function summaryWithMechaInventory(inventory: Record<string, number>) {
+  return {
+    players: {
+      p1: {
+        player_id: "p1",
+        is_alive: true,
+        mechas: [{
+          unit_id: "u-1", planet_id: "planet-1-1", operator: "p1", alive: true, respawn_at_tick: 0,
+          inventory, inventory_slots_used: 1, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+        }],
+      },
+    },
+  };
+}
+
 describe("PlanetEntityPanel 建筑库存", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -674,7 +691,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
         catalog={{ items: [{ id: "iron_ingot", name: "铁块" }] } as CatalogView}
         onOpenWorkflow={onOpenWorkflow}
         planet={planet as never}
-        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25 } } } } as never}
+        summary={summaryWithMechaInventory({ iron_ingot: 25 }) as never}
       />,
     );
 
@@ -732,7 +749,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
       <PlanetEntityPanel
         catalog={catalog}
         planet={planet as never}
-        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 3 } } } } as never}
+        summary={summaryWithMechaInventory({ iron_ingot: 3 }) as never}
       />,
     );
     const form = screen.getByRole("form", { name: "装入物品表单" });
@@ -746,7 +763,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
       <PlanetEntityPanel
         catalog={catalog}
         planet={planet as never}
-        summary={{ players: { p1: { player_id: "p1", inventory: {} } } } as never}
+        summary={summaryWithMechaInventory({}) as never}
       />,
     );
     expect(within(screen.getByRole("form", { name: "装入物品表单" })).getByText(/背包里没有这座建筑能接收的物品/)).toBeInTheDocument();
@@ -784,7 +801,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
       <PlanetEntityPanel
         catalog={catalog}
         planet={planet as never}
-        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25, gear: 2 } } } } as never}
+        summary={summaryWithMechaInventory({ iron_ingot: 25, gear: 2 }) as never}
       />
     );
 
@@ -813,7 +830,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
       <PlanetEntityPanel
         catalog={catalog}
         planet={planet as never}
-        summary={{ players: { p1: { player_id: "p1", inventory: { iron_ingot: 25, gear: owned } } } } as never}
+        summary={summaryWithMechaInventory({ iron_ingot: 25, gear: owned }) as never}
       />
     );
     rerender(withOwned(20));
@@ -880,7 +897,7 @@ describe("PlanetEntityPanel 建筑库存", () => {
       ],
     } as unknown as CatalogView;
     const summary = {
-      players: { p1: { player_id: "p1", is_alive: true, inventory: { iron_ingot: 5 } } },
+      players: summaryWithMechaInventory({ iron_ingot: 5 }).players,
     } as never;
     usePlanetViewStore.getState().setSelected({ kind: "unit", id: "u-1", position: { x: 3, y: 2, z: 0 } });
 

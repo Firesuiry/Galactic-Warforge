@@ -44,6 +44,16 @@ const summary = {
       player_id: 'p1',
       is_alive: true,
       resources: { energy: 260 },
+      // 契约 §6：背包挂在机甲档案上（players[me].mechas[]），玩家本身不再有 inventory。
+      mechas: [
+        {
+          unit_id: 'mecha-1', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          position: { x: 1, y: 1, z: 0 },
+          inventory: { iron_ingot: 12, gear: 6, circuit_board: 2 },
+          inventory_slots_used: 3, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 1, construction_pending: 0,
+        },
+      ],
       tech: {
         player_id: 'p1',
         current_research: {
@@ -489,6 +499,31 @@ const planets: Record<string, PlanetView> = {
         move_range: 2,
         vision_range: 5,
       },
+      'mecha-1': {
+        id: 'mecha-1',
+        type: 'executor',
+        owner_id: 'p1',
+        position: { x: 1, y: 1, z: 0 },
+        hp: 120,
+        max_hp: 120,
+        attack: 20,
+        defense: 8,
+        attack_range: 4,
+        move_range: 14,
+        vision_range: 6,
+        mecha: {
+          energy: 80,
+          max_energy: 110,
+          fuel_energy: 0,
+          shield: 8,
+          max_shield: 20,
+          attack_energy_cost: 8,
+          move_energy_cost: 1,
+          shield_recharge_delay: 10,
+          last_hit_tick: 0,
+          inventory_slots: 40,
+        },
+      },
       'worker-1': {
         id: 'worker-1',
         type: 'worker',
@@ -917,6 +952,27 @@ const catalog = {
       color: '#ffd43b',
     },
   ],
+  // 第 21 轮契约 §5：executor（执行体机甲）在战场分析基站量产。
+  world_units: [
+    {
+      id: 'executor',
+      name: '执行体机甲',
+      domain: 'planet',
+      runtime_class: 'world_unit',
+      public: true,
+      production_mode: 'world_produce',
+      producer: 'battlefield_analysis_base',
+      production_ticks: 600,
+      cost: [
+        { item_id: 'iron_ingot', quantity: 16 },
+        { item_id: 'gear', quantity: 8 },
+        { item_id: 'magnetic_coil', quantity: 8 },
+        { item_id: 'circuit_board', quantity: 8 },
+      ],
+      query_scopes: ['planet'],
+      commands: ['move', 'attack'],
+    },
+  ],
   techs: [
     {
       id: 'electromagnetism',
@@ -1065,7 +1121,7 @@ const replayDigest = {
   players: 2,
   alive_players: 2,
   buildings: 3,
-  units: 2,
+  units: 3,
   resources: 3,
   total_energy: 380,
   resource_remaining: 1860,

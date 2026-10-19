@@ -9,12 +9,20 @@ function player(partial: Partial<PlayerState> = {}): PlayerState {
     player_id: "p1",
     is_alive: true,
     resources: { energy: 100 },
-    inventory: { electromagnetic_matrix: 50 },
     tech: {
       player_id: "p1",
       completed_techs: ["dyson_sphere_program"],
     },
     ...partial,
+  };
+}
+
+/** 我的机甲（背包挂在档案上，契约 §6）。 */
+function mecha(inventory: Record<string, number> = { electromagnetic_matrix: 50 }) {
+  return {
+    unit_id: "u-1", planet_id: "planet-1-1", operator: "p1", alive: true, respawn_at_tick: 0,
+    inventory, inventory_slots_used: 1, inventory_slots_total: 40,
+    operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
   };
 }
 
@@ -87,6 +95,7 @@ describe("resolveEarlyGameNextAction", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player(),
+      myMecha: mecha(),
       energy: { generation: 0, consumption: 0, storage: 0, current_stored: 0, shortage_ticks: 0 },
       alerts: [alert],
     });
@@ -103,6 +112,7 @@ describe("resolveEarlyGameNextAction", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player(),
+      myMecha: mecha(),
       energy: { generation: 0, consumption: 0, storage: 0, current_stored: 0, shortage_ticks: 0 },
       alerts: [],
     });
@@ -116,6 +126,7 @@ describe("resolveEarlyGameNextAction", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
       player: player(),
+      myMecha: mecha(),
       energy: { generation: 30, consumption: 0, storage: 0, current_stored: 0, shortage_ticks: 0 },
       alerts: [],
     });
@@ -128,6 +139,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("研究缺站：引导建 matrix_lab", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -151,8 +163,9 @@ describe("resolveEarlyGameNextAction", () => {
   it("研究缺矩阵：引导装入（深链 research workflow）", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      // 背包在机甲档案上（契约 §6），玩家本身没有 inventory。
+      myMecha: mecha({ electromagnetic_matrix: 3 }),
       player: player({
-        inventory: { electromagnetic_matrix: 3 },
         tech: {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program"],
@@ -176,6 +189,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("研究进行中：显示进度并深链研究 Tab", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -200,6 +214,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("电磁学完成且无产出：引导采矿", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -217,6 +232,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("有产出但未研究基础物流：引导研究物流", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -236,6 +252,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("物流科技完成但无吞吐：引导铺传送带", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -258,6 +275,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("戴森链解锁：引导戴森 workflow", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",
@@ -281,6 +299,7 @@ describe("resolveEarlyGameNextAction", () => {
   it("中期稳态：军工部署入口（非纯侦察）", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
+      myMecha: mecha(),
       player: player({
         tech: {
           player_id: "p1",

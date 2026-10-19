@@ -89,7 +89,16 @@ const catalog: CatalogView = {
 };
 
 // 玩家已完成 wind_turbine 所需科技，matrix_lab 所需科技未完成
-const summary: StateSummary = {
+/** 契约 §6：背包挂在机甲档案上（`players[me].mechas[]`），玩家本身不再有 inventory。 */
+function mechaWithInventory(inventory: Record<string, number>) {
+  return {
+    unit_id: 'u-1', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+    inventory, inventory_slots_used: 1, inventory_slots_total: 40, operate_range: 18,
+    concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+  };
+}
+
+const summary = {
   tick: 10,
   active_planet_id: 'planet-1-1',
   surface: { topology: 'cube_sphere' as const, face_size: 24 / 3 }, map_width: 24,
@@ -99,14 +108,14 @@ const summary: StateSummary = {
       player_id: 'p1',
       is_alive: true,
       resources: { energy: 100 },
-      inventory: { iron_ingot: 20, gear: 10, circuit_board: 10 },
+      mechas: [mechaWithInventory({ iron_ingot: 20, gear: 10, circuit_board: 10 })],
       tech: {
         player_id: 'p1',
         completed_techs: ['tech-basic-power'],
       },
     },
   },
-};
+} satisfies StateSummary;
 
 function makePlanet(): PlanetRenderView {
   return {
@@ -151,7 +160,7 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, items: [{ id: 'gear', name: '齿轮' }, { id: 'iron_ingot', name: '铁块' }], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
-    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
@@ -183,19 +192,19 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
-    const poorSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 0 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     const { rerender } = renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toHaveTextContent('齿轮 ×1（背包 0/1）');
 
     // 背包补齐 → 清单自动消失（不能停在「还缺…」的旧数字上）
-    const richSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 5, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const richSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 5, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={richSummary} planet={makePlanet()} /></MemoryRouter>);
     expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
 
     // 再次缺料并点开 → 进入建造模式（点另一张买得起的卡）时也收起
-    const gearlessSummary: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { gear: 0, iron_ingot: 20 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const gearlessSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={gearlessSummary} planet={makePlanet()} /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toBeInTheDocument();
@@ -311,14 +320,14 @@ describe('PlanetBuildBar', () => {
   });
 
   it('背包缺料的卡片置灰并逐项显示「背包有/需要」（§4）', () => {
-    const poorSummary: StateSummary = {
+    const poorSummary = {
       ...summary,
       players: {
         p1: {
           player_id: 'p1',
           is_alive: true,
           resources: { energy: 100 },
-          inventory: { iron_ingot: 4, gear: 0 },
+          mechas: [mechaWithInventory({ iron_ingot: 4, gear: 0 })],
           tech: {
             player_id: 'p1',
             completed_techs: ['tech-basic-power'],
@@ -360,7 +369,7 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { iron_ingot: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ iron_ingot: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card.className).toContain('planet-build-card--unaffordable');
@@ -382,7 +391,7 @@ describe('PlanetBuildBar', () => {
     ], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked: StateSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, inventory: { custom_plate: 4, gear: 3 }, tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } };
+    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ custom_plate: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
@@ -400,14 +409,14 @@ describe('PlanetBuildBar', () => {
 
   it('背包充足时卡片可点击进入建造模式', async () => {
     const user = userEvent.setup();
-    const richSummary: StateSummary = {
+    const richSummary = {
       ...summary,
       players: {
         p1: {
           player_id: 'p1',
           is_alive: true,
           resources: { energy: 100 },
-          inventory: { iron_ingot: 60, gear: 10 },
+          mechas: [mechaWithInventory({ iron_ingot: 60, gear: 10 })],
           tech: {
             player_id: 'p1',
             completed_techs: ['tech-basic-power'],
