@@ -100,12 +100,12 @@ describe('awaitExecution', () => {
       fetchFn: (async () => jsonResponse(accepted)) as typeof fetch,
       onCommandResponse: (response) => seen.push(response),
     });
-    await api.sendCommands([{ type: 'build' }]);
+    await api.sendCommands([{ type: 'build', target: { layer: 'planet' } }]);
     assert.deepEqual(seen.map(r => r.request_id), ['rid-1']);
     // 运行时可替换回调（非交互入口用）
     const replaced: CommandResponse[] = [];
     api.setCommandResponseHandler((response) => replaced.push(response));
-    await api.sendCommands([{ type: 'build' }]);
+    await api.sendCommands([{ type: 'build', target: { layer: 'planet' } }]);
     assert.equal(seen.length, 1);
     assert.equal(replaced.length, 1);
   });
