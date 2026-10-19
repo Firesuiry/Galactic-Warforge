@@ -240,7 +240,9 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
       };
     } else {
       const planet = await api.fetchPlanet(planetId);
-      request = centeredWindow(context?.mecha, DEFAULT_SCENE_SIZE, planet.map_width, planet.map_height);
+      // 显式给了别的星球时，我的机甲不在这颗星上，不能拿它当窗口中心。
+      const anchor = context?.planetId === planetId ? context.mecha : undefined;
+      request = centeredWindow(anchor, DEFAULT_SCENE_SIZE, planet.map_width, planet.map_height);
     }
     for (const key of ['near_x', 'near_y', 'radius'] as const) {
       if (parsed.options[key] !== undefined) request[key] = parseRequiredInteger(String(parsed.options[key]), key);
@@ -259,7 +261,8 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
     return fmtScene(scene, {
       limit,
       operators: operatorMap(mechas),
-      context,
+      // 显式给了 planet 时不打印「默认星球」提示行，免得误导。
+      context: planetArg === undefined ? context : undefined,
     });
   } catch (e) {
     return fmtError(errorMessage(e));
