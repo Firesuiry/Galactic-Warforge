@@ -1246,7 +1246,7 @@ export function PlanetEntityPanel({
           onCommandSettled={onCommandSettled}
           onOpenWorkflow={onOpenWorkflow}
           planetId={planet.planet_id}
-          playerInventory={summary?.players?.[session.playerId]?.inventory}
+          playerInventory={myMecha?.inventory}
         />
         {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (
           <button key={candidate.id} className="secondary-button" onClick={() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: candidate.id, position: candidate.position })}>
@@ -1287,8 +1287,8 @@ export function PlanetEntityPanel({
           </dl>
         </section>
 
-        {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
-        {building.type === "logistics_distributor" && building.distributor ? <DistributorControls key={building.id} building={building} host={Object.values(planet.buildings ?? {}).find(candidate => candidate.id === building.distributor?.host_building_id)} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
+        {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={myMecha?.inventory} /> : null}
+        {building.type === "logistics_distributor" && building.distributor ? <DistributorControls key={building.id} building={building} host={Object.values(planet.buildings ?? {}).find(candidate => candidate.id === building.distributor?.host_building_id)} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={myMecha?.inventory} /> : null}
 
         {showLogisticsDetails ? (
           <>

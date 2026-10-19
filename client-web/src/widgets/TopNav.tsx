@@ -9,7 +9,8 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Icon } from '@/common/Icon';
 import { isMuted, setMuted, sfx } from '@/engine/audio';
 import { isPowerAlertType } from '@/features/notifications/event-toasts';
-import { formatInventorySummary, inventorySlotUsage, inventoryStackRows, pickKeyItems } from '@/features/inventory-summary';
+import { formatInventorySummary, inventoryStackRows, pickKeyItems } from '@/features/inventory-summary';
+import { mechaSlotUsage, selectMyMecha } from '@/features/mecha/model';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
@@ -118,7 +119,9 @@ export function TopNav() {
   }
 
   const currentPlayer = summaryQuery.data?.players?.[session.playerId];
-  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
+  // 背包读「我的机甲」（契约 §7.3）：summary.players[me].mechas 里 operator = 自己。
+  const myMecha = selectMyMecha(summaryQuery.data, session.playerId);
+  const inventorySummary = formatInventorySummary(myMecha?.inventory);
   const energyStats = statsQuery.data?.energy_stats;
   const powerGeneration = energyStats?.generation;
   const powerConsumption = energyStats?.consumption;
@@ -207,7 +210,12 @@ export function TopNav() {
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
-        <InventoryChips catalog={catalogQuery.data} inventory={currentPlayer?.inventory} slots={inventorySlotUsage(currentPlayer)} />
+        <InventoryChips
+          catalog={catalogQuery.data}
+          inventory={myMecha?.inventory}
+          mechaId={myMecha?.unit_id}
+          slots={mechaSlotUsage(myMecha)}
+        />
         <button
           className={`top-nav__chip top-nav__chip--button${powerChipClass ? ` ${powerChipClass}` : ''}${powerChipPulse}`}
           type="button"
@@ -329,10 +337,12 @@ function alertPosition(details: Record<string, unknown> | undefined): { x: numbe
 }
 
 /** 顶栏关键库存（弹药/电路板/铁块…前 4 项），点击展开完整背包库存。 */
-function InventoryChips({ catalog, inventory, slots }: {
+function InventoryChips({ catalog, inventory, mechaId, slots }: {
   catalog?: CatalogView;
   inventory?: ItemInventory;
-  /** 背包格数占用（服务端 inventory_slots_used/total）；缺失时不显示容量。 */
+  /** 我的机甲 ID（契约 §7.3：chip 文案「背包 <used>/<total> 格 · <机甲ID>」）。 */
+  mechaId?: string;
+  /** 背包格数占用（机甲档案的 inventory_slots_used/total）；缺失时不显示容量。 */
   slots?: { used: number; total: number } | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -347,7 +357,21 @@ function InventoryChips({ catalog, inventory, slots }: {
   }, [open]);
   const keyItems = pickKeyItems(inventory);
   const rows = inventoryStackRows(inventory, catalog);
-  const slotText = slots ? ` · ${slots.used}/${slots.total} 格` : '';
+  if (!mechaId) {
+    // 未绑定机甲：灰色只读 chip（悬浮提示去行星上接管），不展开背包面板。
+    return (
+      <div className="top-nav__inventory" ref={ref}>
+        <span
+          className="top-nav__chip top-nav__chip--muted"
+          title="在行星上选中一台机甲 → 接管"
+        >
+          <Icon iconKey="iron_ingot" color="#8a94a6" size={14} />
+          <span>未绑定机甲</span>
+        </span>
+      </div>
+    );
+  }
+  const slotText = slots ? `${slots.used}/${slots.total} 格` : '格数未知';
   return (
     <div className="top-nav__inventory" ref={ref}>
       <button
@@ -355,7 +379,7 @@ function InventoryChips({ catalog, inventory, slots }: {
         type="button"
         aria-expanded={open}
         aria-label="背包库存"
-        title={`背包库存${slotText}（点击展开全部）`}
+        title={`背包库存 · ${slotText} · 机甲 ${mechaId}（点击展开全部）`}
         onClick={() => setOpen(!open)}
       >
         {keyItems.length === 0 ? <span className="top-nav__chip">背包空</span> : keyItems.map((item) => (
@@ -369,7 +393,7 @@ function InventoryChips({ catalog, inventory, slots }: {
       {open ? (
         <div className="top-nav__inventory-panel" role="dialog" aria-label="完整库存">
           <div className="top-nav__inventory-title">
-            背包库存 · {rows.length} 种{slots ? ` · 已用 ${slots.used}/${slots.total} 格` : ''}
+            背包库存 · {rows.length} 种{slots ? ` · 已用 ${slots.used}/${slots.total} 格` : ''} · 机甲 {mechaId}
           </div>
           {rows.length === 0 ? <div className="top-nav__inventory-empty">背包是空的</div> : (
             <ul>

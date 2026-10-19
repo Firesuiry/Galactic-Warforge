@@ -15,6 +15,8 @@ import { useEffect, useRef } from 'react';
 
 import type { CatalogView, Unit } from '@shared/types';
 
+import type { MechaView } from '@/features/mecha/model';
+
 import { isNotificationsFrozen } from '@/features/notifications/notify';
 import { useNotificationsStore } from '@/features/notifications/store';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
@@ -79,8 +81,20 @@ function jobStateLabel(state: string): string | undefined {
   }
 }
 
-/** 玩家自己的执行体（机甲）。 */
-export function findOwnExecutor(planet: PlanetRenderView | undefined, playerId: string): Unit | undefined {
+/**
+ * 「我的机甲」在本行星场景里的单位（契约 §7.3）。
+ *
+ * 以前按「己方第一个带 mecha 的单位」猜，多机甲后可能拿到别人的；现在按 summary 里
+ * operator = 自己的档案找 unit_id。未绑定 / 不在本星球时返回 undefined。
+ */
+export function findOwnExecutor(
+  planet: PlanetRenderView | undefined,
+  playerId: string,
+  myMecha?: MechaView | null,
+): Unit | undefined {
+  if (myMecha) {
+    return planet?.units?.[myMecha.unit_id];
+  }
   return Object.values(planet?.units ?? {}).find(
     (unit) => unit.owner_id === playerId && unit.mecha != null,
   );
@@ -145,8 +159,9 @@ export function useMechaJobProgress(
   planet: PlanetRenderView | undefined,
   playerId: string,
   tickRate: number = DEFAULT_TICKS_PER_SECOND,
+  myMecha?: MechaView | null,
 ): MechaJobProgress | null {
-  const unit = findOwnExecutor(planet, playerId);
+  const unit = findOwnExecutor(planet, playerId, myMecha);
   const progress = deriveMechaJobProgress(catalog, unit, tickRate);
   const lastJobRef = useRef<{ unitId: string; job: NonNullable<Unit['mecha']>['job'] } | null>(null);
 

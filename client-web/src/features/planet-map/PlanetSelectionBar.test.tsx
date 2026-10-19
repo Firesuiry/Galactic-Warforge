@@ -11,7 +11,7 @@ import { useSessionStore } from '@/stores/session';
 
 const { mockClient } = vi.hoisted(() => ({
   mockClient: {
-    cmdMineResource: vi.fn().mockResolvedValue({ accepted: false, request_id: 'r-mine' }),
+    sendCommands: vi.fn().mockResolvedValue({ accepted: false, request_id: 'r-mine' }),
     cmdUpgrade: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-up' }),
     cmdDemolish: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-de' }),
     cmdAutoHaul: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-auto' }),
@@ -431,6 +431,25 @@ describe('运输机器人选中条（§2.1 全局自动模式）', () => {
   });
 });
 
+/** summary 里 p1 的机甲档案（operator = p1 = 我的）。 */
+function miningSummary(unitId = 'u-1') {
+  return {
+    tick: 10,
+    active_planet_id: 'planet-1-1',
+    players: {
+      p1: {
+        player_id: 'p1',
+        is_alive: true,
+        mechas: [{
+          unit_id: unitId, planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40, operate_range: 18,
+          concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+        }],
+      },
+    },
+  } as never;
+}
+
 function miningPlanet(): PlanetRenderView {
   const planet = makePlanet();
   planet.units!['u-1'].mecha = { energy: 50, max_energy: 100, fuel_energy: 0, shield: 0, max_shield: 0, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10, last_hit_tick: 0 };
@@ -444,30 +463,43 @@ const miningCatalog = { items: [{ id: 'iron_ore', name: '铁矿', form: 'solid' 
 it('collects selected solid resource using own nearby mecha and chosen quantity', async () => {
   vi.clearAllMocks();
   const user = userEvent.setup();
-  render(<PlanetSelectionBar catalog={miningCatalog} planet={miningPlanet()} />);
+  render(<PlanetSelectionBar catalog={miningCatalog} planet={miningPlanet()} summary={miningSummary()} />);
   const quantity = screen.getByLabelText('采集数量');
   await user.clear(quantity);
   await user.type(quantity, '3');
   await user.click(screen.getByRole('button', { name: '手动采集' }));
-  expect(mockClient.cmdMineResource).toHaveBeenCalledWith('u-1', 'ore-1', 3);
+  // 契约 §3.1：采集不再带 target.entity_id，由发令者绑定的机甲执行。
+  expect(mockClient.sendCommands).toHaveBeenCalledWith([{
+    type: 'mine_resource',
+    target: { layer: 'planet', planet_id: 'planet-1-1' },
+    payload: { resource_id: 'ore-1', quantity: 3 },
+  }]);
 });
 
 it('blocks distant or busy mecha and offers no mining control for another player or fluids', () => {
   const planet = miningPlanet();
   planet.units!['u-1'].position = { x: 6, y: 6, z: 0 };
-  const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
   expect(screen.getByText('请将机甲移动到矿点 6 格内')).toBeInTheDocument();
   planet.units!['u-1'].position = { x: 1, y: 1, z: 0 };
   planet.units!['u-1'].mecha!.job = { kind: 'mine', resource_id: 'ore-1', remaining_ticks: 5, ticks_per_batch: 10, remaining_batches: 1, completed_batches: 0, energy_per_batch: 3, state: 'running' };
-  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
-  planet.units!['u-1'].owner_id = 'p2';
-  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  // 未绑定机甲：没有可下采集命令的机甲，面板只提示去接管。
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={{ tick: 1, players: { p1: { player_id: 'p1', is_alive: true, mechas: [] } } } as never} />);
   expect(screen.queryByRole('button', { name: '手动采集' })).toBeNull();
-  planet.units!['u-1'].owner_id = 'p1';
+  expect(screen.getByText('未绑定机甲：在行星上选中一台机甲 → 接管')).toBeInTheDocument();
+  // 我的机甲不在本星球（档案 planet_id 不同）。
+  const elsewhere = miningSummary();
+  // 档案说机甲在别的星球、本行星场景里没有它 → 提示「不在本星球」。
+  (elsewhere as never as { players: { p1: { mechas: { planet_id: string }[] } } }).players.p1.mechas[0].planet_id = 'planet-1-2';
+  planet.units = {};
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={elsewhere} />);
+  expect(screen.getByText('你的机甲在 planet-1-2，不在本星球')).toBeInTheDocument();
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   planet.resources![0].kind = 'crude_oil';
-  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   expect(screen.queryByRole('button', { name: '手动采集' })).toBeNull();
 });
 
@@ -476,14 +508,14 @@ it('blocks distant or busy mecha and offers no mining control for another player
 it('allows mining at the server-side 6-cell range boundary and blocks beyond it', () => {
   const planet = miningPlanet();
   planet.resources![0].position = { x: 0, y: 0, z: 0 };
-  const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  const { rerender } = render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   for (const distance of [2, 3, 6]) {
     planet.units!['u-1'].position = { x: distance, y: 0, z: 0 };
-    rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+    rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
     expect(screen.getByRole('button', { name: '手动采集' })).toBeEnabled();
   }
   planet.units!['u-1'].position = { x: 7, y: 0, z: 0 };
-  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  rerender(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeDisabled();
   expect(screen.getByText('请将机甲移动到矿点 6 格内')).toBeInTheDocument();
 });
@@ -499,7 +531,7 @@ it('uses cube-sphere adjacency to allow mining across a face seam', () => {
   const planet = miningPlanet();
   planet.units!['u-1'].position = { x: 2, y: 0, z: 0 };
   planet.resources![0].position = { x: 10, y: 15, z: 0 };
-  render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} />);
+  render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={miningSummary()} />);
   expect(screen.getByRole('button', { name: '手动采集' })).toBeEnabled();
 });
 

@@ -6,7 +6,7 @@ import { AmmunitionBar } from "@/features/war/components/AmmunitionBar";
 
 import { useState } from 'react';
 import { surfaceDistanceWithin } from '@shared/surface';
-import type { AlertEntry, Building, CatalogView, CombatSquad, CommandResponse, Position } from '@shared/types';
+import type { AlertEntry, Building, CatalogView, CombatSquad, CommandResponse, Position, StateSummary } from '@shared/types';
 import { haulUnreachableDetail, isAlertActive } from '@shared/alerts';
 
 import { Icon } from '@/common/Icon';
@@ -27,6 +27,8 @@ import { usePlanetViewStore } from '@/features/planet-map/store';
 import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_RANGE, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { sendMechaCommand } from '@/features/mecha/commands';
+import { selectMyMecha } from '@/features/mecha/model';
 import { translateBuildingState, translateUnitType } from '@/i18n/translate';
 
 interface PlanetSelectionBarProps {
@@ -36,6 +38,8 @@ interface PlanetSelectionBarProps {
   planet: PlanetRenderView;
   /** C4：战斗小队列表（planet_runtime.combat_squads），小队选中面板的实体源。 */
   squads?: CombatSquad[];
+  /** /state/summary：采集面板据此找「我的机甲」（operator 等于自己）。 */
+  summary?: StateSummary;
   /**
    * 当前仍成立的产线告警：运输机器人选中条据此显示 `haul_unreachable`
    * （「这台机器人到不了目标」），玩家才知道它为什么空转。
@@ -86,7 +90,7 @@ export function findNearbyMinableResource(planet: PlanetRenderView, catalog: Cat
   return best?.resource;
 }
 
-export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, alerts }: PlanetSelectionBarProps) {
+export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squads, summary }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
@@ -217,8 +221,11 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
   if (selected.kind === 'resource') {
     const resource = planet.resources?.find(entry => entry.id === selected.id);
     if (!resource) return null;
-    const ownMechas = Object.values(planet.units ?? {}).filter(unit => unit.owner_id === session.playerId && unit.type === 'executor' && unit.mecha);
-    const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined) ?? ownMechas[0];
+    // 「我的机甲」= summary 里 operator 等于自己的那台（契约 §7.3）：采集命令不再带 entity_id，
+    // 服务端按发令者绑定的机甲执行；这里只用来显示能量/作业/距离。
+    const myMecha = selectMyMecha(summary, session.playerId);
+    const mecha = myMecha ? planet.units?.[myMecha.unit_id] : undefined;
+    const mechaElsewhere = myMecha && !mecha ? myMecha.planet_id : undefined;
     const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined;
     const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
     const quantity = quantityDraft?.resourceId === resource.id
@@ -231,7 +238,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
       <div className="planet-selection-bar__info">
         <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
         <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
-        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !myMecha ? '未绑定机甲：在行星上选中一台机甲 → 接管' : mechaElsewhere ? `你的机甲在 ${mechaElsewhere}，不在本星球` : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
       </div>
       {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
         event.preventDefault();
@@ -239,7 +246,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
         setMiningPending(true);
         try {
           await submitPlanetCommand({ commandType: 'mine_resource', planetId: planet.planet_id, focus: { entityId: mecha.id },
-            execute: () => client.cmdMineResource(mecha.id, resource.id, count),
+            execute: () => sendMechaCommand(client, 'mine_resource', planet.planet_id, { resource_id: resource.id, quantity: count }),
             fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
           });
         } finally { setMiningPending(false); }

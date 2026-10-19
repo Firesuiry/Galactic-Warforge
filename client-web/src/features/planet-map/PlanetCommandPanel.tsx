@@ -14,6 +14,7 @@ import type {
 
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
+import { selectMyMecha } from "@/features/mecha/model";
 import {
   canReceiveTransferItems,
   constructionTaskLabel,
@@ -279,6 +280,8 @@ export function PlanetCommandPanel({
   const currentResearchId =
     summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? "";
   const playerTechState = summary?.players?.[playerId]?.tech;
+  /** 装料只从「我的机甲」背包扣（契约 §7.3）：玩家本身不再有 inventory。 */
+  const myMechaInventory = selectMyMecha(summary, playerId)?.inventory;
   const currentSystemId =
     planet.system_id ??
     system?.system_id ??
@@ -528,7 +531,7 @@ export function PlanetCommandPanel({
       listTransferItemOptions(
         catalog,
         selectedTransferBuilding ?? undefined,
-        summary?.players?.[playerId]?.inventory,
+        myMechaInventory,
       ),
     [catalog, selectedTransferBuilding, summary, playerId],
   );
@@ -537,8 +540,7 @@ export function PlanetCommandPanel({
     selectedTransferBuilding != null &&
     transferItemOptions.length === 0;
   /** 背包里该物品的数量（装料只从背包扣，与服务端 execTransferItem 一致）。 */
-  const transferItemOwned =
-    summary?.players?.[playerId]?.inventory?.[transferItemId];
+  const transferItemOwned = myMechaInventory?.[transferItemId];
   const transferQuantityValue = toOptionalInt(transferQuantity);
   const transferQuantityShort =
     transferItemOwned !== undefined &&

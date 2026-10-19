@@ -23,11 +23,24 @@ function summaryPayload() {
         player_id: 'p1',
         is_alive: true,
         resources: { energy: 140 },
-        inventory: {
-          iron_ore: 24,
-          silicon_ore: 8,
-          stone_ore: 3,
-        },
+        mechas: [
+          {
+            unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+            inventory: { iron_ore: 24, silicon_ore: 8, stone_ore: 3 },
+            inventory_slots_used: 3, inventory_slots_total: 40,
+            operate_range: 18, concurrent_tasks: 2, construction_active: 1, construction_pending: 2,
+          },
+          {
+            unit_id: 'u-4', planet_id: 'planet-1-2', operator: 'builder-a', alive: false, respawn_at_tick: 512,
+            inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40,
+            operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+          },
+          {
+            unit_id: 'u-5', planet_id: 'planet-1-1', operator: '', alive: true, respawn_at_tick: 0,
+            inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40,
+            operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+          },
+        ],
         tech: {
           player_id: 'p1',
           current_research: {
@@ -253,6 +266,19 @@ describe('OverviewPage', () => {
     expect(within(resources).getByText('120/90')).toBeInTheDocument();
     expect(within(resources).getByText('供电稳定')).toBeInTheDocument();
     expect(within(resources).getByText('基础能源学 40/100')).toBeInTheDocument();
+
+    // 机甲卡片（契约 §7.3 第 4 条）：机甲 / 星球 / 操作者 / 状态 / 背包格数 / 施工中·排队
+    const mechaCard = screen.getByRole('region', { name: '机甲' });
+    const rows = within(mechaCard).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(3);
+    expect(within(rows[0]).getByText('u-3')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('我')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('存活')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('3/40')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('1/2')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('builder-a')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('复活于 tick 512')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('空闲')).toBeInTheDocument();
 
     // 右栏：行星态势（活跃行星置顶 + 当前徽标）
     const planets = document.querySelector('.command-planets') as HTMLElement;
