@@ -51,7 +51,10 @@ export function createPlanetInvalidationScheduler(
       ['scene', ['planet-view', serverUrl, playerId, planetId]],
       ['runtime', ['planet-runtime', serverUrl, playerId, planetId]],
       ['networks', ['planet-networks', serverUrl, playerId, planetId]],
+      // 顶栏 / 告警栏读的是 'shell-summary'（与行星页的 'summary' 同源不同 key）：
+      // 两者都失效，接管机甲后 chip 不必等 5s 轮询。
       ['summary', ['summary', serverUrl, playerId]],
+      ['summary', ['shell-summary', serverUrl, playerId]],
       ['stats', ['stats', serverUrl, playerId]],
       ['alerts', ['alerts-snapshot', serverUrl, playerId, planetId]],
     ];
