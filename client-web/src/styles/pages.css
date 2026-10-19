@@ -1486,14 +1486,15 @@
 .command-mechas__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  /* 12px：右栏 298px 内容宽刚好放下 6 列（13px 时状态列「复活于 tick N」会撑出 5px）。 */
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
 .command-mechas__table th,
 .command-mechas__table td {
-  /* 右侧窄栏（300–340px）里 6 列要放得下：列间距收紧到 5px。 */
-  padding: 6px 5px;
+  /* 右侧窄栏（300–340px）里 6 列要放得下：列间距收紧到 4px（实测内容宽 298px）。 */
+  padding: 6px 4px;
   border-bottom: 1px solid var(--line-1);
   text-align: left;
 }
