@@ -1,339 +1,104 @@
 ---
 name: play-siliconworld
-description: Play SiliconWorld as a player via CLI/HTTP. Start local or official-war servers, authenticate, run briefing→decide→command loops, and follow newgame/midgame/war tactics. Use when asked to play, trial, fight a war, or drive the game as Claude Code.
+description: Play SiliconWorld as an AI agent via the non-interactive CLI (scripts/sw). Start a local server or load a checkpoint, then run an observe → check → act → verify loop to build mining/smelting/assembly lines, research tech, fight wars, or cooperate with other agents on the same side (one mecha per agent). Use when asked to play, trial, playtest, build production lines, fight a war, or drive the game as Claude Code.
 ---
 
-# Play SiliconWorld
+# Play SiliconWorld（面向 AI 代理）
 
-用 **CLI 或 HTTP** 当玩家打完一局。优先 CLI（有命令校验与统一格式化）；CLI 不便时用 `curl` 直打 server。
+## 0. 这是什么游戏
 
-## 0. 先读
+- 类《戴森球计划》的工业游戏，地图是一颗立方体球面行星。
+- **纯实物经济，没有金钱或 minerals**：每座建筑的造价都是实物，从**你的机甲背包**里扣。
+- 典型产线：采矿机 → 传送带 → 分拣器 → 熔炉 → 制造台 → 研究站（消耗矩阵研究科技）。
+- 对手是 bot 和黑雾。
+- 你操作一台**机甲**：建造、手搓、取放物品都由它执行。多个代理可以在同一方，各操作一台机甲。
 
-| 场景 | 文档 |
-| --- | --- |
-| 启动 | `docs/dev/本地环境与测试.md`、`scripts/start-local-playtest.sh` |
-| 玩法总纲 | `docs/player/玩法指南.md` |
-| 验收勾选 | `docs/player/试玩验收清单.md` |
-| CLI 命令 | `docs/dev/客户端CLI.md` |
-| HTTP API | `docs/dev/服务端API.md` |
-| 已知问题 | `docs/player/known-issues.md` |
-
-Go 路径：`PATH=/mnt/wsl/data/home/firesuiry/sdk/go1.25.0/bin:$PATH`（受限环境加 `GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local`）。
-
-## 1. 起服
-
-工作目录始终是仓库根（本 skill 所在 repo）。**不要占用主仓正在用的端口**；试玩用独立 `data_dir`。
-
-### 1.1 一键本地试玩（server + web + agent-gateway）
+## 1. 起服与连接
 
 ```bash
-bash scripts/start-local-playtest.sh          # start
-bash scripts/start-local-playtest.sh stop     # stop
+# 推荐：带存档点的本地环境（N 选一个没人用的编号，端口 = N*100）
+bash scripts/playtest-up.sh 230 --tick-rate 10 --checkpoint cp-root   # 新局起点
+bash scripts/playtest-up.sh 230 --tick-rate 10 --checkpoint cp-base   # 已有铁铜冶炼线的基地
+bash scripts/playtest-down.sh 230                                      # 用完关掉
+export SW_SERVER=http://127.0.0.1:23000
 ```
 
-默认：`server=18080`、`gateway=18180`、`web=5173`。可用 `SERVER_PORT` / `GATEWAY_PORT` / `WEB_PORT` 覆盖。
+- 存档点缺失或版本不对时，脚本会自动重建。
+- 常用存档点：`cp-root`（新局）、`cp-base`（铁铜冶炼 + 齿轮）、`cp-lab`（有研究站）、`cp-matrix-line`（电磁矩阵线）、`cp-mecha-pair`（3 台机甲，练习多代理）。
+- 账号：`p1` / `key_player_1`（admin，可以用 `advance` 快进），`p2` / `key_player_2`。默认就是 p1。
+- 其它场景（战争局、midgame）见 [reference/war.md](reference/war.md)。
 
-### 1.2 普通新局（只起 server）
+## 2. 发命令：`scripts/sw`
 
 ```bash
-cd server
-env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
-  go run ./cmd/server -config config-dev.yaml -map-config map.yaml
-```
-
-### 1.3 官方战争局（推荐 skill 对战验收）
-
-```bash
-# 默认端口 19481；脚本用临时 data_dir，退出即清理
-bash server/scripts/start_official_war_test_server.sh 19481
-```
-
-等价手写：
-
-```bash
-cd server
-env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
-  go run ./cmd/server -config config-war.yaml -map-config map-war.yaml
-```
-
-### 1.4 官方 midgame
-
-```bash
-cd server
-env PATH=/home/firesuiry/sdk/go1.25.0/bin:$PATH \
-  go run ./cmd/server -config config-midgame.yaml -map-config map-midgame.yaml
-```
-
-### 1.5 就绪检查
-
-```bash
-curl -fsS http://localhost:<port>/health
-# 期望 {"status":"ok", ... tick 前进}
-```
-
-## 2. 账号与鉴权
-
-默认配置玩家：
-
-| player_id | player_key |
-| --- | --- |
-| `p1` | `key_player_1` |
-| `p2` | `key_player_2` |
-
-HTTP 一律：
-
-```http
-Authorization: Bearer <player_key>
-```
-
-`POST /commands` 还要：`issuer_type=player` 且 `issuer_id` = 该 key 对应的 `player_id`。
-
-## 3. 操作入口（优先 CLI）
-
-### 3.1 交互 REPL（人类）
-
-```bash
-npm install   # 首次，在仓库根目录执行（npm workspace，依赖只装一份）
-cd client-cli
-SW_SERVER=http://localhost:18080 npm run dev
-# 选 [1] p1
-```
-
-### 3.2 非交互单条命令（Claude 推荐）
-
-**两条路径，勿混用：**
-
-| 角色 | 入口 | 说明 |
-| --- | --- | --- |
-| **Commander（skill 默认）** | `dispatch` 或 **HTTP** | 全命令面；**不要**给 `runCommandLine` 塞 agent military policy |
-| **委派 Agent** | `runCommandLine(line, ctx, policy)`（`@gw/shared/command-runtime`） | 必须带 `policy.military`（theater/taskForce/白名单），否则军事查询/指令会被运行时拒绝 |
-
-Commander 非交互（与官方战争回归一致，走 `dispatch`，无 military 门禁）：
-
-```bash
-cd client-cli
-# 推荐：本地 runner 文件（tsx -e 对 top-level await 不友好）；EOF 不加引号，$PWD 展开成绝对路径
-cat > /tmp/sw-dispatch.mjs <<EOF
-import { api } from '$PWD/src/api.ts';
-import { dispatch } from '$PWD/src/commands/index.ts';
-const line = process.argv.slice(2).join(' ');
-const player = process.env.SW_PLAYER || 'p1';
-const key = process.env.SW_KEY || 'key_player_1';
-api.setServerUrl(process.env.SW_SERVER || 'http://localhost:18080');
-api.setAuth(player, key);
-console.log(await dispatch(line, { api, currentPlayer: player, rl: {} }));
+scripts/sw briefing                         # 单条
+scripts/sw - <<'EOF'                        # 批量：逐行执行，# 开头是注释，失败不中止
+build 60 135 wind_turbine
+build 63 136 tesla_tower
 EOF
-SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs briefing
-SW_SERVER=http://localhost:19481 npx tsx /tmp/sw-dispatch.mjs war_industry
+SW_ISSUER=builder-a scripts/sw mecha list   # 以代理身份发令（多代理时必设）
 ```
 
-`runCommandLine` 仅在**模拟 agent 委派**时使用（会校验 `policy.military`；无 policy 时 `war_industry` / 舰队任务群等会直接抛错）。
+- **下令命令会等到真正执行完**，再打印 `✓ OK: …` 或 `✗ CODE: …`。`ACCEPTED` 只表示入队，**以 ✓/✗ 为准**。
+- 有失败时退出码非 0，批量模式最后打印汇总。
+- 环境变量：`SW_SERVER`、`SW_PLAYER`、`SW_KEY`、`SW_ISSUER`、`SW_WAIT=0`（不等结果）。
+- 不知道参数时：`scripts/sw help <命令>`。完整命令表见 `docs/dev/客户端CLI.md`。
 
-多条时循环调用；**每条命令等返回后再发下一条**（异步施工/战斗靠下一轮查询对账，不要连发盲猜）。
-
-### 3.3 直接 HTTP（CLI 不可用或 commander 捷径）
-
-```bash
-# 一眼局势
-curl -fsS -H "Authorization: Bearer key_player_1" \
-  "http://localhost:18080/state/agent-briefing"
-
-# 下命令（request_id 必须唯一）
-curl -fsS -X POST -H "Authorization: Bearer key_player_1" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "request_id": "req-'"$(date +%s%N)"'",
-    "issuer_type": "player",
-    "issuer_id": "p1",
-    "commands": [{
-      "type": "build",
-      "target": {"layer":"planet","planet_id":"planet-1-1","position":{"x":10,"y":12}},
-      "payload": {"building_type":"wind_turbine"}
-    }]
-  }' \
-  "http://localhost:18080/commands"
-```
-
-- HTTP `202` + `results[].status=accepted` **只表示入队**，不是最终成功。
-- 最终结果看 `command_result` 事件，或下一轮 `briefing` / `summary` / `inspect` / `war_industry` 对账。
-- 结构失败时看 `results[].code` + `results[].message`；结构化 `issues[]`（字段级）随 T-B2 提供时优先用 `issues` repair。
-
-### 3.4 多代理同阵营
-
-同一个玩家可以开多个代理（多个 Claude 会话 / agent-gateway 智能体）同时操作，各绑一台机甲，施工额度与背包互不影响。
-
-1. **每个代理设自己的名字**：`SW_ISSUER=<名>`（或 REPL 里 `as <名>`；`as` 不带参数恢复玩家本人）。之后命令以 `issuer_type=agent`、`issuer_id=<名>` 发出；`status` 可核对。
-2. **看机甲、接管空闲机甲**：
-
-   ```bash
-   mecha list                     # ID、星球、操作者、存活、背包格数、施工中/排队
-   mecha assign u-7               # operator 缺省 = 自己，接管空闲机甲 u-7
-   ```
-
-3. **造新机甲**（没有空闲机甲时）：在基站 `produce <hq_id> executor`。成本：铁块 16、齿轮 8、磁线圈 8、电路板 8，先用 `transfer_item`（CLI `transfer <hq_id> <item_id> <qty>`）装进基站存储。出厂机甲空闲、空背包、满能量，再 `mecha assign <id>`。
-4. **取料时机甲要在范围内**：基站的 `build_radius` 覆盖内可以远程取放；覆盖外要把机甲开到目标建筑旁（`move <mecha_id> <x> <y>`，`operate_range` 18）。
-5. 没有绑定机甲时，`build` / `transfer` / `mine_resource` / `craft_item` 等返回 `EXECUTOR_UNAVAILABLE`；背包行显示「未绑定机甲：mecha list / mecha assign <id>」。
-
-```bash
-# 非交互 runner 里也照常生效（setAuth 后设发令者）
-SW_ISSUER=builder SW_SERVER=http://localhost:18080 npx tsx /tmp/sw-dispatch.mjs mecha list
-```
-
-## 4. 决策循环（核心）
-
-每一轮固定四步，**不要跳过 briefing**：
-
-```
-1. OBSERVE  briefing [20]
-            必要时再拉：summary / scene / war_industry / task_forces / theaters /
-                        system_runtime / planet_runtime / fleet_status / inspect /
-                        catalog_commands（字段级结构/JSON Schema，修命令时用）
-2. DECIDE   根据 self.resources、tech、alerts、fleets/task_forces/theaters/enemy_forces
-            选 1～N 条可执行命令（优先闭环最短路径）
-3. ACT      经 CLI 或 POST /commands 发出
-4. VERIFY   再 briefing / 专项查询；失败则读 code/message/issues 修正后重试
-```
-
-节奏：
-
-- 工业建设：每 2～5 秒一轮，等矿机/产线 running、minerals 上涨。
-- 战争：每轮先 `war_industry` + `task_forces` + `system_runtime`，再部署/封锁；战区行星区域（theater_define_zone 带坐标）会自动做防区警戒，有敌情时通过 theaters 查询的 `hostile_count/alerted` 与 `theater_zone_alert` 事件可见。
-- 胜利：`briefing` 出现 `winner` / `victory_reason` 即停，写战报。
-
-## 5. 战术手册（按场景）
-
-坐标**禁止硬编码**——用 `scene` / Web / `inspect` 找 base 与矿点。出生保证铁铜在操作距离内。
-
-### 5.1 新局 30 分钟（`config-dev` + `map.yaml`）
-
-目标：采矿闭环 → 矩阵产线 → 第一门研究。
+## 3. 决策循环
 
 ```text
-briefing / summary
-scene <planet> <x> <y> <w> <h>     # 找 base、iron_ore、copper_ore
-build <邻格x> <邻格y> wind_turbine
-build <...> tesla_tower             # 电网接到矿
-build <ore_x> <ore_y> mining_machine
-# 等 minerals 上涨
-build ... arc_smelter / assembling_machine_mk1   # 铁铜→磁线圈/电路板→电磁矩阵
-build ... matrix_lab                # 不要带 --recipe（研究站模式）
-start_research electromagnetism     # 缺矩阵应失败
-transfer <lab_id> electromagnetic_matrix 10
-start_research electromagnetism     # 成功 → 解锁 depot_mk1
+1. 看    briefing（我的背包/作业/科技/告警） · mecha list · scene（周边建筑和矿）
+2. 查    catalog building <type>（解锁？造价？占地？） · 背包够不够 · 占地空不空
+3. 做    一小批命令（3–8 条），用 scripts/sw - 批量发
+4. 验    每条看 ✓/✗；然后 planet_runtime --mine（施工有没有卡住）、inspect <建筑>（running？库存在涨吗？）
+5. 等    wait job / wait build / wait item … / wait ticks N（不要空转轮询）
 ```
 
-开局资源：`minerals=240`、`energy=100`，**不预置矩阵**。矿机满仓仍 kickback minerals。
+- 每一步要看的字段和下令前的自检清单：[reference/queries.md](reference/queries.md)。
+- 失败了先查 [reference/errors.md](reference/errors.md)，按消息修，**同一条命令不要原样重发**。
 
-详细勾选与步骤：`docs/player/试玩验收清单.md`。
+## 4. 十条铁律
 
-### 5.2 官方 midgame（戴森/轨道）
+1. **造价在自己的机甲背包里**。连续下几个建造单时，造价要累加；回执里出现「本任务将等料」就要补料。
+2. **`build x y` 的 x、y 是占地左上角**，占地向东、向南展开。下单前用 `catalog building <type>` 查占地大小。
+3. **传送带不给建筑喂料**。熔炉、制造台、研究站、补给站的进料和出料都靠**分拣器**。
+4. **分拣器的 `--rotation` 就是放货方向**（0 北、90 东、180 南、270 西），背面取货，沿轴扫描 3 格内的第一个建筑。建完用 `inspect <分拣器>` 确认两端都连上了。
+5. **采矿机必须有出口**：在它的边上放一段出货方向背离矿机的传送带。否则几 tick 就会堵死。
+6. **机甲同一时间只有一个手搓作业**：批次一次发够，再 `wait job`；不要在作业进行中追加 `craft_item`。
+7. **新建筑要通电**：风机发电 10，电力感应塔的覆盖半径是 12。建完用 `networks` 或 `inspect` 看是否 `no_power`。
+8. **有科技门槛**：`depot_mk1`、钢材等需要先研究。用 `catalog techs --available` 看现在能研究什么。
+9. **每建完一段就验证一段**，确认上游在出货、下游在增长，再往下建。不要一口气建完整条线再排查。
+10. **多代理时只动自己的东西**：只用自己的机甲，只在自己的区域建，不 `advance`，共用仓库只取当下要用的量。详见 [reference/multi-agent.md](reference/multi-agent.md)。
 
-- 确认 `active_planet_id=planet-1-2`（气态行星）。
-- 先堆电：`tesla_tower` + 多台 `wind_turbine` 至 generation 够用。
-- `orbital_collector` / `vertical_launching_silo` / `em_rail_ejector` → `transfer` 装填 → `launch_solar_sail` / `launch_rocket`。
-- 防御与射线：`jammer_tower`、`sr_plasma_turret`、`planetary_shield_generator`、`set_ray_receiver_mode`。
+## 5. 开局路线
 
-详见 `docs/player/试玩验收清单.md`。
+从 `cp-root` 到第一条自动产线、完成第一项研究的实测命令序列，见 [reference/opening.md](reference/opening.md)。
+摆放规则和产线模板（矿 → 熔炉 → 补给站、制造台 → 研究站）见 [reference/logistics.md](reference/logistics.md)。
 
-### 5.3 官方战争局（skill 验收主路径）
+## 6. 参考索引
 
-启动：`bash server/scripts/start_official_war_test_server.sh 19481`  
-`SW_SERVER=http://localhost:19481`。
-
-最小权威闭环（ID 用查询结果替换）：
-
-```text
-briefing
-war_industry
-# 蓝图
-blueprint_variant corvette corvette_play utility --name play-corvette
-blueprint_validate corvette_play
-blueprint_finalize corvette_play --target-state prototype
-# 排产 → 部署枢纽 ready_payloads
-queue_military_production <recomposing_assembler_id> <base_id> corvette_play --count 1
-war_industry
-# 舰队 + 任务群 + 战区
-commission_fleet <base_id> corvette_play sys-1 --fleet-id fleet-play
-task_force_create tf-play --name play --stance escort
-task_force_assign tf-play fleet fleet-play --system sys-1 --planet planet-1-1
-task_force_deploy tf-play --system sys-1 --planet planet-1-1
-theater_create theater-play --name play
-theater_define_zone theater-play primary --system sys-1 --planet planet-1-1 --radius 8
-theater_set_objective theater-play secure_planet --system sys-1 --planet planet-1-1 --description hold
-# 对账
-fleet_status / task_forces / theaters / system_runtime sys-1 / planet_runtime planet-1-1
-# 升级动作
-blockade_planet tf-play planet-1-1
-system_runtime sys-1   # 确认 blockades；theaters 确认区域敌情 hostile_count/alerted
-```
-
-注意：
-
-- 官方战争局预置科技与军工底座，**不会**自动建舰队/任务群/战区。
-- `blockade_planet` 的同步返回只代表入队；以 `system_runtime` 为准。
-- 详细：`docs/player/试玩验收清单.md`；GUI 对照 `/war`。
-
-### 5.4 决策启发式
-
-| 观察 | 动作 |
+| 文件 | 内容 |
 | --- | --- |
-| energy 紧 / generation 低 | 先 `wind_turbine` / `tesla_tower` / 太阳能 |
-| minerals 不涨 | 查矿机是否在资源格、是否通电、`inspect` 状态 |
-| 研究失败 | 空 `matrix_lab` + 本地有足够矩阵再 `start_research` |
-| `ready_payloads` 有货未部署 | `commission_fleet` / `deploy_squad` |
-| 有舰队无任务群 | `task_force_create` → `assign` → `deploy` |
-| 有任务群无战区 | `theater_*` 后把 TF deploy 进 theater |
-| alerts 刷生产 | `alert_snapshot` / 修配方或缺料，勿盲目扩建 |
-| threat / enemy_forces | 优先姿态、封锁、滩头，再扩张工业 |
+| [reference/opening.md](reference/opening.md) | 开局到第一项研究的分阶段路线（实测命令） |
+| [reference/logistics.md](reference/logistics.md) | 坐标、分拣器方向、传送带、采矿机、产线模板、供电 |
+| [reference/queries.md](reference/queries.md) | 每个查询怎么读；build / craft / transfer / produce / research 的下令前自检 |
+| [reference/errors.md](reference/errors.md) | 结果码 → 修法；隐蔽失败（回执 OK 但事没办成） |
+| [reference/multi-agent.md](reference/multi-agent.md) | 多代理身份、机甲接管与制造、互不干扰的约定 |
+| [reference/war.md](reference/war.md) | 战争局与 midgame 流程 |
+| `docs/guide/科技树与建造前置.md` | 全部科技、建筑解锁与造价（自动生成） |
+| `docs/dev/客户端CLI.md` / `docs/dev/服务端API.md` | 命令与 API 全表 |
 
-## 6. 常用 CLI 速查
+## 7. 收尾：写战报
 
-```text
-# 观察
-health | summary | stats | briefing [n]
-catalog_commands
-galaxy | system [id] | planet [id]
-scene [planet] x y w h | inspect <planet> building|unit|resource|sector <id>
-war_industry | blueprints [id] | task_forces | theaters
-fleet_status [id] | system_runtime [id] | planet_runtime [id]
-fog | alert_snapshot | event_snapshot
-
-# 工业
-build x y <type> [--recipe id] [--direction d]
-transfer <building_id> <item_id> <qty>
-mecha list | mecha assign <mecha_id> [operator|--release]
-produce <hq_id> executor
-mine_resource <resource_id> <qty> | craft_item <recipe_id> <batches>
-cancel_mecha_job | refuel_mecha <fuel_item_id> [count]
-configure_mecha_logistics <item:min:max,...|none>
-start_research <tech_id> | cancel_research <tech_id>
-switch_active_planet <planet_id>
-
-# 战争
-blueprint_create|set_component|validate|finalize|variant ...
-queue_military_production <factory> <hub> <bp> [--count n]
-commission_fleet | deploy_squad | refit_unit ...
-task_force_create|assign|set_stance|deploy ...
-theater_create|define_zone|set_objective ...
-blockade_planet ...
-```
-
-完整参数表：`docs/dev/客户端CLI.md`。`help` 在 REPL 内可用。
-
-## 7. 战报输出（验收收尾）
-
-打完或中止时写简短战报（markdown）：
-
-1. 场景：newgame / midgame / war，端口与 commit
-2. 用时与最终 tick / winner
-3. 关键节点（首矿、首研究、首舰队、封锁…）
-4. 失败命令与 `code`/`issues`（若有）
-5. 阻塞问题是否需记入 `docs/player/known-issues.md`
+结束或中止时写一份简短战报（markdown）：
+1. 场景、端口、起始存档点、用时、最终 tick；
+2. 建了什么，各产线现在是否在运行（附 `inspect` 数字）；
+3. 命令总数和失败数，以及失败原因分布（`audit --limit 200`）；
+4. 卡住的地方，以及文档或 CLI 里缺了什么。
 
 ## 8. 红线
 
-- 不杀不属于本仓库的端口进程；脚本已做「本仓库 cmdline」判断。
-- 不提交 `node_modules`、临时 `data_dir`、`.run/` 试玩产物。
-- 不把主仓正在跑的 record/play 环境当试玩服混用。
-- 命令失败先读结构化错误再改，禁止无依据连发。
-- 改 server API / CLI 行为后更新 `docs/dev/服务端API.md` / `docs/dev/客户端CLI.md`；测试绿才算完成。
+- 不杀不是自己起的进程。关环境用 `playtest-down.sh <N>`。
+- 不提交 `node_modules`、临时数据目录、`.run/`。
+- 命令失败先读 ✗ 后面的消息再改，禁止没有依据地连发。
+- 和别的代理同局时，不用 `advance`、不读档、不开新局。
