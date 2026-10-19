@@ -12,7 +12,7 @@ import (
 )
 
 // 网页「开新局」必须完整继承启动配置（遭遇战预设）：battlefield 全字段与
-// 同名玩家的 bootstrap/bot/executor 都要带过去，只有请求里显式给出的字段才覆盖。
+// 同名玩家的 bootstrap/bot 都要带过去，只有请求里显式给出的字段才覆盖。
 func TestNewGameInheritsStartupPreset(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	mapCfgPath := filepath.Join(repoRoot, "server", "map.yaml")
@@ -36,10 +36,6 @@ players:
     key: "key_player_1"
     team_id: "team-1"
     role: "admin"
-    executor:
-      build_efficiency: 1.5
-      operate_range: 7
-      concurrent_tasks: 3
     bootstrap:
       items:
         - { item_id: iron_ingot, quantity: 100 }

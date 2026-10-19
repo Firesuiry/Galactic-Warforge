@@ -134,7 +134,7 @@ func TestT124RelocatedSpawnAreaIsFlattened(t *testing.T) {
 		t.Fatalf("expected spawn relocated away from center (%d,%d)", base.X, base.Y)
 	}
 	// 细分网格：执行体作业半径默认 ×3（6→18），可迁入的资源距离随之变大。
-	if dist := ws.SurfaceDistance(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance(nil) {
+	if dist := ws.SurfaceDistance(base, model.Position{X: 20, Y: 20}); dist > spawnMineDistance() {
 		t.Fatalf("base (%d,%d) not relocated next to ore node (20,20), dist=%d", base.X, base.Y, dist)
 	}
 	assertT124SurfacePosition(t, ws, base, 8)
@@ -205,7 +205,7 @@ func TestT124StarterIronAndCopperWithinMineDistance(t *testing.T) {
 	core := New(cfg, maps, queue.New(), NewEventBus(), store)
 	ws := core.World()
 	base := t124BuildingPos(t, ws, "p1", model.BuildingTypeBattlefieldAnalysisBase)
-	mineDist := spawnMineDistance(cfg.Players)
+	mineDist := spawnMineDistance()
 
 	for _, kind := range []string{string(mapmodel.ResourceIronOre), string(mapmodel.ResourceCopperOre)} {
 		if !hasResourceKindWithin(ws, base, mineDist, kind) {
@@ -236,7 +236,7 @@ func TestConfigDevStarterOresReachableForMatrixChain(t *testing.T) {
 	if execState == nil {
 		t.Fatal("expected executor state")
 	}
-	mineDist := spawnMineDistance(nil)
+	mineDist := spawnMineDistance()
 	for _, kind := range []string{string(mapmodel.ResourceIronOre), string(mapmodel.ResourceCopperOre)} {
 		if !hasResourceKindWithin(ws, base.Position, mineDist, kind) {
 			t.Fatalf("config-dev seed: expected %s within dist %d of base %+v (operate_range=%d)",

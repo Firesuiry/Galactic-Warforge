@@ -2,8 +2,10 @@ package gamecore
 
 import (
 	"fmt"
-	"siliconworld/internal/model"
+	"log"
 	"sort"
+
+	"siliconworld/internal/model"
 )
 
 type producePayload struct {
@@ -128,7 +130,14 @@ func registerProducedMecha(ws *model.WorldState, b *model.Building, unit *model.
 		return
 	}
 	model.SyncMechaCapabilities(unit, player)
-	player.EnsureMechas()[unit.ID] = &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID}
+	mechas := player.EnsureMechas()
+	if _, exists := mechas[unit.ID]; exists {
+		// 单位 ID 由 EntityCounter 保证唯一；撞档说明计数器回退或夹具手写 ID，
+		// 宁可保留旧档案也不静默覆盖。
+		log.Printf("[GameCore] mecha dossier %s already exists for %s on %s, skip overwrite", unit.ID, player.PlayerID, ws.PlanetID)
+		return
+	}
+	mechas[unit.ID] = &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID}
 }
 
 // unitSpawnBlockedEvents 出生点被占满时的一条中文告警：同一建筑持续堵塞时

@@ -74,7 +74,7 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 	}
 	// Guarantee iron/copper within mining reach of every final base so the
 	// matrix production chain is not blocked by distant mapgen veins.
-	ensureStarterResourceNodes(ws, planet, basePositions, spawnMineDistance(players))
+	ensureStarterResourceNodes(ws, planet, basePositions, spawnMineDistance())
 	for i, p := range players {
 		ps := ws.Players[p.PlayerID]
 		if ps == nil {
@@ -187,7 +187,7 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 		}
 	}
 	positions := computeStartPositions(&config.Config{Players: players}, ws.Surface())
-	mineDist := spawnMineDistance(players)
+	mineDist := spawnMineDistance()
 	for i := range positions {
 		positions[i] = relocateSpawnNearResources(ws, positions[i], mineDist)
 	}
@@ -196,12 +196,8 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 
 // spawnMineDistance is the max surface graph distance allowed between a spawn and
 // the nearest resource node, leaving room for the executor's adjacent tile.
-func spawnMineDistance(players []config.PlayerConfig) int {
-	operateRange := model.ExecutorOperateRange()
-	if operateRange <= 0 {
-		operateRange = 18
-	}
-	dist := operateRange - 2
+func spawnMineDistance() int {
+	dist := model.ExecutorOperateRange() - 2
 	if dist < 1 {
 		dist = 1
 	}
