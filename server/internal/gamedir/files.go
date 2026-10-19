@@ -23,7 +23,7 @@ import (
 // 版本 1 = 旧网格；版本 3 = 快照只存地形游程与资源差异（可由地图配置 + seed
 // 重建的部分不入快照）。之后的状态语义变更（第 16 轮去资金、第 17 轮背包格数制）
 // 由内嵌快照的 snapshot.CurrentVersion 一并拒绝，外层包格式未再变。
-const CurrentFormatVersion = 3
+const CurrentFormatVersion = 4
 
 var syncFile = func(file *os.File) error {
 	return file.Sync()

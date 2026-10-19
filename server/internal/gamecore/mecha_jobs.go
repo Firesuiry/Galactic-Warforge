@@ -20,28 +20,6 @@ func mechaCraftEnergy(recipe model.RecipeDefinition) int {
 	return max(1, recipe.Duration/mechaCraftEnergyDivisor)
 }
 
-func mechaJobTarget(ws *model.WorldState, playerID string, cmd model.Command) (*model.Unit, *model.PlayerState, model.CommandResult) {
-	fail := func(code model.ResultCode, message string) (*model.Unit, *model.PlayerState, model.CommandResult) {
-		return nil, nil, model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}
-	}
-	unit := ws.Units[cmd.Target.EntityID]
-	if unit == nil {
-		return fail(model.CodeEntityNotFound, "未找到机甲单位")
-	}
-	if unit.OwnerID != playerID {
-		return fail(model.CodeNotOwner, "不能操作其他玩家的机甲")
-	}
-	if unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
-		return fail(model.CodeInvalidTarget, "作业需要存活的玩家机甲")
-	}
-	player := ws.Players[playerID]
-	if player == nil {
-		return fail(model.CodeEntityNotFound, "未找到玩家")
-	}
-	model.SyncMechaCapabilities(unit, player)
-	return unit, player, model.CommandResult{}
-}
-
 func mechaJobFailed(code model.ResultCode, message string) (model.CommandResult, []*model.GameEvent) {
 	return model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}, nil
 }
@@ -60,11 +38,8 @@ type mineResourcePayload struct {
 	Quantity   int    `json:"quantity" payload:"required"`
 }
 
-func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd model.Command, p mineResourcePayload) (model.CommandResult, []*model.GameEvent) {
-	unit, _, failure := mechaJobTarget(ws, playerID, cmd)
-	if unit == nil {
-		return failure, nil
-	}
+func (gc *GameCore) execMineResource(ws *model.WorldState, playerID string, cmd model.Command, p mineResourcePayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+	unit := mecha.Unit
 	if unit.Mecha.Job != nil {
 		return mechaJobFailed(model.CodeInvalidTarget, "机甲已有作业，请先取消")
 	}
@@ -96,11 +71,8 @@ type craftItemPayload struct {
 	Quantity int    `json:"quantity" payload:"required"`
 }
 
-func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd model.Command, p craftItemPayload) (model.CommandResult, []*model.GameEvent) {
-	unit, player, failure := mechaJobTarget(ws, playerID, cmd)
-	if unit == nil {
-		return failure, nil
-	}
+func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd model.Command, p craftItemPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+	unit, player, record := mecha.Unit, mecha.Player, mecha.Record
 	if unit.Mecha.Job != nil {
 		return mechaJobFailed(model.CodeInvalidTarget, "机甲已有作业，请先取消")
 	}
@@ -129,8 +101,8 @@ func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd mod
 	for _, item := range recipe.Inputs {
 		reserved = append(reserved, model.ItemAmount{ItemID: item.ItemID, Quantity: item.Quantity * quantity})
 	}
-	if !player.DeductItems(reserved) {
-		return mechaJobFailed(model.CodeInsufficientResource, "玩家背包中缺少手工制造原料")
+	if !record.DeductItems(reserved) {
+		return mechaJobFailed(model.CodeInsufficientResource, "机甲背包中缺少手工制造原料")
 	}
 	// 手搓是机甲个人作业，不受工厂产出节奏 pace_output 影响。
 	duration := recipe.Duration
@@ -147,16 +119,15 @@ func refundMechaJob(ws *model.WorldState, unit *model.Unit) {
 		return
 	}
 	if player := ws.Players[unit.OwnerID]; player != nil {
-		player.AddItems(unit.Mecha.Job.ReservedInputs, mechaInventorySlots(ws, unit, player))
+		if record := player.MechaByUnitID(unit.ID); record != nil {
+			record.AddItems(unit.Mecha.Job.ReservedInputs, mechaInventorySlots(player))
+		}
 	}
 	unit.Mecha.Job = nil
 }
 
-func (gc *GameCore) execCancelMechaJob(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
-	unit, _, failure := mechaJobTarget(ws, playerID, cmd)
-	if unit == nil {
-		return failure, nil
-	}
+func (gc *GameCore) execCancelMechaJob(ws *model.WorldState, playerID string, cmd model.Command, p noPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+	unit := mecha.Unit
 	if unit.Mecha.Job == nil {
 		return mechaJobFailed(model.CodeInvalidTarget, "机甲没有进行中的作业")
 	}
@@ -177,14 +148,15 @@ func settleMechaJobs(ws *model.WorldState) []*model.GameEvent {
 			continue
 		}
 		player := ws.Players[unit.OwnerID]
-		if player == nil {
+		record := mechaRecordForUnit(ws, unit)
+		if player == nil || record == nil {
 			continue
 		}
 		before := unit.Mecha.Clone()
 		if unit.HP <= 0 {
 			refundMechaJob(ws, unit)
 		} else {
-			events = append(events, advanceMechaJob(ws, unit, player)...)
+			events = append(events, advanceMechaJob(ws, unit, record, player)...)
 		}
 		if !reflect.DeepEqual(before, unit.Mecha) {
 			events = append(events, mechaStateEvent(unit))
@@ -193,7 +165,7 @@ func settleMechaJobs(ws *model.WorldState) []*model.GameEvent {
 	return events
 }
 
-func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) []*model.GameEvent {
+func advanceMechaJob(ws *model.WorldState, unit *model.Unit, record *model.MechaRecord, player *model.PlayerState) []*model.GameEvent {
 	job := unit.Mecha.Job
 	// 被自动防御暂停的手搓：保留进度与预留原料，等威胁消失后由交战结算恢复。
 	if job.Paused {
@@ -230,13 +202,13 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 	} else {
 		output = append([]model.ItemAmount(nil), recipe.AllOutputs()...)
 	}
-	slots := mechaInventorySlots(ws, unit, player)
+	slots := mechaInventorySlots(player)
 	if job.RemainingTicks >= job.TicksPerBatch {
 		// 每批开工前先确认背包装得下整批产出（按格计：每件物品折算 ceil(数量/
 		// stack_limit) 格），装不下就停在这里等腾空，既不扣能也不推进；否则背包
 		// 满时每批都会白扣一份核心能量却毫无产出。绝不允许绕过格数上限把背包顶满
 		// （试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁变成 201/200）。
-		if need := itemAmountTotal(output); mechaInventoryFree(player, slots, output[0].ItemID, need) < need {
+		if need := itemAmountTotal(output); mechaInventoryFree(record, slots, output[0].ItemID, need) < need {
 			job.State = "inventory_full"
 			return nil
 		}
@@ -254,13 +226,13 @@ func advanceMechaJob(ws *model.WorldState, unit *model.Unit, player *model.Playe
 	}
 	// 兜底：批内背包被塞满时本批不结算（节点/原料都不动，进度保留），
 	// 玩家腾出空位后自动继续，产出与原料都不会丢。
-	accepted := player.AddItems(output, slots)
+	accepted := record.AddItems(output, slots)
 	if accepted < itemAmountTotal(output) {
 		job.State = "inventory_full"
 		return []*model.GameEvent{{EventType: model.EvtResourceChanged, VisibilityScope: unit.OwnerID, Payload: map[string]any{
 			"entity_id": unit.ID, "items": output, "job_kind": job.Kind,
 			"completed_batches": job.CompletedBatches, "blocked": "inventory_full",
-			"inventory_slots_used": player.InventorySlotsUsed(), "inventory_slots_total": slots,
+			"inventory_slots_used": record.Inventory.SlotsUsed(), "inventory_slots_total": slots,
 		}}}
 	}
 	// 入包成功才结算本批：消耗矿点余量、扣减预留原料。

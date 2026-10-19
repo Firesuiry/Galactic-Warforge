@@ -23,11 +23,6 @@ players:
           quantity: 22
         - item_id: stone_brick
           quantity: 3
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
   - player_id: "p2"
     key: "key_player_2"
     team_id: "team-2"
@@ -46,15 +41,9 @@ players:
           quantity: 22
         - item_id: stone_brick
           quantity: 3
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
 
 server:
   port: 18080
-  rate_limit: 20
   event_history_limit: 2000
   snapshot_max_events: 200
   alert_history_limit: 1000

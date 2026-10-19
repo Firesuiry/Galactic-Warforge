@@ -106,6 +106,10 @@ type MechaSpec struct {
 	// 取 4 时约 0.25 点/tick，只有行军耗能（1 点/格、0.5 格/tick）的一半左右：
 	// 长途行军不用反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。
 	EnergyRegenTicks int `yaml:"energy_regen_ticks,omitempty"`
+	// OperateRange 是机甲的作业半径（格）：建造/取放/装卸的远程判定。
+	OperateRange int `yaml:"operate_range"`
+	// ConcurrentTasks 是每台机甲同时施工的任务数上限。
+	ConcurrentTasks int `yaml:"concurrent_tasks"`
 }
 
 // UnitDefinition 世界单位定义（units.yaml 的一个条目）：战斗数值、造价与对外目录信息。
@@ -151,6 +155,22 @@ func ExecutorRespawnTicks() int64 { return unitDefinitions[UnitTypeExecutor].Mec
 
 // MechaEnergyRegenTicks 执行体机甲的被动回能间隔（units.yaml executor.mecha.energy_regen_ticks）。
 func MechaEnergyRegenTicks() int { return unitDefinitions[UnitTypeExecutor].Mecha.EnergyRegenTicks }
+
+// ExecutorOperateRange 执行体机甲的作业半径（units.yaml executor.mecha.operate_range）。
+func ExecutorOperateRange() int {
+	if spec := unitDefinitions[UnitTypeExecutor].Mecha; spec != nil && spec.OperateRange > 0 {
+		return spec.OperateRange
+	}
+	return 18
+}
+
+// ExecutorConcurrentTasks 每台执行体机甲同时施工的任务数（units.yaml executor.mecha.concurrent_tasks）。
+func ExecutorConcurrentTasks() int {
+	if spec := unitDefinitions[UnitTypeExecutor].Mecha; spec != nil && spec.ConcurrentTasks > 0 {
+		return spec.ConcurrentTasks
+	}
+	return 2
+}
 
 // unitStatsFromDefinition 由单位定义生成出厂状态。
 func unitStatsFromDefinition(def UnitDefinition) Unit {

@@ -412,8 +412,8 @@ func (gd *GameData) Validate() error {
 		}
 	}
 	for _, u := range gd.Units.Units {
-		if u.Mecha != nil && (u.Mecha.MaxEnergy <= 0 || u.Mecha.InventorySlots <= 0 || u.Mecha.RespawnTicks <= 0) {
-			errs.addf(GameDataUnitsFile, "unit %s mecha needs positive max_energy and inventory_slots", u.ID)
+		if u.Mecha != nil && (u.Mecha.MaxEnergy <= 0 || u.Mecha.InventorySlots <= 0 || u.Mecha.RespawnTicks <= 0 || u.Mecha.OperateRange <= 0 || u.Mecha.ConcurrentTasks <= 0) {
+			errs.addf(GameDataUnitsFile, "unit %s mecha needs positive max_energy, inventory_slots, respawn_ticks, operate_range and concurrent_tasks", u.ID)
 		}
 		if u.ID == UnitTypeExecutor && u.Mecha == nil {
 			errs.addf(GameDataUnitsFile, "unit executor must define mecha")

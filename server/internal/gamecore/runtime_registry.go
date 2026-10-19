@@ -37,7 +37,6 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 			ps.Bot = &model.BotRuntimeState{}
 		}
 		ps.SetPermissions(p.Permissions)
-		applyPlayerBootstrap(ps, p.Bootstrap)
 		players[p.PlayerID] = ps
 	}
 	return players
@@ -126,7 +125,11 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)
-		ps.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState(execID, p.Executor.BuildEfficiency, p.Executor.OperateRange, p.Executor.ConcurrentTasks, p.Executor.ResearchBoost))
+		// 开局机甲：Operator = PlayerID（人类 GUI / 未设代理名的 CLI 直接用玩家身份发令），
+		// bootstrap 物资进它的背包。
+		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID, Operator: p.PlayerID}
+		ps.EnsureMechas()[execID] = record
+		applyPlayerBootstrap(ps, record, p.Bootstrap)
 	}
 }
 
@@ -186,15 +189,7 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 // spawnMineDistance is the max surface graph distance allowed between a spawn and
 // the nearest resource node, leaving room for the executor's adjacent tile.
 func spawnMineDistance(players []config.PlayerConfig) int {
-	operateRange := 0
-	for _, p := range players {
-		if p.Executor.OperateRange <= 0 {
-			continue
-		}
-		if operateRange == 0 || p.Executor.OperateRange < operateRange {
-			operateRange = p.Executor.OperateRange
-		}
-	}
+	operateRange := model.ExecutorOperateRange()
 	if operateRange <= 0 {
 		operateRange = 18
 	}

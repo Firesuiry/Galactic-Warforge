@@ -11,7 +11,7 @@ import (
 )
 
 // Resources holds player resource counts. 第 16 轮起矿物不再是玩家级货币：
-// 一切消耗都是实物（PlayerState.Inventory）。Energy 只保留为电网结余的只读展示
+// 一切消耗都是实物（MechaRecord.Inventory）。Energy 只保留为电网结余的只读展示
 // （power_settlement 每 tick 写入），不再参与建造/升级/发射的扣费。
 type Resources struct {
 	Energy int `json:"energy"`
@@ -19,26 +19,23 @@ type Resources struct {
 
 // PlayerState holds per-player game state
 type PlayerState struct {
-	PlayerID  string        `json:"player_id"`
-	TeamID    string        `json:"team_id"`
-	Role      string        `json:"role"`
-	Resources Resources     `json:"resources"`
-	Inventory ItemInventory `json:"inventory,omitempty"`
-	// InventorySlots 是背包格数上限（DSP 口径：按格计，每格可堆叠该物品的
-	// stack_limit 件）。0 = 不限（旧存档/测试世界）。由 SyncMechaCapabilities
-	// 从执行体的 inventory_slots 写入；读档时快照恢复的原值即为准。
-	InventorySlots int      `json:"inventory_slots,omitempty"`
-	IsAlive        bool     `json:"is_alive"`
-	Permissions    []string `json:"permissions,omitempty"`
+	PlayerID    string    `json:"player_id"`
+	TeamID      string    `json:"team_id"`
+	Role        string    `json:"role"`
+	Resources   Resources `json:"resources"`
+	IsAlive     bool      `json:"is_alive"`
+	Permissions []string  `json:"permissions,omitempty"`
 	// FocusPlanetID 是该玩家的视图焦点/默认落点行星（F4）：未显式指定行星的
 	// 命令在此行星结算；switch_active_planet 只改这个字段，不再影响全局模拟。
-	FocusPlanetID   string                    `json:"focus_planet_id,omitempty"`
-	Executors       map[string]*ExecutorState `json:"executors,omitempty"`
-	Tech            *PlayerTechState          `json:"tech,omitempty"`
-	Stats           *PlayerStats              `json:"stats,omitempty"`
-	WarBlueprints   map[string]*WarBlueprint  `json:"war_blueprints,omitempty"`
-	WarIndustry     *WarIndustryState         `json:"war_industry,omitempty"`
-	WarCoordination *WarCoordinationState     `json:"war_coordination,omitempty"`
+	FocusPlanetID string `json:"focus_planet_id,omitempty"`
+	// Mechas 是本玩家的机甲档案（key = 机甲单位 ID）。背包挂在档案上，机甲
+	// 阵亡后单位被移出 ws.Units，背包要保留到复活。
+	Mechas          map[string]*MechaRecord  `json:"mechas,omitempty"`
+	Tech            *PlayerTechState         `json:"tech,omitempty"`
+	Stats           *PlayerStats             `json:"stats,omitempty"`
+	WarBlueprints   map[string]*WarBlueprint `json:"war_blueprints,omitempty"`
+	WarIndustry     *WarIndustryState        `json:"war_industry,omitempty"`
+	WarCoordination *WarCoordinationState    `json:"war_coordination,omitempty"`
 	// Bot 是服务端 bot 玩家的运营状态（人类玩家为 nil）。随存档持久化：
 	// 波次冷却以它为锚点，读档必须延续而不是从零重算。
 	Bot *BotRuntimeState `json:"bot,omitempty"`

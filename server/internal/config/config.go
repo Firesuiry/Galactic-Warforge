@@ -7,14 +7,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ExecutorConfig defines executor capability defaults per player.
-type ExecutorConfig struct {
-	BuildEfficiency float64 `yaml:"build_efficiency"`
-	OperateRange    int     `yaml:"operate_range"`
-	ConcurrentTasks int     `yaml:"concurrent_tasks"`
-	ResearchBoost   float64 `yaml:"research_boost"`
-}
-
 type BootstrapItemConfig struct {
 	ItemID   string `yaml:"item_id" json:"item_id"`
 	Quantity int    `yaml:"quantity" json:"quantity"`
@@ -86,7 +78,6 @@ type PlayerConfig struct {
 	TeamID      string                `yaml:"team_id"`
 	Role        string                `yaml:"role"`
 	Permissions []string              `yaml:"permissions"`
-	Executor    ExecutorConfig        `yaml:"executor"`
 	Bootstrap   PlayerBootstrapConfig `yaml:"bootstrap"`
 	// Bot 遭遇战 AI（A1）：easy|normal|hard，空为人类玩家。
 	// bot 走与玩家相同的命令接口，确定性可重放。
@@ -124,7 +115,6 @@ type BattlefieldConfig struct {
 // ServerConfig holds HTTP server settings
 type ServerConfig struct {
 	Port              int    `yaml:"port"`
-	RateLimit         int    `yaml:"rate_limit"`          // commands per second per player
 	EventHistoryLimit int    `yaml:"event_history_limit"` // max events kept for snapshot queries
 	SnapshotMaxEvents int    `yaml:"snapshot_max_events"` // max events returned by snapshot endpoint
 	AlertHistoryLimit int    `yaml:"alert_history_limit"` // max production alerts kept for snapshot queries
@@ -223,9 +213,6 @@ func ApplyDefaults(cfg *Config) error {
 	}
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
-	}
-	if cfg.Server.RateLimit == 0 {
-		cfg.Server.RateLimit = 10
 	}
 	if cfg.Server.EventHistoryLimit == 0 {
 		cfg.Server.EventHistoryLimit = 2000
@@ -336,16 +323,6 @@ func ApplyDefaults(cfg *Config) error {
 		}
 		if len(p.Permissions) == 0 {
 			p.Permissions = DefaultPermissionsForRole(p.Role)
-		}
-		if p.Executor.BuildEfficiency == 0 {
-			p.Executor.BuildEfficiency = 1.0
-		}
-		if p.Executor.OperateRange == 0 {
-			// 细分网格：距离类数值 ×3（6→18），与 config*.yaml 的 operate_range 一致。
-			p.Executor.OperateRange = 18
-		}
-		if p.Executor.ConcurrentTasks == 0 {
-			p.Executor.ConcurrentTasks = 2
 		}
 	}
 

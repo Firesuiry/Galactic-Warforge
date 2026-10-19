@@ -138,7 +138,7 @@ func destroyEnemyForce(ws *model.WorldState, force *model.EnemyForce, strengthBe
 	if force.Type == model.EnemyForceTypeHive {
 		drops = amplifyNestLoot(drops, level)
 	}
-	grants := grantDarkFogLoot(ws, killerOwnerID, storage, drops)
+	grants := grantDarkFogLoot(ws, killerID, killerOwnerID, storage, drops)
 
 	var events []*model.GameEvent
 	events = append(events, darkFogLootEvents(ws, force, killerID, killerOwnerID, grants)...)
@@ -195,9 +195,9 @@ func destroyEnemyForce(ws *model.WorldState, force *model.EnemyForce, strengthBe
 // grantDarkFogLoot 把击杀掉落分配给击杀者：
 //  1. 击杀者是炮塔时优先进入炮塔自身存储（行星侧库存）；满仓时保留已有物品，
 //     溢出部分继续向下转移；
-//  2. 放不下的（或击杀者是战斗单位/机甲时的全部）进入击杀者的机甲背包（玩家库存）；
-//  3. 击杀者玩家已不存在时，剩余部分丢弃。
-func grantDarkFogLoot(ws *model.WorldState, playerID string, storage *model.StorageState, drops []model.ItemAmount) []darkFogLootGrant {
+//  2. 放不下的（或击杀者是战斗单位/机甲时的全部）进入击杀者机甲的背包；
+//  3. 击杀者不是机甲、玩家不存在或没有机甲档案时，剩余部分丢弃。
+func grantDarkFogLoot(ws *model.WorldState, killerID, playerID string, storage *model.StorageState, drops []model.ItemAmount) []darkFogLootGrant {
 	grants := make([]darkFogLootGrant, 0, len(drops))
 	for _, drop := range drops {
 		grant := darkFogLootGrant{Drop: drop}
@@ -210,10 +210,12 @@ func grantDarkFogLoot(ws *model.WorldState, playerID string, storage *model.Stor
 		}
 		if remaining > 0 {
 			if player := ws.Players[playerID]; player != nil {
-				// 背包（机甲背包）满时放不下的战利品丢弃，绝不超上限。
-				carried := player.AddItems([]model.ItemAmount{{ItemID: drop.ItemID, Quantity: remaining}}, mechaInventorySlots(ws, nil, player))
-				grant.CarriedQty = carried
-				remaining -= carried
+				if record := player.MechaByUnitID(killerID); record != nil {
+					// 击杀者机甲背包满时放不下的战利品丢弃，绝不超上限。
+					carried := record.AddItems([]model.ItemAmount{{ItemID: drop.ItemID, Quantity: remaining}}, mechaInventorySlots(player))
+					grant.CarriedQty = carried
+					remaining -= carried
+				}
 			}
 		}
 		grant.DiscardedQty = remaining

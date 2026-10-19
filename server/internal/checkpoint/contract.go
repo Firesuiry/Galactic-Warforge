@@ -30,7 +30,7 @@ import "siliconworld/internal/model"
 //	dark_fog_calmed     {tick}          自 tick 起该玩家出现过 dark_fog_calmed（冷静期到期恢复中立）
 //	enemy_attack_seen   {bool}          该玩家是否已被敌方玩家造成过伤害/损失
 //
-// 「玩家可用物资」口径：PlayerState.Inventory（就是机甲背包——采矿、手搓、战利品都落这里，
+// 「玩家可用物资」口径：所有机甲背包之和（采矿、手搓、战利品都落这里，
 // 也是 transfer / build 的扣料来源）。第 16 轮去掉资金维度后建造/升级只扣背包物品，
 // 玩家级资源池只剩 resources.energy（电网结余的只读展示）。
 

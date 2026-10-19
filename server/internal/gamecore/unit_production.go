@@ -98,6 +98,9 @@ func settleUnitProduction(ws *model.WorldState) ([]*model.GameEvent, []alertReso
 		u.OwnerID = b.OwnerID
 		u.Position = *pos
 		ws.Units[u.ID] = &u
+		if u.Type == model.UnitTypeExecutor {
+			registerProducedMecha(ws, b, &u)
+		}
 		key := model.TileKey(pos.X, pos.Y)
 		ws.TileUnits[key] = append(ws.TileUnits[key], u.ID)
 		if b.RallyPoint != nil {
@@ -115,6 +118,17 @@ func settleUnitProduction(ws *model.WorldState) ([]*model.GameEvent, []alertReso
 		events = append(events, &model.GameEvent{EventType: model.EvtEntityCreated, VisibilityScope: b.OwnerID, Payload: map[string]any{"entity_type": "unit", "entity_id": u.ID, "unit": u.Clone(), "planet_id": ws.PlanetID}}, unitProductionEvent(b))
 	}
 	return events, resolved
+}
+
+// registerProducedMecha 出厂登记机甲档案：空闲、空背包、满能量（UnitStats 已给
+// 满能量机甲状态），所在星球 = 出厂星球。
+func registerProducedMecha(ws *model.WorldState, b *model.Building, unit *model.Unit) {
+	player := ws.Players[b.OwnerID]
+	if player == nil || unit == nil {
+		return
+	}
+	model.SyncMechaCapabilities(unit, player)
+	player.EnsureMechas()[unit.ID] = &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID}
 }
 
 // unitSpawnBlockedEvents 出生点被占满时的一条中文告警：同一建筑持续堵塞时

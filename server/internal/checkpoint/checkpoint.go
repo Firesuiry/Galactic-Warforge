@@ -20,7 +20,7 @@ import (
 )
 
 // FormatVersion 是 manifest.json 的结构版本。
-const FormatVersion = 1
+const FormatVersion = 2
 
 // KindRegression 要求契约全过才允许创建；KindBug 只记录契约结果。
 const (

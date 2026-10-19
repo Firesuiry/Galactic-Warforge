@@ -1,62 +1,140 @@
 package model
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
-// ExecutorState captures executor capability parameters and its unit reference.
-type ExecutorState struct {
-	RespawnAtTick   int64   `json:"respawn_at_tick,omitempty"`
-	UnitID          string  `json:"unit_id"`
-	BuildEfficiency float64 `json:"build_efficiency"`
-	OperateRange    int     `json:"operate_range"`
-	ConcurrentTasks int     `json:"concurrent_tasks"`
-	ResearchBoost   float64 `json:"research_boost"`
+// MechaRecord is the persistent per-mecha dossier: one record per executor unit,
+// owned by a player. The backpack lives here (not on Unit) so it survives death
+// and is restored with the respawned unit. Operator binds an issuer_id to this
+// mecha; "" means idle.
+type MechaRecord struct {
+	UnitID        string        `json:"unit_id"`
+	PlanetID      string        `json:"planet_id"`
+	Operator      string        `json:"operator,omitempty"`
+	Inventory     ItemInventory `json:"inventory,omitempty"`
+	RespawnAtTick int64         `json:"respawn_at_tick,omitempty"`
 }
 
-// NewExecutorState builds a normalized executor state.
-func NewExecutorState(unitID string, buildEfficiency float64, operateRange, concurrentTasks int, researchBoost float64) *ExecutorState {
-	if buildEfficiency <= 0 {
-		buildEfficiency = 1.0
-	}
-	if operateRange < 0 {
-		operateRange = 0
-	}
-	if concurrentTasks <= 0 {
-		concurrentTasks = 1
-	}
-	return &ExecutorState{
-		UnitID:          unitID,
-		BuildEfficiency: buildEfficiency,
-		OperateRange:    operateRange,
-		ConcurrentTasks: concurrentTasks,
-		ResearchBoost:   researchBoost,
-	}
-}
-
-func cloneExecutorState(exec *ExecutorState) *ExecutorState {
-	if exec == nil {
+// Clone returns a deep copy of the record.
+func (m *MechaRecord) Clone() *MechaRecord {
+	if m == nil {
 		return nil
 	}
-	clone := *exec
-	return &clone
+	out := *m
+	out.Inventory = m.Inventory.Clone()
+	return &out
 }
 
-// SetPlanetExecutor registers an executor for a specific planet.
-func (ps *PlayerState) SetPlanetExecutor(planetID string, exec *ExecutorState) {
-	if ps == nil || planetID == "" || exec == nil {
-		return
+// EnsureInventory returns a writable inventory map.
+func (m *MechaRecord) EnsureInventory() ItemInventory {
+	if m == nil {
+		return nil
 	}
-	if ps.Executors == nil {
-		ps.Executors = make(map[string]*ExecutorState)
+	if m.Inventory == nil {
+		m.Inventory = make(ItemInventory)
 	}
-	ps.Executors[planetID] = cloneExecutorState(exec)
+	return m.Inventory
 }
 
-// ExecutorForPlanet returns the executor bound to a planet.
-func (ps *PlayerState) ExecutorForPlanet(planetID string) *ExecutorState {
+// HasItems reports whether the backpack holds the required amounts.
+func (m *MechaRecord) HasItems(cost []ItemAmount) bool {
+	if m == nil {
+		return len(cost) == 0
+	}
+	return m.Inventory.HasItems(cost)
+}
+
+// DeductItems removes item amounts from the backpack if possible.
+func (m *MechaRecord) DeductItems(cost []ItemAmount) bool {
+	if m == nil {
+		return len(cost) == 0
+	}
+	return m.Inventory.DeductItems(cost)
+}
+
+// AddItems adds items to the backpack under the slot limit and returns how many
+// were accepted.
+func (m *MechaRecord) AddItems(items []ItemAmount, slots int) int {
+	if m == nil {
+		return 0
+	}
+	if len(items) == 0 {
+		return 0
+	}
+	m.EnsureInventory()
+	return m.Inventory.AddItems(items, slots)
+}
+
+// EnsureMechas returns a writable mecha registry.
+func (ps *PlayerState) EnsureMechas() map[string]*MechaRecord {
 	if ps == nil {
 		return nil
 	}
-	return ps.Executors[planetID]
+	if ps.Mechas == nil {
+		ps.Mechas = make(map[string]*MechaRecord)
+	}
+	return ps.Mechas
+}
+
+// MechaByUnitID returns the dossier for a mecha unit.
+func (ps *PlayerState) MechaByUnitID(unitID string) *MechaRecord {
+	if ps == nil || unitID == "" {
+		return nil
+	}
+	return ps.Mechas[unitID]
+}
+
+// MechaByOperator returns the mecha bound to an issuer_id.
+func (ps *PlayerState) MechaByOperator(operator string) *MechaRecord {
+	if ps == nil || operator == "" {
+		return nil
+	}
+	for _, id := range sortedMechaIDs(ps.Mechas) {
+		if mecha := ps.Mechas[id]; mecha != nil && mecha.Operator == operator {
+			return mecha
+		}
+	}
+	return nil
+}
+
+// SortedMechas returns every dossier ordered by unit ID (deterministic views).
+func (ps *PlayerState) SortedMechas() []*MechaRecord {
+	if ps == nil {
+		return nil
+	}
+	ids := sortedMechaIDs(ps.Mechas)
+	out := make([]*MechaRecord, 0, len(ids))
+	for _, id := range ids {
+		if mecha := ps.Mechas[id]; mecha != nil {
+			out = append(out, mecha)
+		}
+	}
+	return out
+}
+
+// TotalItems sums one item across every mecha backpack.
+func (ps *PlayerState) TotalItems(itemID string) int {
+	if ps == nil || itemID == "" {
+		return 0
+	}
+	total := 0
+	for _, mecha := range ps.Mechas {
+		if mecha != nil {
+			total += mecha.Inventory[itemID]
+		}
+	}
+	return total
+}
+
+func sortedMechaIDs(mechas map[string]*MechaRecord) []string {
+	ids := make([]string, 0, len(mechas))
+	for id := range mechas {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // SetPermissions normalizes and sets permissions on the player state.
@@ -79,162 +157,6 @@ func (ps *PlayerState) HasPermission(cmdType CommandType) bool {
 	_, ok := ps.permissionSet[strings.ToLower(string(cmdType))]
 	return ok
 }
-
-// EnsureInventory returns a writable inventory map.
-func (ps *PlayerState) EnsureInventory() ItemInventory {
-	if ps == nil {
-		return nil
-	}
-	if ps.Inventory == nil {
-		ps.Inventory = make(ItemInventory)
-	}
-	return ps.Inventory
-}
-
-// HasItems checks whether the player has the required item amounts.
-func (ps *PlayerState) HasItems(cost []ItemAmount) bool {
-	if len(cost) == 0 {
-		return true
-	}
-	if ps == nil || ps.Inventory == nil {
-		return false
-	}
-	for _, item := range cost {
-		if item.Quantity <= 0 {
-			continue
-		}
-		if ps.Inventory[item.ItemID] < item.Quantity {
-			return false
-		}
-	}
-	return true
-}
-
-// DeductItems removes item amounts from inventory if possible.
-func (ps *PlayerState) DeductItems(cost []ItemAmount) bool {
-	if len(cost) == 0 {
-		return true
-	}
-	if !ps.HasItems(cost) {
-		return false
-	}
-	inv := ps.EnsureInventory()
-	for _, item := range cost {
-		if item.Quantity <= 0 {
-			continue
-		}
-		inv[item.ItemID] -= item.Quantity
-		if inv[item.ItemID] <= 0 {
-			delete(inv, item.ItemID)
-		}
-	}
-	return true
-}
-
-// InventoryCount returns how many items the bag holds in total.
-func (ps *PlayerState) InventoryCount() int {
-	if ps == nil {
-		return 0
-	}
-	total := 0
-	for _, qty := range ps.Inventory {
-		total += qty
-	}
-	return total
-}
-
-// InventorySlotsUsed 返回背包占用的格数：每种物品占 ceil(数量/该物品的单格上限)
-// 格，再把各物品相加（DSP 机甲背包口径：格子数 + 每格按物品的堆叠上限）。
-// 单格上限取 items.yaml 的 stack_limit；目录里查不到的物品按 1 格算（宁可多占）。
-func (ps *PlayerState) InventorySlotsUsed() int {
-	if ps == nil {
-		return 0
-	}
-	slots := 0
-	for id, qty := range ps.Inventory {
-		if qty <= 0 {
-			continue
-		}
-		slots += ItemSlots(id, qty)
-	}
-	return slots
-}
-
-// ItemSlots 返回 qty 件该物品占用的背包格数（向上取整到 stack_limit）。
-func ItemSlots(itemID string, qty int) int {
-	if qty <= 0 {
-		return 0
-	}
-	def, ok := Item(itemID)
-	if !ok || def.StackLimit <= 0 {
-		return qty
-	}
-	return (qty + def.StackLimit - 1) / def.StackLimit
-}
-
-// AddItems adds item amounts to inventory and returns how many were accepted.
-// slots > 0 是背包格数上限（本行星执行体的 inventory_slots）：按每件物品的
-// stack_limit 折算占格，装不下的部分直接丢弃，任何调用方都不可能把背包顶到
-// 上限之上（试玩 1014：手搓产出无视上限，背包 200/200 时搓出 1 个磁铁变成
-// 201/200）。slots <= 0 表示不限。
-func (ps *PlayerState) AddItems(items []ItemAmount, slots int) int {
-	if len(items) == 0 || ps == nil {
-		return 0
-	}
-	inv := ps.EnsureInventory()
-	accepted := 0
-	for _, item := range items {
-		if item.Quantity <= 0 {
-			continue
-		}
-		add := item.Quantity
-		if slots > 0 {
-			add = min(add, ps.InventoryFreeSlotsFor(item.ItemID, slots))
-			if add <= 0 {
-				continue
-			}
-		}
-		inv[item.ItemID] += add
-		accepted += add
-	}
-	return accepted
-}
-
-// InventoryFreeSlotsFor 返回在 slots 格上限下还能再装下多少件 itemID：
-// 已有该物品时先用满当前那格剩余的堆叠空间，再按整格上限算剩余格数。
-// slots <= 0 表示不限，返回 maxInt。
-func (ps *PlayerState) InventoryFreeSlotsFor(itemID string, slots int) int {
-	if slots <= 0 {
-		return maxInt
-	}
-	free := slots - ps.InventorySlotsUsed()
-	if free < 0 {
-		free = 0
-	}
-	have := 0
-	if ps != nil {
-		have = ps.Inventory[itemID]
-	}
-	room := 0
-	if def, ok := Item(itemID); ok && def.StackLimit > 0 && have > 0 {
-		room = def.StackLimit - have%def.StackLimit
-		if room == def.StackLimit {
-			room = 0
-		}
-	}
-	return room + free*stackSize(itemID)
-}
-
-// ItemStackSize 返回该物品单格可堆叠的数量（items.yaml 的 stack_limit；
-// 目录缺失时按 1）。
-func ItemStackSize(itemID string) int {
-	if def, ok := Item(itemID); ok && def.StackLimit > 0 {
-		return def.StackLimit
-	}
-	return 1
-}
-
-func stackSize(itemID string) int { return ItemStackSize(itemID) }
 
 // EnsureWarBlueprints returns a writable blueprint map.
 func (ps *PlayerState) EnsureWarBlueprints() map[string]*WarBlueprint {

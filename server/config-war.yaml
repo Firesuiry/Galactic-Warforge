@@ -11,11 +11,6 @@ players:
     team_id: "team-1"
     role: "commander"
     permissions: ["*"]
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
     # 开局物资包（第 16 轮：去掉资金维度，原 minerals/energy 折算成实物料）。
     # 战争局要能直接开打与维持补给线，故给了整套军用中间件。
     bootstrap:
@@ -84,11 +79,6 @@ players:
     team_id: "team-2"
     role: "commander"
     permissions: ["*"]
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
     # 开局物资包（第 16 轮：去掉资金维度，原 minerals/energy 折算成实物料）。
     # 战争局要能直接开打与维持补给线，故给了整套军用中间件。
     bootstrap:
@@ -337,7 +327,6 @@ scenario_bootstrap:
 
 server:
   port: 18080
-  rate_limit: 20
   event_history_limit: 2000
   snapshot_max_events: 200
   alert_history_limit: 1000

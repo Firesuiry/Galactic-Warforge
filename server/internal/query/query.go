@@ -36,18 +36,84 @@ type StateSummary struct {
 }
 
 // SummaryPlayer is a player entry of /state/summary: the player state plus the
-// executor bound to the summarized planet.
+// caller's mecha list (only for the requesting player).
 type SummaryPlayer struct {
 	*model.PlayerState
-	Executor *model.ExecutorState `json:"executor,omitempty"`
-	// InventorySlotsUsed / InventorySlotsTotal 是背包按格计的占用与上限
-	// （DSP 口径：每格按物品 stack_limit 堆叠）。仅自己可见；敌方玩家为 0。
-	InventorySlotsUsed  int `json:"inventory_slots_used"`
-	InventorySlotsTotal int `json:"inventory_slots_total"`
+	// Mechas 是请求者自己的机甲档案视图（按 unit_id 排序）；敌方玩家不下发。
+	Mechas []MechaView `json:"mechas,omitempty"`
+}
+
+// MechaView 是 summary / agent-briefing 里的机甲卡片。
+type MechaView struct {
+	UnitID              string              `json:"unit_id"`
+	PlanetID            string              `json:"planet_id"`
+	Operator            string              `json:"operator"`
+	Alive               bool                `json:"alive"`
+	RespawnAtTick       int64               `json:"respawn_at_tick"`
+	Position            *model.Position     `json:"position,omitempty"`
+	Inventory           model.ItemInventory `json:"inventory,omitempty"`
+	InventorySlotsUsed  int                 `json:"inventory_slots_used"`
+	InventorySlotsTotal int                 `json:"inventory_slots_total"`
+	OperateRange        int                 `json:"operate_range"`
+	ConcurrentTasks     int                 `json:"concurrent_tasks"`
+	ConstructionActive  int                 `json:"construction_active"`
+	ConstructionPending int                 `json:"construction_pending"`
+}
+
+// MechaViews 汇总玩家所有机甲的视图：存活状态、位置、背包与施工占用。
+func MechaViews(player *model.PlayerState, worlds map[string]*model.WorldState) []MechaView {
+	if player == nil {
+		return nil
+	}
+	slots := model.MechaInventorySlots(player)
+	active := make(map[string]int)
+	pending := make(map[string]int)
+	for _, ws := range worlds {
+		if ws == nil || ws.Construction == nil {
+			continue
+		}
+		for _, task := range ws.Construction.Tasks {
+			if task == nil || task.PlayerID != player.PlayerID || task.MechaID == "" {
+				continue
+			}
+			switch task.State {
+			case model.ConstructionInProgress:
+				active[task.MechaID]++
+			case model.ConstructionPending:
+				pending[task.MechaID]++
+			}
+		}
+	}
+	views := make([]MechaView, 0, len(player.Mechas))
+	for _, record := range player.SortedMechas() {
+		view := MechaView{
+			UnitID:              record.UnitID,
+			PlanetID:            record.PlanetID,
+			Operator:            record.Operator,
+			RespawnAtTick:       record.RespawnAtTick,
+			Inventory:           record.Inventory.Clone(),
+			InventorySlotsUsed:  record.Inventory.SlotsUsed(),
+			InventorySlotsTotal: slots,
+			OperateRange:        model.ExecutorOperateRange(),
+			ConcurrentTasks:     model.ExecutorConcurrentTasks(),
+			ConstructionActive:  active[record.UnitID],
+			ConstructionPending: pending[record.UnitID],
+		}
+		ws := worlds[record.PlanetID]
+		if ws != nil {
+			if unit := ws.Units[record.UnitID]; unit != nil && unit.HP > 0 {
+				view.Alive = true
+				pos := unit.Position
+				view.Position = &pos
+			}
+		}
+		views = append(views, view)
+	}
+	return views
 }
 
 // Summary returns a high-level view of the world (no fog clipping for own resources).
-func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.VictoryState) *StateSummary {
+func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.VictoryState, worlds map[string]*model.WorldState) *StateSummary {
 	ws.RLock()
 	defer ws.RUnlock()
 
@@ -56,19 +122,11 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.Vi
 	for pid, ps := range ws.Players {
 		if pid == playerID {
 			cp := *ps
-			cp.Inventory = ps.Inventory.Clone()
-			total := cp.InventorySlots
-			if total <= 0 {
-				// 测试世界/旧档没有写 PlayerState.InventorySlots：回退到本行星执行体。
-				if unit := executorUnitFor(ws, ps); unit != nil && unit.Mecha != nil {
-					total = unit.Mecha.InventorySlots
-				}
-			}
+			// 原始 mechas map 不下发：只给排序后的视图。
+			cp.Mechas = nil
 			players[pid] = &SummaryPlayer{
-				PlayerState:         &cp,
-				Executor:            ps.ExecutorForPlanet(ws.PlanetID),
-				InventorySlotsUsed:  cp.InventorySlotsUsed(),
-				InventorySlotsTotal: total,
+				PlayerState: &cp,
+				Mechas:      MechaViews(ps, worlds),
 			}
 		} else {
 			// Expose non-sensitive identity fields
@@ -1098,16 +1156,4 @@ func (ql *Layer) PlanetScene(ws *model.WorldState, playerID, planetID string, re
 		}
 	}
 	return view, true
-}
-
-// executorUnitFor 返回该玩家在摘要行星上的执行体单位（没有时返回 nil）。
-func executorUnitFor(ws *model.WorldState, ps *model.PlayerState) *model.Unit {
-	if ws == nil || ps == nil {
-		return nil
-	}
-	exec := ps.ExecutorForPlanet(ws.PlanetID)
-	if exec == nil {
-		return nil
-	}
-	return ws.Units[exec.UnitID]
 }

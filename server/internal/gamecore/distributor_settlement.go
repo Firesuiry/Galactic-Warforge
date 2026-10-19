@@ -108,21 +108,57 @@ func distributorCanDispatch(ws *model.WorldState, b *model.Building) bool {
 	allocation, ok := snapshot.Allocations.Buildings[b.ID]
 	return ok && allocation.Allocated > 0 && allocation.Ratio > 0
 }
-func distributorMecha(ws *model.WorldState, owner string) *model.Unit {
+
+// distributorMecha 返回本星球上该玩家的一台存活机甲；targetID 非空时只认那台
+// （配送器出发时记下目标机甲，送货/回收只针对它）。
+func distributorMecha(ws *model.WorldState, owner, targetID string) *model.Unit {
 	p := ws.Players[owner]
 	if p == nil {
 		return nil
 	}
-	executor := p.ExecutorForPlanet(ws.PlanetID)
-	if executor == nil {
-		return nil
+	ids := make([]string, 0, len(p.Mechas))
+	if targetID != "" {
+		ids = append(ids, targetID)
+	} else {
+		for _, record := range p.SortedMechas() {
+			if record != nil && record.PlanetID == ws.PlanetID {
+				ids = append(ids, record.UnitID)
+			}
+		}
 	}
-	u := ws.Units[executor.UnitID]
-	if u == nil || u.OwnerID != owner || u.Type != model.UnitTypeExecutor || u.Mecha == nil || u.HP <= 0 {
-		return nil
+	for _, id := range ids {
+		u := ws.Units[id]
+		if u == nil || u.OwnerID != owner || u.Type != model.UnitTypeExecutor || u.Mecha == nil || u.HP <= 0 {
+			continue
+		}
+		return u
 	}
-	return u
+	return nil
 }
+
+// distributorMechasInRange 返回配送范围内该玩家所有存活机甲（按单位 ID 排序）。
+func distributorMechasInRange(ws *model.WorldState, owner string, home model.Position, effectiveRange int) []*model.Unit {
+	player := ws.Players[owner]
+	if player == nil {
+		return nil
+	}
+	var out []*model.Unit
+	for _, record := range player.SortedMechas() {
+		if record == nil || record.PlanetID != ws.PlanetID {
+			continue
+		}
+		unit := ws.Units[record.UnitID]
+		if unit == nil || unit.HP <= 0 || unit.Mecha == nil || unit.Mecha.LogisticsRequests == nil {
+			continue
+		}
+		if ws.SurfaceDistance(home, unit.Position) > effectiveRange {
+			continue
+		}
+		out = append(out, unit)
+	}
+	return out
+}
+
 func distributorSupply(ws *model.WorldState, b *model.Building, item, exclude string) int {
 	host := model.DistributorHost(ws, b)
 	if host == nil || b.Distributor.ItemID != item || b.Distributor.Mode != model.LogisticsStationModeSupply {
@@ -209,20 +245,28 @@ func dispatchDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState) 
 	}
 	effectiveRange := distributorEffectiveRange(ws, home)
 	host := model.DistributorHost(ws, home)
-	if unit := distributorMecha(ws, bot.OwnerID); unit != nil && ws.SurfaceDistance(home.Position, unit.Position) <= effectiveRange {
-		if request, ok := unit.Mecha.LogisticsRequests[item]; ok {
-			count := ws.Players[bot.OwnerID].Inventory[item]
-			if s.PlayerDeliveryEnabled && count < request.Min {
-				qty := min(bot.Capacity, max(0, request.Max-count-distributorIncoming(ws, "mecha", unit.ID, item, "")), max(0, min(host.Storage.OutputQuantity(item), host.Storage.ItemQuantity(item)-s.LocalStorage)))
-				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "delivery", item, qty, 2*effectiveRange) {
-					return
-				}
+	// 配送范围内每台有请求的本方机甲都会被服务；出发时记下目标机甲 ID，
+	// 送货/回收只针对它的背包与请求。
+	for _, unit := range distributorMechasInRange(ws, bot.OwnerID, home.Position, effectiveRange) {
+		request, ok := unit.Mecha.LogisticsRequests[item]
+		if !ok {
+			continue
+		}
+		record := ws.Players[bot.OwnerID].MechaByUnitID(unit.ID)
+		if record == nil {
+			continue
+		}
+		count := record.Inventory[item]
+		if s.PlayerDeliveryEnabled && count < request.Min {
+			qty := min(bot.Capacity, max(0, request.Max-count-distributorIncoming(ws, "mecha", unit.ID, item, "")), max(0, min(host.Storage.OutputQuantity(item), host.Storage.ItemQuantity(item)-s.LocalStorage)))
+			if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "delivery", item, qty, 2*effectiveRange) {
+				return
 			}
-			if s.PlayerCollectionEnabled && count > request.Max {
-				qty := min(bot.Capacity, max(0, count-request.Max-distributorPickupReservations(ws, "mecha", unit.ID, item, "")), distributorFreeSpace(ws, home, item, ""))
-				if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "pickup", item, qty, 2*effectiveRange) {
-					return
-				}
+		}
+		if s.PlayerCollectionEnabled && count > request.Max {
+			qty := min(bot.Capacity, max(0, count-request.Max-distributorPickupReservations(ws, "mecha", unit.ID, item, "")), distributorFreeSpace(ws, home, item, ""))
+			if startDistributorFlight(ws, bot, home, "mecha", unit.ID, unit.Position, "pickup", item, qty, 2*effectiveRange) {
+				return
 			}
 		}
 	}
@@ -285,7 +329,7 @@ func distributorBotTarget(ws *model.WorldState, bot *model.LogisticsBotState) (m
 		return model.Position{}, false
 	}
 	if bot.TargetKind == "mecha" {
-		unit := distributorMecha(ws, bot.OwnerID)
+		unit := distributorMecha(ws, bot.OwnerID, bot.TargetID)
 		if unit == nil || unit.ID != bot.TargetID {
 			return model.Position{}, false
 		}
@@ -350,8 +394,13 @@ func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, ho
 		return
 	}
 	if bot.TargetKind == "mecha" {
-		unit := distributorMecha(ws, bot.OwnerID)
+		unit := distributorMecha(ws, bot.OwnerID, bot.TargetID)
 		p := ws.Players[bot.OwnerID]
+		record := p.MechaByUnitID(unit.ID)
+		if record == nil {
+			returnDistributorBot(bot, home, "target_unavailable")
+			return
+		}
 		request := model.MechaLogisticsRequest{}
 		if unit.Mecha.LogisticsRequests != nil {
 			request = unit.Mecha.LogisticsRequests[item]
@@ -359,17 +408,17 @@ func arriveDistributorBot(ws *model.WorldState, bot *model.LogisticsBotState, ho
 		if bot.TripKind == "delivery" {
 			// 机甲背包上限优先：请求 Max 之外还要受 inventory_slots 约束，
 			// 否则配送机器人会把背包顶到上限之上。
-			qty := min(bot.Cargo[item], max(0, request.Max-p.Inventory[item]))
-			slots := mechaInventorySlots(ws, unit, p)
-			qty = min(qty, mechaInventoryFree(p, slots, item, qty))
+			qty := min(bot.Cargo[item], max(0, request.Max-record.Inventory[item]))
+			slots := mechaInventorySlots(p)
+			qty = min(qty, mechaInventoryFree(record, slots, item, qty))
 			if qty > 0 {
-				p.AddItems([]model.ItemAmount{{ItemID: item, Quantity: qty}}, slots)
+				record.AddItems([]model.ItemAmount{{ItemID: item, Quantity: qty}}, slots)
 				bot.Unload(item, qty)
 			}
 		} else {
-			qty := min(bot.PickupQuantity, max(0, p.Inventory[item]-request.Max), distributorFreeSpace(ws, home, item, bot.ID))
+			qty := min(bot.PickupQuantity, max(0, record.Inventory[item]-request.Max), distributorFreeSpace(ws, home, item, bot.ID))
 			if qty > 0 {
-				p.DeductItems([]model.ItemAmount{{ItemID: item, Quantity: qty}})
+				record.DeductItems([]model.ItemAmount{{ItemID: item, Quantity: qty}})
 				bot.Load(item, qty)
 			}
 		}

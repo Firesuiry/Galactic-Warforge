@@ -16,11 +16,8 @@ type mechaLogisticsRequestPayload struct {
 	Max *int `json:"max" payload:"required"`
 }
 
-func (gc *GameCore) execConfigureMechaLogistics(ws *model.WorldState, playerID string, cmd model.Command, p configureMechaLogisticsPayload) (model.CommandResult, []*model.GameEvent) {
-	unit, _, failure := mechaJobTarget(ws, playerID, cmd)
-	if unit == nil {
-		return failure, nil
-	}
+func (gc *GameCore) execConfigureMechaLogistics(ws *model.WorldState, playerID string, cmd model.Command, p configureMechaLogisticsPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+	unit := mecha.Unit
 	fail := func(message string) (model.CommandResult, []*model.GameEvent) {
 		return mechaJobFailed(model.CodeValidationFailed, message)
 	}
@@ -49,7 +46,7 @@ type transferItemPayload struct {
 	Direction *string `json:"direction"`
 }
 
-func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command, p transferItemPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd model.Command, p transferItemPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	buildingID, itemID, quantity := p.BuildingID, p.ItemID, p.Quantity
@@ -87,6 +84,10 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		res.Message = "玩家不存在或已阵亡"
 		return res, nil
 	}
+	record := mecha.Record
+	if record == nil {
+		return mechaJobFailed(model.CodeExecutorUnavailable, "机甲不可用")
+	}
 	direction := "to_building"
 	if p.Direction != nil {
 		direction = *p.Direction
@@ -94,17 +95,14 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			return mechaJobFailed(model.CodeValidationFailed, "direction 必须为 to_building 或 to_player")
 		}
 	}
+	if rangeRes := gc.requireBuildRange(ws, playerID, mecha, building.Position); rangeRes != nil {
+		return *rangeRes, nil
+	}
 	if direction == "to_player" {
 		if building.Storage == nil {
 			return mechaJobFailed(model.CodeInvalidTarget, "只能从存储建筑取出物品")
 		}
-		executor := player.ExecutorForPlanet(ws.PlanetID)
-		if executor == nil || ws.Units[executor.UnitID] == nil || ws.Units[executor.UnitID].Mecha == nil {
-			return mechaJobFailed(model.CodeInvalidTarget, "需要存活的执行者来接收物品")
-		}
-		unit := ws.Units[executor.UnitID]
-		model.SyncMechaCapabilities(unit, player)
-		slots := mechaInventorySlots(ws, unit, player)
+		slots := mechaInventorySlots(player)
 		// 试玩报告 1013 C：「无可取出物品或背包已满」把两种完全不同的原因混在
 		// 一起，玩家看不出是建筑里没货还是自己装不下。分开报，并给出背包占用。
 		stored := building.Storage.OutputQuantity(itemID)
@@ -112,18 +110,18 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			return mechaJobFailed(model.CodeInsufficientResource,
 				fmt.Sprintf("%s里没有可取出的「%s」", buildingDisplayName(building), itemDisplayName(itemID)))
 		}
-		free := mechaInventoryFree(player, slots, itemID, quantity)
+		free := mechaInventoryFree(record, slots, itemID, quantity)
 		if free <= 0 {
 			return mechaJobFailed(model.CodeInsufficientResource,
 				fmt.Sprintf("%s，装不下取出的「%s」：先腾出空位或改送到别的建筑",
-					mechaInventoryFullMessage(player, slots), itemDisplayName(itemID)))
+					mechaInventoryFullMessage(record, slots), itemDisplayName(itemID)))
 		}
 		quantity = min(quantity, free)
 		quantity = min(quantity, stored)
 		if quantity <= 0 {
 			return mechaJobFailed(model.CodeInsufficientResource,
 				fmt.Sprintf("%s，装不下取出的「%s」：先腾出空位或改送到别的建筑",
-					mechaInventoryFullMessage(player, slots), itemDisplayName(itemID)))
+					mechaInventoryFullMessage(record, slots), itemDisplayName(itemID)))
 		}
 		taken, _, err := building.Storage.Provide(itemID, quantity)
 		if err != nil {
@@ -132,18 +130,18 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		// 上限兜底：真正入包的数量仍由 AddItems 裁剪（容量科技在取出过程中变化也不会超）。
 		// 上面已按剩余空间裁剪过，正常不会少收；万一少收，多拿出来的部分退回建筑，
 		// 不能凭空消失。
-		if accepted := player.AddItems([]model.ItemAmount{{ItemID: itemID, Quantity: taken}}, slots); accepted < taken {
+		if accepted := record.AddItems([]model.ItemAmount{{ItemID: itemID, Quantity: taken}}, slots); accepted < taken {
 			_, _, _ = building.Storage.Load(itemID, taken-accepted)
 			taken = accepted
 		}
 		return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已取出 %d 个「%s」（来自%s）", taken, itemDisplayName(itemID), buildingDisplayName(building))}, []*model.GameEvent{{
 			EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
-			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": player.Inventory[itemID]},
+			Payload: map[string]any{"building_id": buildingID, "item_id": itemID, "transferred": taken, "source": "building_storage", "inventory_qty": record.Inventory[itemID], "mecha_id": record.UnitID},
 		}}
 	}
-	if player.Inventory[itemID] < quantity {
+	if record.Inventory[itemID] < quantity {
 		res.Code = model.CodeInsufficientResource
-		res.Message = fmt.Sprintf("背包需有 %d 个「%s」，当前 %d 个", quantity, itemDisplayName(itemID), player.Inventory[itemID])
+		res.Message = fmt.Sprintf("机甲背包需有 %d 个「%s」，当前 %d 个", quantity, itemDisplayName(itemID), record.Inventory[itemID])
 		return res, nil
 	}
 
@@ -181,11 +179,8 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		return res, nil
 	}
 
-	inv := player.EnsureInventory()
-	inv[itemID] -= accepted
-	if inv[itemID] <= 0 {
-		delete(inv, itemID)
-	}
+	record.DeductItems([]model.ItemAmount{{ItemID: itemID, Quantity: accepted}})
+	inv := record.Inventory
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
@@ -209,6 +204,7 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 			"source":        "player_inventory",
 			"remaining":     remaining,
 			"inventory_qty": inv[itemID],
+			"mecha_id":      record.UnitID,
 		},
 	}}
 }

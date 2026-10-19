@@ -72,7 +72,7 @@ type installLogisticsBotPayload struct {
 	Source   *string `json:"source"`
 }
 
-func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsBotPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsBotPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -102,8 +102,16 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	if !CanBuildTech(player, model.TechUnlockRecipe, model.ItemLogisticsBot) {
 		return fail("需先研究解锁 logistics_bot 配方（distribution_logistics）")
 	}
-	count := player.Inventory[model.ItemLogisticsBot]
-	if source == "storage" {
+	count := 0
+	if source == "player" {
+		if mecha.Record == nil {
+			return fail("机甲不可用")
+		}
+		if rangeRes := gc.requireBuildRange(ws, playerID, mecha, b.Position); rangeRes != nil {
+			return *rangeRes, nil
+		}
+		count = mecha.Record.Inventory[model.ItemLogisticsBot]
+	} else {
 		count = host.Storage.OutputQuantity(model.ItemLogisticsBot)
 	}
 	if count < n {
@@ -121,7 +129,7 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 		added = append(added, bot.ID)
 	}
 	if source == "player" {
-		player.DeductItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
+		mecha.Record.DeductItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
 	} else {
 		host.Storage.Provide(model.ItemLogisticsBot, n)
 	}
@@ -132,7 +140,7 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	if source == "player" {
 		events = append(events, &model.GameEvent{
 			EventType: model.EvtResourceChanged, VisibilityScope: playerID,
-			Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": player.Inventory[model.ItemLogisticsBot]},
+			Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": mecha.Record.Inventory[model.ItemLogisticsBot], "mecha_id": mecha.Record.UnitID},
 		})
 	}
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已安装 %d 个物流机器人", n)}, events
@@ -142,7 +150,7 @@ type uninstallLogisticsBotPayload struct {
 	Quantity int `json:"quantity" payload:"required"`
 }
 
-func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p uninstallLogisticsBotPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p uninstallLogisticsBotPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -160,12 +168,18 @@ func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID str
 	if n > len(ids) || ws.Players[playerID] == nil {
 		return mechaJobFailed(model.CodeValidationFailed, "空闲且空载的机器人不足")
 	}
-	player := ws.Players[playerID]
+	record := mecha.Record
+	if record == nil {
+		return mechaJobFailed(model.CodeExecutorUnavailable, "机甲不可用")
+	}
+	if rangeRes := gc.requireBuildRange(ws, playerID, mecha, b.Position); rangeRes != nil {
+		return *rangeRes, nil
+	}
 	// 回收的机器人也要占背包格：背包放不下就只卸下装得下的部分。
-	slots := mechaInventorySlots(ws, nil, player)
-	if free := mechaInventoryFree(player, slots, model.ItemLogisticsBot, n); free < n {
+	slots := mechaInventorySlots(ws.Players[playerID])
+	if free := mechaInventoryFree(record, slots, model.ItemLogisticsBot, n); free < n {
 		if free <= 0 {
-			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("%s，先腾出空位再卸下机器人", mechaInventoryFullMessage(player, slots)))
+			return mechaJobFailed(model.CodeInsufficientResource, fmt.Sprintf("%s，先腾出空位再卸下机器人", mechaInventoryFullMessage(record, slots)))
 		}
 		n = free
 	}
@@ -173,12 +187,12 @@ func (gc *GameCore) execUninstallLogisticsBot(ws *model.WorldState, playerID str
 	for _, id := range ids[:n] {
 		model.UnregisterLogisticsBot(ws, id)
 	}
-	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}}, slots)
+	record.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}}, slots)
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: "机器人已退回玩家背包"}, []*model.GameEvent{{
 		EventType: model.EvtEntityUpdated, VisibilityScope: playerID,
 		Payload: map[string]any{"building_id": b.ID, "uninstalled": n, "bot_count": model.DistributorBotCount(ws, b.ID)},
 	}, {
 		EventType: model.EvtResourceChanged, VisibilityScope: playerID,
-		Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": ws.Players[playerID].Inventory[model.ItemLogisticsBot]},
+		Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": record.Inventory[model.ItemLogisticsBot], "mecha_id": record.UnitID},
 	}}
 }

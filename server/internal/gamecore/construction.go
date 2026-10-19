@@ -23,13 +23,13 @@ func reserveConstructionMaterials(ws *model.WorldState, task *model.Construction
 	if ws == nil || task == nil {
 		return nil, fmt.Errorf("世界状态或施工任务为空")
 	}
-	player := ws.Players[task.PlayerID]
-	if player == nil {
-		return nil, fmt.Errorf("未找到玩家 %s", task.PlayerID)
+	record := taskMecha(ws, task)
+	if record == nil {
+		return nil, fmt.Errorf("施工任务缺少机甲（机甲已不存在）")
 	}
 
 	// Validate availability (check but don't deduct)
-	if msg, short := missingItemMessage(player.Inventory, task.Cost.Items); short {
+	if msg, short := missingItemMessage(record.Inventory, task.Cost.Items); short {
 		return nil, fmt.Errorf("%s", msg)
 	}
 
@@ -68,13 +68,13 @@ func deductLockedMaterials(ws *model.WorldState, task *model.ConstructionTask) e
 		return nil
 	}
 
-	player := ws.Players[task.PlayerID]
-	if player == nil {
-		return fmt.Errorf("未找到玩家 %s", task.PlayerID)
+	record := taskMecha(ws, task)
+	if record == nil {
+		return fmt.Errorf("施工任务 %s 的机甲不存在", task.ID)
 	}
 
-	// Deduct items（第 16 轮起建造只扣背包物品）
-	if !player.DeductItems(task.Cost.Items) {
+	// Deduct items（第 16 轮起建造只扣机甲背包物品）
+	if !record.DeductItems(task.Cost.Items) {
 		// This shouldn't happen if reservation was correct, but handle it
 		return fmt.Errorf("扣除施工任务 %s 的物品失败", task.ID)
 	}
@@ -316,22 +316,9 @@ func (gc *GameCore) constructionRegionLimit() int {
 	return limit
 }
 
-func executorConcurrentLimit(ws *model.WorldState, playerID string) int {
-	if ws == nil {
-		return 1
-	}
-	player := ws.Players[playerID]
-	if player == nil {
-		return 1
-	}
-	exec := player.ExecutorForPlanet(ws.PlanetID)
-	if exec == nil {
-		return 1
-	}
-	if exec.ConcurrentTasks <= 0 {
-		return 1
-	}
-	return exec.ConcurrentTasks
+// executorConcurrentLimit 每台机甲的施工并发上限（units.yaml executor.mecha.concurrent_tasks）。
+func executorConcurrentLimit() int {
+	return model.ExecutorConcurrentTasks()
 }
 
 // checkMaterialsAvailable checks if a player has enough materials for a construction task.
@@ -341,13 +328,12 @@ func checkMaterialsAvailable(ws *model.WorldState, task *model.ConstructionTask)
 	if ws == nil || task == nil {
 		return false
 	}
-	player := ws.Players[task.PlayerID]
-	if player == nil {
+	record := taskMecha(ws, task)
+	if record == nil {
 		return false
 	}
-
-	// Check items
-	if _, ok := missingItem(player.Inventory, task.Cost.Items); ok {
+	// Check items（只看该任务所属机甲的背包，不跨机甲凑料）
+	if _, ok := missingItem(record.Inventory, task.Cost.Items); ok {
 		return false
 	}
 	return true
@@ -453,9 +439,9 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 	currentTick := ws.Tick
 	events := make([]*model.GameEvent, 0)
 
-	// F4：执行体并发上限按玩家跨行星聚合——本世界之前已开始的任务与
-	// 其他行星上 tick 内已转入 InProgress 的任务都计入。
-	activeByPlayer := countActiveExecutorUsage(gc.sortedWorlds())
+	// F4：施工并发上限按机甲跨行星聚合——本世界之前已开始的任务与
+	// 其他行星上 tick 内已转入 InProgress 的任务都计入（键 = 机甲单位 ID）。
+	activeByMecha := countActiveExecutorUsage(gc.sortedWorlds())
 	activeByRegion := countActiveConstructionByRegion(ws)
 
 	// T079: First pass - pause in-progress tasks that no longer have materials available.
@@ -501,8 +487,15 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 
-		if task.AutoApproach && gc.requireBuildRange(ws, task.PlayerID, task.Position) != nil {
-			unit, path := planBuildApproach(ws, task.PlayerID, task.Position)
+		record := taskMecha(ws, task)
+		if record == nil {
+			// 机甲档案已不存在（旧档/被移除）：任务保持排队，不跨机甲借料。
+			noteConstructionWait(ws, task, "insufficient_materials")
+			continue
+		}
+		mechaCtx := mechaContext{Record: record, Player: ws.Players[task.PlayerID], World: ws}
+		if task.AutoApproach && gc.requireBuildRange(ws, task.PlayerID, mechaCtx, task.Position) != nil {
+			unit, path := planBuildApproach(ws, task.MechaID, task.Position)
 			if unit != nil && !unit.HasPath() {
 				startBuildApproach(unit, path)
 			}
@@ -515,9 +508,9 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			continue
 		}
 
-		playerLimit := executorConcurrentLimit(ws, task.PlayerID)
-		if activeByPlayer[task.PlayerID] >= playerLimit {
-			// 玩家并发上限（executor.concurrent_tasks）已满：排队等待，不是失败。
+		playerLimit := executorConcurrentLimit()
+		if activeByMecha[task.MechaID] >= playerLimit {
+			// 机甲并发上限（executor.mecha.concurrent_tasks）已满：排队等待，不是失败。
 			noteConstructionWait(ws, task, "executor_concurrent_limit")
 			continue
 		}
@@ -545,7 +538,7 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 		if task.SpeedBonus == 0 {
 			task.SpeedBonus = calculateConstructionSpeedBonus(ws, task.PlayerID, task.BuildingType)
 		}
-		activeByPlayer[task.PlayerID]++
+		activeByMecha[task.MechaID]++
 		activeByRegion[task.RegionID]++
 	}
 
@@ -624,18 +617,18 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 	if ws == nil || task == nil {
 		return
 	}
-	player := ws.Players[task.PlayerID]
-	if player == nil {
+	record := taskMecha(ws, task)
+	if record == nil {
 		return
 	}
 	// Full refund for pending tasks
 	if task.State == model.ConstructionPending {
-		refundConstructionItems(ws, player, task.Cost.Items)
+		refundConstructionItems(ws, record, task.PlayerID, task.Cost.Items)
 		return
 	}
 	// Partial refund for in_progress tasks: remaining / total
 	if task.TotalTicks <= 0 {
-		refundConstructionItems(ws, player, task.Cost.Items)
+		refundConstructionItems(ws, record, task.PlayerID, task.Cost.Items)
 		return
 	}
 	ratio := float64(task.RemainingTicks) / float64(task.TotalTicks)
@@ -656,27 +649,27 @@ func refundConstructionRefund(ws *model.WorldState, task *model.ConstructionTask
 			refundItems = append(refundItems, model.ItemAmount{ItemID: item.ItemID, Quantity: refundQty})
 		}
 	}
-	refundConstructionItems(ws, player, refundItems)
+	refundConstructionItems(ws, record, task.PlayerID, refundItems)
 }
 
-// refundConstructionItems 退回施工材料：玩家背包就是机甲背包，退款同样受
-// 机甲背包上限约束（capacity 之外的部分丢弃，背包永远不会超过上限）。
-func refundConstructionItems(ws *model.WorldState, player *model.PlayerState, items []model.ItemAmount) {
-	if player == nil || len(items) == 0 {
+// refundConstructionItems 退回施工材料到该任务所属机甲的背包：退款同样受
+// 背包格数上限约束（capacity 之外的部分丢弃，背包永远不会超过上限）。
+func refundConstructionItems(ws *model.WorldState, record *model.MechaRecord, playerID string, items []model.ItemAmount) {
+	if record == nil || len(items) == 0 {
 		return
 	}
-	player.AddItems(items, mechaInventorySlots(ws, nil, player))
+	record.AddItems(items, mechaInventorySlots(ws.Players[playerID]))
 }
 
 func rollbackConstructionDeduction(ws *model.WorldState, task *model.ConstructionTask) {
 	if ws == nil || task == nil || !task.MaterialsDeducted {
 		return
 	}
-	player := ws.Players[task.PlayerID]
-	if player == nil {
+	record := taskMecha(ws, task)
+	if record == nil {
 		return
 	}
-	refundConstructionItems(ws, player, task.Cost.Items)
+	refundConstructionItems(ws, record, task.PlayerID, task.Cost.Items)
 	task.MaterialsDeducted = false
 }
 

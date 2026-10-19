@@ -48,16 +48,23 @@ func (r buildingRef) entityRefs() entityRefs {
 
 // commandHandler 是命令注册表的一项：结算层级/路由 + 载荷解码 + 执行器。
 // 命令的类型、目录元数据与结构校验登记在 model 的命令目录里，这里只绑定执行。
+//
+// 三种执行器形态：
+//   - handle：只需要玩家 ID（不碰机甲，也不看发令者）；
+//   - handleIssuer：需要发令者 ID（move/attack/unit_order 判定 NOT_OPERATOR）；
+//   - handleMecha：由发令者绑定的机甲执行；路由后先解析机甲，失败在进入执行器
+//     之前就以 EXECUTOR_UNAVAILABLE 返回。
 type commandHandler struct {
-	route   commandRoute
-	payload reflect.Type
-	bind    func(cmd model.Command) (boundCommand, error)
+	route      commandRoute
+	payload    reflect.Type
+	needsMecha bool
+	bind       func(cmd model.Command) (boundCommand, error)
 }
 
 // boundCommand 是载荷已解码的命令：带路由引用与执行闭包。
 type boundCommand struct {
 	refs entityRefs
-	exec func(gc *GameCore, ws *model.WorldState, playerID string) (model.CommandResult, []*model.GameEvent)
+	exec func(gc *GameCore, ws *model.WorldState, playerID, issuerID string) (model.CommandResult, []*model.GameEvent)
 }
 
 func handle[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, model.Command, P) (model.CommandResult, []*model.GameEvent)) commandHandler {
@@ -72,8 +79,52 @@ func handle[P any](route commandRoute, exec func(*GameCore, *model.WorldState, s
 		}
 		return boundCommand{
 			refs: route.refs(cmd, refs),
-			exec: func(gc *GameCore, ws *model.WorldState, playerID string) (model.CommandResult, []*model.GameEvent) {
+			exec: func(gc *GameCore, ws *model.WorldState, playerID, issuerID string) (model.CommandResult, []*model.GameEvent) {
 				return exec(gc, ws, playerID, cmd, payload)
+			},
+		}, nil
+	}}
+}
+
+// handleIssuer 登记需要发令者 ID 的命令。
+func handleIssuer[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, string, model.Command, P) (model.CommandResult, []*model.GameEvent)) commandHandler {
+	return commandHandler{route: route, payload: reflect.TypeFor[P](), bind: func(cmd model.Command) (boundCommand, error) {
+		payload, err := decodePayload[P](cmd.Payload)
+		if err != nil {
+			return boundCommand{}, err
+		}
+		var refs entityRefs
+		if r, ok := any(payload).(payloadRefs); ok {
+			refs = r.entityRefs()
+		}
+		return boundCommand{
+			refs: route.refs(cmd, refs),
+			exec: func(gc *GameCore, ws *model.WorldState, playerID, issuerID string) (model.CommandResult, []*model.GameEvent) {
+				return exec(gc, ws, playerID, issuerID, cmd, payload)
+			},
+		}, nil
+	}}
+}
+
+// handleMecha 登记「由发令者绑定的机甲执行」的命令。
+func handleMecha[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, model.Command, P, mechaContext) (model.CommandResult, []*model.GameEvent)) commandHandler {
+	return commandHandler{route: route, payload: reflect.TypeFor[P](), needsMecha: true, bind: func(cmd model.Command) (boundCommand, error) {
+		payload, err := decodePayload[P](cmd.Payload)
+		if err != nil {
+			return boundCommand{}, err
+		}
+		var refs entityRefs
+		if r, ok := any(payload).(payloadRefs); ok {
+			refs = r.entityRefs()
+		}
+		return boundCommand{
+			refs: route.refs(cmd, refs),
+			exec: func(gc *GameCore, ws *model.WorldState, playerID, issuerID string) (model.CommandResult, []*model.GameEvent) {
+				mecha, failure := issuerMecha(ws, ws.Players[playerID], issuerID)
+				if failure != nil {
+					return *failure, nil
+				}
+				return exec(gc, ws, playerID, cmd, payload, mecha)
 			},
 		}, nil
 	}}
@@ -85,22 +136,22 @@ var commandHandlers = map[model.CommandType]commandHandler{
 	model.CmdConfigureSorter:           handle(routeTargetBuilding, (*GameCore).execConfigureSorter),
 	model.CmdConfigureTrafficMonitor:   handle(routeTargetBuilding, (*GameCore).execConfigureTrafficMonitor),
 	model.CmdConfigureSplitter:         handle(routeTargetBuilding, (*GameCore).execConfigureSplitter),
-	model.CmdBuild:                     handle(routePlanet, (*GameCore).execBuild),
-	model.CmdMove:                      handle(routeUnitSelection, (*GameCore).execMove),
-	model.CmdAttack:                    handle(routeUnitSelection, (*GameCore).execAttack),
-	model.CmdUnitOrder:                 handle(routeUnitSelection, (*GameCore).execUnitOrder),
-	model.CmdRefuelMecha:               handle(routeTargetUnit, (*GameCore).execRefuelMecha),
-	model.CmdMineResource:              handle(routeTargetUnit, (*GameCore).execMineResource),
-	model.CmdCraftItem:                 handle(routeTargetUnit, (*GameCore).execCraftItem),
-	model.CmdCancelMechaJob:            handle(routeTargetUnit, (*GameCore).execCancelMechaJob),
+	model.CmdBuild:                     handleMecha(routePlanet, (*GameCore).execBuild),
+	model.CmdMove:                      handleIssuer(routeUnitSelection, (*GameCore).execMove),
+	model.CmdAttack:                    handleIssuer(routeUnitSelection, (*GameCore).execAttack),
+	model.CmdUnitOrder:                 handleIssuer(routeUnitSelection, (*GameCore).execUnitOrder),
+	model.CmdRefuelMecha:               handleMecha(routePlanet, (*GameCore).execRefuelMecha),
+	model.CmdMineResource:              handleMecha(routePlanet, (*GameCore).execMineResource),
+	model.CmdCraftItem:                 handleMecha(routePlanet, (*GameCore).execCraftItem),
+	model.CmdCancelMechaJob:            handleMecha(routePlanet, (*GameCore).execCancelMechaJob),
 	model.CmdProduce:                   handle(routeTargetBuilding, (*GameCore).execProduce),
-	model.CmdUpgrade:                   handle(routeTargetBuilding, (*GameCore).execUpgrade),
-	model.CmdDemolish:                  handle(routeTargetBuilding, (*GameCore).execDemolish),
+	model.CmdUpgrade:                   handleMecha(routeTargetBuilding, (*GameCore).execUpgrade),
+	model.CmdDemolish:                  handleMecha(routeTargetBuilding, (*GameCore).execDemolish),
 	model.CmdConfigureDistributor:      handle(routeTargetBuilding, (*GameCore).execConfigureDistributor),
-	model.CmdInstallLogisticsBot:       handle(routeTargetBuilding, (*GameCore).execInstallLogisticsBot),
-	model.CmdUninstallLogisticsBot:     handle(routeTargetBuilding, (*GameCore).execUninstallLogisticsBot),
-	model.CmdConfigureMechaLogistics:   handle(routeTargetUnit, (*GameCore).execConfigureMechaLogistics),
-	model.CmdInstallLogisticsVehicle:   handle(routeTargetBuilding, (*GameCore).execInstallLogisticsVehicle),
+	model.CmdInstallLogisticsBot:       handleMecha(routeTargetBuilding, (*GameCore).execInstallLogisticsBot),
+	model.CmdUninstallLogisticsBot:     handleMecha(routeTargetBuilding, (*GameCore).execUninstallLogisticsBot),
+	model.CmdConfigureMechaLogistics:   handleMecha(routePlanet, (*GameCore).execConfigureMechaLogistics),
+	model.CmdInstallLogisticsVehicle:   handleMecha(routeTargetBuilding, (*GameCore).execInstallLogisticsVehicle),
 	model.CmdConfigureLogisticsStation: handle(routeTargetBuilding, (*GameCore).execConfigureLogisticsStation),
 	model.CmdConfigureLogisticsSlot:    handle(routeTargetBuilding, (*GameCore).execConfigureLogisticsSlot),
 	model.CmdScanGalaxy:                handle(routeSpace, (*GameCore).execScanGalaxy),
@@ -112,7 +163,7 @@ var commandHandlers = map[model.CommandType]commandHandler{
 	model.CmdCancelResearch:            handle(routeSpace, (*GameCore).execCancelResearch),
 	model.CmdSetRecipe:                 handle(routeTargetBuilding, (*GameCore).execSetRecipe),
 	model.CmdSwitchActivePlanet:        handle(routeSpace, (*GameCore).execSwitchActivePlanet),
-	model.CmdTransferItem:              handle(routePlanet, (*GameCore).execTransferItem),
+	model.CmdTransferItem:              handleMecha(routePlanet, (*GameCore).execTransferItem),
 	model.CmdLaunchSolarSail:           handle(routePlanet, (*GameCore).execLaunchSolarSail),
 	model.CmdLaunchRocket:              handle(routePlanet, (*GameCore).execLaunchRocket),
 	model.CmdSetRayReceiverMode:        handle(routePlanet, (*GameCore).execSetRayReceiverMode),
@@ -139,8 +190,9 @@ var commandHandlers = map[model.CommandType]commandHandler{
 	model.CmdBlueprintValidate:         handle(routeSpace, (*GameCore).execBlueprintValidate),
 	model.CmdBlueprintFinalize:         handle(routeSpace, (*GameCore).execBlueprintFinalize),
 	model.CmdBlueprintVariant:          handle(routeSpace, (*GameCore).execBlueprintVariant),
-	model.CmdQueueMilitaryProduction:   handle(routePlanet, (*GameCore).execQueueMilitaryProduction),
-	model.CmdRefitUnit:                 handle(routePlanet, (*GameCore).execRefitUnit),
+	model.CmdQueueMilitaryProduction:   handleMecha(routePlanet, (*GameCore).execQueueMilitaryProduction),
+	model.CmdRefitUnit:                 handleMecha(routePlanet, (*GameCore).execRefitUnit),
+	model.CmdAssignMecha:               handle(routePlanet, (*GameCore).execAssignMecha),
 	model.CmdBuildDysonNode:            handle(routeSpace, (*GameCore).execBuildDysonNode),
 	model.CmdBuildDysonFrame:           handle(routeSpace, (*GameCore).execBuildDysonFrame),
 	model.CmdBuildDysonShell:           handle(routeSpace, (*GameCore).execBuildDysonShell),
@@ -149,7 +201,7 @@ var commandHandlers = map[model.CommandType]commandHandler{
 
 // dispatchCommand 查注册表、解码载荷、按行星路由并执行一条命令。
 // executed=false 表示命令在路由阶段被拒、未进入执行。
-func (gc *GameCore) dispatchCommand(playerID string, player *model.PlayerState, cmd model.Command) (res model.CommandResult, evts []*model.GameEvent, executed bool) {
+func (gc *GameCore) dispatchCommand(playerID, issuerID string, player *model.PlayerState, cmd model.Command) (res model.CommandResult, evts []*model.GameEvent, executed bool) {
 	handler, ok := commandHandlers[cmd.Type]
 	if !ok {
 		return model.CommandResult{
@@ -163,12 +215,12 @@ func (gc *GameCore) dispatchCommand(playerID string, player *model.PlayerState, 
 		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: err.Error()}, nil, true
 	}
 	// F4：命令按目标行星路由——显式 planet_id → 目标实体所在行星 →
-	// 玩家焦点行星 → 全局活动行星兜底。
-	ws, routeFailure := gc.resolveCommandWorld(player, cmd, handler.route, bound.refs)
+	// 发令者机甲所在行星 → 玩家焦点行星 → 全局活动行星兜底。
+	ws, routeFailure := gc.resolveCommandWorld(player, issuerID, cmd, handler.route, bound.refs)
 	if routeFailure != nil {
 		return *routeFailure, nil, false
 	}
-	res, evts = bound.exec(gc, ws, playerID)
+	res, evts = bound.exec(gc, ws, playerID, issuerID)
 	return res, evts, true
 }
 

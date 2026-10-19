@@ -48,8 +48,9 @@ type buildPayload struct {
 	Elevation int `json:"elevation"`
 }
 
-// execBuild handles the "build" command
-func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.Command, p buildPayload) (model.CommandResult, []*model.GameEvent) {
+// execBuild handles the "build" command：由发令者绑定的机甲扣料、占施工额度、
+// auto_approach 只开这一台机甲。
+func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.Command, p buildPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	pos := cmd.Target.Position
@@ -317,17 +318,17 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 	var approachPath []model.Position
 	// Check resource cost (availability validation)
 	player = ws.Players[playerID]
-	if msg, short := missingItemMessage(player.Inventory, def.BuildCost.Items); short {
+	if msg, short := missingItemMessage(mecha.Record.Inventory, def.BuildCost.Items); short {
 		res.Code = model.CodeInsufficientResource
 		res.Message = msg
 		return res, nil
 	}
 
-	if rangeRes := gc.requireBuildRange(ws, playerID, *pos); rangeRes != nil {
+	if rangeRes := gc.requireBuildRange(ws, playerID, mecha, *pos); rangeRes != nil {
 		if !autoApproach {
 			return *rangeRes, nil
 		}
-		approachUnit, approachPath = planBuildApproach(ws, playerID, *pos)
+		approachUnit, approachPath = planBuildApproach(ws, mecha.Record.UnitID, *pos)
 		if approachUnit == nil {
 			return mechaJobFailed(model.CodeOutOfRange, "没有可到达的施工位置")
 		}
@@ -357,6 +358,7 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		Rotation:          rotation,
 		AutoApproach:      autoApproach,
 		PlayerID:          playerID,
+		MechaID:           mecha.Record.UnitID,
 		RegionID:          constructionRegionKey(ws, *pos),
 		BuildingType:      btype,
 		Position:          *pos,
@@ -1261,8 +1263,8 @@ func (gc *GameCore) execRestoreConstruction(ws *model.WorldState, playerID strin
 	return res, nil
 }
 
-// execUpgrade handles upgrading a building
-func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
+// execUpgrade handles upgrading a building（扣料/占额度都走发令者机甲）
+func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model.Command, p noPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	var events []*model.GameEvent
 
@@ -1309,24 +1311,22 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 
 	cost := model.BuildingUpgradeCost(building.Type, building.Level)
 
-	player := ws.Players[playerID]
-	if msg, short := missingItemMessage(player.Inventory, cost.Items); short {
+	if msg, short := missingItemMessage(mecha.Record.Inventory, cost.Items); short {
 		res.Code = model.CodeInsufficientResource
 		res.Message = msg
 		return res, nil
 	}
 
-	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
+	if rangeRes := gc.requireBuildRange(ws, playerID, mecha, building.Position); rangeRes != nil {
 		return *rangeRes, nil
 	}
-	playerState := ws.Players[playerID]
-	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+	if !gc.reserveExecutorSlot(mecha.Record.UnitID, model.ExecutorConcurrentTasks()) {
 		res.Code = model.CodeExecutorBusy
 		res.Message = "机甲正忙"
 		return res, nil
 	}
 
-	if !player.DeductItems(cost.Items) {
+	if !mecha.Record.DeductItems(cost.Items) {
 		res.Code = model.CodeInsufficientResource
 		res.Message = "升级所需物品不足"
 		return res, nil
@@ -1339,6 +1339,7 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 			RemainingTicks: rule.DurationTicks,
 			TargetLevel:    nextLevel,
 			PrevState:      building.Runtime.State,
+			MechaID:        mecha.Record.UnitID,
 		}
 		if evt := applyBuildingState(building, model.BuildingWorkPaused, stateReasonPause); evt != nil {
 			events = append(events, evt)
@@ -1357,8 +1358,8 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 	return res, events
 }
 
-// execDemolish handles demolishing a building
-func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
+// execDemolish handles demolishing a building（退料进发令者机甲背包）
+func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd model.Command, p noPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	var events []*model.GameEvent
 
@@ -1431,11 +1432,10 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		return res, nil
 	}
 
-	if rangeRes := gc.requireBuildRange(ws, playerID, building.Position); rangeRes != nil {
+	if rangeRes := gc.requireBuildRange(ws, playerID, mecha, building.Position); rangeRes != nil {
 		return *rangeRes, nil
 	}
-	playerState := ws.Players[playerID]
-	if execState := playerState.ExecutorForPlanet(ws.PlanetID); execState != nil && !gc.reserveExecutorSlot(playerID, execState.ConcurrentTasks) {
+	if !gc.reserveExecutorSlot(mecha.Record.UnitID, model.ExecutorConcurrentTasks()) {
 		res.Code = model.CodeExecutorBusy
 		res.Message = "机甲正忙"
 		return res, nil
@@ -1447,6 +1447,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 			RemainingTicks: rule.DurationTicks,
 			RefundRate:     rule.RefundRate,
 			PrevState:      building.Runtime.State,
+			MechaID:        mecha.Record.UnitID,
 		}
 		if evt := applyBuildingState(building, model.BuildingWorkPaused, stateReasonPause); evt != nil {
 			events = append(events, evt)
@@ -1457,7 +1458,7 @@ func (gc *GameCore) execDemolish(ws *model.WorldState, playerID string, cmd mode
 		return res, events
 	}
 
-	events = demolishBuilding(ws, gc.alertHistory, building, rule.RefundRate)
+	events = demolishBuilding(ws, gc.alertHistory, building, rule.RefundRate, mecha.Record.UnitID)
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK

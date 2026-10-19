@@ -13,15 +13,16 @@ import (
 //  1. target.planet_id 显式路由提示；
 //  2. 命令引用的目标实体（建筑/单位/建造任务）所在行星——跨行星同 ID 时
 //     优先落在玩家焦点行星；
-//  3. 玩家焦点行星（switch_active_planet 写入的 PlayerState.FocusPlanetID）；
-//  4. 全局活动行星（冷启动/兜底默认值）。
+//  3. 发令者绑定机甲所在行星（需要机甲的命令因此自动落在机甲身边）；
+//  4. 玩家焦点行星（switch_active_planet 写入的 PlayerState.FocusPlanetID）；
+//  5. 全局活动行星（冷启动/兜底默认值）。
 //
 // 太空层/玩家级命令（fleet_*、task_force_*、theater_*、blueprint_*、dyson、
 // research 等）的 target.planet_id 是作战参数而非路由提示，不参与路由；
 // 它们只读共享玩家状态，落到焦点/全局世界即可。
 //
 // 返回的 CommandResult 非空表示路由失败（显式指定的行星未加载）。
-func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Command, route commandRoute, refs entityRefs) (*model.WorldState, *model.CommandResult) {
+func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, issuerID string, cmd model.Command, route commandRoute, refs entityRefs) (*model.WorldState, *model.CommandResult) {
 	if route != routeSpace && cmd.Target.PlanetID != "" {
 		ws := gc.WorldForPlanet(cmd.Target.PlanetID)
 		if ws == nil {
@@ -40,6 +41,15 @@ func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, cmd model.Com
 	}
 	if ws := gc.worldForEntityRefs(refs, focusPlanetID); ws != nil {
 		return ws, nil
+	}
+
+	// 发令者机甲所在行星：不带 planet_id、也不引用实体时，命令自动落到机甲身边。
+	if player != nil {
+		if record := player.MechaByOperator(issuerID); record != nil && record.PlanetID != "" {
+			if ws := gc.WorldForPlanet(record.PlanetID); ws != nil {
+				return ws, nil
+			}
+		}
 	}
 
 	if focusPlanetID != "" {

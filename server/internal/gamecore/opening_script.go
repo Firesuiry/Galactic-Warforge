@@ -133,14 +133,18 @@ func (s *ScriptedOpening) Plan(ws *model.WorldState) (model.Command, bool) {
 	if unit == nil || unit.Mecha == nil {
 		return model.Command{}, false
 	}
-	if cmd, ok := s.refuel(ws, unit, player); ok {
+	record := player.MechaByUnitID(unit.ID)
+	if record == nil {
+		return model.Command{}, false
+	}
+	if cmd, ok := s.refuel(ws, unit, record); ok {
 		return cmd, true
 	}
 	step := s.plan[s.next]
-	if cmd, ok := s.buildStep(ws, player, step); ok {
+	if cmd, ok := s.buildStep(ws, player, record, step); ok {
 		return cmd, true
 	}
-	return s.driveMecha(ws, unit, player, step)
+	return s.driveMecha(ws, unit, player, record, step)
 }
 
 // settleAwaiting 在上一条建造命令结算后认领新落成的建筑。
@@ -182,11 +186,11 @@ func (s *ScriptedOpening) claimNewBuilding(ws *model.WorldState, btype model.Bui
 }
 
 // refuel 核心能量低时烧煤（煤是手动采矿的副产品，开局就能采到）。
-func (s *ScriptedOpening) refuel(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) (model.Command, bool) {
+func (s *ScriptedOpening) refuel(ws *model.WorldState, unit *model.Unit, record *model.MechaRecord) (model.Command, bool) {
 	if unit.Mecha.Energy >= 20 || unit.Mecha.Job != nil {
 		return model.Command{}, false
 	}
-	if player.Inventory[model.ItemCoal] <= 0 {
+	if record.Inventory[model.ItemCoal] <= 0 {
 		return model.Command{}, false
 	}
 	if ws.Tick-s.lastActionTick < 4 {
@@ -204,7 +208,7 @@ func (s *ScriptedOpening) refuel(ws *model.WorldState, unit *model.Unit, player 
 }
 
 // buildStep 推进当前这一步：先放传送带，再放分拣器，最后放下游建筑。
-func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerState, step scriptStep) (model.Command, bool) {
+func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerState, record *model.MechaRecord, step scriptStep) (model.Command, bool) {
 	if step.belt {
 		if s.built[step.role] != "" {
 			// 带子已经落成并认领：跳过这一步。
@@ -226,7 +230,7 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		if !ok {
 			return model.Command{}, false
 		}
-		if !scriptMaterialsReady(player, model.BuildingTypeConveyorBeltMk1) {
+		if !scriptMaterialsReady(record, model.BuildingTypeConveyorBeltMk1) {
 			return model.Command{}, false
 		}
 		s.links[step.linkTo] = link
@@ -244,7 +248,7 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		if !ok || s.built[s.beltRoleFor(step.linkTo)] == "" {
 			return model.Command{}, false
 		}
-		if !scriptMaterialsReady(player, model.BuildingTypeSorterMk1) {
+		if !scriptMaterialsReady(record, model.BuildingTypeSorterMk1) {
 			return model.Command{}, false
 		}
 		s.awaiting = true
@@ -257,13 +261,13 @@ func (s *ScriptedOpening) buildStep(ws *model.WorldState, player *model.PlayerSt
 		}
 		// 第 16 轮起建造门槛只剩「背包物品够不够」（scriptMaterialsReady）：
 		// 不够时脚本会先去手搓/采矿，不再等一个已经不存在的矿物池。
-		if !scriptMaterialsReady(player, step.btype) {
+		if !scriptMaterialsReady(record, step.btype) {
 			return model.Command{}, false
 		}
 		s.awaiting = true
 		return BuildCommand(link.Target.X, link.Target.Y, step.btype, step.recipe, model.ConveyorAuto), true
 	}
-	if !scriptMaterialsReady(player, step.btype) {
+	if !scriptMaterialsReady(record, step.btype) {
 		return model.Command{}, false
 	}
 	unit := executorUnitFor(ws, s.PlayerID)
@@ -371,8 +375,8 @@ func scriptGoMine(ws *model.WorldState, unit *model.Unit, node *model.ResourceNo
 	if node.Remaining < want {
 		want = node.Remaining
 	}
-	if player := ws.Players[unit.OwnerID]; player != nil {
-		if free := mechaInventoryFree(player, mechaInventorySlots(ws, unit, player), node.Kind, want); free < want {
+	if record := ws.Players[unit.OwnerID].MechaByUnitID(unit.ID); record != nil {
+		if free := mechaInventoryFree(record, mechaInventorySlots(ws.Players[unit.OwnerID]), node.Kind, want); free < want {
 			want = free
 		}
 	}
@@ -390,7 +394,7 @@ func scriptGoMine(ws *model.WorldState, unit *model.Unit, node *model.ResourceNo
 }
 
 // driveMecha 让机甲做「下一步建造缺的那件东西」：能手搓就手搓，是原矿就去采。
-func (s *ScriptedOpening) driveMecha(ws *model.WorldState, unit *model.Unit, player *model.PlayerState, step scriptStep) (model.Command, bool) {
+func (s *ScriptedOpening) driveMecha(ws *model.WorldState, unit *model.Unit, player *model.PlayerState, record *model.MechaRecord, step scriptStep) (model.Command, bool) {
 	if unit.Mecha.Job != nil {
 		return model.Command{}, false
 	}
@@ -402,7 +406,7 @@ func (s *ScriptedOpening) driveMecha(ws *model.WorldState, unit *model.Unit, pla
 	if ws.Tick-s.lastActionTick < 2 {
 		return model.Command{}, false
 	}
-	actions := scriptBuildActions(player, s.driveTarget(step))
+	actions := scriptBuildActions(record, s.driveTarget(step))
 	for _, action := range actions {
 		switch action.kind {
 		case "mine":
@@ -423,12 +427,12 @@ func (s *ScriptedOpening) driveMecha(ws *model.WorldState, unit *model.Unit, pla
 			if !ok || !recipe.HandcraftAllowed || action.qty <= 0 {
 				continue
 			}
-			if !scriptRecipeInputsReady(player, recipe) {
+			if !scriptRecipeInputsReady(record, recipe) {
 				continue
 			}
 			batches := action.qty
 			if out := scriptRecipeOutputQty(recipe, action.item); out > 0 {
-				if free := mechaInventoryFree(player, mechaInventorySlots(ws, unit, player), action.item, batches*out); free/out < batches {
+				if free := mechaInventoryFree(record, mechaInventorySlots(player), action.item, batches*out); free/out < batches {
 					batches = free / out
 				}
 			}
@@ -462,16 +466,16 @@ type scriptAction struct {
 //
 // 这就是「手搓链下钻」：风机缺齿轮 → 齿轮缺铁块 → 铁块缺铁矿，一路钻到原矿。
 // 不这么做的话，脚本会在「背包里没有铁块」时一直干等——真人玩家会先去挖矿。
-func scriptBuildActions(player *model.PlayerState, btype model.BuildingType) []scriptAction {
-	if player == nil {
+func scriptBuildActions(record *model.MechaRecord, btype model.BuildingType) []scriptAction {
+	if record == nil {
 		return nil
 	}
 	def, ok := model.BuildingDefinitionByID(btype)
 	if !ok {
 		return nil
 	}
-	available := make(map[string]int, len(player.Inventory))
-	for item, qty := range player.Inventory {
+	available := make(map[string]int, len(record.Inventory))
+	for item, qty := range record.Inventory {
 		available[item] = qty
 	}
 	var actions []scriptAction
@@ -552,8 +556,8 @@ var scriptOreItems = []string{model.ItemIronOre, model.ItemCopperOre, model.Item
 var scriptCraftOrder = []string{"gear", "circuit_board", "magnetic_coil", "smelt_iron", "smelt_copper", "smelt_magnet", "smelt_stone"}
 
 // scriptMaterialsReady 背包里是否已经凑齐这栋建筑的全部物品材料（第 16 轮起这是唯一的建造门槛）。
-func scriptMaterialsReady(player *model.PlayerState, btype model.BuildingType) bool {
-	for _, missing := range scriptMissingItems(player, btype) {
+func scriptMaterialsReady(record *model.MechaRecord, btype model.BuildingType) bool {
+	for _, missing := range scriptMissingItems(record, btype) {
 		if missing > 0 {
 			return false
 		}
@@ -562,14 +566,14 @@ func scriptMaterialsReady(player *model.PlayerState, btype model.BuildingType) b
 }
 
 // scriptMissingItems 返回建造这栋建筑还缺的物品与数量。
-func scriptMissingItems(player *model.PlayerState, btype model.BuildingType) map[string]int {
+func scriptMissingItems(record *model.MechaRecord, btype model.BuildingType) map[string]int {
 	out := map[string]int{}
 	def, ok := model.BuildingDefinitionByID(btype)
 	if !ok {
 		return out
 	}
 	for _, need := range def.BuildCost.Items {
-		if have := player.Inventory[need.ItemID]; have < need.Quantity {
+		if have := record.Inventory[need.ItemID]; have < need.Quantity {
 			out[need.ItemID] = need.Quantity - have
 		}
 	}
@@ -577,9 +581,9 @@ func scriptMissingItems(player *model.PlayerState, btype model.BuildingType) map
 }
 
 // scriptRecipeInputsReady 手搓这批的原料是否都在背包里。
-func scriptRecipeInputsReady(player *model.PlayerState, recipe model.RecipeDefinition) bool {
+func scriptRecipeInputsReady(record *model.MechaRecord, recipe model.RecipeDefinition) bool {
 	for _, in := range recipe.Inputs {
-		if player.Inventory[in.ItemID] < in.Quantity {
+		if record.Inventory[in.ItemID] < in.Quantity {
 			return false
 		}
 	}

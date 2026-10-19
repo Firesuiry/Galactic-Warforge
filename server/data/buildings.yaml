@@ -14,6 +14,7 @@ buildings:
         - {item_id: steel, quantity: 12}
     buildable: true
     build_radius: 72
+    can_produce_units: true
     profile: {max_hp_base: 500, max_hp_per_level: 200, vision_range: 5}
     runtime:
       params:

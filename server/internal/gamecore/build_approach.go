@@ -2,25 +2,23 @@ package gamecore
 
 import "siliconworld/internal/model"
 
-func planBuildApproach(ws *model.WorldState, playerID string, pos model.Position) (*model.Unit, []model.Position) {
-	player := ws.Players[playerID]
-	if player == nil {
+// planBuildApproach 只让指定机甲（发令者绑定的那台）走向施工点：
+// 同星球的其它机甲互不打断路径。
+func planBuildApproach(ws *model.WorldState, mechaID string, pos model.Position) (*model.Unit, []model.Position) {
+	if ws == nil || mechaID == "" {
 		return nil, nil
 	}
-	executor := player.ExecutorForPlanet(ws.PlanetID)
-	if executor == nil {
-		return nil, nil
-	}
-	unit := ws.Units[executor.UnitID]
+	unit := ws.Units[mechaID]
 	if unit == nil || unit.HP <= 0 {
 		return nil, nil
 	}
+	operateRange := model.ExecutorOperateRange()
 	path, ok := computeUnitPath(ws, unit.Position, pos, unit.ID)
 	if !ok {
 		return nil, nil
 	}
 	for i, p := range path {
-		if ws.SurfaceDistance(p, pos) <= executor.OperateRange {
+		if ws.SurfaceDistance(p, pos) <= operateRange {
 			return unit, path[:i+1]
 		}
 	}

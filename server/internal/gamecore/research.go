@@ -59,8 +59,8 @@ func hiddenTechDiscovered(player *model.PlayerState, labs []*model.Building, cos
 			continue
 		}
 		total := 0
-		if player != nil && player.Inventory != nil {
-			total += player.Inventory[c.ItemID]
+		if player != nil {
+			total += player.TotalItems(c.ItemID)
 		}
 		for _, lab := range labs {
 			storage := storageOf(lab)
@@ -397,15 +397,7 @@ func researchThroughput(player *model.PlayerState, labs []*model.Building, power
 		return 0, 0
 	}
 	multiplier := effectiveSpeed / float64(baseSpeed)
-	boost := 0.0
-	if player != nil {
-		for _, exec := range player.Executors {
-			if exec != nil && exec.ResearchBoost > boost {
-				boost = exec.ResearchBoost
-			}
-		}
-	}
-	boost += model.TechEffectValue(player, "research_speed")
+	boost := model.TechEffectValue(player, "research_speed")
 	if boost > 0 {
 		effectiveSpeed *= 1 + boost
 	}

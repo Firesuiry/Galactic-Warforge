@@ -64,6 +64,7 @@ const (
 	CmdBlueprintVariant          CommandType = "blueprint_variant"
 	CmdQueueMilitaryProduction   CommandType = "queue_military_production"
 	CmdRefitUnit                 CommandType = "refit_unit"
+	CmdAssignMecha               CommandType = "assign_mecha"
 	CmdBuildDysonNode            CommandType = "build_dyson_node"
 	CmdBuildDysonFrame           CommandType = "build_dyson_frame"
 	CmdBuildDysonShell           CommandType = "build_dyson_shell"
@@ -126,7 +127,10 @@ const (
 	CodeInvalidElevation    ResultCode = "INVALID_ELEVATION"
 	CodeUnauthorized        ResultCode = "UNAUTHORIZED"
 	CodeExecutorUnavailable ResultCode = "EXECUTOR_UNAVAILABLE"
-	CodeExecutorBusy        ResultCode = "EXECUTOR_BUSY"
+	// CodeNotOperator move/attack/unit_order 里选中了别的发令者绑定的机甲：
+	// 该单位逐个拒绝，其余单位照常执行。
+	CodeNotOperator  ResultCode = "NOT_OPERATOR"
+	CodeExecutorBusy ResultCode = "EXECUTOR_BUSY"
 	// CodeGameFinished 终局拒绝（F2）：victory 宣判后对局进入 finished，
 	// 常规游戏命令统一以该码拒绝；管理面接口（/save、/games/new、查询类）不受限。
 	CodeGameFinished ResultCode = "GAME_FINISHED"
