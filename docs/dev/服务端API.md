@@ -236,7 +236,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `theater_create` | planet | — | `theater_id`, `name?` | `theater_create` | Create a theater container for war zoning and objectives |
 | `theater_define_zone` | system | — | `theater_id`, `zone_type`, `system_id?`, `planet_id?`, `position?`, `radius?` | `theater_define_zone` | Define or update one theater zone |
 | `theater_set_objective` | system | — | `theater_id`, `objective_type`, `system_id?`, `planet_id?`, `entity_id?`, `description?` | `theater_set_objective` | Set a theater objective anchor and description |
-| `transfer_item` | planet | — | `building_id`, `item_id`, `quantity`, `direction?` | `transfer` | Load items from player inventory into building local storage（按建筑所在行星结算） |
+| `transfer_item` | planet | — | `building_id`, `item_id`, `quantity`, `direction?` | `transfer` | Load items from your mecha backpack into building local storage（按建筑所在行星结算） |
 | `uninstall_logistics_bot` | planet | `entity_id` | `quantity` | `uninstall_logistics_bot` | 回收空载停靠的配送机器人至背包 |
 | `unit_order` | planet | — | `order`, `target_entity_id?`, `from_building_id?`, `to_building_id?`, `item_id?` | `order` | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
 | `upgrade` | planet | `entity_id` | — | `upgrade` | Upgrade building（按建筑所在行星结算） |

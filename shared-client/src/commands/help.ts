@@ -71,7 +71,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   theater_define_zone: { usage: '<theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y> [--z <z>]] [--radius <n>]', desc: 'Define or update one theater zone' },
   theater_set_objective: { usage: '<theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]', desc: 'Set a theater objective anchor and description' },
   blockade_planet: { usage: '<task_force_id> <planet_id>', desc: 'Issue a blockade intent against one planet' },
-  transfer: { usage: '<building_id> <item_id> <quantity> [--planet <planet_id>]', desc: 'Load items from player inventory into building local storage（按建筑所在行星结算）' },
+  transfer: { usage: '<building_id> <item_id> <quantity> [--planet <planet_id>]', desc: 'Load items from your mecha backpack into building local storage（按建筑所在行星结算）' },
   mine_resource: { usage: '<resource_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）' },
   craft_item: { usage: '<recipe_id> <quantity> [--planet <planet_id>]', desc: '用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算）' },
   configure_traffic_monitor: { usage: '<building_id> <belt_id|none> --window <1..600> --minimum <0..60> --alerts <on|off>', desc: '监测相邻皮带真实流出量；none 清绑定，配置重置采样' },
