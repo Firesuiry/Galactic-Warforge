@@ -39,6 +39,7 @@ GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local /home/firesuiry/sdk/go1.25.0/bin/go \
 | `tc07-hostile` | cp-near-hive | executable | 激怒黑雾后停火（hostile=true） | 64800 |
 | `cp-logistics` | cp-base | executable（分支） | 混合带 + 三熔炉 + 出料全链 + 运输机器人 | 23906 |
 | `cp-haul-unreachable` | cp-base | executable（分支） | 围死熔炉触发 haul_unreachable | 12000 |
+| `cp-mecha-pair` | cp-base | executable（分支，第 21 轮） | 出两台执行体机甲：一台绑 builder-a、一台空闲（UI 多机甲测试起点） | 8600 |
 | `cp-belt-dsp` | cp-base | executable（分支） | 多层带立体交叉 + 侧汇 + 跨格分拣器 + 死端带 + UI 拖拽走廊（第 19 轮 §5；生成器 `develop_tools/checkpoint-gen/cp_belt_dsp/`，走廊 x36..52,y161..165 除 x=44 外保留空） | 14832 |
 | `cp-base-ui16` | cp-root | retired（见 `cp-base-ui16.md`） | 审计被裁的纯 UI 导出，不能重建 | — |
 | `tc07-calmed` | tc07-hostile | retired（见 `tc07-calmed.md`） | 冷静期前能跑，后半段必败（HQ 被拆、p1 被淘汰），改由 Go 测试覆盖 | — |

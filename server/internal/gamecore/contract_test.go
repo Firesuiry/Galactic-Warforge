@@ -462,3 +462,58 @@ func TestBuildingPositionPredicates(t *testing.T) {
 	}
 	_ = player
 }
+
+// 第 21 轮：机甲谓词。mecha_count_gte 数档案（阵亡待复活也算），
+// mecha_operator_count 按 issuer_id 精确计数（空串 = 空闲），用于
+// cp-mecha-pair 断言「一台我、一台 builder-a、一台空闲」。
+func TestMechaContractPredicates(t *testing.T) {
+	core := newBlackFogTestCore(t, "normal")
+	ws := core.World()
+	player := ws.Players["p1"]
+	// 开局机甲：Operator = p1。
+	mine := starterMecha(ws, player.PlayerID)
+	if mine == nil {
+		t.Fatal("开局应有玩家自己的机甲")
+	}
+	// 再登记两台档案：一台绑给 builder-a，一台空闲。
+	player.EnsureMechas()["u-101"] = &model.MechaRecord{UnitID: "u-101", PlanetID: ws.PlanetID, Operator: "builder-a"}
+	player.EnsureMechas()["u-102"] = &model.MechaRecord{UnitID: "u-102", PlanetID: ws.PlanetID}
+
+	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
+		return core.evaluateContractCheck(check)
+	}
+
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_count_gte", Player: "p1", N: 3}); !r.Passed || r.Actual != "3" {
+		t.Fatalf("3 台机甲应通过 mecha_count_gte，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_count_gte", Player: "p1", N: 4}); r.Passed {
+		t.Fatalf("只有 3 台，N=4 必须失败，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "p1", N: 1}); !r.Passed {
+		t.Fatalf("operator=p1 应恰好 1 台，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "builder-a", N: 1}); !r.Passed {
+		t.Fatalf("operator=builder-a 应恰好 1 台，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "", N: 1}); !r.Passed {
+		t.Fatalf("空闲机甲应恰好 1 台，got %+v", r)
+	}
+	// 相等而不是 >=：多一台空闲同样是坏层。
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "", N: 0}); r.Passed {
+		t.Fatalf("空闲 1 台时 N=0 必须失败，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "ghost", N: 0}); !r.Passed {
+		t.Fatalf("没人绑给 ghost 时应通过 N=0，got %+v", r)
+	}
+	// 阵亡待复活：档案还在，谓词照常计数。
+	mine.RespawnAtTick = 999
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_count_gte", Player: "p1", N: 3}); !r.Passed {
+		t.Fatalf("阵亡的机甲仍有档案，应计入，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "p1", Operator: "p1", N: 1}); !r.Passed {
+		t.Fatalf("阵亡机甲的操作者仍算绑定，got %+v", r)
+	}
+	if r := eval(checkpoint.ContractCheck{Kind: "mecha_operator_count", Player: "ghost", Operator: "p1", N: 0}); r.Passed || r.Actual != "(none)" {
+		t.Fatalf("找不到玩家时必须失败，got %+v", r)
+	}
+}
