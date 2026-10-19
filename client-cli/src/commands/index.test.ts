@@ -256,3 +256,47 @@ describe('issuer commands', () => {
     api.setAuth('', '');
   });
 });
+
+describe('help 补全（SK-CLI-B）', () => {
+  const fakeCatalogApi = {
+    fetchCatalog: async () => ({
+      items: [{ id: 'iron_ingot', name: '铁块' }, { id: 'gear', name: '齿轮' }],
+      recipes: [
+        {
+          id: 'craft_gear', name: '齿轮', handcraft_allowed: true, duration: 4,
+          inputs: [{ item_id: 'iron_ingot', quantity: 2 }],
+          outputs: [{ item_id: 'gear', quantity: 1 }],
+        },
+        {
+          id: 'smelt_steel', name: '钢', handcraft_allowed: false, duration: 8,
+          inputs: [{ item_id: 'iron_ingot', quantity: 3 }],
+          outputs: [{ item_id: 'steel', quantity: 1 }],
+        },
+      ],
+    }),
+  } as never;
+
+  it('总表 build 行带 --elevation', async () => {
+    const out = await cmdHelp([], { api });
+    assert.match(out, /build <x> <y> <type> .*--elevation 0-4/);
+  });
+
+  it('help craft_item 动态列出可手搓配方，排除不可手搓的', async () => {
+    const out = await cmdHelp(['craft_item'], { api: fakeCatalogApi });
+    assert.match(out, /可手搓配方（1/);
+    assert.match(out, /craft_gear\s+铁块×2 -> 齿轮×1/);
+    assert.doesNotMatch(out, /smelt_steel/);
+  });
+
+  it('help mine_resource 说明 resource_id 取自 scene.resources，不是物品 id', async () => {
+    const out = await cmdHelp(['mine_resource'], { api });
+    assert.match(out, /scene 的 resources\[\]\.id/);
+    assert.match(out, /不是物品 id/);
+  });
+
+  it('help build 说明 x,y 是占地左上角', async () => {
+    const out = await cmdHelp(['build'], { api });
+    assert.match(out, /占地左上角/);
+    assert.match(out, /footprint/);
+  });
+});
