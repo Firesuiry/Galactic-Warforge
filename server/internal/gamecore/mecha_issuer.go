@@ -48,6 +48,8 @@ func issuerMecha(ws *model.WorldState, player *model.PlayerState, issuerID strin
 		if record.RespawnAtTick > 0 {
 			return fail(fmt.Sprintf("机甲 %s 已阵亡，tick %d 复活", record.UnitID, record.RespawnAtTick))
 		}
+		// 正常阵亡路径必定写 RespawnAtTick；档案仍在但单位不在 ws.Units 且没有
+		// 复活时间只可能是数据异常，按「等待复活」提示，避免玩家以为能立刻用。
 		return fail(fmt.Sprintf("机甲 %s 已阵亡，等待复活", record.UnitID))
 	}
 	model.SyncMechaCapabilities(unit, player)
