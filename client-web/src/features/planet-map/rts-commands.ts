@@ -60,14 +60,21 @@ export const FACTION_COLOR: Record<UnitFaction, number> = {
  * `knownOwnUnits` 是跨窗口累积的己方单位（见 own-entity-cache）：`/scene` 只返回相机窗口内的
  * 实体，镜头一移开，`planet.units` 里就没有被选中的单位了，早期这里直接把它过滤掉，
  * 于是「右键远处格」变成静默不下发任何命令（试玩 1010 E）。
+ *
+ * `excludeIds`：本玩家名下但已绑定给其他发令者的机甲（契约 §3.1：move/attack 会逐个
+ * 拒绝 NOT_OPERATOR）。框选会把它们一起选进来，下发前必须剔除。
  */
 export function commandableUnitIds(
   planet: PlanetRenderView,
   selectedUnits: readonly string[],
   playerId: string,
   knownOwnUnits?: ReadonlyMap<string, Unit>,
+  excludeIds?: ReadonlySet<string>,
 ): string[] {
   return selectedUnits.filter((id) => {
+    if (excludeIds?.has(id)) {
+      return false;
+    }
     const unit = planet.units?.[id] ?? knownOwnUnits?.get(id);
     return Boolean(unit && unit.owner_id === playerId);
   });
@@ -82,8 +89,9 @@ export function orderEligibleUnitIds(
   selectedUnits: readonly string[],
   playerId: string,
   knownOwnUnits?: ReadonlyMap<string, Unit>,
+  excludeIds?: ReadonlySet<string>,
 ): string[] {
-  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits)
+  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits, excludeIds)
     .filter((id) => !(planet.units?.[id] ?? knownOwnUnits?.get(id))?.mecha);
 }
 

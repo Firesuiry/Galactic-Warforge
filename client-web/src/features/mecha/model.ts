@@ -36,6 +36,22 @@ export function selectMechaById(
   return selectPlayerMechas(summary, playerId).find((mecha) => mecha.unit_id === unitId);
 }
 
+/**
+ * 本玩家名下、但已绑定给其他发令者的机甲 unit_id 集合（契约 §3.1：move/attack
+ * 对别人绑定的机甲逐个拒绝 NOT_OPERATOR）。框选/编队/右键批量指令都要先把它们排除，
+ * 否则一条命令里混着会被拒的单位，玩家看到的是「部分失败」。
+ */
+export function foreignOperatedMechaIds(
+  summary: StateSummary | undefined,
+  playerId: string,
+): Set<string> {
+  return new Set(
+    selectPlayerMechas(summary, playerId)
+      .filter((mecha) => Boolean(mecha.operator) && mecha.operator !== playerId)
+      .map((mecha) => mecha.unit_id),
+  );
+}
+
 /** 背包格数占用（契约 §6 的 inventory_slots_used/total）。 */
 export function mechaSlotUsage(mecha: MechaView | undefined): { used: number; total: number } | null {
   const total = mecha?.inventory_slots_total ?? 0;

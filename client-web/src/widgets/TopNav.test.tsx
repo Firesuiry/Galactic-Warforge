@@ -535,7 +535,7 @@ describe('顶栏背包 chip（契约 §7.3）', () => {
     expect(screen.queryByRole('dialog', { name: '完整库存' })).toBeNull();
   });
 
-  it('已绑定但背包为空：仍显示格数 chip，并保留「背包空」', async () => {
+  it('已绑定但背包为空：只显示格数 chip，不再叠「背包空」空态', async () => {
     stubSummary({
       p1: {
         player_id: 'p1',
@@ -549,6 +549,6 @@ describe('顶栏背包 chip（契约 §7.3）', () => {
     renderTopNav();
     const button = await screen.findByTitle('背包库存 · 0/40 格 · 机甲 u-8（点击展开全部）');
     expect(button).toHaveTextContent('背包 0/40 格 · u-8');
-    expect(button).toHaveTextContent('背包空');
+    expect(button).not.toHaveTextContent('背包空');
   });
 });

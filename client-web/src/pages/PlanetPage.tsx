@@ -51,7 +51,7 @@ import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
 import { formatInventorySummary } from "@/features/inventory-summary";
-import { mechaSlotUsage, selectMyMecha } from "@/features/mecha/model";
+import { foreignOperatedMechaIds, mechaSlotUsage, selectMyMecha } from "@/features/mecha/model";
 import {
   extractAlertFromEvent,
   parseEnabledLayers,
@@ -507,8 +507,14 @@ export function PlanetPage() {
   // 背包读「我的机甲」（契约 §7.3）：建造扣料、放料提示都按这台机甲算。
   const myMecha = selectMyMecha(summaryQuery.data, session.playerId);
   const myMechaInventory = myMecha?.inventory;
+  // 契约 §3.1：别人绑定的本方机甲拒绝 move/attack（NOT_OPERATOR），批量选择器先剔除。
+  const foreignMechaIds = useMemo(
+    () => foreignOperatedMechaIds(summaryQuery.data, session.playerId),
+    [summaryQuery.data, session.playerId],
+  );
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
+    foreignMechaIds,
     inventory: myMechaInventory,
     mechaUnbound: !myMecha,
     planet: sceneQuery.data,
@@ -531,6 +537,7 @@ export function PlanetPage() {
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
     knownOwnUnits,
+    foreignMechaIds,
     interactions,
   });
 

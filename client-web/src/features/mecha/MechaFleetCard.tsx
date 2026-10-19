@@ -28,7 +28,8 @@ export function MechaFleetCard({ mechas, playerId, planetNames }: {
                 <th scope="col">操作者</th>
                 <th scope="col">状态</th>
                 <th scope="col">背包格数</th>
-                <th scope="col">施工中/排队</th>
+                {/* 真实布局里卡片在右侧窄栏（300–340px），表头用短名，值保持「施工中/排队」。 */}
+                <th scope="col" title="施工中/排队">施工</th>
               </tr>
             </thead>
             <tbody>

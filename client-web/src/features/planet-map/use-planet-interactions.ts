@@ -73,8 +73,9 @@ export function selectedTransportRobotIds(
   selectedUnits: readonly string[],
   playerId: string,
   knownOwnUnits?: ReadonlyMap<string, Unit>,
+  excludeIds?: ReadonlySet<string>,
 ): string[] {
-  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits)
+  return commandableUnitIds(planet, selectedUnits, playerId, knownOwnUnits, excludeIds)
     .filter((id) => isTransportRobot(planet.units?.[id] ?? knownOwnUnits?.get(id)));
 }
 
@@ -122,6 +123,11 @@ interface UsePlanetInteractionsInput {
    * 命令选择器必须能回退到这份缓存，否则「右键远处格」会静默不下发（试玩 1010 E）。
    */
   knownOwnUnits?: ReadonlyMap<string, Unit>;
+  /**
+   * 本玩家名下、已绑定给其他发令者的机甲（契约 §3.1）：批量 move/attack 会被服务端
+   * 逐个拒绝 NOT_OPERATOR，选择器里先剔除（框选不会因此整条不下发）。
+   */
+  foreignMechaIds?: ReadonlySet<string>;
   /** C4：任务群列表（小队右键部署的归属解析；缺省时小队右键给出编组提示）。 */
   taskForces?: WarTaskForceView[];
   /** C4：小队部署命令提交后的回调（调用侧据此失效/重取任务群查询）。 */
@@ -145,7 +151,7 @@ export interface PlanetInteractions {
 /**
  * 地图交互命令中枢：planet 未加载完成时所有入口为空操作。
  */
-export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet, runtime, knownOwnUnits, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
+export function usePlanetInteractions({ catalog, foreignMechaIds, inventory, mechaUnbound, planet, runtime, knownOwnUnits, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
   const client = useApiClient();
   const session = useSessionSnapshot();
 
@@ -241,7 +247,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
 
       // §4 运输机器人「设置运输」：依次点起点建筑、终点建筑（同一格只认建筑）。
       if (mode.kind === 'haul') {
-        const selector = selectedTransportRobotIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+        const selector = selectedTransportRobotIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
         if (selector.length === 0) {
           reportLocalBlock('unit_order', planet.planet_id, '没有选中的运输机器人', { position });
           store.exitInteractionMode();
@@ -307,7 +313,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
       }
 
       if (mode.kind === 'move') {
-        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
         if (selector.length === 0) {
           reportLocalBlock('move', planet.planet_id, '没有选中的己方单位', { position });
           store.exitInteractionMode();
@@ -319,7 +325,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
       }
 
       if (mode.kind === 'attack') {
-        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+        const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
         if (selector.length === 0) {
           reportLocalBlock('attack', planet.planet_id, '没有选中的己方单位', { position });
           store.exitInteractionMode();
@@ -352,7 +358,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
       }
 
       if (mode.kind === 'unit_order') {
-        const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+        const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
         if (selector.length === 0) {
           reportLocalBlock('unit_order', planet.planet_id, '没有可接受指令的单位（执行体不受理编队指令）', { position });
           store.exitInteractionMode();
@@ -371,7 +377,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
         store.exitInteractionMode();
       }
     },
-    [catalog, client, inventory, mechaUnbound, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitHaulOrder, submitMove, submitUnitOrder],
+    [catalog, client, foreignMechaIds, inventory, mechaUnbound, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitHaulOrder, submitMove, submitUnitOrder],
   );
 
   const contextTile = useCallback(
@@ -380,7 +386,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
         return false;
       }
       const store = usePlanetViewStore.getState();
-      const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+      const selector = commandableUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
 
       // C4：小队右键部署——按所属任务群分组下达 task_force_deploy 到目标坐标。
@@ -426,7 +432,7 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
       }
       return true;
     },
-    [client, knownOwnUnits, onTaskForceDeployed, planet, runtime, session.playerId, submitAttack, submitMove, taskForces],
+    [client, foreignMechaIds, knownOwnUnits, onTaskForceDeployed, planet, runtime, session.playerId, submitAttack, submitMove, taskForces],
   );
 
   const orderNow = useCallback(
@@ -435,13 +441,13 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
         return;
       }
       const store = usePlanetViewStore.getState();
-      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
       if (selector.length === 0) {
         return;
       }
       submitUnitOrder(selector, order, {});
     },
-    [knownOwnUnits, planet, session.playerId, submitUnitOrder],
+    [foreignMechaIds, knownOwnUnits, planet, session.playerId, submitUnitOrder],
   );
 
   /**
@@ -454,14 +460,14 @@ export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet
         return false;
       }
       const store = usePlanetViewStore.getState();
-      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits);
+      const selector = orderEligibleUnitIds(planet, store.selectedUnits, session.playerId, knownOwnUnits, foreignMechaIds);
       if (selector.length === 0) {
         return false;
       }
       submitUnitOrder(selector, 'attack_move', { position: { x: tile.x, y: tile.y, z: 0 } });
       return true;
     },
-    [knownOwnUnits, planet, session.playerId, submitUnitOrder],
+    [foreignMechaIds, knownOwnUnits, planet, session.playerId, submitUnitOrder],
   );
 
   return { attackMove, interactTile, contextTile, orderNow };

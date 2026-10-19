@@ -605,3 +605,123 @@ describe('PlanetSelectionBar 机甲所在星球判定（审查 #16）', () => {
     expect(screen.getByTestId('planet-selection-bar')).toHaveTextContent('你的机甲在 planet-1-2，不在本星球');
   });
 });
+
+describe('PlanetSelectionBar 按机甲操作者区分按钮（契约 §3.1）', () => {
+  beforeEach(() => {
+    resetPlanetViewStore();
+    vi.clearAllMocks();
+    useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
+  });
+
+  const mechaRecord = (unitId: string, operator: string) => ({
+    unit_id: unitId, planet_id: 'planet-1-1', operator, alive: true, respawn_at_tick: 0,
+    inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40, operate_range: 18,
+    concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+  });
+
+  /** 场上两台机甲：u-1（operator 由参数给）、u-2（空闲），脚下都有矿。 */
+  function scene(operator: string) {
+    const planet = miningPlanet();
+    planet.units!['u-2'] = {
+      id: 'u-2', type: 'executor', owner_id: 'p1', position: { x: 3, y: 1, z: 0 },
+      hp: 120, max_hp: 120, attack: 20, defense: 8, attack_range: 4, move_range: 14, vision_range: 6,
+      mecha: { energy: 90, max_energy: 100, fuel_energy: 0, shield: 0, max_shield: 0, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10, last_hit_tick: 0 },
+    } as never;
+    planet.resources!.push({ id: 'ore-2', planet_id: 'planet-1-1', kind: 'iron_ore', behavior: 'finite', position: { x: 3, y: 2, z: 0 }, remaining: 20 } as never);
+    const summary = {
+      tick: 10,
+      active_planet_id: 'planet-1-1',
+      players: {
+        p1: {
+          player_id: 'p1',
+          is_alive: true,
+          mechas: [mechaRecord('u-1', operator), mechaRecord('u-2', '')],
+        },
+      },
+    } as never;
+    return { planet, summary };
+  }
+
+  function selectUnit(id: string, position = { x: 1, y: 1, z: 0 }) {
+    usePlanetViewStore.getState().setSelected({ kind: 'unit', id, position });
+    usePlanetViewStore.getState().setSelectedUnits([id]);
+  }
+
+  it('我的机甲：保留采集脚下 / 移动 / 攻击', () => {
+    const { planet, summary } = scene('p1');
+    selectUnit('u-1');
+    render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={summary} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('采集脚下铁矿');
+    expect(screen.getByRole('button', { name: '移动' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '攻击' })).toBeInTheDocument();
+  });
+
+  it('空闲机甲：隐藏「采集脚下」，保留移动 / 攻击（服务端允许）', () => {
+    const { planet, summary } = scene('p1');
+    selectUnit('u-2', { x: 3, y: 1, z: 0 });
+    render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={summary} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).not.toHaveTextContent('采集脚下');
+    expect(screen.getByRole('button', { name: '移动' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '攻击' })).toBeInTheDocument();
+    expect(screen.queryByTestId('mecha-foreign-operator')).toBeNull();
+  });
+
+  it('别人绑定的机甲：不给采集 / 移动 / 攻击，换成操作者提示', () => {
+    const { planet, summary } = scene('builder-a');
+    selectUnit('u-1');
+    render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={summary} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(screen.getByTestId('mecha-foreign-operator')).toHaveTextContent('由 builder-a 操作 · 在工作台接管');
+    expect(bar).not.toHaveTextContent('采集脚下');
+    expect(screen.queryByRole('button', { name: '移动' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '攻击' })).toBeNull();
+    // 详情入口仍保留（抽屉被选择条盖住时的备用通道）。
+    expect(screen.queryByRole('button', { name: '机甲详情' })).toBeNull();
+  });
+
+  it('框选含别人绑定的机甲：不进可下令集合，并提示已跳过台数', async () => {
+    const user = userEvent.setup();
+    const { planet, summary } = scene('builder-a');
+    // u-1 = 别人的机甲，u-2 = 空闲机甲，u-3 = 士兵
+    planet.units!['u-3'] = {
+      id: 'u-3', type: 'soldier', owner_id: 'p1', position: { x: 4, y: 1, z: 0 },
+      hp: 80, max_hp: 80, attack: 9, defense: 3, attack_range: 2, move_range: 3, vision_range: 4,
+    } as never;
+    usePlanetViewStore.getState().setSelectedUnits(['u-1', 'u-2', 'u-3']);
+    render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={summary} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('已选 2 个单位');
+    expect(screen.getByTestId('selection-skipped-foreign')).toHaveTextContent('已跳过 1 台他人机甲');
+    // 批量指令仍可下达（移动/攻击对剩余单位）。
+    await user.click(screen.getByRole('button', { name: '移动' }));
+    expect(usePlanetViewStore.getState().interactionMode).toEqual({ kind: 'move' });
+  });
+
+  it('框选只剩别人的机甲：仍显示跳过计数，但不给移动 / 攻击', () => {
+    const { planet } = scene('builder-a');
+    planet.units!['u-4'] = {
+      id: 'u-4', type: 'executor', owner_id: 'p1', position: { x: 5, y: 1, z: 0 },
+      hp: 120, max_hp: 120, attack: 20, defense: 8, attack_range: 4, move_range: 14, vision_range: 6,
+      mecha: { energy: 90, max_energy: 100, fuel_energy: 0, shield: 0, max_shield: 0, attack_energy_cost: 8, move_energy_cost: 1, shield_recharge_delay: 10, last_hit_tick: 0 },
+    } as never;
+    const summary = {
+      ...(scene('builder-a').summary as never as Record<string, unknown>),
+      players: {
+        p1: {
+          player_id: 'p1',
+          is_alive: true,
+          mechas: [mechaRecord('u-1', 'builder-a'), mechaRecord('u-4', 'builder-b')],
+        },
+      },
+    } as never;
+    usePlanetViewStore.getState().setSelectedUnits(['u-1', 'u-4']);
+    render(<PlanetSelectionBar catalog={miningCatalog} planet={planet} summary={summary} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('已选 2 个单位');
+    expect(screen.getByTestId('selection-skipped-foreign')).toHaveTextContent('已跳过 2 台他人机甲');
+    expect(screen.queryByRole('button', { name: '移动' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '攻击' })).toBeNull();
+  });
+});

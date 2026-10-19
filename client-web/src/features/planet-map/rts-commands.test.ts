@@ -57,6 +57,17 @@ describe('rts-commands 选择器推导', () => {
     expect(commandableUnitIds(planet, ['u-2', 'u-3'], 'p1')).toEqual(['u-2', 'u-3']);
   });
 
+  it('commandableUnitIds：剔除绑定给其他发令者的机甲（契约 §3.1 NOT_OPERATOR）', () => {
+    const planet = makePlanet();
+    const foreign = new Set(['u-1']);
+    // u-1 是本方机甲但 operator=builder-a：不进选择器；其余单位照常。
+    expect(commandableUnitIds(planet, ['u-1', 'u-2', 'u-3'], 'p1', undefined, foreign)).toEqual(['u-2', 'u-3']);
+    // 未给 excludeIds 时行为不变（别的调用点不受影响）。
+    expect(commandableUnitIds(planet, ['u-1', 'u-2'], 'p1')).toEqual(['u-1', 'u-2']);
+    // unit_order 选择器同样剔除（它内部走 commandableUnitIds）。
+    expect(orderEligibleUnitIds(planet, ['u-1', 'u-2'], 'p1', undefined, foreign)).toEqual(['u-2']);
+  });
+
   it('orderEligibleUnitIds：执行体（mecha）不受理 unit_order', () => {
     const planet = makePlanet();
     expect(orderEligibleUnitIds(planet, ['u-1', 'u-2', 'u-3'], 'p1')).toEqual(['u-2', 'u-3']);

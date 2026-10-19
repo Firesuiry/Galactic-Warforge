@@ -1492,9 +1492,18 @@
 
 .command-mechas__table th,
 .command-mechas__table td {
-  padding: 6px 8px;
+  /* 右侧窄栏（300–340px）里 6 列要放得下：列间距收紧到 5px。 */
+  padding: 6px 5px;
   border-bottom: 1px solid var(--line-1);
   text-align: left;
+}
+
+.command-mechas__table th:first-child,
+.command-mechas__table td:first-child,
+.command-mechas__table th:last-child,
+.command-mechas__table td:last-child {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .command-mechas__table th {
