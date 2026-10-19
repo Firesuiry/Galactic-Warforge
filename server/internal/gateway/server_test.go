@@ -740,6 +740,113 @@ func TestPlanetInspectEndpointReturnsStructuredEntityPayload(t *testing.T) {
 	}
 }
 
+func TestPlanetInspectSorterEndpoints(t *testing.T) {
+	srv, core := newTestServer(t)
+	ws := core.World()
+	makeSorter := func(id string, pos model.Position, rotation model.PlanRotation) *model.Building {
+		profile := model.BuildingProfileFor(model.BuildingTypeSorterMk1, 1)
+		b := &model.Building{
+			ID:          id,
+			Type:        model.BuildingTypeSorterMk1,
+			OwnerID:     "p1",
+			Position:    pos,
+			Rotation:    rotation,
+			HP:          profile.MaxHP,
+			MaxHP:       profile.MaxHP,
+			Level:       1,
+			VisionRange: profile.VisionRange,
+			Runtime:     profile.Runtime,
+		}
+		model.InitBuildingSorter(b)
+		b.Runtime.State = model.BuildingWorkRunning
+		return b
+	}
+	makeBelt := func(id string, pos model.Position) *model.Building {
+		profile := model.BuildingProfileFor(model.BuildingTypeConveyorBeltMk1, 1)
+		b := &model.Building{
+			ID:          id,
+			Type:        model.BuildingTypeConveyorBeltMk1,
+			OwnerID:     "p1",
+			Position:    pos,
+			HP:          profile.MaxHP,
+			MaxHP:       profile.MaxHP,
+			Level:       1,
+			VisionRange: profile.VisionRange,
+			Runtime:     profile.Runtime,
+		}
+		model.InitBuildingConveyor(b)
+		b.Conveyor.Output = model.ConveyorEast
+		b.Conveyor.Input = model.ConveyorWest
+		b.Runtime.State = model.BuildingWorkRunning
+		return b
+	}
+	ws.Lock()
+	// 取货带 (2,4) — 分拣器 (3,4) 正面东 — 放货带 (4,4)。
+	ws.Buildings["belt-in"] = makeBelt("belt-in", model.Position{X: 2, Y: 4})
+	ws.Buildings["belt-out"] = makeBelt("belt-out", model.Position{X: 4, Y: 4})
+	ws.Buildings["sorter-ok"] = makeSorter("sorter-ok", model.Position{X: 3, Y: 4}, model.PlanRotation90)
+	// 背面空的同款分拣器（朝北：正面 (3,3) 是空地）。
+	ws.Buildings["sorter-empty"] = makeSorter("sorter-empty", model.Position{X: 3, Y: 4 + 2}, model.PlanRotation0)
+	notSorterPos := model.Position{X: 20, Y: 20}
+	ws.Buildings["not-sorter"] = &model.Building{
+		ID: "not-sorter", Type: model.BuildingTypeWindTurbine, OwnerID: "p1",
+		Position: notSorterPos, HP: 150, MaxHP: 150, Level: 1, VisionRange: 2,
+	}
+	for _, id := range []string{"belt-in", "belt-out", "sorter-ok", "sorter-empty"} {
+		if err := ws.IndexBuilding(ws.Buildings[id]); err != nil {
+			t.Fatalf("index %s: %v", id, err)
+		}
+	}
+	// 非分拣器只登记锚点：地图开局已有建筑，整块占地可能被占。
+	ws.TileBuilding[model.TileKey(notSorterPos.X, notSorterPos.Y)] = "not-sorter"
+	ws.Unlock()
+
+	get := func(id string) map[string]any {
+		req := httptest.NewRequest("GET", "/world/planets/planet-1-1/inspect?entity_kind=building&entity_id="+id, nil)
+		req.Header.Set("Authorization", "Bearer key1")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("inspect %s: %d %s", id, rec.Code, rec.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("invalid json: %v", err)
+		}
+		return body
+	}
+
+	body := get("sorter-ok")
+	endpoints, ok := body["sorter_endpoints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected sorter_endpoints, got %#v", body["sorter_endpoints"])
+	}
+	pick, _ := endpoints["pick"].(map[string]any)
+	drop, _ := endpoints["drop"].(map[string]any)
+	if pick["building_id"] != "belt-in" || pick["direction"] != "west" || pick["steps"] != float64(1) {
+		t.Fatalf("unexpected pick endpoint: %#v", pick)
+	}
+	if drop["building_id"] != "belt-out" || drop["direction"] != "east" {
+		t.Fatalf("unexpected drop endpoint: %#v", drop)
+	}
+
+	body = get("sorter-empty")
+	endpoints, ok = body["sorter_endpoints"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected sorter_endpoints for empty sorter, got %#v", body["sorter_endpoints"])
+	}
+	pick, _ = endpoints["pick"].(map[string]any)
+	if pick["reason"] != "no_building" {
+		t.Fatalf("expected no_building reason, got %#v", pick)
+	}
+
+	// 非分拣器不下发该字段。
+	body = get("not-sorter")
+	if _, exists := body["sorter_endpoints"]; exists {
+		t.Fatalf("non-sorter building must not carry sorter_endpoints: %#v", body["sorter_endpoints"])
+	}
+}
+
 func TestPlanetSceneEndpoint(t *testing.T) {
 	srv, _ := newTestServer(t)
 	req := httptest.NewRequest("GET", "/world/planets/planet-1-1/scene?x=2&y=3&width=8&height=6", nil)
