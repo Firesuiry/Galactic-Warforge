@@ -339,9 +339,18 @@ export function createApiClient(options: ApiClientOptions) {
     return response.json() as Promise<T>;
   }
 
-  /** 设置鉴权与发令者；issuer 缺省 = 玩家本人。 */
+  /**
+   * 设置鉴权与发令者；issuer 缺省时保留当前代理发令者（切玩家不改代理名），
+   * 当前是玩家发令则跟随新玩家 ID。清空玩家（登出）时发令者一并复位。
+   */
   function setAuth(playerId: string, playerKey: string, issuer?: { issuerType?: 'player' | 'agent'; issuerId?: string }) {
-    auth = normalizeAuth({ playerId, playerKey, ...issuer });
+    if (issuer) {
+      auth = normalizeAuth({ playerId, playerKey, ...issuer });
+    } else if (playerId && auth.issuerType === 'agent' && auth.issuerId) {
+      auth = { playerId, playerKey, issuerType: 'agent', issuerId: auth.issuerId };
+    } else {
+      auth = normalizeAuth({ playerId, playerKey });
+    }
   }
 
   /** 只改发令者（REPL `as <名>` / `SW_ISSUER`）；undefined = 恢复玩家本人。 */

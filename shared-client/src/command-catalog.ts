@@ -659,6 +659,7 @@ export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPerm
   fog: { category: "observe" },
   checkpoint: { category: "management" },
   save: { category: "management" },
+  mecha: { category: "management" },
 };
 
 /** 智能体命令白名单：额外命令 + 公开命令的 CLI 别名。 */
