@@ -2227,3 +2227,47 @@ body:has([data-planet-minimap]) {
   font-size:.74rem;
   font-weight:600;
 }
+
+/* 机甲侧栏「操作者」行（第 21 轮契约 §7.3 第 2 条）。 */
+.mecha-operator {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.mecha-operator__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mecha-operator__label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.mecha-operator__value {
+  color: var(--text);
+}
+
+.mecha-operator__id {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.mecha-operator__takeover {
+  margin-left: auto;
+}
+
+.mecha-operator__hint {
+  margin: 4px 0 0;
+}
+
+.mecha-operator__readonly {
+  margin: 4px 0 0;
+}

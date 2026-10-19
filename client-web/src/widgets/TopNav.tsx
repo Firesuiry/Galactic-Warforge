@@ -210,7 +210,7 @@ export function TopNav() {
           <Icon iconKey="tesla_tower" color="#ffb454" size={16} />
           <span className="top-nav__chip-value">{currentPlayer?.resources?.energy ?? 0}</span>
         </span>
-        <InventoryChips
+        <TopNavInventoryChips
           catalog={catalogQuery.data}
           inventory={myMecha?.inventory}
           mechaId={myMecha?.unit_id}
@@ -337,7 +337,7 @@ function alertPosition(details: Record<string, unknown> | undefined): { x: numbe
 }
 
 /** 顶栏关键库存（弹药/电路板/铁块…前 4 项），点击展开完整背包库存。 */
-function InventoryChips({ catalog, inventory, mechaId, slots }: {
+export function TopNavInventoryChips({ catalog, inventory, mechaId, slots }: {
   catalog?: CatalogView;
   inventory?: ItemInventory;
   /** 我的机甲 ID（契约 §7.3：chip 文案「背包 <used>/<total> 格 · <机甲ID>」）。 */
