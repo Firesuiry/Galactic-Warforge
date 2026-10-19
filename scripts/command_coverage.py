@@ -237,6 +237,7 @@ def render_markdown(matrix: dict) -> str:
         "2. shared 声明了 `cliCommandName` 的命令必须在 CLI `COMMANDS` 注册",
         "3. `webSurface=required` 的命令必须有 GUI `client.cmd*` 调用点",
         "4. 服务端API.md / 客户端CLI.md 的生成命令表与目录一致（`scripts/gen_command_docs.py`）",
+        "5. 科技树与建造前置.md 与游戏数据一致（`scripts/gen_tech_tree_doc.py`）",
         "",
     ]
     return "\n".join(lines)
@@ -258,6 +259,16 @@ def check(matrix: dict) -> list[str]:
         errors.append(
             f"stale command docs (run python3 scripts/gen_command_docs.py): {stale}"
         )
+    try:
+        import gen_tech_tree_doc
+    except ImportError:
+        errors.append("gen_tech_tree_doc.py 不可导入（科技树文档检查跳过）")
+    else:
+        if gen_tech_tree_doc.main(["--check"]) != 0:
+            errors.append(
+                "stale tech tree doc (run python3 scripts/gen_tech_tree_doc.py): "
+                "docs/guide/科技树与建造前置.md"
+            )
     return errors
 
 
