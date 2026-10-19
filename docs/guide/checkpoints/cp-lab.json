@@ -10,8 +10,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-59"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-59",
@@ -26,8 +25,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-49"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-49",
@@ -59,8 +57,7 @@
         "type": "mine_resource",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "resource_id": "planet-1-1-res-3012",
@@ -82,8 +79,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "glass",
@@ -105,8 +101,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "smelt_magnet",
@@ -128,8 +123,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "magnetic_coil",
@@ -154,8 +148,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "circuit_board",
@@ -177,8 +170,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "smelt_iron",
