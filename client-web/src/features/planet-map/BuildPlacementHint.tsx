@@ -14,13 +14,15 @@ import { usePlanetViewStore } from '@/features/planet-map/store';
 interface Props {
   catalog?: CatalogView;
   inventory?: ItemInventory;
+  /** 发令者未绑定机甲：建造由机甲执行，预览直接给「先去接管」。 */
+  mechaUnbound?: boolean;
   planet: PlanetRenderView;
   playerId: string;
   /** 施工任务列表：同一格已有自己的施工任务时给出本地提示（试玩 1010 G）。 */
   runtime?: PlanetRuntimeView;
 }
 
-export function BuildPlacementHint({ catalog, inventory, planet, playerId, runtime }: Props) {
+export function BuildPlacementHint({ catalog, inventory, mechaUnbound, planet, playerId, runtime }: Props) {
   const mode = usePlanetViewStore((state) => state.interactionMode);
   const tile = usePlanetViewStore((state) => state.hoveredTile);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
@@ -37,7 +39,7 @@ export function BuildPlacementHint({ catalog, inventory, planet, playerId, runti
   // 施工任务（服务端权威，含 player_id）由 assessBuildTiles 一并评估：占位文案与服务端
   // constructionReservationMessage 完全同口径（「该格已有你的施工任务：传送带 Mk.I（排队中）」），
   // 不再自造「此格已有你的施工任务（pending）」这类另一套措辞（试玩 1011 E）。
-  const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory, runtime, mode.elevation ?? 0);
+  const assessment = assessBuildTiles(catalog, mode.buildingType, planet, { x: tile.x, y: tile.y, z: 0 }, playerId, mode.rotation, inventory, runtime, mode.elevation ?? 0, mechaUnbound);
   const describe = (value: NonNullable<typeof assessment>) => describeBuildBlock(
     value,
     (itemId) => getItemDisplayName(catalog, itemId),

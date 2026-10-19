@@ -702,3 +702,45 @@ describe('PlanetBuildBar 传送带目标高度（§3.5）', () => {
     expect(screen.getByTestId('planet-build-elevation')).toHaveTextContent('高度 0');
   });
 });
+
+describe('PlanetBuildBar 未绑定机甲（审查 #7 / #14）', () => {
+  beforeEach(() => {
+    resetPlanetViewStore();
+    useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
+  });
+
+  it('未绑定机甲：点建造卡只给「未绑定机甲」原因，不进建造模式；卡片不显示为缺料', async () => {
+    const user = userEvent.setup();
+    const noMechaSummary = {
+      ...summary,
+      players: {
+        p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } },
+      },
+    } satisfies StateSummary;
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={noMechaSummary} planet={makePlanet()} />);
+
+    const card = screen.getByRole('button', { name: /风力发电机/ });
+    // 不是「缺料」：不置灰、不标 data-shortage。
+    expect(card).not.toHaveAttribute('data-shortage');
+    expect(card.getAttribute('aria-label')).toContain('未绑定机甲');
+
+    await user.click(card);
+
+    expect(usePlanetViewStore.getState().interactionMode.kind).not.toBe('build');
+    const notice = screen.getByTestId('planet-build-unbound');
+    expect(notice).toHaveTextContent('未绑定机甲：先在行星上接管一台');
+    expect(notice).not.toHaveTextContent('缺少');
+  });
+
+  it('未绑定机甲时悬停详情给「未绑定机甲」，不列逐项背包数字', async () => {
+    const noMechaSummary = {
+      ...summary,
+      players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } },
+    } satisfies StateSummary;
+    renderBuildBar(<PlanetBuildBar catalog={catalog} summary={noMechaSummary} planet={makePlanet()} />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /风力发电机/ }));
+    const detail = screen.getByTestId('planet-build-detail');
+    expect(detail).toHaveTextContent('未绑定机甲：先在行星上接管一台');
+    expect(detail).not.toHaveTextContent('背包有 / 需要');
+  });
+});

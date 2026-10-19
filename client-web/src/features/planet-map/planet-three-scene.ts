@@ -62,6 +62,8 @@ export interface PlanetThreeData {
   darkFogHostile?: boolean;
   /** 玩家背包：建造预览缺料时标红。 */
   inventory?: ItemInventory;
+  /** 发令者未绑定机甲：建造预览直接标红并给「先去接管」。 */
+  mechaUnbound?: boolean;
   /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，画红色短杠（试玩 1016 B1）。 */
   alerts?: AlertEntry[];
 }
@@ -1040,7 +1042,7 @@ export class PlanetThreeScene {
       if (this.interaction.interactionMode.kind === 'build') {
         const mode = this.interaction.interactionMode;
         // 高架带按目标高度预检（压低矮物流可放、压机器不可放），描边与服务端同口径（契约 §3.2）。
-        const assessment = assessBuildTiles(this.data.catalog, mode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId, mode.rotation, this.data.inventory, undefined, mode.elevation ?? 0);
+        const assessment = assessBuildTiles(this.data.catalog, mode.buildingType, this.data.planet, { ...tile, z: 0 }, this.data.playerId, mode.rotation, this.data.inventory, undefined, mode.elevation ?? 0, this.data.mechaUnbound);
         const footprint = assessment?.footprint ?? { width: 1, height: 1 };
         for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);
