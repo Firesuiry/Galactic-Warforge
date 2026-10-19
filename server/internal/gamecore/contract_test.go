@@ -14,7 +14,7 @@ func TestEvaluateContractPredicateVocabulary(t *testing.T) {
 	ws := core.World()
 	ws.Tick = 1234
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 7}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 7}
 	player.Tech = model.NewPlayerTechState("p1")
 	player.Tech.CompletedTechs["electromagnetism"] = 1
 	// 进行中的研究：research_in_progress 表用例（table 用例共享同一份状态）。
@@ -294,7 +294,7 @@ func TestBuildingItemPredicate(t *testing.T) {
 	lab.Storage.EnsureOutputBuffer()[model.ItemElectromagneticMatrix] = 3
 
 	// 背包里的矩阵不算数：谓词只看建筑库存。
-	player.Inventory = model.ItemInventory{model.ItemElectromagneticMatrix: 99}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemElectromagneticMatrix: 99}
 
 	eval := func(check checkpoint.ContractCheck) checkpoint.ContractResult {
 		return core.EvaluateContract(checkpoint.Contract{Checks: []checkpoint.ContractCheck{check}}).Results[0]

@@ -258,7 +258,7 @@ func TestParticleColliderBuildResearchGates(t *testing.T) {
 }
 
 func TestParticleColliderConstructedLineImportsAndExports(t *testing.T) {
-	core := newConstructionTestCore(t, 4, 4)
+	core := newConstructionTestCore(t, 4)
 	ws := core.World()
 	// 细分网格：粒子对撞机占地 5×5，IO 是占地外圈的一圈 cell。第 16 轮契约 §3
 	// 起对撞机不与皮带直连，三台分拣器接上：进料（背西面东）、主产物（背西面东）、

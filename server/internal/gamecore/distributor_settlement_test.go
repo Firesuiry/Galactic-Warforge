@@ -8,7 +8,14 @@ import (
 func distributorTestWorld(t *testing.T) (*model.WorldState, *model.Building, *model.Building) {
 	t.Helper()
 	ws := model.NewWorldState("distributor-test", 32)
-	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: model.ItemInventory{}}
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 8, Y: 8}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 	ws.PowerSnapshot = &model.PowerSettlementSnapshot{Tick: ws.Tick, Allocations: model.PowerAllocationState{Buildings: map[string]model.PowerAllocation{}}}
 	add := func(id string, x int, mode model.LogisticsStationMode, keep int) *model.Building {
 		host := newBuilding(id+"-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: x, Y: 8})
@@ -150,7 +157,7 @@ func distributorTestMecha(ws *model.WorldState, pos model.Position) *model.Unit 
 	unit.ID, unit.OwnerID, unit.Type, unit.Position = "mecha", "p1", model.UnitTypeExecutor, pos
 	unit.Mecha.LogisticsRequests = map[string]model.MechaLogisticsRequest{model.ItemIronOre: {Min: 5, Max: 12}}
 	ws.Units[unit.ID] = &unit
-	ws.Players["p1"].SetPlanetExecutor(ws.PlanetID, model.NewExecutorState(unit.ID, 1, 10, 1, 0))
+	registerMecha(ws, "p1", &unit)
 	return &unit
 }
 
@@ -173,7 +180,7 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			distributorTestMecha(ws, sink.Position)
 			player := ws.Players["p1"]
 			if collection {
-				player.Inventory[model.ItemIronOre] = 29
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemIronOre] = 29
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemIronOre, 40)
 			}
@@ -183,8 +190,8 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			// 细分网格：配送器航程 ×3（12→36），机甲(15,8) 与 home(8,8) 相距 7，
 			// 仍在范围内；但 3 台机器人各飞一趟要更多 tick（速度没变）。
 			distributorTestTicks(t, ws, 60)
-			if player.Inventory[model.ItemIronOre] != 12 {
-				t.Fatalf("request max violated: %d", player.Inventory[model.ItemIronOre])
+			if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] != 12 {
+				t.Fatalf("request max violated: %d", starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre])
 			}
 			want := 28
 			if collection {
@@ -194,10 +201,10 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 				t.Fatalf("home cargo %d, want %d", got, want)
 			}
 			// Inside the min/max band there must be no replenishment flight.
-			player.Inventory[model.ItemIronOre] = 7
+			starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemIronOre] = 7
 			energy := home.Distributor.Energy
 			distributorTestTicks(t, ws, 3)
-			if player.Inventory[model.ItemIronOre] != 7 || home.Distributor.Energy != energy {
+			if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] != 7 || home.Distributor.Energy != energy {
 				t.Fatal("dispatched within min/max band")
 			}
 		})
@@ -228,7 +235,7 @@ func TestDistributorMechaLeavesRangeOrActivePlanetReturnsCargo(t *testing.T) {
 				delete(ws.Units, unit.ID)
 			}
 			distributorTestTicks(t, ws, 10)
-			if bot.Status != model.LogisticsDroneIdle || ws.Players["p1"].Inventory[model.ItemIronOre] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemIronOre) != 30 {
+			if bot.Status != model.LogisticsDroneIdle || starterMecha(ws, "p1").Inventory[model.ItemIronOre] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemIronOre) != 30 {
 				t.Fatalf("lost cargo after target moved: %+v", bot)
 			}
 			if home.Distributor.Energy != 96 {
@@ -318,23 +325,23 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 				t.Fatalf("installed absent items: %+v", result)
 			}
 			if source == "player" {
-				player.Inventory[model.ItemLogisticsBot] = 2
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemLogisticsBot, 2)
 			}
 			result, _ = execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd)
-			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 2 || player.Inventory[model.ItemLogisticsBot] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemLogisticsBot) != 0 {
+			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 2 || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 0 || model.DistributorHost(ws, home).Storage.OutputQuantity(model.ItemLogisticsBot) != 0 {
 				t.Fatalf("install accounting: %+v", result)
 			}
 			distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
 			distributorTestTicks(t, ws, 1)
 			result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", cmd)
-			if result.Status != model.StatusFailed || len(ws.LogisticsBots) != 2 || player.Inventory[model.ItemLogisticsBot] != 0 {
+			if result.Status != model.StatusFailed || len(ws.LogisticsBots) != 2 || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 0 {
 				t.Fatal("active robots uninstalled")
 			}
 			distributorTestTicks(t, ws, 10)
 			result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", cmd)
-			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 0 || player.Inventory[model.ItemLogisticsBot] != 2 {
+			if result.Code != model.CodeOK || len(ws.LogisticsBots) != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 2 {
 				t.Fatalf("idle robot recovery failed: %+v", result)
 			}
 		})
@@ -397,7 +404,7 @@ func TestDistributorBufferedWarehouseAccountingThroughStorageTicks(t *testing.T)
 			}
 			got := total(sink)
 			if trip == "mecha" {
-				got = ws.Players["p1"].Inventory[model.ItemIronOre]
+				got = starterMecha(ws, "p1").Inventory[model.ItemIronOre]
 			}
 			if got != 20 {
 				t.Fatalf("receiver reached %d instead of 20", got)
@@ -427,17 +434,17 @@ func TestDistributorMechaDeliveryNeverExceedsInventoryCapacity(t *testing.T) {
 	// 背包离满还差 2 格，且请求里一件铁矿石都没有（0 < Min=0 不成立 -> 不触发配送）。
 	// 先把 Min 抬到 1 让配送条件成立。
 	unit.Mecha.LogisticsRequests[model.ItemIronOre] = model.MechaLogisticsRequest{Min: 1, Max: 9999}
-	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 2) * model.ItemStackSize(model.ItemCoal)}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: (slots - 2) * model.ItemStackSize(model.ItemCoal)}
 
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 40)
 	for _, id := range []string{"a", "b", "c"} {
 		distributorTestBot(t, ws, home, id)
 	}
 	distributorTestTicks(t, ws, 20)
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("mecha delivery pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemIronOre] != 10 {
-		t.Fatalf("delivery should fill only the free slots, got %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] != 10 {
+		t.Fatalf("delivery should fill only the free slots, got %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 }

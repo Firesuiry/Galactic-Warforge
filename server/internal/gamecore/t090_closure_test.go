@@ -24,7 +24,7 @@ func newTwoPlanetTestCore(t *testing.T) (*GameCore, *config.Config, *mapconfig.C
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -79,12 +79,17 @@ func newBuilding(id string, btype model.BuildingType, owner string, pos model.Po
 }
 
 func issueInternalCommand(core *GameCore, playerID string, cmd model.Command) model.CommandResult {
+	return issueInternalCommandAs(core, playerID, playerID, cmd)
+}
+
+// issueInternalCommandAs 以指定发令者执行一条命令（多机甲协作测试用）。
+func issueInternalCommandAs(core *GameCore, playerID, issuerID string, cmd model.Command) model.CommandResult {
 	results, _ := core.executeRequest(&model.QueuedRequest{
 		PlayerID: playerID,
 		Request: model.CommandRequest{
 			RequestID:  "req-test",
 			IssuerType: "player",
-			IssuerID:   playerID,
+			IssuerID:   issuerID,
 			Commands:   []model.Command{cmd},
 		},
 	})

@@ -44,12 +44,11 @@ func grantAllItems(ws *model.WorldState, playerID string, qty int) {
 	if player == nil {
 		return
 	}
-	if player.Inventory == nil {
-		player.Inventory = map[string]int{}
+	record := player.MechaByOperator(player.PlayerID)
+	if record == nil {
+		record = starterMecha(ws, player.PlayerID)
 	}
-	for _, def := range model.AllItems() {
-		player.Inventory[def.ID] += qty
-	}
+	grantAllItemsToMecha(record, qty)
 }
 
 // grantItems stocks specific items, for tests that pin a fresh-game inventory
@@ -63,7 +62,7 @@ func grantItems(ws *model.WorldState, playerID string, items ...model.ItemAmount
 		return
 	}
 	for _, item := range items {
-		player.EnsureInventory()[item.ItemID] += item.Quantity
+		starterMecha(ws, player.PlayerID).EnsureInventory()[item.ItemID] += item.Quantity
 	}
 }
 
@@ -71,5 +70,16 @@ func grantItems(ws *model.WorldState, playerID string, items ...model.ItemAmount
 func provokeDarkFogFor(ws *model.WorldState, playerIDs ...string) {
 	for _, pid := range playerIDs {
 		provokeDarkFog(ws, pid, true)
+	}
+}
+
+// grantAllItemsToMecha stocks one mecha backpack with qty of every catalog item.
+func grantAllItemsToMecha(record *model.MechaRecord, qty int) {
+	if record == nil {
+		return
+	}
+	record.EnsureInventory()
+	for _, def := range model.AllItems() {
+		record.Inventory[def.ID] += qty
 	}
 }

@@ -493,7 +493,7 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 			noteConstructionWait(ws, task, "insufficient_materials")
 			continue
 		}
-		mechaCtx := mechaContext{Record: record, Player: ws.Players[task.PlayerID], World: ws}
+		mechaCtx := mechaContext{Record: record, Unit: ws.Units[record.UnitID], Player: ws.Players[task.PlayerID], World: ws}
 		if task.AutoApproach && gc.requireBuildRange(ws, task.PlayerID, mechaCtx, task.Position) != nil {
 			unit, path := planBuildApproach(ws, task.MechaID, task.Position)
 			if unit != nil && !unit.HasPath() {

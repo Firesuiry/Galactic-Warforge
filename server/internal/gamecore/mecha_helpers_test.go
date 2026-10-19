@@ -1,6 +1,10 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"testing"
+
+	"siliconworld/internal/model"
+)
 
 // 本文件只放测试辅助函数（由 S1b 迁移测试时使用）；不含测试用例。
 //
@@ -51,4 +55,42 @@ func setStarterBackpack(ws *model.WorldState, playerID string, items model.ItemI
 		return
 	}
 	record.Inventory = items.Clone()
+}
+
+// registerMecha 在测试世界里登记一台机甲单位与它的档案（Operator = playerID），
+// 供手工构造机甲单位、但没有经过开局脚本登记档案的测试使用。返回档案。
+func registerMecha(ws *model.WorldState, playerID string, unit *model.Unit) *model.MechaRecord {
+	player := ws.Players[playerID]
+	if player == nil || unit == nil {
+		return nil
+	}
+	record := &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID, Operator: playerID}
+	player.EnsureMechas()[unit.ID] = record
+	return record
+}
+
+// mechaOnPlanet 返回玩家在某颗行星上的机甲档案（按 unit_id 排序取第一台）。
+func mechaOnPlanet(ws *model.WorldState, playerID, planetID string) *model.MechaRecord {
+	player := ws.Players[playerID]
+	if player == nil {
+		return nil
+	}
+	for _, record := range player.SortedMechas() {
+		if record.PlanetID == planetID {
+			return record
+		}
+	}
+	return nil
+}
+
+// bindMechaToIssuer 把玩家在该行星上的机甲档案改绑到 issuerID（测试用：让
+// 多条命令分别落在不同行星，绕开「一个发令者只绑一台机甲」）。
+func bindMechaToIssuer(t *testing.T, ws *model.WorldState, playerID, issuerID string) *model.MechaRecord {
+	t.Helper()
+	record := mechaOnPlanet(ws, playerID, ws.PlanetID)
+	if record == nil {
+		t.Fatalf("player %s has no mecha on %s", playerID, ws.PlanetID)
+	}
+	record.Operator = issuerID
+	return record
 }

@@ -17,7 +17,7 @@ func installTestStationFleet(core *GameCore, ws *model.WorldState, b *model.Buil
 		if entry.item == model.ItemLogisticsVessel && b.Type != model.BuildingTypeInterstellarLogisticsStation {
 			continue
 		}
-		ws.Players[b.OwnerID].AddItems([]model.ItemAmount{{ItemID: entry.item, Quantity: entry.qty}}, 0)
+		starterMecha(ws, b.OwnerID).AddItems([]model.ItemAmount{{ItemID: entry.item, Quantity: entry.qty}}, 0)
 		result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, b.OwnerID, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: b.ID}, Payload: map[string]any{"item_id": entry.item, "quantity": entry.qty}})
 		if result.Status != model.StatusExecuted {
 			return fmt.Errorf("install fixture: %s", result.Message)
@@ -48,7 +48,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	attachBuilding(ws, station)
 	grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 	player := ws.Players["p1"]
-	player.AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}}, 0)
+	starterMecha(ws, player.PlayerID).AddItems([]model.ItemAmount{{ItemID: model.ItemLogisticsDrone, Quantity: 12}, {ItemID: model.ItemLogisticsVessel, Quantity: 5}}, 0)
 	install := func(owner, item string, qty any) model.CommandResult {
 		r, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, owner, model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": item, "quantity": qty}})
 		return r
@@ -56,7 +56,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	if r := install("p1", model.ItemLogisticsDrone, 3); r.Status != model.StatusExecuted {
 		t.Fatal(r)
 	}
-	if player.Inventory[model.ItemLogisticsDrone] != 9 || model.StationDroneCount(ws, station.ID) != 3 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsDrone] != 9 || model.StationDroneCount(ws, station.ID) != 3 {
 		t.Fatal("installation did not conserve inventory")
 	}
 	for _, tc := range []struct {
@@ -66,17 +66,17 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 		if r := install(tc.owner, tc.item, tc.qty); r.Status != model.StatusFailed {
 			t.Fatalf("invalid installation accepted %+v: %+v", tc, r)
 		}
-		if player.Inventory[model.ItemLogisticsDrone] != 9 || model.StationDroneCount(ws, station.ID) != 3 || model.StationShipCount(ws, station.ID) != 0 {
+		if starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsDrone] != 9 || model.StationDroneCount(ws, station.ID) != 3 || model.StationShipCount(ws, station.ID) != 0 {
 			t.Fatal("failed installation mutated inventory/fleet")
 		}
 	}
 	if r := install("p1", model.ItemLogisticsVessel, 2); r.Status != model.StatusExecuted {
 		t.Fatal(r)
 	}
-	if player.Inventory[model.ItemLogisticsVessel] != 3 || model.StationShipCount(ws, station.ID) != 2 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsVessel] != 3 || model.StationShipCount(ws, station.ID) != 2 {
 		t.Fatal("ship installation did not conserve inventory")
 	}
-	player.Inventory[model.ItemLogisticsDrone] = 0
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsDrone] = 0
 	if r := install("p1", model.ItemLogisticsDrone, 1); r.Code != model.CodeInsufficientResource {
 		t.Fatal(r)
 	}
@@ -91,6 +91,13 @@ func newVehicleFlightFixture(t *testing.T) (*model.WorldState, *model.Building, 
 	t.Helper()
 	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 1, Y: 1}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 	a := newLogisticsStationBuilding("origin", model.Position{X: 1, Y: 1})
 	b := newLogisticsStationBuilding("target", model.Position{X: 9, Y: 1})
 	attachBuilding(ws, a)
@@ -426,7 +433,14 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 	for _, itemID := range []string{model.ItemLogisticsDrone, model.ItemLogisticsVessel} {
 		t.Run(itemID, func(t *testing.T) {
 			ws := model.NewWorldState("planet-1", 16)
-			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: make(model.ItemInventory)}
+			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+			stats := model.UnitStats(model.UnitTypeExecutor)
+			execUnit := &stats
+			execUnit.ID = "u-starter"
+			execUnit.OwnerID = "p1"
+			execUnit.Position = model.Position{X: 3, Y: 3}
+			ws.Units[execUnit.ID] = execUnit
+			registerMecha(ws, "p1", execUnit)
 			grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 			core := &GameCore{}
 			// 细分网格：制造台 3×3（x3..5）、运输站 5×5（x8..12）。第 16 轮契约 §3
@@ -453,7 +467,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 				t.Fatal("missing vehicle recipe")
 			}
 			for _, input := range recipe.Inputs {
-				ws.Players["p1"].Inventory[input.ItemID] = input.Quantity
+				starterMecha(ws, "p1").EnsureInventory()[input.ItemID] = input.Quantity
 				result, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": factory.ID, "item_id": input.ItemID, "quantity": input.Quantity}})
 				if result.Status != model.StatusExecuted {
 					t.Fatalf("input transfer: %+v", result)
@@ -470,11 +484,11 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 				settleBuildingIO(ws)
 				settleLogisticsStationIO(ws)
 			}
-			if station.LogisticsStation.Inventory[itemID] != 1 || ws.Players["p1"].Inventory[itemID] != 0 || factory.ExportableItemQuantity(itemID) != 0 || belt.Conveyor.TotalItems() != 0 {
+			if station.LogisticsStation.Inventory[itemID] != 1 || starterMecha(ws, "p1").Inventory[itemID] != 0 || factory.ExportableItemQuantity(itemID) != 0 || belt.Conveyor.TotalItems() != 0 {
 				t.Fatalf("manufacturing belt path failed: station=%v factory=%+v belt=%+v", station.LogisticsStation.Inventory, factory.Storage, belt.Conveyor)
 			}
 			for _, input := range recipe.Inputs {
-				if ws.Players["p1"].Inventory[input.ItemID] != 0 || availableStorageItem(factory.Storage, input.ItemID) != 0 {
+				if starterMecha(ws, "p1").Inventory[input.ItemID] != 0 || availableStorageItem(factory.Storage, input.ItemID) != 0 {
 					t.Fatal("manufacturing did not consume physical ingredients")
 				}
 			}
@@ -493,7 +507,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 			}
 			command.Payload["source"] = "station"
 			result, _ = execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", command)
-			if result.Status != model.StatusExecuted || station.LogisticsStation.Inventory[itemID] != 0 || len(ws.LogisticsDrones)+len(ws.LogisticsShips) != 1 || ws.Players["p1"].Inventory[itemID] != 0 {
+			if result.Status != model.StatusExecuted || station.LogisticsStation.Inventory[itemID] != 0 || len(ws.LogisticsDrones)+len(ws.LogisticsShips) != 1 || starterMecha(ws, "p1").Inventory[itemID] != 0 {
 				t.Fatalf("station-source installation did not conserve manufactured vehicle: %+v", result)
 			}
 		})
@@ -503,11 +517,11 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 func TestPlanetaryStationRejectsInstallingVesselFromEitherInventory(t *testing.T) {
 	ws, station, _, _ := newVehicleFlightFixture(t)
 	core := &GameCore{}
-	ws.Players["p1"].Inventory = model.ItemInventory{model.ItemLogisticsVessel: 1}
+	starterMecha(ws, "p1").Inventory = model.ItemInventory{model.ItemLogisticsVessel: 1}
 	station.LogisticsStation.Inventory[model.ItemLogisticsVessel] = 1
 	for _, source := range []string{"player", "station"} {
 		result, _ := execCommand(core, model.CmdInstallLogisticsVehicle, ws, "p1", model.Command{Type: model.CmdInstallLogisticsVehicle, Target: model.CommandTarget{EntityID: station.ID}, Payload: map[string]any{"item_id": model.ItemLogisticsVessel, "quantity": 1, "source": source}})
-		if result.Code != model.CodeValidationFailed || station.LogisticsStation.Inventory[model.ItemLogisticsVessel] != 1 || ws.Players["p1"].Inventory[model.ItemLogisticsVessel] != 1 || len(ws.LogisticsShips) != 0 {
+		if result.Code != model.CodeValidationFailed || station.LogisticsStation.Inventory[model.ItemLogisticsVessel] != 1 || starterMecha(ws, "p1").Inventory[model.ItemLogisticsVessel] != 1 || len(ws.LogisticsShips) != 0 {
 			t.Fatal("planetary station accepted vessel or consumed it")
 		}
 	}

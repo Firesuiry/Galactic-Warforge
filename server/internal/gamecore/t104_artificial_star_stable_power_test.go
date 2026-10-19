@@ -29,7 +29,7 @@ func TestT104ArtificialStarRuntimeEventsAndQueryViewsStayConsistentAcrossFuelTic
 		t.Fatalf("expected no player generation without fuel, got %d", generation)
 	}
 
-	ws.Players["p1"].Inventory = model.ItemInventory{model.ItemAntimatterFuelRod: 1}
+	starterMecha(ws, "p1").Inventory = model.ItemInventory{model.ItemAntimatterFuelRod: 1}
 	transferRes := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{

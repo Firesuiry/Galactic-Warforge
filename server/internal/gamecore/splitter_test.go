@@ -135,10 +135,10 @@ func TestSplitterRejectsInactiveAndForeignConnections(t *testing.T) {
 }
 
 func TestSplitterBuildInitializesTransportWithoutElectricity(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
-	before := ws.Players["p1"].Inventory.Clone()
+	before := starterMecha(ws, "p1").Inventory.Clone()
 	result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "splitter", "direction": "east"}})
 	if result.Status != model.StatusExecuted {
 		t.Fatalf("build: %+v", result)
@@ -168,7 +168,7 @@ func TestSplitterBuildInitializesTransportWithoutElectricity(t *testing.T) {
 		t.Fatal("splitter definition missing")
 	}
 	for _, item := range def.BuildCost.Items {
-		if got := before[item.ItemID] - ws.Players["p1"].Inventory[item.ItemID]; got != item.Quantity {
+		if got := before[item.ItemID] - starterMecha(ws, "p1").Inventory[item.ItemID]; got != item.Quantity {
 			t.Fatalf("wrong splitter construction cost for %s: spent %d, want %d", item.ItemID, got, item.Quantity)
 		}
 	}

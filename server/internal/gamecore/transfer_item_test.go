@@ -11,7 +11,7 @@ func TestTransferItemLoadsOwnedBuildingAndEmitsUpdate(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{
 		model.ItemSolarSail: 5,
 	}
 
@@ -36,7 +36,7 @@ func TestTransferItemLoadsOwnedBuildingAndEmitsUpdate(t *testing.T) {
 	if events[0].EventType != model.EvtEntityUpdated {
 		t.Fatalf("expected entity_updated event, got %s", events[0].EventType)
 	}
-	if got := player.Inventory[model.ItemSolarSail]; got != 2 {
+	if got := starterMecha(ws, player.PlayerID).Inventory[model.ItemSolarSail]; got != 2 {
 		t.Fatalf("expected player solar sail inventory 2, got %d", got)
 	}
 	if got := ejector.Storage.OutputQuantity(model.ItemSolarSail); got != 3 {
@@ -50,7 +50,7 @@ func TestTransferItemAllowsImmediateRocketLaunch(t *testing.T) {
 	grantTechs(ws, "p1", "vertical_launching", "lightweight_structure")
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{
 		model.ItemSmallCarrierRocket: 2,
 	}
 
@@ -94,7 +94,7 @@ func TestTransferItemRejectsInvalidTargetsAndInventory(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{
 		model.ItemSolarSail: 1,
 	}
 

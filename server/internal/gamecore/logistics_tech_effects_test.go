@@ -241,10 +241,16 @@ func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 
 func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 12)
-	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: model.ItemInventory{
-		model.ItemLogisticsDrone:  2,
-		model.ItemLogisticsVessel: 2,
-	}}
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 5, Y: 5}
+	ws.Units[execUnit.ID] = execUnit
+	record := registerMecha(ws, "p1", execUnit)
+	record.EnsureInventory()[model.ItemLogisticsDrone] = 2
+	record.EnsureInventory()[model.ItemLogisticsVessel] = 2
 	core := &GameCore{}
 	station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 5, Y: 5})
 	attachBuilding(ws, station)
@@ -262,7 +268,7 @@ func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 		if r.Status != model.StatusFailed || r.Code != model.CodeValidationFailed || !strings.Contains(r.Message, "需要研究解锁") {
 			t.Fatalf("%s install without unit unlock tech must be rejected: %+v", itemID, r)
 		}
-		if ws.Players["p1"].Inventory[itemID] != 2 {
+		if starterMecha(ws, "p1").Inventory[itemID] != 2 {
 			t.Fatalf("rejected install consumed %s", itemID)
 		}
 	}

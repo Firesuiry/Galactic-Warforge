@@ -52,8 +52,11 @@ func TestDistributorBotInstallationEventsReflectActualInventory(t *testing.T) {
 			ws, home, _ := distributorTestWorld(t)
 			grantTechs(ws, "p1", "distribution_logistics")
 			player := ws.Players["p1"]
+			if starterMecha(ws, player.PlayerID) == nil {
+				t.Fatal("fixture must register the starter mecha")
+			}
 			if source == "player" {
-				player.Inventory[model.ItemLogisticsBot] = 2
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemLogisticsBot, 2)
 			}
@@ -93,7 +96,7 @@ func TestUninstallLogisticsBotRespectsInventoryCapacity(t *testing.T) {
 	ws, home, _ := distributorTestWorld(t)
 	grantTechs(ws, "p1", "distribution_logistics")
 	player := ws.Players["p1"]
-	player.Inventory[model.ItemLogisticsBot] = 2
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2, "source": "player"}}
 	if result, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd); result.Code != model.CodeOK {
@@ -103,26 +106,26 @@ func TestUninstallLogisticsBotRespectsInventoryCapacity(t *testing.T) {
 	model.SyncMechaCapabilities(exec, player)
 	slots := exec.Mecha.InventorySlots
 	perSlot := model.ItemStackSize(model.ItemCoal)
-	player.Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
 
 	uninstall := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2}}
 	result, _ := execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", uninstall)
 	if result.Code != model.CodeInsufficientResource {
 		t.Fatalf("full bag must refuse the uninstall, got %s (%s)", result.Code, result.Message)
 	}
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("uninstall pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemLogisticsBot] != 0 {
-		t.Fatalf("refused uninstall must not add bots: %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 0 {
+		t.Fatalf("refused uninstall must not add bots: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	// 腾出 1 个空位：机器人 200 件/格，两个机器人只占同一格，可以一起卸下。
-	player.Inventory[model.ItemCoal] = (slots - 1) * perSlot
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = (slots - 1) * perSlot
 	result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", uninstall)
-	if result.Code != model.CodeOK || player.Inventory[model.ItemLogisticsBot] != 2 {
-		t.Fatalf("uninstall with one free slot: %s inv=%v", result.Message, player.Inventory)
+	if result.Code != model.CodeOK || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 2 {
+		t.Fatalf("uninstall with one free slot: %s inv=%v", result.Message, starterMecha(ws, player.PlayerID).Inventory)
 	}
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("partial uninstall pushed the bag over capacity: %d/%d", got, slots)
 	}
 }

@@ -80,7 +80,7 @@ func TestMissionCompleteDeclaresVictoryAndRecordsOutputs(t *testing.T) {
 	}
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
-	summary := ql.Summary(ws, "p1", victory)
+	summary := ql.Summary(ws, "p1", victory, core.Worlds())
 	if summary.Winner != "p1" || summary.VictoryReason != "game_win" || summary.VictoryRule != "hybrid" {
 		t.Fatalf("unexpected summary victory payload: %+v", summary)
 	}

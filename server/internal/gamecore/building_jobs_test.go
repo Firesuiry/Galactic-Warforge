@@ -59,8 +59,8 @@ func TestUpgradeJobProgress(t *testing.T) {
 		t.Fatalf("expected running state after upgrade, got %s", building.Runtime.State)
 	}
 
-	if player.Inventory[model.ItemCircuitBoard] >= 100 || player.Inventory[model.ItemIronIngot] >= 100 {
-		t.Fatalf("expected upgrade item cost deducted, got %+v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard] >= 100 || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] >= 100 {
+		t.Fatalf("expected upgrade item cost deducted, got %+v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestDemolishJobRefund(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player := ws.Players[building.OwnerID]
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 
 	cmd := model.Command{
 		Type:   model.CmdDemolish,
@@ -89,15 +89,15 @@ func TestDemolishJobRefund(t *testing.T) {
 	if building.Job == nil || building.Job.Type != model.BuildingJobDemolish {
 		t.Fatalf("expected demolish job")
 	}
-	if player.InventoryCount() != 0 {
-		t.Fatalf("expected no item refund before completion, got %+v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory.Count() != 0 {
+		t.Fatalf("expected no item refund before completion, got %+v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	settleBuildingJobs(ws, nil)
 	if _, ok := ws.Buildings[building.ID]; ok {
 		t.Fatalf("expected building removed after demolish")
 	}
-	if player.InventoryCount() == 0 {
+	if starterMecha(ws, player.PlayerID).Inventory.Count() == 0 {
 		t.Fatalf("expected item refund after demolish completion")
 	}
 }
@@ -118,7 +118,7 @@ func TestUpgradeConsumesItems(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 1)
 	player := ws.Players[building.OwnerID]
-	player.Inventory = model.ItemInventory{model.ItemGear: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemGear: 2}
 
 	cmd := model.Command{
 		Type:   model.CmdUpgrade,
@@ -128,7 +128,7 @@ func TestUpgradeConsumesItems(t *testing.T) {
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected upgrade OK, got %s (%s)", res.Code, res.Message)
 	}
-	if player.Inventory[model.ItemGear] != 0 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 {
 		t.Fatalf("expected upgrade items consumed")
 	}
 }
@@ -148,7 +148,7 @@ func TestDemolishRefundItems(t *testing.T) {
 
 	ws, gc, building := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player := ws.Players[building.OwnerID]
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 
 	cmd := model.Command{
 		Type:   model.CmdDemolish,
@@ -158,13 +158,13 @@ func TestDemolishRefundItems(t *testing.T) {
 	if res.Code != model.CodeOK {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}
-	if player.Inventory[model.ItemGear] != 0 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 {
 		t.Fatalf("expected no item refund before completion")
 	}
 
 	settleBuildingJobs(ws, nil)
-	if player.Inventory[model.ItemGear] != 4 {
-		t.Fatalf("expected item refund after demolish completion, got %d", player.Inventory[model.ItemGear])
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 4 {
+		t.Fatalf("expected item refund after demolish completion, got %d", starterMecha(ws, player.PlayerID).Inventory[model.ItemGear])
 	}
 }
 
@@ -175,15 +175,14 @@ func newTestWorldWithBuilding(btype model.BuildingType, level int) (*model.World
 		Resources: model.Resources{Energy: 1000},
 		IsAlive:   true,
 	}
-	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("u-1", 1, 10, 2, 0))
 	ws.Players[player.PlayerID] = player
-	execUnit := &model.Unit{
-		ID:       "u-1",
-		Type:     model.UnitTypeExecutor,
-		OwnerID:  player.PlayerID,
-		Position: model.Position{X: 1, Y: 1},
-	}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-1"
+	execUnit.OwnerID = player.PlayerID
+	execUnit.Position = model.Position{X: 1, Y: 1}
 	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, player.PlayerID, execUnit)
 
 	pos := model.Position{X: 2, Y: 1}
 	profile := model.BuildingProfileFor(btype, level)
@@ -247,7 +246,7 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	unit := ws.Units["u-1"]
 	model.SyncMechaCapabilities(unit, player)
 	slots := unit.Mecha.InventorySlots
-	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
 
 	cmd := model.Command{
 		Type:   model.CmdDemolish,
@@ -257,24 +256,24 @@ func TestDemolishRefundNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatalf("expected demolish OK, got %s (%s)", res.Code, res.Message)
 	}
 	settleBuildingJobs(ws, nil)
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("demolish refund pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemGear] != 0 {
-		t.Fatalf("full bag should have discarded the refund, got %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 {
+		t.Fatalf("full bag should have discarded the refund, got %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	// 腾出空间后返还照常入包。
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 	ws2, gc2, building2 := newTestWorldWithBuilding(model.BuildingTypeMiningMachine, 2)
 	player2 := ws2.Players[building2.OwnerID]
-	player2.Inventory = model.ItemInventory{}
+	starterMecha(ws2, player2.PlayerID).Inventory = model.ItemInventory{}
 	cmd2 := model.Command{Type: model.CmdDemolish, Target: model.CommandTarget{EntityID: building2.ID}}
 	if res, _ := execCommand(gc2, model.CmdDemolish, ws2, building2.OwnerID, cmd2); res.Code != model.CodeOK {
 		t.Fatalf("second demolish: %s", res.Message)
 	}
 	settleBuildingJobs(ws2, nil)
-	if player2.Inventory[model.ItemGear] != 4 {
-		t.Fatalf("expected item refund after demolish completion, got %d", player2.Inventory[model.ItemGear])
+	if starterMecha(ws2, player2.PlayerID).Inventory[model.ItemGear] != 4 {
+		t.Fatalf("expected item refund after demolish completion, got %d", starterMecha(ws2, player2.PlayerID).Inventory[model.ItemGear])
 	}
 }

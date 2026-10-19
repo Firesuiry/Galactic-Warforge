@@ -21,7 +21,7 @@ func TestD2BuildRadiusAllowsRemoteBuildNearHQ(t *testing.T) {
 	placeBuilding(ws, hq)
 
 	// HQ 半径（24）内、执行体操作范围外的可建格：应可建造。
-	execState := player.ExecutorForPlanet(ws.PlanetID)
+	execState := starterMecha(ws, player.PlayerID)
 	execUnit := ws.Units[execState.UnitID]
 	var target *model.Position
 	for _, candidate := range ws.SurfaceDisc(hq.Position, 20) {
@@ -32,7 +32,7 @@ func TestD2BuildRadiusAllowsRemoteBuildNearHQ(t *testing.T) {
 		if d < 8 || d > 20 {
 			continue
 		}
-		if ws.SurfaceDistance(execUnit.Position, candidate) <= execState.OperateRange {
+		if ws.SurfaceDistance(execUnit.Position, candidate) <= model.ExecutorOperateRange() {
 			continue
 		}
 		c := candidate

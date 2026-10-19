@@ -23,7 +23,6 @@ func TestRollbackRestoresState(t *testing.T) {
 		},
 		Server: config.ServerConfig{
 			Port:                   9999,
-			RateLimit:              100,
 			SnapshotIntervalTicks:  1,
 			SnapshotRetentionCount: 10,
 			SnapshotRetentionTicks: 100,
@@ -49,11 +48,11 @@ func TestRollbackRestoresState(t *testing.T) {
 	ws := core.World()
 	ws.RLock()
 	p1 := ws.Players["p1"]
-	if p1 == nil || p1.ExecutorForPlanet(ws.PlanetID) == nil {
+	if p1 == nil || starterMecha(ws, p1.PlayerID) == nil {
 		ws.RUnlock()
 		t.Fatal("player executor missing")
 	}
-	execID := p1.ExecutorForPlanet(ws.PlanetID).UnitID
+	execID := starterMecha(ws, p1.PlayerID).UnitID
 	exec := ws.Units[execID]
 	if exec == nil {
 		ws.RUnlock()
@@ -167,7 +166,6 @@ func TestRollbackRestoresProductionStateBetweenSnapshots(t *testing.T) {
 		},
 		Server: config.ServerConfig{
 			Port:                   9999,
-			RateLimit:              100,
 			SnapshotIntervalTicks:  10,
 			SnapshotRetentionCount: 16,
 			SnapshotRetentionTicks: 200,

@@ -62,7 +62,7 @@ func TestE4NestSpawnsGuards(t *testing.T) {
 	placeBuilding(ws, plant)
 	// 细分网格：守军守巢半径 ×3（等级 2 时 30 格），执行体出生点距巢穴 16 格，
 	// 会被守军当成入侵者一路追击。本用例只验证守军编制，把执行体挪远。
-	if exec := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID); exec != nil {
+	if exec := starterMecha(ws, "p1"); exec != nil {
 		if u := ws.Units[exec.UnitID]; u != nil {
 			teleportUnitForTest(ws, u, model.Position{X: 150, Y: 100})
 		}
@@ -200,7 +200,7 @@ func TestE4NestDestroyRewardsUnitPath(t *testing.T) {
 	ws.Tick = 10
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 500}
 	spawnE4Nest(ws, "hive-e4", 3, 10, model.Position{X: 3, Y: 2})
-	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	killer := spawnLootKillerMecha(ws, "p1", model.Position{X: 2, Y: 2})
 
 	events := settleUnitCombat(ws, nil)
 
@@ -220,7 +220,7 @@ func TestE4NestDestroyRewardsUnitPath(t *testing.T) {
 		t.Fatalf("ruin fields wrong: %+v", ruin)
 	}
 	// 掉落保底：3 级巢 dark_fog_matrix ≥ 4。
-	if got := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]; got < 4 {
+	if got := starterMecha(ws, "p1").Inventory[model.ItemDarkFogMatrix]; got < 4 {
 		t.Fatalf("level-3 nest must drop at least 4 dark_fog_matrix, got %d", got)
 	}
 	// 通用摧毁事件仍在。
@@ -270,6 +270,7 @@ func TestE4NestDestroyRewardsTurretPath(t *testing.T) {
 	ws.Tick = 10
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 300}
 
+	registerMecha(ws, "p1", spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 9, Y: 9}))
 	turret := newBuilding("turret-e4", model.BuildingTypeMissileTurret, "p1", model.Position{X: 2, Y: 2})
 	turret.Runtime.State = model.BuildingWorkRunning
 	ws.Buildings[turret.ID] = turret
@@ -294,9 +295,9 @@ func TestE4NestDestroyRewardsTurretPath(t *testing.T) {
 	if len(ws.EnemyForces.NestRuins) != 1 {
 		t.Fatalf("turret kill should record a ruin, got %+v", ws.EnemyForces.NestRuins)
 	}
-	// 2 级巢：matrix 保底 3；炮塔弹仓被弹药占用，战利品入击杀者背包。
-	if got := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]; got < 3 {
-		t.Fatalf("turret kill should grant >=3 dark_fog_matrix, got %d", got)
+	// 2 级巢：matrix 保底 3；炮塔不是机甲，弹仓收不下的战利品按契约丢弃。
+	if got := starterMecha(ws, "p1").Inventory[model.ItemDarkFogMatrix]; got != 0 {
+		t.Fatalf("non-mecha killer loot must be discarded, got %d", got)
 	}
 	evt := findNestDestroyedEvent(events, "hive-e4t")
 	if evt == nil {
@@ -366,7 +367,7 @@ func TestE4NestRuinSurvivesSaveRestore(t *testing.T) {
 	ws.Tick = 10
 	ws.EnemyForces = &model.EnemyForceState{SystemID: ws.PlanetID, ThreatMeter: 300}
 	spawnE4Nest(ws, "hive-e4save", 2, 10, model.Position{X: 3, Y: 2})
-	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	killer := spawnLootKillerMecha(ws, "p1", model.Position{X: 2, Y: 2})
 	killer.AttackTarget = "hive-e4save"
 
 	settleUnitCombat(ws, nil)
@@ -522,9 +523,9 @@ func TestE4NestDestroyRewardsFleetPath(t *testing.T) {
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("fleet should destroy the nest, remaining %+v", ws.EnemyForces.Forces)
 	}
-	// 2 级巢：matrix 保底 3 进舰队所属玩家背包。
-	if got := ws.Players["p1"].Inventory[model.ItemDarkFogMatrix]; got < 3 {
-		t.Fatalf("fleet kill should grant >=3 dark_fog_matrix to owner, got %d", got)
+	// 2 级巢：matrix 保底 3。击杀者是舰队（不是机甲）：按契约剩余部分丢弃。
+	if got := starterMecha(ws, "p1").Inventory[model.ItemDarkFogMatrix]; got != 0 {
+		t.Fatalf("non-mecha killer loot must be discarded, got %d", got)
 	}
 	if ws.EnemyForces.ThreatMeter != 200 {
 		t.Fatalf("threat meter should drop after fleet kill, got %v", ws.EnemyForces.ThreatMeter)

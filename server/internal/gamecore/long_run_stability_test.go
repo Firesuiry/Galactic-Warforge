@@ -28,7 +28,7 @@ func TestLongRunStability(t *testing.T) {
 	const seedBuildings = 40
 	built := 0
 	seedCenter := model.Position{X: ws.MapWidth / 2, Y: ws.MapHeight / 2}
-	if exec := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID); exec != nil {
+	if exec := starterMecha(ws, "p1"); exec != nil {
 		if u := ws.Units[exec.UnitID]; u != nil {
 			seedCenter = u.Position
 		}

@@ -167,7 +167,7 @@ func TestTransferItemToPlayerStillWithdrawsMachineInputs(t *testing.T) {
 	if res.Code != model.CodeOK {
 		t.Fatalf("transfer_item to_player should still withdraw raw inputs: %s (%s)", res.Code, res.Message)
 	}
-	if got := ws.Players["p1"].Inventory[model.ItemIronOre]; got != 3 {
+	if got := starterMecha(ws, "p1").Inventory[model.ItemIronOre]; got != 3 {
 		t.Fatalf("expected 3 ore in player inventory, got %d", got)
 	}
 	if got := smelter.Storage.Inventory[model.ItemIronOre]; got != 1 {

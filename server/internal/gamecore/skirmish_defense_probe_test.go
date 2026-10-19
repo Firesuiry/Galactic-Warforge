@@ -174,12 +174,12 @@ func feedOpeningIndustry(core *GameCore, ws *model.WorldState) {
 		})
 	}
 	load := func(b *model.Building, item string, qty int) {
-		if b == nil || qty <= 0 || player.Inventory[item] <= 0 {
+		if b == nil || qty <= 0 || starterMecha(ws, player.PlayerID).Inventory[item] <= 0 {
 			return
 		}
 		execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 			Target:  model.CommandTarget{Layer: "planet", EntityID: b.ID},
-			Payload: map[string]any{"building_id": b.ID, "item_id": item, "quantity": min(qty, player.Inventory[item])},
+			Payload: map[string]any{"building_id": b.ID, "item_id": item, "quantity": min(qty, starterMecha(ws, player.PlayerID).Inventory[item])},
 		})
 	}
 
@@ -231,10 +231,10 @@ func feedOpeningIndustry(core *GameCore, ws *model.WorldState) {
 	}
 	// 矿石只补到「够熔炉吃 + 够手搓」的量（背包只有 200 格，取满会把锭/电路板挤掉）。
 	for _, m := range miners {
-		if player.Inventory[model.ItemIronOre] < 60 {
+		if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] < 60 {
 			withdraw(m, model.ItemIronOre, min(30, m.Storage.OutputQuantity(model.ItemIronOre)))
 		}
-		if player.Inventory[model.ItemCopperOre] < 60 {
+		if starterMecha(ws, player.PlayerID).Inventory[model.ItemCopperOre] < 60 {
 			withdraw(m, model.ItemCopperOre, min(30, m.Storage.OutputQuantity(model.ItemCopperOre)))
 		}
 	}
@@ -340,7 +340,7 @@ func executorUnitQuiet(ws *model.WorldState, playerID string) *model.Unit {
 	if player == nil {
 		return nil
 	}
-	state := player.ExecutorForPlanet(ws.PlanetID)
+	state := starterMecha(ws, player.PlayerID)
 	if state == nil {
 		return nil
 	}

@@ -120,7 +120,7 @@ func TestCheckpointKeepsMechaHandcraftJob(t *testing.T) {
 		t.Fatal("执行体没有机甲状态")
 	}
 	// gear 无科技门槛、可手搓（duration 20，每批耗能 1）。
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 2}
 	craft := model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"recipe_id": "gear", "quantity": 2}}
 	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", craft); result.Code != model.CodeOK {
 		t.Fatalf("start handcraft: %+v", result)
@@ -169,7 +169,7 @@ func TestCheckpointKeepsMechaHandcraftJob(t *testing.T) {
 	if runit.Mecha.Job != nil {
 		t.Fatalf("读档后作业未跑完：%+v", runit.Mecha.Job)
 	}
-	if got := rws.Players["p1"].Inventory[model.ItemGear]; got != 2 {
+	if got := starterMecha(restored.World(), "p1").Inventory[model.ItemGear]; got != 2 {
 		t.Fatalf("手搓产出丢失：gear=%d want 2", got)
 	}
 }
@@ -179,7 +179,7 @@ func TestCheckpointKeepsDarkFogHostilityUntilCalm(t *testing.T) {
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{MapSeed: "blackfog-checkpoint", MaxTickRate: 20, DarkFogCalmTicks: 500},
 		Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
-		Server:      config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server:      config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},

@@ -98,7 +98,7 @@ func TestSkirmishBotOpensAndAttacksInWindow(t *testing.T) {
 					}
 				}
 			}
-			t.Logf("tick %d p2 units=%d squads=%d buildings: %s inv=%v", ws.Tick, units, squads, fmtCounts(skirmishBuildingCounts(ws, "p2")), ws.Players["p2"].Inventory)
+			t.Logf("tick %d p2 units=%d squads=%d buildings: %s inv=%v", ws.Tick, units, squads, fmtCounts(skirmishBuildingCounts(ws, "p2")), starterMecha(ws, "p2").Inventory)
 		}
 		if firstAttack == 0 && skirmishBotAttackingPlayer(ws) {
 			firstAttack = ws.Tick
@@ -152,7 +152,7 @@ func TestSkirmishPlayerOpensPowerMiningSmeltingBy7000(t *testing.T) {
 	// 已炼出的铁块 = 熔炉里剩的 + 已经被 feedIndustry 取进背包的。
 	// 只看熔炉存储会在「取料恰好在 tick 7000 结算」时误判（细分网格下开局链
 	// 慢了几百 tick，第一炉铁块正好落在取料节拍上）。
-	ingots := ws.Players["p1"].Inventory[model.ItemIronIngot]
+	ingots := starterMecha(ws, "p1").Inventory[model.ItemIronIngot]
 	for _, b := range ws.Buildings {
 		if b.OwnerID == "p1" && b.Type == model.BuildingTypeArcSmelter && b.Storage != nil {
 			ingots += b.Storage.OutputQuantity(model.ItemIronIngot)
