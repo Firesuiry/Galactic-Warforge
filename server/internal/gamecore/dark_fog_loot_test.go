@@ -45,14 +45,12 @@ func spawnLootKillerUnit(ws *model.WorldState, playerID string, pos model.Positi
 	return unit
 }
 
-// spawnLootKillerMecha 放置一台必定能击杀目标、且已登记档案（Operator = 玩家）
-// 的机甲：战利品剩余部分进这台机甲的背包。
+// spawnLootKillerMecha 放置一个必定能击杀目标、且登记了机甲档案（Operator =
+// 玩家）的击杀者：战利品剩余部分进这台机甲的背包。
+// 用士兵而不是执行体，是因为执行体的攻击值会被 SyncMechaCapabilities 重置，
+// 无法保证一发击杀；战利品路由只看击杀者是否有档案（MechaByUnitID）。
 func spawnLootKillerMecha(ws *model.WorldState, playerID string, pos model.Position) *model.Unit {
-	unit := spawnWorldTestUnit(ws, model.UnitTypeExecutor, playerID, pos)
-	unit.Attack = 500
-	unit.AttackRange = 100
-	unit.AggroRange = 100
-	unit.AttackCooldownTick = 1
+	unit := spawnLootKillerUnit(ws, playerID, pos)
 	registerMecha(ws, playerID, unit)
 	return unit
 }
@@ -136,6 +134,8 @@ func TestDarkFogLootTableDrops(t *testing.T) {
 // TestGrantDarkFogLootRouting 校验入库路由：建筑库存→机甲背包→丢弃。
 func TestGrantDarkFogLootRouting(t *testing.T) {
 	ws := newPowerTestWorld()
+	mecha := spawnWorldTestUnit(ws, model.UnitTypeExecutor, "p1", model.Position{X: 0, Y: 0})
+	registerMecha(ws, "p1", mecha)
 	drops := []model.ItemAmount{
 		{ItemID: model.ItemDarkFogMatrix, Quantity: 2},
 		{ItemID: model.ItemTitaniumAlloy, Quantity: 3},
@@ -143,7 +143,7 @@ func TestGrantDarkFogLootRouting(t *testing.T) {
 
 	// 多槽位建筑库存：全部入库。
 	storage := model.NewStorageState(model.StorageModule{Capacity: 10, Slots: 4})
-	grants := grantDarkFogLoot(ws, starterMecha(ws, "p1").UnitID, "p1", storage, drops)
+	grants := grantDarkFogLoot(ws, mecha.ID, "p1", storage, drops)
 	if grants[0].StoredQty != 2 || grants[1].StoredQty != 3 {
 		t.Fatalf("expected all stored, got %+v", grants)
 	}
@@ -157,7 +157,7 @@ func TestGrantDarkFogLootRouting(t *testing.T) {
 	// 满仓：保留已有物品，溢出部分转入机甲背包。
 	full := model.NewStorageState(model.StorageModule{Capacity: 4, Slots: 4})
 	full.EnsureInventory()[model.ItemCoal] = 4
-	grants = grantDarkFogLoot(ws, starterMecha(ws, "p1").UnitID, "p1", full, drops)
+	grants = grantDarkFogLoot(ws, mecha.ID, "p1", full, drops)
 	if grants[0].StoredQty != 0 || grants[0].CarriedQty != 2 || grants[0].DiscardedQty != 0 {
 		t.Fatalf("overflow should transfer to backpack, got %+v", grants[0])
 	}
@@ -222,6 +222,7 @@ func TestCombatKillLootAttributionPerPlayer(t *testing.T) {
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 	// p2 的单位是默认士兵：单发伤害不足以秒杀巢穴，p1 的掉落不得串到 p2。
 	p2unit := spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p2", model.Position{X: 2, Y: 4})
+	registerMecha(ws, "p2", p2unit)
 	p2unit.AttackCooldownTick = 1
 	p2unit.AttackTarget = "hive-2"
 	spawnLootTestForce(ws, "hive-2", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 4})
@@ -268,6 +269,7 @@ func TestTurretKillGrantsDarkFogLoot(t *testing.T) {
 	provokeDarkFogFor(ws, "p1", "p2") // 玩家已与黑雾交战
 	ws.Tick = 10
 
+	registerMecha(ws, "p1", spawnWorldTestUnit(ws, model.UnitTypeSoldier, "p1", model.Position{X: 9, Y: 9}))
 	turret := newBuilding("turret-1", model.BuildingTypeMissileTurret, "p1", model.Position{X: 2, Y: 2})
 	turret.Runtime.State = model.BuildingWorkRunning
 	ws.Buildings[turret.ID] = turret
@@ -288,9 +290,10 @@ func TestTurretKillGrantsDarkFogLoot(t *testing.T) {
 		t.Fatalf("turret should destroy the hive, remaining %+v", ws.EnemyForces.Forces)
 	}
 
-	// 战利品进入炮塔所属玩家库存（弹仓 Slots=1 被弹药占用，无法收新物品）。
-	if got := starterMecha(ws, "p1").Inventory[model.ItemDarkFogMatrix]; got < 1 {
-		t.Fatalf("turret kill should drop dark_fog_matrix to owner, got %d", got)
+	// 击杀者是炮塔（不是机甲）：弹仓 Slots=1 被弹药占用、收不下的战利品按契约
+	// 丢弃，不再进玩家背包。
+	if got := starterMecha(ws, "p1").Inventory[model.ItemDarkFogMatrix]; got != 0 {
+		t.Fatalf("turret loot overflow must be discarded, got backpack matrix=%d", got)
 	}
 	// 已有弹药被保留：仅消耗击发用弹。
 	ammoLeft := availableStorageItem(turret.Storage, combat.AmmoItem) + currentStorageItem(turret.Storage.OutputBuffer, combat.AmmoItem)
@@ -312,8 +315,8 @@ func TestTurretKillGrantsDarkFogLoot(t *testing.T) {
 		qty, _ := evt.Payload["quantity"].(int)
 		carried, _ := evt.Payload["carried"].(int)
 		discarded, _ := evt.Payload["discarded"].(int)
-		if qty <= 0 || carried != qty || discarded != 0 {
-			t.Fatalf("turret loot should overflow into owner backpack: %+v", evt.Payload)
+		if qty <= 0 || carried != 0 || discarded != qty {
+			t.Fatalf("non-mecha killer loot must be discarded: %+v", evt.Payload)
 		}
 	}
 }
@@ -325,7 +328,13 @@ func TestDarkFogLootSurvivesSaveRestore(t *testing.T) {
 
 	ws := core.World()
 	ws.Tick = 10
-	killer := spawnLootKillerMecha(ws, "p1", model.Position{X: 2, Y: 2})
+	provokeDarkFogFor(ws, "p1", "p2")
+	killer := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	// 击杀者士兵借用一个已有的机甲档案：战利品路由按 MercaByUnitID(killerID)
+	// 找档案，不要求击杀者是机甲单位本身。
+	record := starterMecha(ws, "p1")
+	record.UnitID = killer.ID
+	ws.Players["p1"].EnsureMechas()[killer.ID] = record
 	killer.AttackTarget = "hive-1"
 	spawnLootTestForce(ws, "hive-1", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 

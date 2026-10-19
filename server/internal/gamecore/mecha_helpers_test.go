@@ -1,6 +1,10 @@
 package gamecore
 
-import "siliconworld/internal/model"
+import (
+	"testing"
+
+	"siliconworld/internal/model"
+)
 
 // 本文件只放测试辅助函数（由 S1b 迁移测试时使用）；不含测试用例。
 //
@@ -77,4 +81,16 @@ func mechaOnPlanet(ws *model.WorldState, playerID, planetID string) *model.Mecha
 		}
 	}
 	return nil
+}
+
+// bindMechaToIssuer 把玩家在该行星上的机甲档案改绑到 issuerID（测试用：让
+// 多条命令分别落在不同行星，绕开「一个发令者只绑一台机甲」）。
+func bindMechaToIssuer(t *testing.T, ws *model.WorldState, playerID, issuerID string) *model.MechaRecord {
+	t.Helper()
+	record := mechaOnPlanet(ws, playerID, ws.PlanetID)
+	if record == nil {
+		t.Fatalf("player %s has no mecha on %s", playerID, ws.PlanetID)
+	}
+	record.Operator = issuerID
+	return record
 }

@@ -52,8 +52,11 @@ func TestDistributorBotInstallationEventsReflectActualInventory(t *testing.T) {
 			ws, home, _ := distributorTestWorld(t)
 			grantTechs(ws, "p1", "distribution_logistics")
 			player := ws.Players["p1"]
+			if starterMecha(ws, player.PlayerID) == nil {
+				t.Fatal("fixture must register the starter mecha")
+			}
 			if source == "player" {
-				starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] = 2
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemLogisticsBot, 2)
 			}
@@ -93,7 +96,7 @@ func TestUninstallLogisticsBotRespectsInventoryCapacity(t *testing.T) {
 	ws, home, _ := distributorTestWorld(t)
 	grantTechs(ws, "p1", "distribution_logistics")
 	player := ws.Players["p1"]
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] = 2
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 2, "source": "player"}}
 	if result, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd); result.Code != model.CodeOK {
@@ -117,7 +120,7 @@ func TestUninstallLogisticsBotRespectsInventoryCapacity(t *testing.T) {
 		t.Fatalf("refused uninstall must not add bots: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	// 腾出 1 个空位：机器人 200 件/格，两个机器人只占同一格，可以一起卸下。
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = (slots - 1) * perSlot
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = (slots - 1) * perSlot
 	result, _ = execCommand(core, model.CmdUninstallLogisticsBot, ws, "p1", uninstall)
 	if result.Code != model.CodeOK || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 2 {
 		t.Fatalf("uninstall with one free slot: %s inv=%v", result.Message, starterMecha(ws, player.PlayerID).Inventory)

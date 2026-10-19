@@ -242,8 +242,15 @@ func TestDistributionRangeTechExtendsDeliveryRange(t *testing.T) {
 func TestInstallLogisticsVehicleRequiresUnitUnlockTech(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
-	starterMecha(ws, "p1").EnsureInventory()[model.ItemLogisticsDrone] = 2
-	starterMecha(ws, "p1").EnsureInventory()[model.ItemLogisticsVessel] = 2
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 5, Y: 5}
+	ws.Units[execUnit.ID] = execUnit
+	record := registerMecha(ws, "p1", execUnit)
+	record.EnsureInventory()[model.ItemLogisticsDrone] = 2
+	record.EnsureInventory()[model.ItemLogisticsVessel] = 2
 	core := &GameCore{}
 	station := newInterstellarLogisticsStationBuilding("station", model.Position{X: 5, Y: 5})
 	attachBuilding(ws, station)

@@ -246,13 +246,13 @@ func stackCascadeFixture(t *testing.T) (*model.WorldState, *model.PlayerState, *
 		Resources: model.Resources{Energy: 0},
 	}
 	ws.Players["p1"] = player
-	ws.Units["u-1"] = &model.Unit{
-		ID:       "u-1",
-		Type:     model.UnitTypeExecutor,
-		OwnerID:  "p1",
-		Position: model.Position{X: 1, Y: 1},
-	}
-	registerMecha(ws, "p1", ws.Units["u-1"])
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-1"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 1, Y: 1}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 
 	base := newBuilding("lab-base", model.BuildingTypeMatrixLab, "p1", model.Position{X: 3, Y: 3})
 	placeBuilding(ws, base)

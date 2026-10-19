@@ -10,12 +10,17 @@ import (
 
 // execCommand 在给定世界上直接执行一条命令（跳过权限校验与行星路由），供单测使用。
 func execCommand(gc *GameCore, cmdType model.CommandType, ws *model.WorldState, playerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
+	return execCommandAs(gc, cmdType, ws, playerID, playerID, cmd)
+}
+
+// execCommandAs 以指定发令者执行命令（多机甲协作测试用，跳过行星路由）。
+func execCommandAs(gc *GameCore, cmdType model.CommandType, ws *model.WorldState, playerID, issuerID string, cmd model.Command) (model.CommandResult, []*model.GameEvent) {
 	cmd.Type = cmdType
 	bound, err := commandHandlers[cmdType].bind(cmd)
 	if err != nil {
 		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: err.Error()}, nil
 	}
-	return bound.exec(gc, ws, playerID, playerID)
+	return bound.exec(gc, ws, playerID, issuerID)
 }
 
 func TestCommandRegistryMatchesCatalog(t *testing.T) {

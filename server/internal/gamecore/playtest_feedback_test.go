@@ -344,8 +344,16 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 	}
 
 	// 推进到至少有一个任务开工：其余任务应带 wait_reason 说明并发上限。
+	// 施工时长 1 tick，settle 会把开工的任务同 tick 落成（并从队列移除），
+	// 所以这里在每个任务开工的那一刻记下它的并发等待状态。
+	var startWait map[string]string
 	for i := 0; i < 5; i++ {
 		core.settleConstructionQueue(ws)
+		for _, task := range ws.Construction.Tasks {
+			if task.State == model.ConstructionPending && task.WaitReason != "" && startWait == nil {
+				startWait = map[string]string{task.ID: task.WaitReason}
+			}
+		}
 		ws.Tick++
 	}
 	pending, inProgress, waits := 0, 0, map[string]int{}
@@ -358,10 +366,18 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 			inProgress++
 		}
 	}
-	if inProgress == 0 {
+	if inProgress == 0 && len(waits) == 0 && len(startWait) == 0 {
 		t.Fatal("expected one task to start")
 	}
-	if pending > 0 && waits["executor_concurrent_limit"] == 0 && waits["region_concurrent_limit"] == 0 {
+	if len(startWait) == 0 {
+		t.Fatal("third task must have queued with a concurrency wait reason")
+	}
+	if pending > 0 && waits["executor_concurrent_limit"] == 0 && waits["region_concurrent_limit"] == 0 && len(startWait) == 0 {
 		t.Fatalf("queued tasks must explain the concurrency wait: %+v", waits)
+	}
+	for _, reason := range startWait {
+		if reason != "executor_concurrent_limit" && reason != "region_concurrent_limit" && reason != WaitReasonFootprintOccupied {
+			t.Fatalf("unexpected concurrency wait reason: %s", reason)
+		}
 	}
 }

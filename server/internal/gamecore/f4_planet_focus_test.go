@@ -84,8 +84,13 @@ func f4ConstructionTaskCount(ws *model.WorldState, playerID string) int {
 // planet-1-2 建造。三条命令各自命中目标行星，互不拖拽。
 func TestF4DualPlanetIndependentBuild(t *testing.T) {
 	core, planetA, planetB := newF4DualPlanetCore(t, "off")
+	// 第 21 轮起发令者绑定唯一一台机甲、命令一律落在机甲所在行星（路由第 3 条
+	// 先于焦点）：把 p1/p2 在 planet-1-2 的机甲各自改绑到独立发令者，玩家身份
+	// 的机甲留在 planet-1-1，这样才能分别验证「焦点行星」与「显式 planet_id」。
 	grantAllItems(planetA, "p1", 100)
 	grantAllItems(planetA, "p2", 100)
+	grantAllItemsToMecha(bindMechaToIssuer(t, planetB, "p1", "p1-agent-b"), 100)
+	grantAllItemsToMecha(bindMechaToIssuer(t, planetB, "p2", "p2-agent-b"), 100)
 
 	// p1 切换焦点到 planet-1-1。
 	res := issueInternalCommand(core, "p1", model.Command{
@@ -121,7 +126,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 		t.Fatalf("p2 focus should stay planet-1-2, got %s", got)
 	}
 	p2PosB := f4OpenTileNear(t, planetB, f4BasePos(t, planetB, "p2"))
-	res = issueInternalCommand(core, "p2", model.Command{
+	res = issueInternalCommandAs(core, "p2", "p2-agent-b", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &p2PosB},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -138,7 +143,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 
 	// p1 显式 target.planet_id 在 planet-1-2 建造（覆盖焦点）。
 	p1PosB := f4OpenTileNear(t, planetB, f4BasePos(t, planetB, "p1"))
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-b", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &p1PosB, PlanetID: "planet-1-2"},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -152,7 +157,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 
 	// 显式指定未加载行星 → 路由失败。
 	badPos := p1PosB
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-b", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &badPos, PlanetID: "planet-9-9"},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},

@@ -171,7 +171,7 @@ func TestTransferItemRejectsNonMatrixIntoResearchModeLab(t *testing.T) {
 	}
 
 	// 矩阵照常装入：研究站的库存就是研究耗材。
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemElectromagneticMatrix] = 3
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemElectromagneticMatrix] = 3
 	res, _ = execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
@@ -188,7 +188,7 @@ func TestTransferItemRejectsNonMatrixIntoResearchModeLab(t *testing.T) {
 	}
 
 	// 切成生产模式后，研究站按普通制造建筑对待，原料可以装入。
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard] = 4
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCircuitBoard] = 4
 	if r, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd(lab.ID, model.ItemElectromagneticMatrix)); r.Code != model.CodeOK {
 		t.Fatalf("switch lab to production: %+v", r)
 	}

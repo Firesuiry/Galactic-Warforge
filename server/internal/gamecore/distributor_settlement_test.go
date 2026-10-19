@@ -9,6 +9,13 @@ func distributorTestWorld(t *testing.T) (*model.WorldState, *model.Building, *mo
 	t.Helper()
 	ws := model.NewWorldState("distributor-test", 32)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 8, Y: 8}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 	ws.PowerSnapshot = &model.PowerSettlementSnapshot{Tick: ws.Tick, Allocations: model.PowerAllocationState{Buildings: map[string]model.PowerAllocation{}}}
 	add := func(id string, x int, mode model.LogisticsStationMode, keep int) *model.Building {
 		host := newBuilding(id+"-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: x, Y: 8})
@@ -173,7 +180,7 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 			distributorTestMecha(ws, sink.Position)
 			player := ws.Players["p1"]
 			if collection {
-				starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] = 29
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemIronOre] = 29
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemIronOre, 40)
 			}
@@ -194,7 +201,7 @@ func TestDistributorMechaMinMaxDeliveryAndCollection(t *testing.T) {
 				t.Fatalf("home cargo %d, want %d", got, want)
 			}
 			// Inside the min/max band there must be no replenishment flight.
-			starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] = 7
+			starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemIronOre] = 7
 			energy := home.Distributor.Energy
 			distributorTestTicks(t, ws, 3)
 			if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre] != 7 || home.Distributor.Energy != energy {
@@ -318,7 +325,7 @@ func TestDistributorInstallConsumesRealItemsAndCannotUninstallActiveCargo(t *tes
 				t.Fatalf("installed absent items: %+v", result)
 			}
 			if source == "player" {
-				starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] = 2
+				starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 			} else {
 				distributorTestLoad(t, ws, home, model.ItemLogisticsBot, 2)
 			}

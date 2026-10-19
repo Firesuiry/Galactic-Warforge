@@ -17,6 +17,7 @@ func mechaTestWorld() (*model.WorldState, *model.Unit) {
 	unit.Position = model.Position{X: 1, Y: 1}
 	ws.Units[unit.ID] = &unit
 	ws.TileUnits[model.TileKey(1, 1)] = []string{unit.ID}
+	registerMecha(ws, "p1", &unit)
 	return ws, &unit
 }
 
@@ -36,6 +37,7 @@ func mechaTestWorldFar() (*model.WorldState, *model.Unit) {
 	unit.Position = model.Position{X: 1, Y: 1}
 	ws.Units[unit.ID] = &unit
 	ws.TileUnits[model.TileKey(1, 1)] = []string{unit.ID}
+	registerMecha(ws, "p1", &unit)
 	return ws, &unit
 }
 
@@ -172,7 +174,9 @@ func TestPlayerMechaRefuelValidationDoesNotConsumeInventory(t *testing.T) {
 		quantity    any
 		code        model.ResultCode
 	}{
-		{"p2", model.ItemCoal, 1, model.CodeNotOwner},
+		// 第 21 轮：refuel 忽略 target.entity_id、按发令者解析机甲；
+		// p2 不存在 → EXECUTOR_UNAVAILABLE。
+		{"p2", model.ItemCoal, 1, model.CodeExecutorUnavailable},
 		{"p1", model.ItemIronOre, 1, model.CodeInvalidTarget},
 		{"p1", model.ItemCoal, -1, model.CodeValidationFailed},
 		{"p1", model.ItemCoal, 1.5, model.CodeValidationFailed},

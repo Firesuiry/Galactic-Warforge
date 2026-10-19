@@ -11,6 +11,13 @@ import (
 func stationRuntimeFixture() (*model.WorldState, *model.Building, *model.Building, *model.Building) {
 	ws := model.NewWorldState("station-runtime", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Resources: model.Resources{Energy: 100}}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 3, Y: 3}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 	// 细分网格：物流运输站 5×5（x3..7,y3..7），IO 是占地外圈。输入带贴西侧
 	// 外圈、方向朝东（指向占地）；输出带贴东侧外圈、方向朝东（背离占地）。
 	b := newLogisticsStationBuilding("station", model.Position{X: 3, Y: 3})
@@ -64,8 +71,8 @@ func TestStationBeltIOFiltersUsesSingleInventoryAndBackpressures(t *testing.T) {
 func TestStationTransferItemCannotBypassConfigurationAndCapacity(t *testing.T) {
 	ws, b, _, _ := stationRuntimeFixture()
 	gc := &GameCore{}
-	starterMecha(ws, "p1").Inventory[model.ItemIronOre] = 250
-	starterMecha(ws, "p1").Inventory[model.ItemCopperOre] = 5
+	starterMecha(ws, "p1").EnsureInventory()[model.ItemIronOre] = 250
+	starterMecha(ws, "p1").EnsureInventory()[model.ItemCopperOre] = 5
 	command := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemCopperOre, "quantity": 5}}
 	result, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", command)
 	if result.Status != model.StatusFailed || starterMecha(ws, "p1").Inventory[model.ItemCopperOre] != 5 {

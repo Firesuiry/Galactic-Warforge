@@ -36,7 +36,7 @@ func setTestInventory(ws *model.WorldState, unit *model.Unit, used int) int {
 	slots := unit.Mecha.InventorySlots
 	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 	if used > 0 {
-		starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
+		starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
 	return slots
 }
@@ -201,7 +201,9 @@ func TestMechaJobValidationIsAtomic(t *testing.T) {
 		{"zero", "gear", 0, "p1", model.CodeValidationFailed},
 		{"fraction", "gear", 1.5, "p1", model.CodeValidationFailed},
 		{"negative", "gear", -1, "p1", model.CodeValidationFailed},
-		{"owner", "gear", 1, "p2", model.CodeNotOwner},
+		// 第 21 轮：craft 忽略 target.entity_id、按发令者解析机甲；p2 不存在
+		// → EXECUTOR_UNAVAILABLE（不再从目标机甲判 NOT_OWNER）。
+		{"owner", "gear", 1, "p2", model.CodeExecutorUnavailable},
 		{"advanced", "quantum_chip", 1, "p1", model.CodeInvalidTarget},
 		{"chemistry", "oil_fractionation", 1, "p1", model.CodeInvalidTarget},
 		{"matrix", "electromagnetic_matrix", 1, "p1", model.CodeInvalidTarget},
@@ -499,7 +501,7 @@ func TestMechaJobRefundNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatalf("craft start: %+v", res)
 	}
 	// 铁矿变成预留原料，背包空出 1 格，用别的物品占满。
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemStoneOre] = 1
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemStoneOre] = 1
 	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}

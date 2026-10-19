@@ -22,7 +22,7 @@ func transferWithdrawWorld(t *testing.T, used int) (*GameCore, *model.WorldState
 	slots := unit.Mecha.InventorySlots
 	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 	if used > 0 {
-		starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
+		starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
 	return gc, ws, depot, player, slots
 }

@@ -552,7 +552,7 @@ func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
 	core := newBotTestCore(t, "hard")
 	ws := core.World()
 	player := ws.Players["p2"]
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = 4
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = 4
 	var exec *model.Unit
 	for _, u := range ws.Units {
 		if u.OwnerID == "p2" && u.Mecha != nil {
@@ -568,7 +568,7 @@ func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
 	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); !ok {
 		t.Fatalf("expected cancel_mecha_job when coal is nearly out, got %+v", cmds)
 	}
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = botCoalReserve
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = botCoalReserve
 	cmds = core.planBotCommands(ws, "p2", botTuningFor("hard"))
 	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); ok {
 		t.Fatal("must not cancel handcrafting while coal reserve is sufficient")

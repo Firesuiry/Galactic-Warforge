@@ -83,7 +83,7 @@ func findApproachSite(t *testing.T, core *GameCore, ws *model.WorldState, player
 		if !ws.FootprintFits(p, def.Footprint, btype, "") {
 			continue
 		}
-		unit, path := planBuildApproach(ws, playerID, p)
+		unit, path := planBuildApproach(ws, starterMecha(ws, playerID).UnitID, p)
 		if unit == nil || len(path) < minPath {
 			continue
 		}

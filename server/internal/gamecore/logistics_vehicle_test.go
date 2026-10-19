@@ -76,7 +76,7 @@ func TestInstallLogisticsVehiclesConsumesInventoryAtomically(t *testing.T) {
 	if starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsVessel] != 3 || model.StationShipCount(ws, station.ID) != 2 {
 		t.Fatal("ship installation did not conserve inventory")
 	}
-	starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsDrone] = 0
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsDrone] = 0
 	if r := install("p1", model.ItemLogisticsDrone, 1); r.Code != model.CodeInsufficientResource {
 		t.Fatal(r)
 	}
@@ -91,6 +91,13 @@ func newVehicleFlightFixture(t *testing.T) (*model.WorldState, *model.Building, 
 	t.Helper()
 	ws := model.NewWorldState("planet-1", 12)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-starter"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 1, Y: 1}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 	a := newLogisticsStationBuilding("origin", model.Position{X: 1, Y: 1})
 	b := newLogisticsStationBuilding("target", model.Position{X: 9, Y: 1})
 	attachBuilding(ws, a)
@@ -427,6 +434,13 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 		t.Run(itemID, func(t *testing.T) {
 			ws := model.NewWorldState("planet-1", 16)
 			ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
+			stats := model.UnitStats(model.UnitTypeExecutor)
+			execUnit := &stats
+			execUnit.ID = "u-starter"
+			execUnit.OwnerID = "p1"
+			execUnit.Position = model.Position{X: 3, Y: 3}
+			ws.Units[execUnit.ID] = execUnit
+			registerMecha(ws, "p1", execUnit)
 			grantTechs(ws, "p1", "planetary_logistics", "interstellar_logistics")
 			core := &GameCore{}
 			// 细分网格：制造台 3×3（x3..5）、运输站 5×5（x8..12）。第 16 轮契约 §3
@@ -453,7 +467,7 @@ func TestManufacturedVehiclesTravelByBeltIntoStationAndInstall(t *testing.T) {
 				t.Fatal("missing vehicle recipe")
 			}
 			for _, input := range recipe.Inputs {
-				starterMecha(ws, "p1").Inventory[input.ItemID] = input.Quantity
+				starterMecha(ws, "p1").EnsureInventory()[input.ItemID] = input.Quantity
 				result, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": factory.ID, "item_id": input.ItemID, "quantity": input.Quantity}})
 				if result.Status != model.StatusExecuted {
 					t.Fatalf("input transfer: %+v", result)
