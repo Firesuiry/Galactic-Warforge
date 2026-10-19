@@ -204,6 +204,7 @@ export function fmtInspect(view: PlanetInspectView, options: { operator?: string
     );
     if (unit.mecha) {
       const mecha = unit.mecha;
+      const maxBatches = (mecha.job?.remaining_batches ?? 0) + (mecha.job?.completed_batches ?? 0);
       lines.push(
         `  operator    ${options.operator || '(idle)'}`,
         `  energy      ${mecha.energy}/${mecha.max_energy}  shield=${mecha.shield}/${mecha.max_shield}`,
@@ -211,7 +212,7 @@ export function fmtInspect(view: PlanetInspectView, options: { operator?: string
       const job = mecha.job;
       if (job) {
         const target = job.kind === 'craft' ? job.recipe_id : job.resource_id;
-        lines.push(`  job         ${job.kind} ${target ?? ''} state=${job.state} remaining=${job.remaining_ticks} batches=${job.completed_batches}/${job.remaining_batches + job.completed_batches}`);
+        lines.push(`  job         ${job.kind} ${target ?? ''} state=${job.state} remaining=${job.remaining_ticks} batches=${job.completed_batches}/${maxBatches}`);
       } else {
         lines.push('  job         idle');
       }

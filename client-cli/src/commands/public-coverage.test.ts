@@ -137,7 +137,7 @@ describe('observation query CLI paths', () => {
         return jsonResponse({ version: 1, commands: [{ type: 'build' }] });
       }
       if (url.includes('/inspect')) {
-        return jsonResponse({ entity_id: 'b-1', entity_kind: 'building' });
+        return jsonResponse({ planet_id: 'planet-1-1', discovered: true, entity_id: 'b-1', entity_kind: 'building' });
       }
       return jsonResponse({ error: `unexpected ${url}` }, 500);
     }) as typeof fetch;
@@ -147,7 +147,7 @@ describe('observation query CLI paths', () => {
     const summary = await dispatch('summary', ctx);
     const stats = await dispatch('stats', ctx);
     const catalog = await dispatch('catalog_commands', ctx);
-    const inspect = await dispatch('inspect planet-1-1 building b-1', ctx);
+    const inspect = await dispatch('inspect planet-1-1 building b-1 --json', ctx);
 
     assert.match(gets[0] ?? '', /\/state\/summary$/);
     assert.match(gets[1] ?? '', /\/state\/stats$/);

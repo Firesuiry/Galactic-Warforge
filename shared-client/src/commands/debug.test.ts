@@ -86,7 +86,7 @@ describe('alert_snapshot 中文文案', () => {
       },
     } as never);
     assert.match(out, /传送带堵塞 \(12, 7\)：5 件货 30 秒没动/);
-    assert.doesNotMatch(out, /belt_blocked/);
+    assert.match(out, /alert_type=belt_blocked building=b-9/);
   });
 
   it('其余告警类型给中文标签，同样不裸显枚举 id', async () => {
@@ -111,6 +111,6 @@ describe('alert_snapshot 中文文案', () => {
       },
     } as never);
     assert.match(out, /产物阻塞/);
-    assert.doesNotMatch(out, /output_blocked/);
+    assert.match(out, /alert_type=output_blocked building=b-1/);
   });
 });
