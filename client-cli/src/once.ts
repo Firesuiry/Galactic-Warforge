@@ -74,6 +74,11 @@ export function createOnceRunner(options: OnceOptions) {
     },
   });
   api.setCommandResponseHandler((response) => { pending.response = response; });
+  function takePending(): CommandResponse | undefined {
+    const response = pending.response;
+    pending.response = undefined;
+    return response;
+  }
 
   // 游戏命令走与 REPL 完全相同的 dispatch / 命令表，不复制解析逻辑。
   const ctx: ReplContext = {
@@ -105,6 +110,11 @@ export function createOnceRunner(options: OnceOptions) {
     };
   }
 
+  /** 本地校验失败（fmtError）在 `Error: ` 前缀里；命令 handler 抛异常也按失败算。 */
+  function isLocalError(text: string): boolean {
+    return text.startsWith(fmtError('').replace(/\s+$/, ''));
+  }
+
   async function runLine(line: string): Promise<OnceResult> {
     const { name } = splitCommandLine(line);
     if (NON_INTERACTIVE_EXCLUDED.has(name)) {
@@ -122,11 +132,10 @@ export function createOnceRunner(options: OnceOptions) {
       return { output: chalk.red(`Error: ${error instanceof Error ? error.message : String(error)}`), ok: false };
     }
 
-    const response = pending.response;
-    pending.response = undefined;
+    const response = takePending();
     if (!response) {
       // 查询 / 帮助命令：照常输出。本地校验错误（fmtError）仍算失败。
-      return { output: text, ok: !text.startsWith(chalk.red('Error: ')) };
+      return { output: text, ok: !isLocalError(text) };
     }
     if (!config.wait) {
       return { output: text, ok: response.accepted };
