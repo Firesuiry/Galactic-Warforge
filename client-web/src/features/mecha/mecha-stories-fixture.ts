@@ -89,7 +89,7 @@ export function mechaUnit(mecha: MechaView): Unit {
       last_hit_tick: 0,
       inventory_slots: mecha.inventory_slots_total,
     },
-  } as Unit;
+  };
 }
 
 /** 夹具目录：燃料 + 手搓配方 + 物品名（MechaControls 只读这些）。 */
@@ -126,7 +126,7 @@ export const storyCatalog: CatalogView = {
     },
   ],
   techs: [],
-} as unknown as CatalogView;
+};
 
 /** 玩家（只提供科技/研究状态；背包在机甲档案上）。 */
 export const storyPlayer: PlayerState = {
@@ -137,7 +137,7 @@ export const storyPlayer: PlayerState = {
 };
 
 /** summary：总览卡片与 chip 用（4 台机甲，覆盖 我 / agent / 空闲 / 阵亡）。 */
-export const storySummary = {
+export const storySummary: StateSummary = {
   tick: 128,
   active_planet_id: 'planet-1-1',
   surface: { topology: 'cube_sphere', face_size: 8 },
@@ -152,7 +152,7 @@ export const storySummary = {
       tech: storyPlayer.tech,
     },
   },
-} as unknown as StateSummary;
+};
 
 export const planetNames: Record<string, string> = {
   'planet-1-1': 'Gaia',

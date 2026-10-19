@@ -1,51 +1,30 @@
-import type { ItemInventory, PlayerState, Position, StateSummary } from '@shared/types';
+import { selectMyMechaFromSummary, sortMechas } from '@shared/mecha';
+import type { ItemInventory, MechaView, PlayerState, StateSummary } from '@shared/types';
 
 /**
- * 机甲档案视图（`/state/summary` 的 `players[me].mechas[]`，契约 §6）。
- *
- * TODO(r21-web)：shared-client 的 `MechaView` 由并行任务 C1 落在 `r21/clients`；
- * 合入后删除本文件里的本地类型，改从 `@shared/types` 导入（选择器函数保留）。
+ * 机甲档案的界面口径（契约 §7.3）：类型与「我的机甲」选择器直接复用
+ * `@gw/shared`（`shared-client/src/mecha.ts`，与 CLI / agent-gateway 同源），
+ * 这里只保留展示文案与背包格数换算。
  */
-export interface MechaView {
-  unit_id: string;
-  planet_id: string;
-  /** 绑定的 issuer_id；"" = 空闲。GUI 只按玩家 ID 绑定（客户端没有 agent 发令者）。 */
-  operator: string;
-  alive: boolean;
-  respawn_at_tick: number;
-  /** 只在存活时下发。 */
-  position?: Position;
-  inventory?: ItemInventory;
-  inventory_slots_used: number;
-  inventory_slots_total: number;
-  operate_range: number;
-  concurrent_tasks: number;
-  construction_active: number;
-  construction_pending: number;
-}
 
-/** 带机甲列表的玩家视图（C1 落地前 shared-client 的 `PlayerState` 还没有 `mechas`）。 */
-type PlayerWithMechas = PlayerState & { mechas?: MechaView[] };
+export type { MechaView };
 
 /** 某玩家的全部机甲（按 unit_id 排序，与服务端口径一致）。 */
-export function playerMechas(player?: PlayerWithMechas | null): MechaView[] {
-  return [...(player?.mechas ?? [])].sort((left, right) => left.unit_id.localeCompare(right.unit_id));
-}
-
-/** 玩家的全部机甲（从 summary 取）。 */
-export function selectPlayerMechas(summary: StateSummary | undefined, playerId: string): MechaView[] {
-  return playerMechas(summary?.players?.[playerId] as PlayerWithMechas | undefined);
+export function playerMechas(player?: Pick<PlayerState, 'mechas'> | null): MechaView[] {
+  return sortMechas(player?.mechas);
 }
 
 /**
  * 「我的机甲」= 操作者等于自己的那台（契约 §7.3）。
- * 服务端保证一个发令者至多绑一台，这里仍取第一台兜底。
+ * shared-client 的版本取玩家那一层，这里包一层 summary，省得每个调用点自己拆。
  */
 export function selectMyMecha(summary: StateSummary | undefined, playerId: string): MechaView | undefined {
-  if (!playerId) {
-    return undefined;
-  }
-  return selectPlayerMechas(summary, playerId).find((mecha) => mecha.operator === playerId);
+  return selectMyMechaFromSummary(summary, playerId, playerId);
+}
+
+/** 玩家的全部机甲（从 summary 取）。 */
+export function selectPlayerMechas(summary: StateSummary | undefined, playerId: string): MechaView[] {
+  return playerMechas(summary?.players?.[playerId]);
 }
 
 /** 按单位 ID 找机甲档案（只含自己玩家的档案；别人的机甲不在 summary 里）。 */
@@ -55,11 +34,6 @@ export function selectMechaById(
   unitId: string,
 ): MechaView | undefined {
   return selectPlayerMechas(summary, playerId).find((mecha) => mecha.unit_id === unitId);
-}
-
-/** 我的机甲背包（未绑定时视为空背包，UI 显示「未绑定机甲」而不是「背包空」）。 */
-export function mechaInventory(mecha: MechaView | undefined): ItemInventory | undefined {
-  return mecha?.inventory;
 }
 
 /** 背包格数占用（契约 §6 的 inventory_slots_used/total）。 */
@@ -86,4 +60,9 @@ export function mechaStatusLabel(mecha: MechaView): string {
     return '存活';
   }
   return mecha.respawn_at_tick > 0 ? `复活于 tick ${mecha.respawn_at_tick}` : '阵亡';
+}
+
+/** 机甲背包（未绑定时 undefined，UI 显示「未绑定机甲」而不是「背包空」）。 */
+export function mechaInventory(mecha: MechaView | undefined): ItemInventory | undefined {
+  return mecha?.inventory;
 }

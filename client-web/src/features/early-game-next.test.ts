@@ -163,9 +163,9 @@ describe("resolveEarlyGameNextAction", () => {
   it("研究缺矩阵：引导装入（深链 research workflow）", () => {
     const next = resolveEarlyGameNextAction({
       activePlanetId: "planet-1-1",
-      myMecha: mecha(),
+      // 背包在机甲档案上（契约 §6），玩家本身没有 inventory。
+      myMecha: mecha({ electromagnetic_matrix: 3 }),
       player: player({
-        inventory: { electromagnetic_matrix: 3 },
         tech: {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program"],

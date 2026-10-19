@@ -36,7 +36,7 @@ function summary(mechas: MechaView[]): StateSummary {
     map_width: 24,
     map_height: 16,
     players: {
-      p1: { player_id: 'p1', is_alive: true, mechas } as never,
+      p1: { player_id: 'p1', is_alive: true, mechas },
     },
   };
 }

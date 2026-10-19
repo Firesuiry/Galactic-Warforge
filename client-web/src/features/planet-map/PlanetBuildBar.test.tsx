@@ -115,7 +115,7 @@ const summary = {
       },
     },
   },
-} as unknown as StateSummary;
+} satisfies StateSummary;
 
 function makePlanet(): PlanetRenderView {
   return {
@@ -160,7 +160,7 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, items: [{ id: 'gear', name: '齿轮' }, { id: 'iron_ingot', name: '铁块' }], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
-    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });
@@ -192,19 +192,19 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'gear', quantity: 1 }, { item_id: 'iron_ingot', quantity: 6 }] } }
       : entry) } as CatalogView;
-    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const poorSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 0 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     const { rerender } = renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={poorSummary} planet={makePlanet()} />);
 
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toHaveTextContent('齿轮 ×1（背包 0/1）');
 
     // 背包补齐 → 清单自动消失（不能停在「还缺…」的旧数字上）
-    const richSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 5, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const richSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 5, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={richSummary} planet={makePlanet()} /></MemoryRouter>);
     expect(screen.queryByTestId('planet-build-card-shortage')).not.toBeInTheDocument();
 
     // 再次缺料并点开 → 进入建造模式（点另一张买得起的卡）时也收起
-    const gearlessSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const gearlessSummary = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ gear: 0, iron_ingot: 20 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     rerender(<MemoryRouter><PlanetBuildBar catalog={itemCatalog} summary={gearlessSummary} planet={makePlanet()} /></MemoryRouter>);
     await user.click(screen.getByRole('button', { name: /风力发电机/ }));
     expect(screen.getByTestId('planet-build-card-shortage')).toBeInTheDocument();
@@ -369,7 +369,7 @@ describe('PlanetBuildBar', () => {
     const itemCatalog = { ...catalog, buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ iron_ingot: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ iron_ingot: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
     const card = screen.getByRole('button', { name: /风力发电机/ });
     expect(card.className).toContain('planet-build-card--unaffordable');
@@ -391,7 +391,7 @@ describe('PlanetBuildBar', () => {
     ], buildings: catalog.buildings?.map((entry) => entry.id === 'wind_turbine'
       ? { ...entry, build_cost: { items: [{ item_id: 'custom_plate', quantity: 6 }, { item_id: 'gear', quantity: 1 }] } }
       : entry) } as CatalogView;
-    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ custom_plate: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } as unknown as StateSummary;
+    const stocked = { ...summary, players: { p1: { player_id: 'p1', is_alive: true, resources: { energy: 100 }, mechas: [mechaWithInventory({ custom_plate: 4, gear: 3 })], tech: { player_id: 'p1', completed_techs: ['tech-basic-power'] } } } } satisfies StateSummary;
     renderBuildBar(<PlanetBuildBar catalog={itemCatalog} summary={stocked} planet={makePlanet()} />);
 
     const card = screen.getByRole('button', { name: /风力发电机/ });

@@ -70,7 +70,7 @@ const summary = {
       resources: { energy: 120 },
     },
   },
-} as unknown as StateSummary;
+} satisfies StateSummary;
 
 const statsByPlayer: Record<string, PlayerStatsSnapshot> = {
   p1: {
