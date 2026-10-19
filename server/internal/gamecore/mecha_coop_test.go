@@ -136,17 +136,9 @@ func TestMechaCoop_01_TwoIssuersBuildFarApart(t *testing.T) {
 	coopDisableBuildRadius(ws)
 
 	starterUnit := findExecutorUnit(t, ws) // p1 开局机甲，operator = p1
+	// 挪到地图左半边，给 B 机甲留出足够远的工地。
+	removeUnitFromTile(ws, model.TileKey(starterUnit.Position.X, starterUnit.Position.Y), starterUnit.ID)
 	starterUnit.Position = model.Position{X: 12, Y: 10}
-	delete(ws.TileUnits, model.TileKey(starterUnit.Position.X, starterUnit.Position.Y))
-	// 上面的 delete 把原格索引清掉后重建，避免旧坐标残留。
-	for key, ids := range ws.TileUnits {
-		for i, id := range ids {
-			if id == starterUnit.ID {
-				ws.TileUnits[key] = append(ids[:i], ids[i+1:]...)
-				break
-			}
-		}
-	}
 	ws.TileUnits[model.TileKey(12, 10)] = append(ws.TileUnits[model.TileKey(12, 10)], starterUnit.ID)
 	recordA := starterMecha(ws, "p1")
 	recordA.Operator = "p1-a"
