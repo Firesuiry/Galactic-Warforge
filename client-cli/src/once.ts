@@ -3,6 +3,7 @@ import { createApiClient, type AwaitExecutionOptions, type ApiClient } from '@gw
 import { DEFAULT_GALAXY_ID, DEFAULT_PLANET_ID, DEFAULT_SYSTEM_ID } from '@gw/shared/config';
 import { splitCommandLine } from '@gw/shared/commands/game-commands';
 import { fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
+import { WAIT_FAILURE_MARKER } from '@gw/shared/commands/wait';
 import type { CommandResponse } from '@gw/shared/types';
 
 import { COMMANDS, dispatch } from './commands/index.js';import type { ReplContext } from './repl.js';
@@ -110,9 +111,13 @@ export function createOnceRunner(options: OnceOptions) {
     };
   }
 
-  /** 本地校验失败（fmtError）在 `Error: ` 前缀里；命令 handler 抛异常也按失败算。 */
+  /**
+   * 本地校验失败（fmtError）在 `Error: ` 前缀里；`wait` 超时/提前返回用 `✗ ` 前缀。
+   * chalk 在 TTY 下会给前缀套 ANSI，先剥掉再比。
+   */
   function isLocalError(text: string): boolean {
-    return text.startsWith(fmtError('').replace(/\s+$/, ''));
+    const plain = text.replace(/\u001b\[[0-9;]*m/g, '');
+    return plain.startsWith(fmtError('').replace(/\s+$/, '')) || plain.startsWith(WAIT_FAILURE_MARKER);
   }
 
   async function runLine(line: string): Promise<OnceResult> {

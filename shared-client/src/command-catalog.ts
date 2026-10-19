@@ -654,6 +654,7 @@ export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPerm
   summary: { category: "observe" },
   stats: { category: "observe" },
   briefing: { category: "observe" },
+  wait: { category: "observe" },
   catalog: { category: "observe" },
   galaxy: { category: "observe" },
   system: { category: "observe" },
