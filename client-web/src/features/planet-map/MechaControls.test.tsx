@@ -288,9 +288,8 @@ it('接管被服务端拒绝：面板显示拒绝原因，不显示为成功（�
   client.cmdAssignMecha.mockResolvedValueOnce({
     accepted: false,
     request_id: 'r-reject',
-    enqueue_tick: 1,
     results: [{ command_index: 0, status: 'rejected', code: 'NOT_OWNER', message: '机甲不属于你' }],
-  });
+  } as never);
   render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ operator: 'builder-a' })} />);
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '接管' })); });
   expect(await screen.findByRole('alert')).toHaveTextContent('机甲不属于你');
