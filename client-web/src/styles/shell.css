@@ -591,9 +591,10 @@
 @media(max-width:1500px) { .top-nav__chip-label { display:none; } }
 .top-nav__status { flex-wrap:nowrap; }
 /* 背包 chip 是「次要信息」：空间不够时优先裁掉它们，把位置留给电力 chip
-   （缺电告警的定位入口不能被覆盖）。实测 1200px 视口下只留 2 个才不会压到告警按钮。 */
-@media(max-width:1500px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
-@media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+2) { display:none; } }
+   （缺电告警的定位入口不能被覆盖）。第 1 个 chip 是格数/机甲 ID（契约要求可见），
+   后面才是关键物品 chip，所以裁切从第 4 / 第 3 个开始。 */
+@media(max-width:1500px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+4) { display:none; } }
+@media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
 .top-nav__status { min-width:0; }
 
 /* ============================================================
