@@ -47,6 +47,47 @@ cd client-cli && npm run dev
 - 不带 `--planet` 的 `build` 落在焦点行星；`move`/`attack`/`order`/`transfer`/`produce`/`upgrade`/`demolish`/`set_recipe` 等按目标实体所在行星结算；`mine_resource`/`craft_item`/`cancel_mecha_job`/`refuel_mecha`/`configure_mecha_logistics` 按发令者绑定的机甲所在行星结算。
 - 跨行星存在同 ID 实体时用 `--planet <planet_id>` 消歧。
 
+## 非交互模式（代理推荐）
+
+AI 代理不用开 REPL，直接 `scripts/sw`：
+
+```bash
+scripts/sw build 60 140 wind_turbine     # 执行一条
+scripts/sw - < commands.txt             # 从 stdin 逐行执行
+```
+
+- 脚本自己定位仓库根，任意目录可调用；每条命令走与 REPL 相同的 `dispatch`，不复制解析逻辑。
+- **默认等执行结果**：`POST /commands` 的 `ACCEPTED` 只表示入队，`scripts/sw` 拿到 `request_id` 后轮询审计（`GET /audit?request_id=...&player_id=...` 的 `stage=execute` 记录），在回执后追加每个 command_index 一行：
+
+  ```
+  ACCEPTED  request_id=...  tick=579
+    [0] accepted OK: 已受理，下一 tick 执行
+    [0] ✓ OK: 施工任务已排队（位置 60,140）
+  ```
+
+  失败/超时行：
+
+  ```
+    [0] ✗ INSUFFICIENT_RESOURCE: 背包缺：铜块 1
+    [0] … 未在 8s 内执行（tick 是否在走？）
+  ```
+
+- 结构校验失败（`REJECTED`，未入队）不轮询；执行失败、超时、未知命令、本地校验错误都计入退出码。
+- `scripts/sw -` 空行与 `#` 开头的行跳过；某条失败不中止，最后打印「N 条：成功 a，失败 b」，有失败时退出码 1。
+- 查询命令（`briefing` / `scene` / `mecha list` 等）照常输出，`--json` 等已有选项不变。
+- `quit` / `exit` / `clear` 在非交互模式不可用（报错计入失败）。
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `SW_SERVER` | `http://127.0.0.1:18080` | 游戏服务端 |
+| `SW_PLAYER` | `p1` | 玩家 ID |
+| `SW_KEY` | `key_player_1` | 玩家 key |
+| `SW_ISSUER` | 空 | 以代理身份发令（`issuer_type=agent`），语义同 REPL |
+| `SW_WAIT` | `1` | `0` = 只发不等执行结果 |
+| `SW_WAIT_TIMEOUT` | `8` | 等执行结果的秒数 |
+
+等待逻辑在 `shared-client`：`api.awaitExecution(requestId, expectedCount, opts)` 轮询审计并返回 `{status, outcomes}`，`api.setCommandResponseHandler(fn)` 在每次 `POST /commands` 后回传原始响应（供非交互入口拿 `request_id`）。REPL 默认行为不变。
+
 ## 命令要点
 
 命令表里放不下的语义：
