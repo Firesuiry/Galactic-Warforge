@@ -1,6 +1,7 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test';
 
 import { footprintFits, occupiedCells } from './support/footprint';
+import { myMechaOf } from './support/player-mecha';
 import { THREE_CANVAS, waitPlanetThree } from './support/planet-three';
 
 /** 兵营的占地（server/data/buildings.yaml：barracks footprint 3×3）。 */
@@ -136,7 +137,10 @@ async function constructionTasks(request: APIRequestContext): Promise<string[]> 
   );
 }
 
-/** p1 当前的资源与背包（判断建造成本是否够用）。 */
+/**
+ * p1 当前的资源与背包（判断建造成本是否够用）。
+ * 背包读「我的机甲」（契约 §6）；未绑定机甲时视为空背包，走既有的「材料不足」跳过。
+ */
 async function playerWallet(request: APIRequestContext): Promise<{ energy: number; inventory: Record<string, number> }> {
   const response = await request.get('/state/summary', {
     headers: { Authorization: 'Bearer key_player_1' },
@@ -146,7 +150,7 @@ async function playerWallet(request: APIRequestContext): Promise<{ energy: numbe
   const player = summary.players?.p1 ?? {};
   return {
     energy: player.resources?.energy ?? 0,
-    inventory: player.inventory ?? {},
+    inventory: myMechaOf(summary)?.inventory ?? {},
   };
 }
 
@@ -270,7 +274,7 @@ async function ensureTwoOwnUnits(request: APIRequestContext): Promise<boolean> {
   const inventory = await request.get('/state/summary', {
     headers: { Authorization: 'Bearer key_player_1' },
   });
-  const backpack = ((await inventory.json()).players?.p1?.inventory ?? {}) as Record<string, number>;
+  const backpack = myMechaOf(await inventory.json())?.inventory ?? {};
   const loads: Array<[string, number]> = [
     ['iron_ingot', Math.min(16, backpack.iron_ingot ?? 0)],
     ['circuit_board', Math.min(8, backpack.circuit_board ?? 0)],
