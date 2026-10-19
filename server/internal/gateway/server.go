@@ -338,9 +338,12 @@ type planetInspectResponse struct {
 	Title      string          `json:"title,omitempty"`
 	Building   *model.Building `json:"building,omitempty"`
 	// MiningItem：采集建筑唯一开采的矿种（目录物品 ID，见 model.MiningItemAt）。
-	MiningItem string                   `json:"mining_item,omitempty"`
-	Unit       *model.Unit              `json:"unit,omitempty"`
-	Resource   *model.ResourceNodeState `json:"resource,omitempty"`
+	MiningItem string `json:"mining_item,omitempty"`
+	// SorterEndpoints：分拣器两端（背面取货 / 正面放货）各连到了谁；没连上时
+	// 给出原因。非分拣器为空。
+	SorterEndpoints *model.SorterEndpointsView `json:"sorter_endpoints,omitempty"`
+	Unit            *model.Unit                `json:"unit,omitempty"`
+	Resource        *model.ResourceNodeState   `json:"resource,omitempty"`
 }
 
 // handlePlanetInspect returns GET /world/planets/{planet_id}/inspect
@@ -374,17 +377,27 @@ func (s *Server) handlePlanetInspect(w http.ResponseWriter, r *http.Request, pla
 		writeError(w, http.StatusNotFound, "target not found")
 		return
 	}
+	// 分拣器两端诊断：摆错方向时它静默不动，玩家/代理只能靠这里看出
+	// 「背面扫到的是谁、为什么没连上」。放在 gateway 算是因为 query 不能反向
+	// 依赖 gamecore（gamecore 的测试依赖 query）。
+	var sorterEndpoints *model.SorterEndpointsView
+	if ws != nil && view.Building != nil && view.Building.Sorter != nil {
+		ws.RLock()
+		sorterEndpoints = gamecore.DiagnoseSorterEndpoints(ws, ws.Buildings[view.Building.ID])
+		ws.RUnlock()
+	}
 
 	writeJSON(w, http.StatusOK, planetInspectResponse{
-		PlanetID:   view.PlanetID,
-		Discovered: view.Discovered,
-		EntityKind: entityKind,
-		EntityID:   entityID,
-		Title:      view.Title,
-		Building:   view.Building,
-		MiningItem: view.MiningItem,
-		Unit:       view.Unit,
-		Resource:   view.Resource,
+		PlanetID:        view.PlanetID,
+		Discovered:      view.Discovered,
+		EntityKind:      entityKind,
+		EntityID:        entityID,
+		Title:           view.Title,
+		Building:        view.Building,
+		MiningItem:      view.MiningItem,
+		SorterEndpoints: sorterEndpoints,
+		Unit:            view.Unit,
+		Resource:        view.Resource,
 	})
 }
 

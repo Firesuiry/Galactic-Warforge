@@ -500,6 +500,9 @@ func (gc *GameCore) execBuild(ws *model.WorldState, playerID string, cmd model.C
 		// 较小者）：写进回执，玩家不用等落成才知道（试玩 1016 报告 B2）。
 		res.Message += fmt.Sprintf("，将开采「%s」", itemDisplayName(task.MiningItem))
 	}
+	// 分拣器：下单时就把两端连到了谁写进回执（含同玩家排队中的施工任务），
+	// 摆错方向时一眼能看出来，不用等 20 tick 才发现它不动。
+	res.Message += sorterBuildEndpointHint(ws, task)
 	// 连发 build：后面的任务下单时背包还够，但前面的任务落成会扣走材料。
 	// 如实提示将等料，避免「全 OK」被当成「都会按时建成」。
 	res.Message = addQueuedMaterialHint(gc, task.MechaID, task.ID, mecha.Record.Inventory, task.Cost.Items, res.Message)

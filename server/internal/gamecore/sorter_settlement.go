@@ -406,47 +406,11 @@ func sorterEndpoints(
 	return links
 }
 
+// sorterFindEndpoint 是端点判定的薄包装：规则（扫描、归属、端口、传送带
+// 插入方向）只在 sorterProbeEndpoint 一处，诊断视图与建造回执预判复用同一份。
 func sorterFindEndpoint(ws *model.WorldState, sorter *model.Building, dir model.ConveyorDirection, maxRange int, forInput bool) (sorterLink, bool) {
-	pos := sorter.Position
-	for step := 1; step <= maxRange; step++ {
-		pos, dir = ws.SurfaceStep(pos, dir)
-		targetID := ws.TileBuilding[model.TileKey(pos.X, pos.Y)]
-		if targetID == "" {
-			continue
-		}
-		target := ws.Buildings[targetID]
-		if target == nil || target.OwnerID != sorter.OwnerID {
-			return sorterLink{}, false
-		}
-		if target.Conveyor != nil {
-			if !conveyorActive(target) || target.Splitter != nil {
-				return sorterLink{}, false
-			}
-			// 取货端可以从任意路过的带格上取（不要求带尾正对分拣器）；
-			// 放货端仍要求该格能接受这一侧插入。
-			if forInput && !sorterCanTakeFromConveyor(target) {
-				return sorterLink{}, false
-			}
-			if !forInput && !sorterCanInsertToConveyor(target, dir) {
-				return sorterLink{}, false
-			}
-			return sorterLink{id: targetID, dir: dir, steps: step}, true
-		}
-		if target.Storage != nil {
-			// 分拣器连到建筑占地内任一 cell 即算连上（多格建筑不再是"必须正中锚点"）：
-			// 端口按方向取，offset 已统一收敛到锚点。
-			if !ws.BuildingOccupies(target, pos) {
-				return sorterLink{}, false
-			}
-			for _, port := range sortedIOPorts(target.Runtime.Params.IOPorts) {
-				if (forInput && (port.Direction == model.PortOutput || port.Direction == model.PortBoth)) || (!forInput && (port.Direction == model.PortInput || port.Direction == model.PortBoth)) {
-					return sorterLink{id: targetID, dir: dir, port: port.ID, steps: step}, true
-				}
-			}
-		}
-		return sorterLink{}, false
-	}
-	return sorterLink{}, false
+	probe := sorterProbeEndpoint(ws, sorter, dir, maxRange, forInput, nil)
+	return probe.Link, probe.OK
 }
 
 // sorterCanTakeFromConveyor：运行中的传送带格都能被取货（DSP 口径：带子上
