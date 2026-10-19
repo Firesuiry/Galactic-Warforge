@@ -188,17 +188,17 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `build_dyson_node` | system | — | `system_id`, `layer_index`, `latitude`, `longitude`, `orbit_radius?` | `build_dyson_node` | Build a Dyson sphere node |
 | `build_dyson_shell` | system | — | `system_id`, `layer_index`, `latitude_min`, `latitude_max`, `coverage` | `build_dyson_shell` | Build a Dyson sphere shell |
 | `cancel_construction` | planet | — | `task_id` | `cancel_construction` | Cancel queued or running construction task |
-| `cancel_mecha_job` | planet | `entity_id` | — | `cancel_mecha_job` | 取消机甲任务并返还未完成批次原料 |
+| `cancel_mecha_job` | planet | `entity_id` | — | `cancel_mecha_job` | 取消我的机甲的作业并返还未完成批次原料 |
 | `cancel_research` | planet | — | `tech_id` | `cancel_research` | Cancel a technology in progress or queue |
 | `commission_fleet` | system | — | `building_id`, `blueprint_id`, `count`, `system_id`, `fleet_id?` | `commission_fleet` | Consume a fleet payload from a hub and create or reinforce a fleet |
 | `configure_distributor` | planet | `entity_id` | `item_id`, `mode`, `local_storage`, `player_delivery_enabled?`, `player_collection_enabled?` | `configure_distributor` | 配置仓库配送器；省略开关保留原值 |
 | `configure_logistics_slot` | planet | `entity_id` | `scope`, `item_id`, `mode`, `local_storage`, `remove?` | `configure_logistics_slot` | 配置物流物品槽；remove移除无库存、无端口或在途引用的空槽 |
 | `configure_logistics_station` | planet | `entity_id` | `input_priority?`, `output_priority?`, `drone_capacity?`, `interstellar?`, `belt_ports?` | `configure_logistics_station` | Configure logistics station capacity, priority and interstellar switches |
-| `configure_mecha_logistics` | planet | `entity_id` | `requests` | `configure_mecha_logistics` | 替换机甲配送请求，最多 8 项，none 清空 |
+| `configure_mecha_logistics` | planet | `entity_id` | `requests` | `configure_mecha_logistics` | 替换本发令者机甲（我的机甲）的配送请求，最多 8 项，none 清空 |
 | `configure_sorter` | planet | `entity_id` | `filter_mode?`, `filter_items?` | `configure_sorter` | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | planet | `entity_id` | `input_directions`, `output_directions`, `input_priority?`, `output_priority?`, `output_filters?` | `configure_splitter` | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | planet | `entity_id` | `target_belt_id`, `window_ticks`, `minimum_items_per_tick`, `alerts_enabled` | `configure_traffic_monitor` | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
-| `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
+| `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算） |
 | `demolish` | planet | `entity_id` | — | `demolish` | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | system | — | `system_id`, `component_type`, `component_id` | `demolish_dyson` | Demolish a Dyson sphere component |
 | `deploy_squad` | planet | — | `member_ids?`, `name?`, `building_id?`, `blueprint_id?`, `count?`, `planet_id?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
@@ -212,12 +212,12 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `install_logistics_vehicle` | planet | `entity_id` | `item_id`, `quantity`, `source?` | `install_logistics_vehicle` | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | planet | — | `building_id`, `system_id`, `layer_index?`, `count?` | `launch_rocket` | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | planet | — | `building_id`, `count?`, `orbit_radius?`, `inclination?` | `launch_solar_sail` | Launch loaded solar sails from an EM Rail Ejector |
-| `mine_resource` | planet | `entity_id` | `resource_id`, `quantity` | `mine_resource` | 手动采集固体资源到背包（按执行体所在行星结算） |
+| `mine_resource` | planet | `entity_id` | `resource_id`, `quantity` | `mine_resource` | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算） |
 | `move` | planet | `position` | — | `move` | Move entity to position |
 | `produce` | planet | `entity_id` | `unit_type` | `produce` | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | planet | — | `building_id`, `deployment_hub_id`, `blueprint_id`, `count` | `queue_military_production` | Queue military production and deliver ready payloads into a deployment hub |
 | `refit_unit` | planet | — | `building_id`, `unit_id`, `target_blueprint_id` | `refit_unit` | Send a squad or fleet into authoritative refit |
-| `refuel_mecha` | planet | `entity_id` | `item_id`, `count?` | `refuel_mecha` | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
+| `refuel_mecha` | planet | `entity_id` | `item_id`, `count?` | `refuel_mecha` | 给我的机甲补能：烧最多 count 块燃料（缺省 1）直到核心充满 |
 | `restore_construction` | planet | — | `task_id` | `restore_construction` | Restore a cancelled construction task |
 | `scan_galaxy` | galaxy | `galaxy_id` | — | `scan_galaxy` | 登记星系到星图（不改地表迷雾） |
 | `scan_planet` | planet | `planet_id` | — | `scan_planet` | 登记星球到星图（不改地表迷雾） |
@@ -236,7 +236,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `theater_create` | planet | — | `theater_id`, `name?` | `theater_create` | Create a theater container for war zoning and objectives |
 | `theater_define_zone` | system | — | `theater_id`, `zone_type`, `system_id?`, `planet_id?`, `position?`, `radius?` | `theater_define_zone` | Define or update one theater zone |
 | `theater_set_objective` | system | — | `theater_id`, `objective_type`, `system_id?`, `planet_id?`, `entity_id?`, `description?` | `theater_set_objective` | Set a theater objective anchor and description |
-| `transfer_item` | planet | — | `building_id`, `item_id`, `quantity`, `direction?` | `transfer` | Load items from player inventory into building local storage（按建筑所在行星结算） |
+| `transfer_item` | planet | — | `building_id`, `item_id`, `quantity`, `direction?` | `transfer` | Load items from your mecha backpack into building local storage（按建筑所在行星结算） |
 | `uninstall_logistics_bot` | planet | `entity_id` | `quantity` | `uninstall_logistics_bot` | 回收空载停靠的配送机器人至背包 |
 | `unit_order` | planet | — | `order`, `target_entity_id?`, `from_building_id?`, `to_building_id?`, `item_id?` | `order` | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
 | `upgrade` | planet | `entity_id` | — | `upgrade` | Upgrade building（按建筑所在行星结算） |

@@ -57,7 +57,7 @@ describe('mecha refuel command registration', () => {
   it('registers refuel_mecha and exposes its fuel arguments', async () => {
     assert.ok(COMMANDS.refuel_mecha);
     const help = await dispatch('help refuel_mecha', { api, currentPlayer: 'p1', rl: {} as never });
-    assert.match(help, /refuel_mecha <executor_id> <fuel_item_id> \[count\]/);
+    assert.match(help, /refuel_mecha <fuel_item_id> \[count\]/);
   });
 });
 
@@ -167,9 +167,9 @@ describe('warfare command registration', () => {
 
 describe('personal mecha job help and registration', () => {
   for (const [name, usage] of [
-    ['mine_resource', 'mine_resource <executor_id> <resource_id> <quantity>'],
-    ['craft_item', 'craft_item <executor_id> <recipe_id> <quantity>'],
-    ['cancel_mecha_job', 'cancel_mecha_job <executor_id>'],
+    ['mine_resource', 'mine_resource <resource_id> <quantity>'],
+    ['craft_item', 'craft_item <recipe_id> <quantity>'],
+    ['cancel_mecha_job', 'cancel_mecha_job [--planet'],
   ]) {
     it(`${name} exposes dedicated help and --help without submitting commands`, async () => {
       assert.equal(typeof COMMANDS[name]?.handler, 'function');
@@ -216,5 +216,43 @@ describe('fast-forward command registration', () => {
   it('validates the target before calling the server', async () => {
     const out = await dispatch('advance', { api, currentPlayer: 'p1', rl: {} as never });
     assert.match(out, /需要 <ticks> 或 --to <tick>/);
+  });
+});
+
+
+describe('issuer commands', () => {
+  it('registers as and mecha commands', async () => {
+    assert.ok(COMMANDS.as);
+    assert.ok(COMMANDS.mecha);
+    const mechaHelp = await dispatch('help mecha', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(mechaHelp, /mecha <list\|assign <mecha_id> \[operator\]\|assign <mecha_id> --release>/);
+  });
+
+  it('switches issuer with as <name> and restores the player with bare as', async () => {
+    api.setAuth('p1', 'key_player_1');
+    const ctx = { api, currentPlayer: 'p1', rl: {} as never };
+    assert.match(await dispatch('as builder', ctx), /Now issuing as agent builder/);
+    assert.equal(api.getAuth().issuerType, 'agent');
+    assert.equal(api.getAuth().issuerId, 'builder');
+    assert.match(await dispatch('as', ctx), /Now issuing as player p1/);
+    assert.equal(api.getAuth().issuerType, 'player');
+    assert.equal(api.getAuth().issuerId, 'p1');
+  });
+
+  it('rejects an agent name equal to the player id or with illegal characters', async () => {
+    api.setAuth('p1', 'key_player_1');
+    const ctx = { api, currentPlayer: 'p1', rl: {} as never };
+    assert.match(await dispatch('as p1', ctx), /不能等于玩家 ID/);
+    assert.match(await dispatch('as bad name', ctx), /Usage: as/);
+    assert.equal(api.getAuth().issuerType, 'player');
+  });
+
+  it('shows the current issuer in status', async () => {
+    api.setAuth('p1', 'key_player_1');
+    const ctx = { api, currentPlayer: 'p1', rl: {} as never };
+    assert.match(await dispatch('status', ctx), /Issuer: player:p1/);
+    await dispatch('as scout', ctx);
+    assert.match(await dispatch('status', ctx), /Issuer: agent:scout/);
+    api.setAuth('', '');
   });
 });

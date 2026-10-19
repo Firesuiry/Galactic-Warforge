@@ -71,12 +71,17 @@ import { resolveServerUrl } from './utils.js';
 export interface AuthState {
   playerId: string;
   playerKey: string;
+  /** player（默认）= 玩家本人发令；agent = 子代理 / agent-gateway 智能体，id 为代理名。 */
+  issuerType: 'player' | 'agent';
+  /** 发令者 ID：issuerType=agent 时为代理名，否则等于 playerId。 */
+  issuerId: string;
 }
 
 export interface ApiClientOptions {
   serverUrl: string;
   fetchFn?: typeof fetch;
   auth?: Partial<AuthState>;
+  /** 发令者；缺省 player + playerId。`SW_ISSUER=<名>` 时传 `{issuerType: 'agent', issuerId: <名>}`。 */
   defaultGalaxyId?: string;
   defaultPlanetId?: string;
   defaultSystemId?: string;
@@ -294,10 +299,14 @@ function addParams(params: URLSearchParams, values: object) {
 
 export function createApiClient(options: ApiClientOptions) {
   let serverUrl = options.serverUrl;
-  let auth: AuthState = {
-    playerId: options.auth?.playerId ?? '',
-    playerKey: options.auth?.playerKey ?? '',
-  };
+  let auth: AuthState = normalizeAuth(options.auth);
+
+  function normalizeAuth(next?: Partial<AuthState>): AuthState {
+    const playerId = next?.playerId ?? '';
+    const issuerType = next?.issuerType ?? 'player';
+    const issuerId = next?.issuerId || (issuerType === 'player' ? playerId : '');
+    return { playerId, playerKey: next?.playerKey ?? '', issuerType, issuerId };
+  }
 
   const fetchFn: typeof fetch = options.fetchFn
     ?? ((input, init) => globalThis.fetch(input, init));
@@ -330,12 +339,29 @@ export function createApiClient(options: ApiClientOptions) {
     return response.json() as Promise<T>;
   }
 
-  function setAuth(playerId: string, playerKey: string) {
-    auth = { playerId, playerKey };
+  /**
+   * 设置鉴权与发令者；issuer 缺省时保留当前代理发令者（切玩家不改代理名），
+   * 当前是玩家发令则跟随新玩家 ID。清空玩家（登出）时发令者一并复位。
+   */
+  function setAuth(playerId: string, playerKey: string, issuer?: { issuerType?: 'player' | 'agent'; issuerId?: string }) {
+    if (issuer) {
+      auth = normalizeAuth({ playerId, playerKey, ...issuer });
+    } else if (playerId && auth.issuerType === 'agent' && auth.issuerId) {
+      auth = { playerId, playerKey, issuerType: 'agent', issuerId: auth.issuerId };
+    } else {
+      auth = normalizeAuth({ playerId, playerKey });
+    }
+  }
+
+  /** 只改发令者（REPL `as <名>` / `SW_ISSUER`）；undefined = 恢复玩家本人。 */
+  function setIssuer(issuerId?: string) {
+    auth = issuerId
+      ? { ...auth, issuerType: 'agent', issuerId }
+      : { ...auth, issuerType: 'player', issuerId: auth.playerId };
   }
 
   function clearAuth() {
-    auth = { playerId: '', playerKey: '' };
+    auth = { playerId: '', playerKey: '', issuerType: 'player', issuerId: '' };
   }
 
   function getAuth(): AuthState {
@@ -479,8 +505,8 @@ export function createApiClient(options: ApiClientOptions) {
     }
     const request: CommandRequest = {
       request_id: crypto.randomUUID(),
-      issuer_type: 'player',
-      issuer_id: auth.playerId,
+      issuer_type: auth.issuerType,
+      issuer_id: auth.issuerId || auth.playerId,
       commands,
     };
     return sendCommandRequest(request);
@@ -675,26 +701,27 @@ export function createApiClient(options: ApiClientOptions) {
   }
 
   /** count：最多烧几块燃料（缺省 1），服务端烧到核心满为止。 */
-  function cmdRefuelMecha(entityId: string, itemId: string, count?: number, planetId?: string) {
+  // 第 21 轮：需要机甲的命令不再带 entity_id，由服务端按发令者绑定的机甲执行。
+  function cmdRefuelMecha(itemId: string, count?: number, planetId?: string) {
     return sendSingleCommand({
       type: 'refuel_mecha',
-      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
       payload: { item_id: itemId, ...(count !== undefined ? { count } : {}) },
     });
   }
 
-  function cmdMineResource(entityId: string, itemId: string, quantity: number, planetId?: string) {
+  function cmdMineResource(itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'mine_resource',
-      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
       payload: { resource_id: itemId, quantity },
     });
   }
 
-  function cmdCraftItem(entityId: string, itemId: string, quantity: number, planetId?: string) {
+  function cmdCraftItem(itemId: string, quantity: number, planetId?: string) {
     return sendSingleCommand({
       type: 'craft_item',
-      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
       payload: { recipe_id: itemId, quantity },
     });
   }
@@ -719,10 +746,10 @@ export function createApiClient(options: ApiClientOptions) {
     });
   }
 
-  function cmdCancelMechaJob(entityId: string, planetId?: string) {
+  function cmdCancelMechaJob(planetId?: string) {
     return sendSingleCommand({
       type: 'cancel_mecha_job',
-      target: { layer: 'planet', entity_id: entityId, ...(planetId ? { planet_id: planetId } : {}) },
+      target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) },
     });
   }
 
@@ -790,8 +817,17 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdUninstallLogisticsBot(buildingId: string, quantity: number) {
     return sendSingleCommand({ type: 'uninstall_logistics_bot', target: { layer: 'planet', entity_id: buildingId }, payload: { quantity } });
   }
-  function cmdConfigureMechaLogistics(unitId: string, requests: Record<string, MechaLogisticsRequest>, planetId?: string) {
-    return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', entity_id: unitId, ...(planetId ? { planet_id: planetId } : {}) }, payload: { requests } });
+  function cmdConfigureMechaLogistics(requests: Record<string, MechaLogisticsRequest>, planetId?: string) {
+    return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) }, payload: { requests } });
+  }
+
+  /** assign_mecha：把本方机甲绑给某个发令者；operator 为空字符串 = 解绑。 */
+  function cmdAssignMecha(mechaId: string, operator: string) {
+    return sendSingleCommand({
+      type: 'assign_mecha',
+      target: { layer: 'planet', entity_id: mechaId },
+      payload: { operator },
+    });
   }
 
   function cmdConfigureLogisticsStation(buildingId: string, options: ConfigureLogisticsStationOptions = {}) {
@@ -1406,7 +1442,9 @@ export function createApiClient(options: ApiClientOptions) {
     sendRollback,
     sendSave,
     setAuth,
+    setIssuer,
     setServerUrl,
+    cmdAssignMecha,
   };
 }
 

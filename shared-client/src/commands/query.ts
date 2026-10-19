@@ -1,4 +1,4 @@
-import type { CommandContext } from './game-commands.js';
+import { resolveIssuerId, type CommandContext } from './game-commands.js';
 import { DEFAULT_SYSTEM_ID, DEFAULT_PLANET_ID } from '../config.js';
 import {
   fmtError,
@@ -12,6 +12,7 @@ import {
   fmtPlanetSummary,
   fmtStats,
   fmtSummary,
+  fmtMechaInventory,
   fmtAgentBriefing,
   fmtCommandCatalog,
   fmtSystem,
@@ -24,6 +25,7 @@ import {
 } from './format.js';
 import type { PlanetSceneParams } from '../api.js';
 import { parseArgs, parseIntegerArg } from './args.js';
+import { selectMyMecha } from '../mecha.js';
 
 function parseRequiredInteger(raw: string | undefined, label: string): number {
   const value = parseIntegerArg(raw);
@@ -49,9 +51,12 @@ export async function cmdMetrics(_args: string[], { api }: CommandContext): Prom
   }
 }
 
-export async function cmdSummary(_args: string[], { api }: CommandContext): Promise<string> {
+export async function cmdSummary(_args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
   try {
-    return fmtSummary(await api.fetchSummary());
+    const summary = await api.fetchSummary();
+    const mecha = selectMyMecha(summary.players?.[api.getAuth().playerId], resolveIssuerId(ctx));
+    return [fmtSummary(summary), fmtMechaInventory(mecha)].join('\n');
   } catch (e) {
     return fmtError(String(e));
   }
@@ -65,13 +70,17 @@ export async function cmdStats(_args: string[], { api }: CommandContext): Promis
   }
 }
 
-export async function cmdBriefing(args: string[], { api }: CommandContext): Promise<string> {
+export async function cmdBriefing(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
   try {
     let alertLimit: number | undefined;
     if (args[0] !== undefined && args[0] !== '') {
       alertLimit = parseRequiredInteger(args[0], 'alert_limit');
     }
-    return fmtAgentBriefing(await api.fetchAgentBriefing(alertLimit !== undefined ? { alert_limit: alertLimit } : undefined));
+    return fmtAgentBriefing(
+      await api.fetchAgentBriefing(alertLimit !== undefined ? { alert_limit: alertLimit } : undefined),
+      resolveIssuerId(ctx),
+    );
   } catch (e) {
     return fmtError(String(e));
   }

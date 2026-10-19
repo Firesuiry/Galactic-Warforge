@@ -1,7 +1,9 @@
 import chalk from 'chalk';
 import { formatAlertText } from '../alerts.js';
+import { NO_MECHA_HINT, selectMyMecha } from '../mecha.js';
 import type {
   Building,
+  MechaView,
   CommandCatalogView,
   CommandResponse,
   FleetDetailView,
@@ -162,6 +164,21 @@ export function fmtMetrics(m: MetricsSnapshot): string {
   return Object.entries(m).map(([k, v]) => `  ${chalk.yellow(k)}: ${v}`).join('\n');
 }
 
+/**
+ * 玩家自己的背包行（第 21 轮：背包挂在机甲上）。
+ * `mecha` = 当前发令者绑定的机甲；未绑定时给统一提示。
+ */
+export function fmtMechaInventory(mecha: MechaView | undefined): string {
+  if (!mecha) {
+    return chalk.yellow(NO_MECHA_HINT);
+  }
+  const slots = mecha.inventory_slots_total
+    ? ` [${mecha.inventory_slots_used}/${mecha.inventory_slots_total} slots]`
+    : '';
+  const preview = fmtInventoryPreview(mecha.inventory, 8) || chalk.dim('空');
+  return `Inventory ${mecha.unit_id}${slots}: ${preview}`;
+}
+
 export function fmtSummary(s: StateSummary): string {
   const lines: string[] = [
     `Tick: ${chalk.cyan(s.tick)}  Active Planet: ${s.active_planet_id}  Map: ${s.map_width}x${s.map_height}`,
@@ -171,26 +188,16 @@ export function fmtSummary(s: StateSummary): string {
   }
   lines.push('');
 
-  const headers = ['Player', 'Team', 'Role', 'Alive', 'Energy', 'Executor'];
+  const headers = ['Player', 'Team', 'Role', 'Alive', 'Energy', 'Mechas'];
   const rows = Object.values(s.players).map(p => [
     p.player_id,
     p.team_id ?? '-',
     p.role ?? '-',
     p.is_alive ? chalk.green('yes') : chalk.red('no'),
     p.resources ? String(p.resources.energy) : chalk.dim('-'),
-    p.executor?.unit_id ?? '-',
+    (p.mechas ?? []).map(m => m.unit_id).join(',') || '-',
   ]);
   lines.push(table(headers, rows));
-  for (const player of Object.values(s.players)) {
-    const preview = fmtInventoryPreview(player.inventory, 8);
-    if (preview) {
-      // 背包按格计（DSP 口径：每格按物品 stack_limit 堆叠），同时打印占用/上限。
-      const slots = player.inventory_slots_total
-        ? ` [${player.inventory_slots_used ?? 0}/${player.inventory_slots_total} slots]`
-        : '';
-      lines.push(`Inventory ${player.player_id}${slots}: ${preview}`);
-    }
-  }
   return lines.join('\n');
 }
 
@@ -240,7 +247,7 @@ export function fmtCommandCatalog(catalog: CommandCatalogView): string {
   return lines.join('\n');
 }
 
-export function fmtAgentBriefing(b: AgentBriefing): string {
+export function fmtAgentBriefing(b: AgentBriefing, issuerId = b.self.player_id): string {
   const lines: string[] = [
     `Tick: ${chalk.cyan(b.tick)}  Active Planet: ${b.active_planet_id}  Map: ${b.map_width}x${b.map_height}`,
   ];
@@ -255,6 +262,7 @@ export function fmtAgentBriefing(b: AgentBriefing): string {
   lines.push(
     `  energy=${b.self.resources?.energy ?? 0}（电网结余）`,
   );
+  lines.push(`  ${fmtMechaInventory(selectMyMecha(b.self, issuerId))}`);
   if (b.self.tech) {
     lines.push(
       `  tech completed=${b.self.tech.completed_count} queue=${b.self.tech.research_queue_len} researched=${b.self.tech.total_researched}`,

@@ -809,7 +809,8 @@ export type CommandType =
   | 'build_dyson_node'
   | 'build_dyson_frame'
   | 'build_dyson_shell'
-  | 'demolish_dyson';
+  | 'demolish_dyson'
+  | 'assign_mecha';
 
 export interface CommandTarget {
   layer: string;
@@ -854,7 +855,8 @@ export interface CommandIssue {
 export interface CommandResult {
   command_index: number;
   status: string;
-  code: string;
+  /** NOT_OPERATOR：单位被别的发令者绑定，不能操作；EXECUTOR_UNAVAILABLE：发令者没有可用的机甲。 */
+  code: 'NOT_OPERATOR' | 'EXECUTOR_UNAVAILABLE' | string;
   message: string;
   issues?: CommandIssue[];
   validation?: WarBlueprintValidationResult;
@@ -873,14 +875,6 @@ export interface Resources {
 }
 
 export type ItemInventory = Record<string, number>;
-
-export interface ExecutorState {
-  unit_id: string;
-  build_efficiency: number;
-  operate_range: number;
-  concurrent_tasks: number;
-  research_boost: number;
-}
 
 export interface TechQueueEntry {
   tech_id: string;
@@ -964,23 +958,35 @@ export interface PlayerStatsSnapshot {
   combat_stats: CombatStats;
 }
 
+/** 玩家自己的一台机甲（`GET /state/summary` / `agent-briefing` 的 `mechas[]`）。 */
+export interface MechaView {
+  unit_id: string;
+  planet_id: string;
+  /** 绑定的 issuer_id；空字符串 = 空闲。 */
+  operator: string;
+  alive: boolean;
+  respawn_at_tick: number;
+  /** 只在 alive 时下发。 */
+  position?: Position;
+  inventory: ItemInventory;
+  inventory_slots_used: number;
+  inventory_slots_total: number;
+  operate_range: number;
+  concurrent_tasks: number;
+  construction_active: number;
+  construction_pending: number;
+}
+
 export interface PlayerState {
   player_id: string;
   team_id?: string;
   role?: string;
   resources?: Resources;
-  inventory?: ItemInventory;
-  /**
-   * 背包格数上限与已用格数（DSP 口径：每格按物品 stack_limit 堆叠）。
-   * 仅自己可见；旧服务端不返回时按 0 处理（UI 隐藏容量提示）。
-   */
-  inventory_slots_used?: number;
-  inventory_slots_total?: number;
+  /** 自己的机甲列表；别人的玩家视图不带。 */
+  mechas?: MechaView[];
   permissions?: string[];
   /** F4：玩家自己的视图焦点/默认落点行星。 */
   focus_planet_id?: string;
-  executor?: ExecutorState;
-  executors?: Record<string, ExecutorState>;
   tech?: TechState;
   combat_tech?: CombatTechState;
   stats?: PlayerStatsSnapshot;
@@ -1021,10 +1027,8 @@ export interface AgentBriefingSelf {
   role?: string;
   is_alive: boolean;
   resources: Resources;
-  inventory?: ItemInventory;
-  /** 背包格数占用/上限（DSP 口径：每格按物品 stack_limit 堆叠）。 */
-  inventory_slots_used?: number;
-  inventory_slots_total?: number;
+  /** 自己的机甲列表（同 summary 的 MechaView）。 */
+  mechas?: MechaView[];
   tech?: AgentBriefingTech;
   /** F4：玩家自己的视图焦点/默认落点行星。 */
   focus_planet_id?: string;
@@ -1415,6 +1419,8 @@ export interface ConstructionTaskView {
   materials_deducted?: boolean;
   /** 采集任务排产时定下的唯一开采矿种（目录物品 ID，见 Building.mining_item）。 */
   mining_item?: string;
+  /** 下单时的发令者机甲（预留、扣料、退料都只走这台机甲的背包）。 */
+  mecha_id?: string;
 }
 
 export interface EnemyForceView {

@@ -158,6 +158,27 @@ curl -fsS -X POST -H "Authorization: Bearer key_player_1" \
 - 最终结果看 `command_result` 事件，或下一轮 `briefing` / `summary` / `inspect` / `war_industry` 对账。
 - 结构失败时看 `results[].code` + `results[].message`；结构化 `issues[]`（字段级）随 T-B2 提供时优先用 `issues` repair。
 
+### 3.4 多代理同阵营
+
+同一个玩家可以开多个代理（多个 Claude 会话 / agent-gateway 智能体）同时操作，各绑一台机甲，施工额度与背包互不影响。
+
+1. **每个代理设自己的名字**：`SW_ISSUER=<名>`（或 REPL 里 `as <名>`；`as` 不带参数恢复玩家本人）。之后命令以 `issuer_type=agent`、`issuer_id=<名>` 发出；`status` 可核对。
+2. **看机甲、接管空闲机甲**：
+
+   ```bash
+   mecha list                     # ID、星球、操作者、存活、背包格数、施工中/排队
+   mecha assign u-7               # operator 缺省 = 自己，接管空闲机甲 u-7
+   ```
+
+3. **造新机甲**（没有空闲机甲时）：在基站 `produce <hq_id> executor`。成本：铁块 16、齿轮 8、磁线圈 8、电路板 8，先用 `transfer_item`（CLI `transfer <hq_id> <item_id> <qty>`）装进基站存储。出厂机甲空闲、空背包、满能量，再 `mecha assign <id>`。
+4. **取料时机甲要在范围内**：基站的 `build_radius` 覆盖内可以远程取放；覆盖外要把机甲开到目标建筑旁（`move <mecha_id> <x> <y>`，`operate_range` 18）。
+5. 没有绑定机甲时，`build` / `transfer` / `mine_resource` / `craft_item` 等返回 `EXECUTOR_UNAVAILABLE`；背包行显示「未绑定机甲：mecha list / mecha assign <id>」。
+
+```bash
+# 非交互 runner 里也照常生效（setAuth 后设发令者）
+SW_ISSUER=builder SW_SERVER=http://localhost:18080 npx tsx /tmp/sw-dispatch.mjs mecha list
+```
+
 ## 4. 决策循环（核心）
 
 每一轮固定四步，**不要跳过 briefing**：
@@ -280,6 +301,11 @@ fog | alert_snapshot | event_snapshot
 # 工业
 build x y <type> [--recipe id] [--direction d]
 transfer <building_id> <item_id> <qty>
+mecha list | mecha assign <mecha_id> [operator|--release]
+produce <hq_id> executor
+mine_resource <resource_id> <qty> | craft_item <recipe_id> <batches>
+cancel_mecha_job | refuel_mecha <fuel_item_id> [count]
+configure_mecha_logistics <item:min:max,...|none>
 start_research <tech_id> | cancel_research <tech_id>
 switch_active_planet <planet_id>
 

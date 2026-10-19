@@ -20,12 +20,14 @@ cd client-cli && npm run dev
 | `SW_SERVER` | `http://localhost:18080` | 游戏服务端 |
 | `SW_AGENT_GATEWAY` | `http://127.0.0.1:18180` | agent-gateway |
 | `SW_SSE_VERBOSE=1` | 关 | 订阅全部 SSE 事件 |
+| `SW_ISSUER` | 空 | 以代理身份发令：`issuer_type=agent`、`issuer_id=<名>`；不设时为玩家本人 |
 
 默认值：银河 `galaxy-1`、恒星系 `sys-1`、行星 `planet-1-1`、`events` 显示 10 条。
 
 ## 登录与事件流
 
 - 启动时检查 `/health`，再选择玩家：`p1 / key_player_1`、`p2 / key_player_2` 或自定义 ID/key。`switch [player_id] [key]` 切换玩家并重连 SSE。
+- 发令者：默认由玩家本人发令（`issuer_type=player`、`issuer_id=<player_id>`）。设 `SW_ISSUER=<名>` 或 REPL 执行 `as <名>` 后改为 `issuer_type=agent`、`issuer_id=<名>`（名字只允许字母、数字、`_ . : -`，最长 64，且不能等于玩家 ID）；`as` 不带参数 = 恢复为玩家本人。启动横幅、REPL 提示符（`[p1@builder]`）与 `status` 都显示当前发令者。`switch` 切玩家时保留当前代理名。
 - 自动连接 `GET /events/stream?event_types=...`。默认只订阅低噪声事件：`command_result`、`entity_created`、`entity_destroyed`、`building_state_changed`、`construction_paused`、`construction_resumed`、`research_completed`、`victory_declared`、`loot_dropped`、`rocket_launched`。
 - `production_alert`、`damage_applied`、`entity_updated` 等高频事件默认不进实时流；告警用 `alert_snapshot`，其余用 `event_snapshot --types ...` 或 `--all`。
 - `building_state_changed` 可能 `prev_state == next_state`，此时看 `prev_reason -> reason`（如 `power_out_of_range -> under_power` 表示已接网但当前缺电）。
@@ -42,7 +44,7 @@ cd client-cli && npm run dev
 ## 行星路由（`--planet`）
 
 - `switch_active_planet <planet_id>` 只改自己的焦点行星（每玩家独立），只能切到已发现、已加载且自己有 foothold 的行星；所有已加载行星始终结算。
-- 不带 `--planet` 的 `build` 落在焦点行星；`move`/`attack`/`order`/`transfer`/`produce`/`upgrade`/`demolish`/`set_recipe`/`mine_resource`/`craft_item` 等按目标实体所在行星结算。
+- 不带 `--planet` 的 `build` 落在焦点行星；`move`/`attack`/`order`/`transfer`/`produce`/`upgrade`/`demolish`/`set_recipe` 等按目标实体所在行星结算；`mine_resource`/`craft_item`/`cancel_mecha_job`/`refuel_mecha`/`configure_mecha_logistics` 按发令者绑定的机甲所在行星结算。
 - 跨行星存在同 ID 实体时用 `--planet <planet_id>` 消歧。
 
 ## 命令要点
@@ -58,7 +60,12 @@ cd client-cli && npm run dev
 - **军团**：`form_squad` 可含补给车；`squad_order ... resupply` 不带坐标，自动前往最近补给站；`dissolve_squad` 后成员保留当前指令。
 - **弹药**：`inspect` 单位可见 `ammo_class`/`ammo`/`ammo_capacity`/`ammo_item`，打空后 `combat_state=no_ammunition` 停火；进入 `supply_station`（半径 30 cell）或 `supply_truck`（半径 15 cell）范围自动补满。防空炮吃 `ammo_missile`、火炮吃 `shell_set`，用 `transfer` 或皮带装填。
 - **研究**：至少 1 个 `running` 研究站（`matrix_lab` 不设配方即研究模式），所需矩阵须已在研究站本地库存，推进时真实消耗。`summary` 的 `tech.current_research.blocked_reason` 为 `waiting_lab`/`waiting_matrix`/`low_power`，`speed_multiplier` 与 `estimated_ticks_remaining` 反映供电降速。
-- **机甲**：`mine_resource` 在 6 cell 内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。采矿每件耗 3 核心，手搓每批耗 `max(1, 时长/20)` 核心，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha <executor_id> <fuel_item_id> [count]` 只接受 `items[].mecha_fuel_energy > 0` 的燃料，count 缺省 1，烧到核心满为止。靠近运行中的自有无线输电塔（18 cell）或电力感应塔（12 cell）自动充电。
+- **机甲**：背包挂在机甲上，`summary` / `briefing` 显示的是**当前发令者绑定的机甲**（`mechas.find(m => m.operator === issuer_id)`）的背包；未绑定时提示「未绑定机甲：mecha list / mecha assign <id>」。
+  - `mecha list`：本方全部机甲（ID、星球、操作者、存活、背包格数、施工中/排队），当前发令者那台加粗。
+  - `mecha assign <mecha_id> [operator]`：把机甲绑给发令者（operator 缺省 = 自己），`--release` 解绑为空闲。同玩家任何发令者都能改绑本方机甲；绑定别人的机甲时对方自动解绑。
+  - 需要机甲的命令（`build` / `upgrade` / `demolish` / `transfer` / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / 安装物流载具 / 军工排产）一律由发令者绑定的机甲执行，不再带 `<executor_id>`；未绑定、机甲不在本星球或阵亡时返回 `EXECUTOR_UNAVAILABLE`。被别的发令者绑定的机甲不能 `move`/`attack`/`order`（该单位返回 `NOT_OPERATOR`），空闲机甲谁都能动。
+  - `mine_resource` 在 6 cell 内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。采矿每件耗 3 核心，手搓每批耗 `max(1, 时长/20)` 核心，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha <fuel_item_id> [count]` 只接受 `items[].mecha_fuel_energy > 0` 的燃料，count 缺省 1，烧到核心满为止。靠近运行中的自有无线输电塔（18 cell）或电力感应塔（12 cell）自动充电。
+  - 新机甲在战场分析基站制造：`produce <hq_id> executor`（成本：铁块 16、齿轮 8、磁线圈 8、电路板 8，从基站存储扣）。出厂时空闲、空背包，用 `mecha assign` 接管。
 - **分流器**：`configure_splitter` 每次完整替换端口、优先级与过滤；省略可选项即清除。方向限 `north/east/south/west`，至少一入一出、方向不重复。未过滤出口可作旁路；优先是“可用优先”。
 - **分拣器**：`configure_sorter` 只配过滤——`--mode allow|deny` 配 `--items`（逗号分隔成数组）。方向由建造朝向决定（背面取货、正面放货），不再有 `--inputs`/`--outputs`；要改方向得拆除重建（客户端 R 旋转）。
 - **流速监测器**：`configure_traffic_monitor` 完整替换配置，绑定相邻自有 Mk.I/II/III 传送带，`none` 清绑定；任何配置都会重置统计。告警事件为 `traffic_monitor_alert`。
@@ -142,6 +149,19 @@ agent_thread agent-war-director
 
 `shared-client` 目录中声明的公共 CLI 动词会自动进入 agent runtime 白名单。
 
+## 多代理同阵营
+
+同一个玩家可以同时跑多个 CLI / agent-gateway 智能体：每个代理设自己的 `SW_ISSUER=<名>`，各绑一台机甲，施工额度与背包互不影响。
+
+```bash
+SW_ISSUER=builder npm run dev          # 代理 builder
+mecha list                             # 看本方机甲与操作者
+mecha assign u-7                       # 接管空闲机甲 u-7（operator 缺省 = 自己）
+as                                     # 临时恢复为玩家本人发令
+```
+
+代理没有可用机甲时，需要机甲的命令返回 `EXECUTOR_UNAVAILABLE`；先在基站 `produce <hq_id> executor` 造一台再 `mecha assign`。
+
 ## 命令一览
 
 <!-- BEGIN GENERATED COMMANDS -->
@@ -163,17 +183,17 @@ agent_thread agent-war-director
 | `build_dyson_node` | `build_dyson_node <system_id> <layer_index> <latitude> <longitude> [--orbit-radius <n>]` | `build_dyson_node` | build | Build a Dyson sphere node |
 | `build_dyson_shell` | `build_dyson_shell <system_id> <layer_index> <latitude_min> <latitude_max> <coverage>` | `build_dyson_shell` | build | Build a Dyson sphere shell |
 | `cancel_construction` | `cancel_construction <task_id>` | `cancel_construction` | build | Cancel queued or running construction task |
-| `cancel_mecha_job` | `cancel_mecha_job <executor_id> [--planet <planet_id>]` | `cancel_mecha_job` | management | 取消机甲任务并返还未完成批次原料 |
+| `cancel_mecha_job` | `cancel_mecha_job [--planet <planet_id>]` | `cancel_mecha_job` | management | 取消我的机甲的作业并返还未完成批次原料 |
 | `cancel_research` | `cancel_research <tech_id>` | `cancel_research` | research | Cancel a technology in progress or queue |
 | `commission_fleet` | `commission_fleet <building_id> <blueprint_id> <system_id> [--count <n>] [--fleet-id <fleet_id>]` | `commission_fleet` | combat | Consume a fleet payload from a hub and create or reinforce a fleet |
 | `configure_distributor` | `configure_distributor <id> <item_id\|none> <none\|supply\|demand> <local_storage> [--delivery true\|false] [--collection true\|false]` | `configure_distributor` | management | 配置仓库配送器；省略开关保留原值 |
 | `configure_logistics_slot` | `configure_logistics_slot <building_id> <planetary\|interstellar> <item_id> [<none\|supply\|demand\|both> <local_storage> \| --remove]` | `configure_logistics_slot` | management | 配置物流物品槽；remove移除无库存、无端口或在途引用的空槽 |
 | `configure_logistics_station` | `configure_logistics_station <building_id> [--drone-capacity <n>] [--input-priority <n>] [--output-priority <n>] [--interstellar-enabled <true\|false>] [--warp-enabled <true\|false>] [--ship-slots <n>] [--belt-ports direction:input\|output:item_id,...\|none]` | `configure_logistics_station` | management | Configure logistics station capacity, priority and interstellar switches |
-| `configure_mecha_logistics` | `configure_mecha_logistics <unit_id> <item:min:max,...\|none>` | `configure_mecha_logistics` | management | 替换机甲配送请求，最多 8 项，none 清空 |
+| `configure_mecha_logistics` | `configure_mecha_logistics <item:min:max,...\|none>` | `configure_mecha_logistics` | management | 替换本发令者机甲（我的机甲）的配送请求，最多 8 项，none 清空 |
 | `configure_sorter` | `configure_sorter <building_id> [--mode allow\|deny] [--items iron_ore] [--planet <id>]` | `configure_sorter` | management | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | `configure_splitter <building_id> --inputs west --outputs east,south,north [--input-priority west] [--output-priority east] [--filters east:iron_ore,south:copper_ore]` | `configure_splitter` | management | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | `configure_traffic_monitor <building_id> <belt_id\|none> --window <1..600> --minimum <0..60> --alerts <on\|off>` | `configure_traffic_monitor` | management | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
-| `craft_item` | `craft_item <executor_id> <recipe_id> <quantity> [--planet <planet_id>]` | `craft_item` | management | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
+| `craft_item` | `craft_item <recipe_id> <quantity> [--planet <planet_id>]` | `craft_item` | management | 用我的机甲背包原料进行个人制造，quantity为批数（按发令者机甲所在行星结算） |
 | `demolish` | `demolish <entity_id> [--planet <planet_id>]` | `demolish` | build | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | `demolish_dyson <system_id> <node\|frame\|shell> <component_id>` | `demolish_dyson` | build | Demolish a Dyson sphere component |
 | `deploy_squad` | `deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]` | `deploy_squad` | combat | Consume a squad payload from a hub and create a combat squad |
@@ -187,13 +207,13 @@ agent_thread agent-war-director
 | `install_logistics_vehicle` | `install_logistics_vehicle <station_id> <logistics_drone\|logistics_vessel> <quantity> [--source player\|station]` | `install_logistics_vehicle` | management | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | `launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]` | `launch_rocket` | management | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | `launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]` | `launch_solar_sail` | management | Launch loaded solar sails from an EM Rail Ejector |
-| `mine_resource` | `mine_resource <executor_id> <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 手动采集固体资源到背包（按执行体所在行星结算） |
+| `mine_resource` | `mine_resource <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算） |
 | `move` | `move <entity_id> <x> <y> [--z <z>]` | `move` | combat | Move entity to position |
 | `order` | `order <entity_id[,entity_id...]> <attack_move\|patrol\|guard\|hold\|follow\|retreat\|stop> [x y] [--target <entity_id>] [--planet <planet_id>]` | `unit_order` | combat | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
 | `produce` | `produce <entity_id> <unit_type> [--planet <planet_id>]` | `produce` | build | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | `queue_military_production <building_id> <deployment_hub_id> <blueprint_id> [--count <n>]` | `queue_military_production` | management | Queue military production and deliver ready payloads into a deployment hub |
 | `refit_unit` | `refit_unit <building_id> <unit_id> <target_blueprint_id>` | `refit_unit` | management | Send a squad or fleet into authoritative refit |
-| `refuel_mecha` | `refuel_mecha <executor_id> <fuel_item_id> [count] [--planet <planet_id>]` | `refuel_mecha` | management | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
+| `refuel_mecha` | `refuel_mecha <fuel_item_id> [count] [--planet <planet_id>]` | `refuel_mecha` | management | 给我的机甲补能：烧最多 count 块燃料（缺省 1）直到核心充满 |
 | `restore_construction` | `restore_construction <task_id>` | `restore_construction` | build | Restore a cancelled construction task |
 | `scan_galaxy` | `scan_galaxy [galaxy_id]` | `scan_galaxy` | observe | 登记星系到星图（不改地表迷雾） |
 | `scan_planet` | `scan_planet <planet_id>` | `scan_planet` | observe | 登记星球到星图（不改地表迷雾） |
@@ -212,14 +232,15 @@ agent_thread agent-war-director
 | `theater_create` | `theater_create <theater_id> [--name <name>]` | `theater_create` | combat | Create a theater container for war zoning and objectives |
 | `theater_define_zone` | `theater_define_zone <theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y> [--z <z>]] [--radius <n>]` | `theater_define_zone` | combat | Define or update one theater zone |
 | `theater_set_objective` | `theater_set_objective <theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]` | `theater_set_objective` | combat | Set a theater objective anchor and description |
-| `transfer` | `transfer <building_id> <item_id> <quantity> [--planet <planet_id>]` | `transfer_item` | management | Load items from player inventory into building local storage（按建筑所在行星结算） |
+| `transfer` | `transfer <building_id> <item_id> <quantity> [--planet <planet_id>]` | `transfer_item` | management | Load items from your mecha backpack into building local storage（按建筑所在行星结算） |
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（20 条，agent 可用）
+### 查询命令（21 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
+| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
 | `health` | — | Server status and current tick |
 | `metrics` | — | Runtime metrics |
 | `summary` | — | Game summary (resources, players, map) |
@@ -241,7 +262,7 @@ agent_thread agent-war-director
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
-### 管理、调试与工具（25 条）
+### 管理、调试与工具（26 条）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -263,6 +284,7 @@ agent_thread agent-war-director
 | `agent_message` | `agent_message <agent_id> <content>` | Send one direct task message to an agent thread |
 | `agent_thread` | `agent_thread <agent_id>` | Inspect one agent thread including messages, tool calls and logs |
 | `switch` | `switch [player_id] [key]` | Switch player |
+| `as` | — | — |
 | `events` | `events [count]` | Show recent SSE events (default: 10) |
 | `status` | — | Current player and connection status |
 | `game_new` | — | — |

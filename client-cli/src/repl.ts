@@ -21,8 +21,10 @@ export function createSerialLineProcessor<T>(handler: (value: T) => Promise<void
   };
 }
 
-function makePrompt(playerId: string): string {
-  return chalk.bold.blue(`[${playerId}]`) + chalk.bold(' > ');
+function makePrompt(ctx: Pick<ReplContext, 'currentPlayer' | 'api'>): string {
+  const auth = ctx.api.getAuth();
+  const tag = auth.issuerType === 'agent' ? `@${auth.issuerId}` : '';
+  return chalk.bold.blue(`[${ctx.currentPlayer}${tag}]`) + chalk.bold(' > ');
 }
 
 function completer(line: string): [string[], string] {
@@ -50,6 +52,13 @@ function completer(line: string): [string[], string] {
     return [hits.length ? hits : ids, partial];
   }
 
+  if (cmdName === 'mecha' && parts.length === 2) {
+    const subcommands = ['list', 'assign'];
+    const partial = parts[1];
+    const hits = subcommands.filter(name => name.startsWith(partial));
+    return [hits.length ? hits : subcommands, partial];
+  }
+
   if (cmdName === 'help' && parts.length === 2) {
     const partial = parts[1];
     const hits = commandNames.filter(c => c.startsWith(partial));
@@ -63,16 +72,16 @@ export function startRepl(playerId: string): ReplContext {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: makePrompt(playerId),
+    prompt: makePrompt({ currentPlayer: playerId, api }),
     completer,
     terminal: true,
   });
 
-  const ctx: ReplContext = { api, currentPlayer: playerId, rl };
+  const ctx: ReplContext = { api, currentPlayer: playerId, issuerId: api.getAuth().issuerId, rl };
   const processLine = createSerialLineProcessor(async (line: string) => {
     const trimmed = line.trim();
     if (!trimmed) {
-      rl.setPrompt(makePrompt(ctx.currentPlayer));
+      rl.setPrompt(makePrompt(ctx));
       rl.prompt();
       return;
     }
@@ -86,10 +95,14 @@ export function startRepl(playerId: string): ReplContext {
       console.log(chalk.red('Unexpected error: ') + String(e));
     }
 
-    rl.setPrompt(makePrompt(ctx.currentPlayer));
+    rl.setPrompt(makePrompt(ctx));
     rl.prompt();
   });
 
+  const auth = api.getAuth();
+  if (auth.issuerType === 'agent') {
+    console.log(chalk.cyan(`Issuer: agent:${auth.issuerId}（SW_ISSUER；用 "as" 恢复为玩家本人）`));
+  }
   rl.prompt();
 
   rl.on('line', (line: string) => {

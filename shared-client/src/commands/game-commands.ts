@@ -77,6 +77,7 @@ import {
 import { cmdCheckpoint } from './checkpoint.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
+import { cmdMecha } from './mecha.js';
 import {
   cmdBlueprints,
   cmdFleetStatus,
@@ -102,6 +103,8 @@ import {
 /** 命令执行上下文：每次执行都显式携带已鉴权的 API 客户端，不依赖模块级单例。 */
 export interface CommandContext {
   api: ApiClient;
+  /** 当前发令者 ID（玩家本人或代理名）；查询「我的机甲」与提示用，缺省取 api.getAuth().issuerId。 */
+  issuerId?: string;
 }
 
 export type CommandHandler<Ctx extends CommandContext = CommandContext> =
@@ -112,12 +115,18 @@ export interface CommandEntry<Ctx extends CommandContext = CommandContext> {
   completions?: string[];
 }
 
+/** 发令者 ID：上下文显式给的优先，其次 API 客户端的当前 issuer。 */
+export function resolveIssuerId(ctx: CommandContext): string {
+  return ctx.issuerId || ctx.api.getAuth().issuerId || ctx.api.getAuth().playerId;
+}
+
 /** 与终端会话无关的游戏命令表：CLI REPL 与 agent-gateway 共用。 */
 export const GAME_COMMANDS: Record<string, CommandEntry> = {
   configure_distributor: { handler: configureDistributor },
   install_logistics_bot: { handler: installBot },
   uninstall_logistics_bot: { handler: uninstallBot },
   configure_mecha_logistics: { handler: configureMechaLogistics },
+  mecha: { handler: cmdMecha, completions: ['list', 'assign'] },
   health: { handler: cmdHealth },
   metrics: { handler: cmdMetrics },
   summary: { handler: cmdSummary },
