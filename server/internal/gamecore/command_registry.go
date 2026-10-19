@@ -55,10 +55,9 @@ func (r buildingRef) entityRefs() entityRefs {
 //   - handleMecha：由发令者绑定的机甲执行；路由后先解析机甲，失败在进入执行器
 //     之前就以 EXECUTOR_UNAVAILABLE 返回。
 type commandHandler struct {
-	route      commandRoute
-	payload    reflect.Type
-	needsMecha bool
-	bind       func(cmd model.Command) (boundCommand, error)
+	route   commandRoute
+	payload reflect.Type
+	bind    func(cmd model.Command) (boundCommand, error)
 }
 
 // boundCommand 是载荷已解码的命令：带路由引用与执行闭包。
@@ -108,7 +107,7 @@ func handleIssuer[P any](route commandRoute, exec func(*GameCore, *model.WorldSt
 
 // handleMecha 登记「由发令者绑定的机甲执行」的命令。
 func handleMecha[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, model.Command, P, mechaContext) (model.CommandResult, []*model.GameEvent)) commandHandler {
-	return commandHandler{route: route, payload: reflect.TypeFor[P](), needsMecha: true, bind: func(cmd model.Command) (boundCommand, error) {
+	return commandHandler{route: route, payload: reflect.TypeFor[P](), bind: func(cmd model.Command) (boundCommand, error) {
 		payload, err := decodePayload[P](cmd.Payload)
 		if err != nil {
 			return boundCommand{}, err
