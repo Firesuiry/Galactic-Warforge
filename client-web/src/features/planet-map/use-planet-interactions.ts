@@ -112,6 +112,8 @@ interface UsePlanetInteractionsInput {
   catalog?: CatalogView;
   /** 玩家背包：建造前本地校验物品造价。 */
   inventory?: ItemInventory;
+  /** 发令者未绑定机甲：建造由机甲执行，本地直接拦（服务端会回 EXECUTOR_UNAVAILABLE）。 */
+  mechaUnbound?: boolean;
   planet?: PlanetRenderView;
   runtime?: PlanetRuntimeView;
   /**
@@ -143,7 +145,7 @@ export interface PlanetInteractions {
 /**
  * 地图交互命令中枢：planet 未加载完成时所有入口为空操作。
  */
-export function usePlanetInteractions({ catalog, inventory, planet, runtime, knownOwnUnits, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
+export function usePlanetInteractions({ catalog, inventory, mechaUnbound, planet, runtime, knownOwnUnits, taskForces, onTaskForceDeployed }: UsePlanetInteractionsInput): PlanetInteractions {
   const client = useApiClient();
   const session = useSessionSnapshot();
 
@@ -267,7 +269,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
       if (mode.kind === 'build') {
         const elevation = placement?.elevation ?? mode.elevation ?? 0;
         const direction = placement?.direction ?? mode.direction;
-        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime, elevation);
+        const assessment = assessBuildTiles(catalog, mode.buildingType, planet, position, session.playerId, mode.rotation, inventory, runtime, elevation, mechaUnbound);
         // 未探索区（地形 unknown）不本地拦截：客户端没有该格地形，是否可建由服务端判定，
         // 命令照常下发，以回执为准（试玩 1009 F：本地「地形不可建造」把合法建造拦掉了）。
         if (shouldBlockBuildLocally(assessment)) {
@@ -369,7 +371,7 @@ export function usePlanetInteractions({ catalog, inventory, planet, runtime, kno
         store.exitInteractionMode();
       }
     },
-    [catalog, client, inventory, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitHaulOrder, submitMove, submitUnitOrder],
+    [catalog, client, inventory, mechaUnbound, knownOwnUnits, planet, runtime, session.playerId, submitAttack, submitHaulOrder, submitMove, submitUnitOrder],
   );
 
   const contextTile = useCallback(

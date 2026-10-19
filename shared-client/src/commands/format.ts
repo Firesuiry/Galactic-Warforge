@@ -27,21 +27,35 @@ import type {
   WarTheaterListView,
 } from '../types.js';
 
-function pad(s: string, len: number): string {
+export function pad(s: string, len: number): string {
   return s.length >= len ? s.slice(0, len) : s + ' '.repeat(len - s.length);
 }
 
-function row(cols: string[], widths: number[]): string {
+export function row(cols: string[], widths: number[]): string {
   return cols.map((c, i) => pad(c, widths[i])).join('  ');
 }
 
-function table(headers: string[], rows: string[][]): string {
+/**
+ * 终端表格。列宽按**可见宽度**算：单元格可以带 ANSI 颜色（`chalk`），
+ * 直接用 `.length` 会把转义序列算进去，彩色列被撑宽、整表错位。
+ * 着色在补齐之后做：调用方传纯文本 + 可选的按列着色函数。
+ */
+export function table(
+  headers: string[],
+  rows: string[][],
+  colorize?: (col: number, value: string, rowIndex: number) => string,
+): string {
   const widths = headers.map((h, i) =>
     Math.max(h.length, ...rows.map(r => (r[i] ?? '').length))
   );
   const header = chalk.bold(row(headers, widths));
   const sep = widths.map(w => '-'.repeat(w)).join('  ');
-  const body = rows.map(r => row(r, widths)).join('\n');
+  const body = rows
+    .map((r, rowIndex) => r.map((c, i) => {
+      const padded = pad(c, widths[i]);
+      return colorize ? colorize(i, padded, rowIndex) : padded;
+    }).join('  '))
+    .join('\n');
   return [header, sep, body].join('\n');
 }
 

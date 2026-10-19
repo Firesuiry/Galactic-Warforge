@@ -1,5 +1,5 @@
 import { selectMyMechaFromSummary, sortMechas } from '@shared/mecha';
-import type { ItemInventory, MechaView, PlayerState, StateSummary } from '@shared/types';
+import type { MechaView, PlayerState, StateSummary } from '@shared/types';
 
 /**
  * 机甲档案的界面口径（契约 §7.3）：类型与「我的机甲」选择器直接复用
@@ -60,9 +60,4 @@ export function mechaStatusLabel(mecha: MechaView): string {
     return '存活';
   }
   return mecha.respawn_at_tick > 0 ? `复活于 tick ${mecha.respawn_at_tick}` : '阵亡';
-}
-
-/** 机甲背包（未绑定时 undefined，UI 显示「未绑定机甲」而不是「背包空」）。 */
-export function mechaInventory(mecha: MechaView | undefined): ItemInventory | undefined {
-  return mecha?.inventory;
 }

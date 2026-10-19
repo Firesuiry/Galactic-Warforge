@@ -339,7 +339,6 @@ export function PlanetPage() {
   const mechaJob = useMechaJobProgress(
     catalogQuery.data,
     sceneQuery.data,
-    session.playerId,
     currentGameQuery.data?.max_tick_rate ?? 0,
     selectMyMecha(summaryQuery.data, session.playerId),
   );
@@ -511,6 +510,7 @@ export function PlanetPage() {
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
     inventory: myMechaInventory,
+    mechaUnbound: !myMecha,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
     knownOwnUnits,
@@ -938,6 +938,7 @@ export function PlanetPage() {
           alerts={liveAlerts}
           catalog={catalog}
           inventory={myMechaInventory}
+          mechaUnbound={!myMecha}
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
@@ -966,7 +967,7 @@ export function PlanetPage() {
           )}
         />
         </Suspense>
-        <BuildPlacementHint catalog={catalog} inventory={myMechaInventory} planet={planet} playerId={session.playerId} runtime={runtime} />
+        <BuildPlacementHint catalog={catalog} inventory={myMechaInventory} mechaUnbound={!myMecha} planet={planet} playerId={session.playerId} runtime={runtime} />
         {/* 视图切换按钮组已随 2D「平面战术」视图删除（只剩 3D）；恒星系入口保留。 */}
         {systemId ? (
           <div className="planet-view-switch" aria-label="地图视图">

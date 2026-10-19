@@ -46,6 +46,8 @@ interface Props {
   planet: PlanetRenderView;
   catalog?: CatalogView;
   inventory?: ItemInventory;
+  /** 发令者未绑定机甲：建造预览标红并给原因（不把「没有背包」当缺料）。 */
+  mechaUnbound?: boolean;
   /** 服务端当前仍成立的产线告警：`belt_blocked` 指向带格，画红色短杠（试玩 1016 B1）。 */
   alerts?: AlertEntry[];
   fog?: FogMapView | PlanetSceneView;
@@ -426,7 +428,7 @@ export function PlanetMapThree(props: Props) {
   useEffect(() => {
     if (!ready) return;
     scene.current?.setData({ ...props, playerId: session.playerId });
-  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.inventory, props.runtime, props.networks, props.darkFogHostile, props.alerts, session.playerId]);
+  }, [ready, props.planet, props.fog, props.overview, props.catalog, props.inventory, props.mechaUnbound, props.runtime, props.networks, props.darkFogHostile, props.alerts, session.playerId]);
 
   useEffect(() => {
     if (ready) scene.current?.setQuality(quality);

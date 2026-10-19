@@ -715,3 +715,26 @@ describe("采集建筑覆盖范围（coverage_radius）与服务端 ValidateColl
     expect(assessment?.blockedTiles).toContainEqual(expect.objectContaining({ x: 1, y: 1, reason: "missing_resource" }));
   });
 });
+
+describe('未绑定机甲的建造预检（审查 #7）', () => {
+  it('assessBuildTiles 传 mechaUnbound：本地拦建造，原因优先于缺料', () => {
+    const catalog = createCatalog() as never;
+    const planet = {
+      planet_id: 'planet-1-1',
+      surface: { topology: 'cube_sphere', face_size: 8 },
+      map_width: 24,
+      map_height: 16,
+      terrain: Array.from({ length: 16 }, () => Array.from({ length: 24 }, () => 'buildable')),
+      buildings: {},
+      units: {},
+      resources: [],
+    } as never;
+    const assessment = assessBuildTiles(catalog, 'wind_turbine', planet, { x: 1, y: 1, z: 0 }, 'p1', 0, undefined, undefined, 0, true)!;
+    expect(assessment.mechaUnbound).toBe(true);
+    expect(assessment.buildable).toBe(false);
+    // 没有背包 ≠ 全部造价都缺。
+    expect(assessment.missingItems).toEqual([]);
+    expect(shouldBlockBuildLocally(assessment)).toBe(true);
+    expect(describeBuildBlock(assessment)).toBe('未绑定机甲：先在行星上接管一台');
+  });
+});

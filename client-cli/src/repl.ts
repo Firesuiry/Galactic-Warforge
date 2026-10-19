@@ -52,13 +52,6 @@ function completer(line: string): [string[], string] {
     return [hits.length ? hits : ids, partial];
   }
 
-  if (cmdName === 'mecha' && parts.length === 2) {
-    const subcommands = ['list', 'assign'];
-    const partial = parts[1];
-    const hits = subcommands.filter(name => name.startsWith(partial));
-    return [hits.length ? hits : subcommands, partial];
-  }
-
   if (cmdName === 'help' && parts.length === 2) {
     const partial = parts[1];
     const hits = commandNames.filter(c => c.startsWith(partial));

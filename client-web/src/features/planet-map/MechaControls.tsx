@@ -5,6 +5,7 @@ import { normalizeCompletedTechIds } from './research-workflow';
 import { isRecipeUnlocked } from './tech-gate';
 import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
+import { rejectionPlayerMessage } from '@/common/player-facing-error';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { MechaLogisticsControls } from './MechaLogisticsControls';
 import { mechaCraftEnergyPerBatch, MECHA_MINE_RANGE } from './mecha-costs';
@@ -107,11 +108,22 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
   const [fuelId, setFuelId] = useState('coal');
   const [pending, setPending] = useState(false);
   const [assignPending, setAssignPending] = useState(false);
+  /** 接管被服务端拒绝时的原因（按回执，不按客户端预期）。 */
+  const [assignError, setAssignError] = useState<string | null>(null);
   const inventory: ItemInventory | undefined = mecha?.inventory;
-  /** 只有自己的机甲档案才会出现在 summary 里；别人玩家的机甲按 owner 显示、不给「接管」。 */
+  /** 只有自己的机甲档案才会出现在 summary 里；别人玩家的机甲只读、不给「接管」。 */
   const isOwnUnit = Boolean(playerId) && unit.owner_id === playerId;
-  const operator = isOwnUnit ? mecha?.operator ?? '' : unit.owner_id;
+  // 操作者口径统一走 `mecha.operator`（契约 §6）：别人的单位拿不到档案时显示「其他玩家」，
+  // 不能拿 owner_id 冒充操作者（那是玩家 ID，不是绑定到机甲的 issuer）。
+  const operator = mecha?.operator ?? '';
   const isMine = isOwnUnit && operator === playerId;
+  const operatorLabel = !isOwnUnit
+    ? '其他玩家'
+    : isMine
+      ? '我'
+      : operator
+        ? mechaOperatorLabel(operator, playerId)
+        : '空闲机甲';
   const slotUsage = mechaSlotUsage(mecha);
   // 配方选择放在行星视图 store：详情面板会随「选中单位是否落在场景窗口内」卸载重挂，
   // 组件内 state 会丢，下拉框跳回第一个可用配方（试玩 1013 bug-1013-2）。
@@ -170,17 +182,24 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
     if (assignPending || !playerId) return;
     setAssignPending(true);
     try {
-      await submitPlanetCommand({
+      const response = await submitPlanetCommand({
         commandType: 'assign_mecha',
         planetId,
         focus: { entityId: unit.id },
         execute: () => client.cmdAssignMecha(mecha?.unit_id ?? unit.id, playerId, planetId),
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
       });
+      // 以服务端回执为准：被拒绝时把原因留在面板上（toast 之外的第二处可见反馈）。
+      // submitPlanetCommand 在请求异常时返回 undefined——失败原因已由它弹 toast，这里不再重复。
+      if (!response) return;
+      if (!response.accepted || response.results.every((result) => result.status !== 'executed' && result.status !== 'accepted')) {
+        setAssignError(rejectionPlayerMessage(response.results, '服务端拒绝了接管'));
+      } else {
+        setAssignError(null);
+      }
     } finally { setAssignPending(false); }
   }
   const canControl = isMine;
-  const operatorLabel = mechaOperatorLabel(operator, playerId);
   const takeoverHint = isOwnUnit && boundMecha && boundMecha.unit_id !== unit.id
     ? `接管后 ${boundMecha.unit_id} 变为空闲`
     : null;
@@ -191,7 +210,7 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
         <div className="mecha-operator__line">
           <span className="mecha-operator__label">操作者</span>
           <strong className="mecha-operator__value">
-            {isMine ? '我' : operator ? operatorLabel : '空闲机甲'}
+            {operatorLabel}
           </strong>
           <span className="mecha-operator__id">{unit.id}</span>
           {!isMine && isOwnUnit ? (
@@ -206,6 +225,7 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
           ) : null}
         </div>
         {!isMine && takeoverHint ? <p className="muted mecha-operator__hint">{takeoverHint}</p> : null}
+        {!isMine && assignError ? <p className="mecha-operator__error" role="alert">{assignError}</p> : null}
         {!isMine && mecha && slotUsage ? (
           <p className="muted mecha-operator__readonly">背包 {slotUsage.used}/{slotUsage.total} 格</p>
         ) : null}

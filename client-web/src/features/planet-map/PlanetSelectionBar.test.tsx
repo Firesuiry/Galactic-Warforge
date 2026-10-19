@@ -539,3 +539,69 @@ describe('defaultMiningQuantity', () => {
     expect(defaultMiningQuantity(500, 0)).toBe(1);
   });
 });
+
+describe('PlanetSelectionBar 机甲所在星球判定（审查 #16）', () => {
+  const resource = {
+    id: 'ore-1',
+    kind: 'iron_ore',
+    behavior: 'finite',
+    remaining: 500,
+    position: { x: 3, y: 3, z: 0 },
+  } as never;
+  const mechaRecord = {
+    unit_id: 'u-9',
+    planet_id: 'planet-1-1',
+    operator: 'p1',
+    alive: true,
+    respawn_at_tick: 0,
+    inventory: {},
+    inventory_slots_used: 0,
+    inventory_slots_total: 40,
+    operate_range: 18,
+    concurrent_tasks: 2,
+    construction_active: 0,
+    construction_pending: 0,
+  };
+  const summaryWithMecha = (planetId: string) => ({
+    tick: 10,
+    active_planet_id: 'planet-1-1',
+    surface: { topology: 'cube_sphere' as const, face_size: 8 },
+    map_width: 24,
+    map_height: 16,
+    players: {
+      p1: {
+        player_id: 'p1',
+        is_alive: true,
+        resources: { energy: 100 },
+        mechas: [{ ...mechaRecord, planet_id: planetId }],
+        tech: { player_id: 'p1', completed_techs: [] },
+      },
+    },
+  }) as never;
+
+  beforeEach(() => {
+    resetPlanetViewStore();
+    useSessionStore.getState().setSession({ serverUrl: 'http://localhost:5173', playerId: 'p1', playerKey: 'key_player_1' });
+  });
+
+  function selectOre() {
+    const planet = makePlanet();
+    planet.resources = [resource];
+    usePlanetViewStore.getState().setSelected({ kind: 'resource', id: 'ore-1', position: { x: 3, y: 3, z: 0 } });
+    return planet;
+  }
+
+  const oreCatalog = { items: [{ id: 'iron_ore', name: '铁矿', form: 'solid' }] } as unknown as CatalogView;
+
+  it('机甲同星球但不在场景窗口：提示「不在当前视野」，不说「不在本星球」', () => {
+    render(<PlanetSelectionBar catalog={oreCatalog} planet={selectOre()} summary={summaryWithMecha('planet-1-1')} />);
+    const bar = screen.getByTestId('planet-selection-bar');
+    expect(bar).toHaveTextContent('不在当前视野');
+    expect(bar).not.toHaveTextContent('不在本星球');
+  });
+
+  it('机甲在别的星球：提示「在 X，不在本星球」', () => {
+    render(<PlanetSelectionBar catalog={oreCatalog} planet={selectOre()} summary={summaryWithMecha('planet-1-2')} />);
+    expect(screen.getByTestId('planet-selection-bar')).toHaveTextContent('你的机甲在 planet-1-2，不在本星球');
+  });
+});

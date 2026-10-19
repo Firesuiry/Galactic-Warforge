@@ -281,7 +281,8 @@ export function PlanetCommandPanel({
     summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? "";
   const playerTechState = summary?.players?.[playerId]?.tech;
   /** 装料只从「我的机甲」背包扣（契约 §7.3）：玩家本身不再有 inventory。 */
-  const myMechaInventory = selectMyMecha(summary, playerId)?.inventory;
+  const myMecha = selectMyMecha(summary, playerId);
+  const myMechaInventory = myMecha?.inventory;
   const currentSystemId =
     planet.system_id ??
     system?.system_id ??
@@ -539,6 +540,8 @@ export function PlanetCommandPanel({
     !noTransferTarget &&
     selectedTransferBuilding != null &&
     transferItemOptions.length === 0;
+  /** 未绑定机甲时背包不存在：装入表单给「未绑定机甲」而不是「背包里没有…」。 */
+  const mechaUnbound = !myMecha;
   /** 背包里该物品的数量（装料只从背包扣，与服务端 execTransferItem 一致）。 */
   const transferItemOwned = myMechaInventory?.[transferItemId];
   const transferQuantityValue = toOptionalInt(transferQuantity);
@@ -1790,9 +1793,11 @@ export function PlanetCommandPanel({
               </label>
               {noTransferItemOption ? (
                 <p className="subtle-text field--span-2" role="status">
-                  {isResearchStationBuildingType(selectedTransferBuilding?.type)
-                    ? "该研究站处于研究模式，只接受矩阵（研究耗材）；背包里现在没有矩阵，先手工制造或从别的建筑取出矩阵再装料。"
-                    : "背包里没有该建筑能接收的物品（装入物品按目标建筑的配方输入/准入规则过滤）。"}
+                  {mechaUnbound
+                    ? "未绑定机甲：装入只从机甲背包扣，先在行星上选中一台机甲 → 接管。"
+                    : isResearchStationBuildingType(selectedTransferBuilding?.type)
+                      ? "该研究站处于研究模式，只接受矩阵（研究耗材）；背包里现在没有矩阵，先手工制造或从别的建筑取出矩阵再装料。"
+                      : "背包里没有该建筑能接收的物品（装入物品按目标建筑的配方输入/准入规则过滤）。"}
                 </p>
               ) : null}
               <label className="field">

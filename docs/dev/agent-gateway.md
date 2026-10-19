@@ -99,7 +99,7 @@ agent provider 以 typed `game.command` 作为唯一游戏动作入口，同时�
 
 ### 3.1.2 发令者与机甲
 
-每个智能体的 `game.command` 都以 `issuer_type=agent`、`issuer_id=<agentId>` 发给服务端（`runCommandLine` 的 `issuerId`，经 shared-client 的 api client 写入 `POST /commands`）。玩家自己操作（GUI / 未设代理名的 CLI）用 `issuer_type=player`。
+每个智能体的 `game.command` 都以 `issuer_type=agent`、`issuer_id=<agentId>` 发给服务端（agent id 统一为 `agent-<uuid>`：REST 创建未指定 id 时自动生成该形态，`agent.create` 同样；显式传入的 id 原样使用）（`runCommandLine` 的 `issuerId`，经 shared-client 的 api client 写入 `POST /commands`）。玩家自己操作（GUI / 未设代理名的 CLI）用 `issuer_type=player`。
 
 一个智能体对应一台机甲：
 

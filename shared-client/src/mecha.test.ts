@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
-import { NO_MECHA_HINT, missingMechaHint, selectMyMecha, selectMyMechaFromBriefing, selectMyMechaFromSummary, sortMechas } from './mecha.js';
+import { NO_MECHA_HINT, selectMyMecha, selectMyMechaFromSummary, sortMechas } from './mecha.js';
 import type { MechaView } from './types.js';
 
 function mecha(unitId: string, operator: string, overrides: Partial<MechaView> = {}): MechaView {
@@ -31,7 +31,7 @@ describe('selectMyMecha', () => {
 
   it('returns undefined when the issuer has no mecha', () => {
     assert.equal(selectMyMecha({ mechas: [mecha('u-1', 'p1')] }, 'builder'), undefined);
-    assert.equal(missingMechaHint(undefined), NO_MECHA_HINT);
+    assert.ok(NO_MECHA_HINT.includes('未绑定机甲'));
   });
 
   it('returns the first match when several mechas carry the same operator', () => {
@@ -43,11 +43,9 @@ describe('selectMyMecha', () => {
     assert.equal(selectMyMecha({ mechas: [mecha('u-1', '')] }, ''), undefined);
   });
 
-  it('reads summary and briefing player layers', () => {
+  it('reads the summary player layer', () => {
     const summary = { players: { p1: { player_id: 'p1', is_alive: true, mechas: [mecha('u-3', 'p1')] } } } as never;
     assert.equal(selectMyMechaFromSummary(summary, 'p1', 'p1')?.unit_id, 'u-3');
-    const briefing = { self: { player_id: 'p1', mechas: [mecha('u-4', 'scout')] } } as never;
-    assert.equal(selectMyMechaFromBriefing(briefing, 'scout')?.unit_id, 'u-4');
   });
 
   it('sorts mechas by unit id for list output', () => {

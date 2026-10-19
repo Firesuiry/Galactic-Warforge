@@ -233,7 +233,7 @@ as                                     # 临时恢复为玩家本人发令
 | `theater_create` | `theater_create <theater_id> [--name <name>]` | `theater_create` | combat | Create a theater container for war zoning and objectives |
 | `theater_define_zone` | `theater_define_zone <theater_id> <zone_type> [--system <system_id>] [--planet <planet_id>] [--x <x> --y <y> [--z <z>]] [--radius <n>]` | `theater_define_zone` | combat | Define or update one theater zone |
 | `theater_set_objective` | `theater_set_objective <theater_id> <objective_type> [--system <system_id>] [--planet <planet_id>] [--entity <entity_id>] [--description <text>]` | `theater_set_objective` | combat | Set a theater objective anchor and description |
-| `transfer` | `transfer <building_id> <item_id> <quantity> [--planet <planet_id>]` | `transfer_item` | management | Load items from your mecha backpack into building local storage（按建筑所在行星结算） |
+| `transfer` | `transfer <building_id> <item_id> <quantity> [--take] [--planet <planet_id>]` | `transfer_item` | management | 装料：默认把机甲背包物品装进建筑本地存储；加 --take 从建筑取进背包（受背包容量限制，按建筑所在行星结算） |
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 

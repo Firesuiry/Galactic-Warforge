@@ -224,7 +224,10 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
     // 服务端按发令者绑定的机甲执行；这里只用来显示能量/作业/距离。
     const myMecha = selectMyMecha(summary, session.playerId);
     const mecha = myMecha ? planet.units?.[myMecha.unit_id] : undefined;
-    const mechaElsewhere = myMecha && !mecha ? myMecha.planet_id : undefined;
+    // `/scene` 只返回相机窗口内的实体：同星球但镜头移开时 `planet.units` 里没有它，
+    // 不能当成「不在本星球」——按档案的 planet_id 判断。
+    const mechaElsewhere = myMecha && myMecha.planet_id !== planet.planet_id ? myMecha.planet_id : undefined;
+    const mechaOutOfView = Boolean(myMecha) && !mecha && !mechaElsewhere;
     const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined;
     const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
     const quantity = quantityDraft?.resourceId === resource.id
@@ -237,7 +240,7 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
       <div className="planet-selection-bar__info">
         <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
         <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
-        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !myMecha ? '未绑定机甲：在行星上选中一台机甲 → 接管' : mechaElsewhere ? `你的机甲在 ${mechaElsewhere}，不在本星球` : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !myMecha ? '未绑定机甲：在行星上选中一台机甲 → 接管' : mechaElsewhere ? `你的机甲在 ${mechaElsewhere}，不在本星球` : mechaOutOfView ? '你的机甲不在当前视野：把镜头移过去或先移动到矿点' : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
       </div>
       {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
         event.preventDefault();

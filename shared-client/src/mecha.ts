@@ -1,4 +1,4 @@
-import type { AgentBriefing, AgentBriefingSelf, MechaView, PlayerState, StateSummary } from './types.js';
+import type { AgentBriefingSelf, MechaView, PlayerState, StateSummary } from './types.js';
 
 /** 未绑定机甲时的统一提示（CLI / agent 文案共用）。 */
 export const NO_MECHA_HINT = '未绑定机甲：mecha list / mecha assign <id>';
@@ -31,19 +31,6 @@ export function selectMyMechaFromSummary(
   issuerId: string,
 ): MechaView | undefined {
   return selectMyMecha(summary?.players?.[playerId], issuerId);
-}
-
-/** 从完整 briefing 里取自己那一层的机甲列表。 */
-export function selectMyMechaFromBriefing(
-  briefing: AgentBriefing | null | undefined,
-  issuerId: string,
-): MechaView | undefined {
-  return selectMyMecha(briefing?.self, issuerId);
-}
-
-/** 未绑定时给玩家的提示；已绑定返回 null。 */
-export function missingMechaHint(mecha: MechaView | undefined): string | null {
-  return mecha ? null : NO_MECHA_HINT;
 }
 
 /** 按 unit_id 排序的机甲表格（mecha list / 总览共用）。 */

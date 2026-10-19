@@ -339,6 +339,7 @@ export const TRANSLATIONS = {
     mine_resource: "手动采集",
     craft_item: "个人制造",
     cancel_mecha_job: "取消机甲任务",
+    assign_mecha: "接管机甲",
     switch_active_planet: "切换活动行星",
     launch_solar_sail: "发射太阳帆",
     launch_rocket: "发射火箭",

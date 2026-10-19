@@ -84,20 +84,18 @@ function jobStateLabel(state: string): string | undefined {
 /**
  * 「我的机甲」在本行星场景里的单位（契约 §7.3）。
  *
- * 以前按「己方第一个带 mecha 的单位」猜，多机甲后可能拿到别人的；现在按 summary 里
- * operator = 自己的档案找 unit_id。未绑定 / 不在本星球时返回 undefined。
+ * 只看 summary 里 operator = 自己的档案（按 unit_id 找场景单位）。
+ * 未绑定 / 不在本星球 / 不在当前场景窗口时返回 undefined——**不回落**到
+ * 「己方第一台带 mecha 的单位」：多机甲协作下那是别人的机甲，横幅与完成通知会串台。
  */
 export function findOwnExecutor(
   planet: PlanetRenderView | undefined,
-  playerId: string,
   myMecha?: MechaView | null,
 ): Unit | undefined {
-  if (myMecha) {
-    return planet?.units?.[myMecha.unit_id];
+  if (!myMecha) {
+    return undefined;
   }
-  return Object.values(planet?.units ?? {}).find(
-    (unit) => unit.owner_id === playerId && unit.mecha != null,
-  );
+  return planet?.units?.[myMecha.unit_id];
 }
 
 /** 当前机甲任务的展示模型（无任务返回 null）。 */
@@ -157,11 +155,10 @@ export function completionToast(
 export function useMechaJobProgress(
   catalog: CatalogView | undefined,
   planet: PlanetRenderView | undefined,
-  playerId: string,
   tickRate: number = DEFAULT_TICKS_PER_SECOND,
   myMecha?: MechaView | null,
 ): MechaJobProgress | null {
-  const unit = findOwnExecutor(planet, playerId, myMecha);
+  const unit = findOwnExecutor(planet, myMecha);
   const progress = deriveMechaJobProgress(catalog, unit, tickRate);
   const lastJobRef = useRef<{ unitId: string; job: NonNullable<Unit['mecha']>['job'] } | null>(null);
 
