@@ -276,3 +276,22 @@ it('背包格数读这台机甲的档案（不是玩家）', () => {
   render(<MechaControls unit={{ ...unit, id: 'u-2' }} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ unit_id: 'u-2', inventory: { iron_ingot: 1 }, inventory_slots_used: 1 })} />);
   expect(screen.getByText('原料：铁块 1（背包 1）')).toBeInTheDocument();
 });
+
+it('别人玩家的机甲：操作者显示「其他玩家」，不拿 owner_id 冒充（审查 #8）', () => {
+  render(<MechaControls unit={{ ...unit, owner_id: 'p2' }} catalog={craftingCatalog} planetId="planet-1-1" />);
+  const row = screen.getByLabelText('机甲操作者');
+  expect(row).toHaveTextContent('其他玩家');
+  expect(row).not.toHaveTextContent('p2');
+});
+
+it('接管被服务端拒绝：面板显示拒绝原因，不显示为成功（审查 #3）', async () => {
+  client.cmdAssignMecha.mockResolvedValueOnce({
+    accepted: false,
+    request_id: 'r-reject',
+    enqueue_tick: 1,
+    results: [{ command_index: 0, status: 'rejected', code: 'NOT_OWNER', message: '机甲不属于你' }],
+  });
+  render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ operator: 'builder-a' })} />);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '接管' })); });
+  expect(await screen.findByRole('alert')).toHaveTextContent('机甲不属于你');
+});
