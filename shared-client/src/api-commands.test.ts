@@ -5,7 +5,7 @@ import { describe, it } from 'vitest';
 import { createApiClient } from './api.js';
 
 describe('refuel_mecha request serialization', () => {
-  it('serializes executor target and fuel payload', async () => {
+  it('serializes fuel payload without an executor target (issuer-bound mecha)', async () => {
     let requestBody = '';
     const api = createApiClient({
       serverUrl: 'http://test.local',
@@ -15,12 +15,12 @@ describe('refuel_mecha request serialization', () => {
         return { ok: true, json: async () => ({ accepted: true }) } as Response;
       },
     });
-    await api.cmdRefuelMecha('executor-1', 'fuel-rod', 3);
+    await api.cmdRefuelMecha('fuel-rod', 3);
     const request = JSON.parse(requestBody) as { issuer_id: string; commands: Array<{ type: string; target: Record<string, string>; payload: Record<string, unknown> }> };
     assert.equal(request.issuer_id, 'p1');
     assert.deepEqual(request.commands[0], {
       type: 'refuel_mecha',
-      target: { layer: 'planet', entity_id: 'executor-1' },
+      target: { layer: 'planet' },
       payload: { item_id: 'fuel-rod', count: 3 },
     });
   });
@@ -38,10 +38,10 @@ describe('personal mecha job request serialization', () => {
         return { ok: true, json: async () => ({ accepted: true }) } as Response;
       },
     });
-    await api.cmdMineResource('executor-1', 'node:iron:4:5', 7);
-    await api.cmdCraftItem('executor-1', 'magnetic_coil', 3);
-    await api.cmdCancelMechaJob('executor-1');
-    const target = { layer: 'planet', entity_id: 'executor-1' };
+    await api.cmdMineResource('node:iron:4:5', 7);
+    await api.cmdCraftItem('magnetic_coil', 3);
+    await api.cmdCancelMechaJob();
+    const target = { layer: 'planet' };
     assert.deepEqual(requests.map(request => request.body.commands), [
       [{ type: 'mine_resource', target, payload: { resource_id: 'node:iron:4:5', quantity: 7 } }],
       [{ type: 'craft_item', target, payload: { recipe_id: 'magnetic_coil', quantity: 3 } }],
@@ -108,5 +108,53 @@ describe('logistics station requests', () => {
       { type: 'configure_logistics_station', target, payload: { belt_ports: { west: { mode: 'input', item_id: 'iron_ore' } } } },
       { type: 'configure_logistics_slot', target, payload: { scope: 'planetary', item_id: 'iron_ore', mode: 'none', local_storage: 0, remove: true } },
     ]);
+  });
+});
+
+
+describe('issuer serialization', () => {
+  it('defaults to player issuer and honours an agent issuer', async () => {
+    const requests: Array<Record<string, unknown>> = [];
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        requests.push(JSON.parse(String(init?.body)));
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    await api.cmdScanPlanet('planet-1-1');
+    assert.equal(requests[0].issuer_type, 'player');
+    assert.equal(requests[0].issuer_id, 'p1');
+
+    api.setIssuer('builder');
+    await api.cmdScanPlanet('planet-1-1');
+    assert.equal(requests[1].issuer_type, 'agent');
+    assert.equal(requests[1].issuer_id, 'builder');
+
+    api.setIssuer();
+    await api.cmdScanPlanet('planet-1-1');
+    assert.equal(requests[2].issuer_type, 'player');
+    assert.equal(requests[2].issuer_id, 'p1');
+  });
+
+  it('sends assign_mecha with the mecha id target and operator payload', async () => {
+    let body: Record<string, unknown> = {};
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    await api.cmdAssignMecha('u-3', 'builder');
+    assert.deepEqual(body.commands, [{
+      type: 'assign_mecha',
+      target: { layer: 'planet', entity_id: 'u-3' },
+      payload: { operator: 'builder' },
+    }]);
+    await api.cmdAssignMecha('u-3', '');
+    assert.deepEqual((body.commands as Array<{ payload: unknown }>)[0].payload, { operator: '' });
   });
 });
