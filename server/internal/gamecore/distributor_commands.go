@@ -72,7 +72,7 @@ type installLogisticsBotPayload struct {
 	Source   *string `json:"source"`
 }
 
-func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsBotPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID string, issuerID string, cmd model.Command, p installLogisticsBotPayload) (model.CommandResult, []*model.GameEvent) {
 	b, failure := ownedDistributor(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -103,9 +103,12 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 		return fail("需先研究解锁 logistics_bot 配方（distribution_logistics）")
 	}
 	count := 0
+	var mecha mechaContext
 	if source == "player" {
-		if mecha.Record == nil {
-			return fail("机甲不可用")
+		var failure *model.CommandResult
+		mecha, failure = issuerMecha(ws, player, issuerID)
+		if failure != nil {
+			return *failure, nil
 		}
 		if rangeRes := gc.requireBuildRange(ws, playerID, mecha, b.Position); rangeRes != nil {
 			return *rangeRes, nil

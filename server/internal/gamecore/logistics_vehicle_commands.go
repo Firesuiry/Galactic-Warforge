@@ -12,7 +12,7 @@ type installLogisticsVehiclePayload struct {
 }
 
 // Installation consumes manufactured vehicles; changing station capacity never creates a fleet.
-func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID string, cmd model.Command, p installLogisticsVehiclePayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID string, issuerID string, cmd model.Command, p installLogisticsVehiclePayload) (model.CommandResult, []*model.GameEvent) {
 	building, station, failure := requireOwnedLogisticsStation(ws, playerID, cmd.Target.EntityID)
 	if failure != nil {
 		return *failure, nil
@@ -59,14 +59,16 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 		return fail("item_id 必须为 logistics_drone 或 logistics_vessel")
 	}
 	cost := []model.ItemAmount{{ItemID: itemID, Quantity: quantity}}
-	record := mecha.Record
+	var record *model.MechaRecord
 	if source == "player" {
-		if record == nil {
-			return fail("机甲不可用")
+		mecha, failure := issuerMecha(ws, player, issuerID)
+		if failure != nil {
+			return *failure, nil
 		}
 		if rangeRes := gc.requireBuildRange(ws, playerID, mecha, building.Position); rangeRes != nil {
 			return *rangeRes, nil
 		}
+		record = mecha.Record
 		if !record.HasItems(cost) {
 			return model.CommandResult{Status: model.StatusFailed, Code: model.CodeInsufficientResource, Message: "机甲背包中缺少已制造的运输载具"}, nil
 		}
