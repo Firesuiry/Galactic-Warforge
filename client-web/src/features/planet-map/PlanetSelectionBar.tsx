@@ -436,101 +436,101 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
                 采集脚下{getItemDisplayName(catalog, underfootResource.kind)}
               </button>
             ) : null}
-            {foreignOperated ? null : (
-              <>
-            <button
-              className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
-              type="button"
-              title="M · 也可直接右键点地移动"
-              onClick={() => {
-                sfx.uiClick();
-                if (activeMode?.kind === 'move') {
-                  exitInteractionMode();
-                } else {
-                  setInteractionMode({ kind: 'move' });
-                }
-              }}
-            >
-              {activeMode?.kind === 'move' ? '取消移动' : '移动'}
-            </button>
-            <button
-              className={`secondary-button${activeMode?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
-              type="button"
-              title="也可直接右键点敌攻击"
-              onClick={() => {
-                sfx.uiClick();
-                if (activeMode?.kind === 'attack') {
-                  exitInteractionMode();
-                } else {
-                  setInteractionMode({ kind: 'attack' });
-                }
-              }}
-            >
-              {activeMode?.kind === 'attack' ? '取消攻击' : '攻击'}
-            </button>
-            {!unit.mecha ? (
+            {!foreignOperated ? (
               <>
                 <button
-                  className={`secondary-button${activeMode?.kind === 'unit_order' && activeMode.order === 'attack_move' ? ' planet-selection-bar__active' : ''}`}
+                  className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
                   type="button"
-                  title="A · 攻击移动：点击目标点，沿途交战"
+                  title="M · 也可直接右键点地移动"
                   onClick={() => {
                     sfx.uiClick();
-                    setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
-                  }}
-                >
-                  攻击移动
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  title="H · 原地坚守：不追击，射程内自动开火"
-                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
-                >
-                  坚守
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  title="S · 停止当前命令，回到待命"
-                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
-                >
-                  停止
-                </button>
-              </>
-            ) : null}
-            {/* 运输机器人（§2.1）：自动搬运（出厂默认，切换按钮高亮）/ 设置运输（进入固定路线）/ 停止（进入待命）。 */}
-            {isTransportRobot(unit) ? (
-              <>
-                <button
-                  className={`secondary-button${transportHaulMode(unit) === 'auto' ? ' planet-selection-bar__active' : ''}`}
-                  type="button"
-                  title="切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料"
-                  onClick={() => submit('unit_order', () => client.cmdAutoHaul(unit.id), { entityId: unit.id })}
-                >
-                  自动搬运
-                </button>
-                <button
-                  className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
-                  type="button"
-                  title="依次点击起点建筑、终点建筑；物品留空由服务端取终点能接收的第一种"
-                  onClick={() => {
-                    sfx.uiClick();
-                    if (activeMode?.kind === 'haul') {
+                    if (activeMode?.kind === 'move') {
                       exitInteractionMode();
                     } else {
-                      setInteractionMode({ kind: 'haul' });
+                      setInteractionMode({ kind: 'move' });
                     }
                   }}
                 >
-                  {activeMode?.kind === 'haul'
-                    ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
-                    : '设置运输'}
+                  {activeMode?.kind === 'move' ? '取消移动' : '移动'}
                 </button>
+                <button
+                  className={`secondary-button${activeMode?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
+                  type="button"
+                  title="也可直接右键点敌攻击"
+                  onClick={() => {
+                    sfx.uiClick();
+                    if (activeMode?.kind === 'attack') {
+                      exitInteractionMode();
+                    } else {
+                      setInteractionMode({ kind: 'attack' });
+                    }
+                  }}
+                >
+                  {activeMode?.kind === 'attack' ? '取消攻击' : '攻击'}
+                </button>
+                {!unit.mecha ? (
+                  <>
+                    <button
+                      className={`secondary-button${activeMode?.kind === 'unit_order' && activeMode.order === 'attack_move' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="A · 攻击移动：点击目标点，沿途交战"
+                      onClick={() => {
+                        sfx.uiClick();
+                        setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
+                      }}
+                    >
+                      攻击移动
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      title="H · 原地坚守：不追击，射程内自动开火"
+                      onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
+                    >
+                      坚守
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      title="S · 停止当前命令，回到待命"
+                      onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
+                    >
+                      停止
+                    </button>
+                  </>
+                ) : null}
+                {/* 运输机器人（§2.1）：自动搬运（出厂默认，切换按钮高亮）/ 设置运输（进入固定路线）/ 停止（进入待命）。 */}
+                {isTransportRobot(unit) ? (
+                  <>
+                    <button
+                      className={`secondary-button${transportHaulMode(unit) === 'auto' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料"
+                      onClick={() => submit('unit_order', () => client.cmdAutoHaul(unit.id), { entityId: unit.id })}
+                    >
+                      自动搬运
+                    </button>
+                    <button
+                      className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="依次点击起点建筑、终点建筑；物品留空由服务端取终点能接收的第一种"
+                      onClick={() => {
+                        sfx.uiClick();
+                        if (activeMode?.kind === 'haul') {
+                          exitInteractionMode();
+                        } else {
+                          setInteractionMode({ kind: 'haul' });
+                        }
+                      }}
+                    >
+                      {activeMode?.kind === 'haul'
+                        ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
+                        : '设置运输'}
+                    </button>
+                  </>
+                ) : null}
               </>
             ) : null}
-              </>
-            )}
           </div>
         ) : null}
       </div>
