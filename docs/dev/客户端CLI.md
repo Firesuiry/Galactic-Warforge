@@ -114,7 +114,23 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 - **配送器**：`configure_distributor` 省略布尔开关保留原值；物品为 `none` 时须同时停用仓间与机甲配送。`uninstall_logistics_bot` 只回收空载停靠的机器人。`configure_mecha_logistics` 整体替换请求（最多 8 项，`0≤min≤max≤1000` 且 `max>0`）。
 - **戴森**：`launch_solar_sail` 只接受 `em_rail_ejector`，`launch_rocket` 只接受 `vertical_launching_silo`，均需本地已装载载荷；`launch_rocket` 还需目标层已有 `build_dyson_*` 结构。`set_ray_receiver_mode photon` 需 `dirac_inversion`。
 - **舰队**：`fleet_attack` 只打同星系目标；`fleet_move` 要求目标星系为直达航线、舰队 `idle` 且不在跃迁中，固定 10 tick。`blockade_planet` 最终状态看 `system_runtime` 的 `planet_blockades`。
-- **scene**：`scene [planet_id] <x> <y> <w> <h> [--near_x X --near_y Y --radius R]`，R ≤ 128，额外返回球面邻域补片 `surface_patches`。服务端窗口默认 160、最大 257。球面寻路没有 CLI 命令，用 `GET /world/planets/{id}/path`。
+- **scene**：`scene [planet] [x y w h] [--near_x X --near_y Y --radius R] [--json] [--limit N|all]`。
+  - 省略 planet = 我的机甲（summary `mechas` 里 `operator` = 发令者）所在星球，未绑定时用焦点星球 `focus_planet_id`，再退回 `active_planet_id`；首行会打印选中原因。省略窗口 = 以我的机甲为中心 48×48（按星球图集尺寸裁剪；无机甲时从 0,0 起）。
+  - 位置参数不再「第一个数字当 planet」：`scene 40 130 16 12` 就是窗口；给 planet 必须形如 `planet-1-1`。
+  - 默认输出紧凑文本：建筑表（id / 类型 / 锚点 / 占地 / `runtime.state[:state_reason]`）、资源按 `kind` 汇总（格数、包围盒、代表矿点 id）、单位表（机甲标 `operator`，空闲显示 `(idle)`）；每节默认最多 20 条，超出提示 `--json` 或缩小窗口，`--limit all` 全列。
+  - `--json` 输出服务端原始 JSON（`buildings`/`units` 是对象、空节是 `null`，脚本用 `(.buildings // {})`）。`--near_x/--near_y/--radius`（R ≤ 128）仍返回球面邻域补片 `surface_patches`。服务端窗口默认 160、最大 257。球面寻路没有 CLI 命令，用 `GET /world/planets/{id}/path`。
+- **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
+  - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
+  - 默认输出人话摘要：`state[:state_reason]`、坐标/占地、HP、配方与剩余 tick、主库存/输出缓冲、`production_monitor.active_alerts`（如 `input_shortage,throughput_drop`）；单位给操作者、能量/护盾、`mecha.job`（空闲为 `idle`）、弹药；资源给矿种/剩余量/产率。
+  - `--json` 输出原始响应。
+- **catalog**：`catalog <buildings [关键词]|building <id>|recipes [--handcraft] [--building <type>] [关键词]|items [关键词]|techs [--available|--done]|units>`，一次读 `GET /catalog`。
+  - `buildings`：id / 名称 / 占地 / 造价 / `unlock_tech` / 是否已解锁（对照 `summary` 已完成科技；`unlock_tech` 是「任一完成即可」，空 = 无门槛）。
+  - `building <id>`：造价、占地、1 级耗电/发电、IO 口与连接点（来自 `runtime_params`）、可跑配方、科技前置、可产单位。
+  - `recipes`：输入 → 输出、时长（tick）、能否手搓、科技门控；`--handcraft` 只列可手搓。
+  - `techs --available` 只列「前置全部完成且自身未完成」的科技，`--done` 只列已完成；`cost` 已按本局 `research_pace` 缩放。
+  - `items`：堆叠上限与机甲燃料值；`units`：可生产单位、生产建筑、成本、时长。
+- **networks**：`networks [planet] [--json]` 读 `GET /world/planets/<id>/networks`：每个电网的发电/用电/净额/建筑数/是否缺电，另列未接网与欠电建筑（`connected`/`ratio`/`reason`）；有管网时给节点/管段/流体种类计数。省略 planet 同 `scene`。
+- **alerts**：`alert_snapshot` 的别名，参数相同；每行额外打印 `alert_type=<枚举>` 与 `building_id`，便于脚本定位。
 
 ## 调试与管理选项
 
@@ -278,7 +294,7 @@ as                                     # 临时恢复为玩家本人发令
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（20 条，agent 可用）
+### 查询命令（23 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -287,6 +303,7 @@ as                                     # 临时恢复为玩家本人发令
 | `summary` | — | Game summary (resources, players, map) |
 | `stats` | — | Current player statistics |
 | `briefing` | `briefing [alert_limit]` | One-shot agent briefing (self/war/fleets/alerts/commands) |
+| `catalog` | `catalog <buildings [关键词]\|building <id>\|recipes [--handcraft] [--building <type>] [关键词]\|items [关键词]\|techs [--available\|--done]\|units>` | 紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog） |
 | `galaxy` | — | Galaxy list |
 | `system` | `system [system_id]` | System details (default: sys-1) |
 | `system_runtime` | `system_runtime [system_id]` | System runtime state including fleets, contacts, blockades and battle reports |
@@ -296,10 +313,12 @@ as                                     # 临时恢复为玩家本人发令
 | `war_industry` | — | Military production, refit, deployment hub and supply node status |
 | `task_forces` | — | Player-owned task force list with supply and command capacity |
 | `theaters` | — | Player-owned theater zones and objectives |
-| `scene` | `scene [planet_id] <x> <y> <width> <height> [--near_x X --near_y Y --radius R]` | Cube-sphere atlas scene and seam patches |
-| `inspect` | `inspect <planet_id> <building\|unit\|resource\|sector> <entity_id>` | Planet inspect raw JSON |
+| `scene` | `scene [planet] [x y width height] [--near_x X --near_y Y --radius R] [--json] [--limit N\|all]` | 局部场景紧凑文本（建筑/资源汇总/单位）；省略 planet = 我的机甲所在星球，省略窗口 = 机甲居中 48×48；--json 输出原始 JSON |
+| `inspect` | `inspect [planet] [building\|unit\|resource\|sector] <entity_id> [--json]` | 单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON |
+| `networks` | `networks [planet] [--json]` | 电网：每个网络的发电/用电/建筑数/缺电，以及未接网与欠电建筑；有管网时列出节点数（GET /world/planets/<id>/networks） |
 | `fleet_status` | `fleet_status [fleet_id]` | Fleet list or one fleet detail |
 | `fog` | `fog [planet_id] [x y width height]` | ASCII fog slice via /scene (default: 0 0 32 16) |
+| `alerts` | `alerts [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | alert_snapshot 的别名：产线告警快照，每行带 alert_type 与 building_id |
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
