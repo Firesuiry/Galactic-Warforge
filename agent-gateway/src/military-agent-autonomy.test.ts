@@ -30,7 +30,8 @@ async function waitForHealth(url: string) {
   while (Date.now() < deadline) {
     try {
       const response = await fetch(`${url}/health`);
-      if (response.ok) {
+      // 开局头几个 tick 电网尚未结算，工厂会报 under_power 拒收军工订单：等电网稳定再开测。
+      if (response.ok && ((await response.json()) as { tick: number }).tick >= 10) {
         return;
       }
       lastError = new Error(`health returned ${response.status}`);
