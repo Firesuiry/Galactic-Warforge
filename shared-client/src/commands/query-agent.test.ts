@@ -193,6 +193,19 @@ describe('scene argument parsing', () => {
     assert.deepEqual(calls[0].request, { x: 25, y: 110, width: 48, height: 48 });
   });
 
+  it('does not center an explicitly named planet on my mecha from another planet', async () => {
+    const calls: Array<{ planetId: string; request: unknown }> = [];
+    const api = fakeApi({
+      fetchPlanetScene: async (planetId: string, request: unknown) => {
+        calls.push({ planetId, request });
+        return FIXTURE.scene;
+      },
+    });
+    await cmdScene(['planet-1-7'], { api, issuerId: 'p1' });
+    assert.equal(calls[0].planetId, 'planet-1-7');
+    assert.deepEqual(calls[0].request, { x: 0, y: 0, width: 48, height: 48 });
+  });
+
   it('prints raw JSON with --json', async () => {
     const out = await cmdScene(['planet-1-1', '40', '130', '16', '12', '--json'], { api: fakeApi(), issuerId: 'p1' });
     assert.match(out, /"planet_id": "planet-1-1"/);
