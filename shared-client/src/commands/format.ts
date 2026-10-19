@@ -518,7 +518,86 @@ export function fmtFleetDetail(fleet: FleetDetailView | FleetRuntimeView): strin
   return lines.join('\n');
 }
 
-export function fmtPlanetRuntime(runtime: PlanetRuntimeView): string {
+/** 施工任务表：代理最该看的一栏（wait_reason 说明为什么还没开工）。 */
+function fmtConstructionTasks(runtime: PlanetRuntimeView, mineOnly: boolean, myMechaId?: string): string[] {
+  const all = runtime.construction_tasks ?? [];
+  const tasks = mineOnly
+    ? all.filter((task) => myMechaId !== undefined && task.mecha_id === myMechaId)
+    : all;
+  const lines: string[] = [chalk.bold(`Construction tasks (${tasks.length}${mineOnly ? ` mine, ${all.length} total` : ''})`)];
+  if (tasks.length === 0) {
+    lines.push(chalk.dim(mineOnly ? '  none for my mecha' : '  none'));
+    return lines;
+  }
+  lines.push(table(
+    ['ID', 'Type', 'Position', 'Mecha', 'State', 'Wait', 'Remaining'],
+    tasks.map((task) => [
+      task.id,
+      task.building_name ?? task.building_type,
+      fmtPosition(task.position),
+      task.mecha_id ?? '-',
+      task.state,
+      task.wait_reason ?? '-',
+      task.state === 'pending' || task.state === 'paused' ? '-' : String(task.remaining_ticks ?? '-'),
+    ]),
+  ));
+  return lines;
+}
+
+/** 物流摘要：站点/运输器/机器人按状态计数，站点表给库存总量。 */
+function fmtLogistics(runtime: PlanetRuntimeView): string[] {
+  const stations = runtime.logistics_stations ?? [];
+  const drones = runtime.logistics_drones ?? [];
+  const ships = runtime.logistics_ships ?? [];
+  const bots = runtime.logistics_bots ?? [];
+  const distributors = runtime.logistics_distributors ?? [];
+  const countByStatus = (items: Array<{ status?: string }>): string => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const status = item.status ?? '-';
+      counts.set(status, (counts.get(status) ?? 0) + 1);
+    }
+    return counts.size === 0
+      ? '-'
+      : [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([status, n]) => `${status}:${n}`).join(' ');
+  };
+  const lines: string[] = [chalk.bold('Logistics')];
+  lines.push(
+    `  stations=${stations.length}  drones=${drones.length}  ships=${ships.length}  ` +
+    `distributors=${distributors.length}  bots=${bots.length}`,
+  );
+  if (drones.length > 0) {
+    lines.push(`  drones ${countByStatus(drones)}`);
+  }
+  if (ships.length > 0) {
+    lines.push(`  ships ${countByStatus(ships)}`);
+  }
+  if (bots.length > 0) {
+    lines.push(`  bots ${countByStatus(bots)}`);
+  }
+  if (stations.length > 0) {
+    lines.push(table(
+      ['Station', 'Type', 'Position', 'Drones', 'Ships', 'Inventory'],
+      stations.map((station) => [
+        station.building_id,
+        station.building_type,
+        fmtPosition(station.position),
+        String(station.drone_ids?.length ?? 0),
+        String(station.ship_ids?.length ?? 0),
+        fmtInventoryPreview(station.state?.inventory, 6) || '-',
+      ]),
+    ));
+  }
+  return lines;
+}
+
+export interface PlanetRuntimeFormatOptions {
+  /** 只看这台机甲的施工任务（`planet_runtime --mine`）。 */
+  myMechaId?: string;
+  mineOnly?: boolean;
+}
+
+export function fmtPlanetRuntime(runtime: PlanetRuntimeView, options: PlanetRuntimeFormatOptions = {}): string {
   if (!runtime.discovered) {
     return `Planet Runtime: ${chalk.bold(runtime.planet_id)}  ${chalk.dim('undiscovered')}`;
   }
@@ -527,6 +606,11 @@ export function fmtPlanetRuntime(runtime: PlanetRuntimeView): string {
     `Available: ${runtime.available ? chalk.green('yes') : chalk.dim('no')}  Tick: ${chalk.cyan(runtime.tick)}`,
     `Contacts=${runtime.contacts?.length ?? 0}  EnemyForces=${runtime.enemy_forces?.length ?? 0}  Frontlines=${runtime.frontlines?.length ?? 0}`,
   ];
+
+  lines.push('');
+  lines.push(...fmtConstructionTasks(runtime, options.mineOnly ?? false, options.myMechaId));
+  lines.push('');
+  lines.push(...fmtLogistics(runtime));
 
   const contacts = runtime.contacts ?? [];
   lines.push('');
