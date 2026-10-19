@@ -57,12 +57,12 @@ func deadCommandTargetMessage(ws *model.WorldState, playerID, unitID string) str
 	if player == nil {
 		return ""
 	}
-	exec := player.ExecutorForPlanet(ws.PlanetID)
-	if exec == nil || exec.UnitID != unitID {
+	record := player.MechaByUnitID(unitID)
+	if record == nil {
 		return ""
 	}
-	if exec.RespawnAtTick > ws.Tick {
-		return fmt.Sprintf("机甲已阵亡，将在 %d tick 后复活", exec.RespawnAtTick)
+	if record.RespawnAtTick > ws.Tick {
+		return fmt.Sprintf("机甲已阵亡，将在 %d tick 后复活", record.RespawnAtTick)
 	}
 	return "机甲已阵亡，等待复活"
 }
@@ -71,7 +71,7 @@ func deadCommandTargetMessage(ws *model.WorldState, playerID, unitID string) str
 //   - 目标格无需已探索（服务端是权威，按真实地形寻路）；
 //   - 不再受单次移动范围限制，一条命令下达整条路径，由实时移动结算推进；
 //   - 失败回执写明中文原因（不可达、目标格被占、能量不足等）。
-func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execMove(ws *model.WorldState, playerID string, issuerID string, cmd model.Command, p noPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
@@ -98,7 +98,12 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 
 	var events []*model.GameEvent
 	moved := 0
+	denied := 0
 	for _, unit := range units {
+		if operatorDenied(ws, playerID, issuerID, unit) {
+			denied++
+			continue
+		}
 		model.SyncMechaCapabilities(unit, ws.Players[playerID])
 		if unit.Mecha != nil {
 			mechaEvents, failure := moveMecha(ws, unit, *pos)
@@ -141,9 +146,14 @@ func (gc *GameCore) execMove(ws *model.WorldState, playerID string, cmd model.Co
 		moved++
 	}
 
+	if denied > 0 {
+		res.Code = model.CodeNotOperator
+		res.Message = fmt.Sprintf("%d 个单位正前往 (%d,%d)；%d 台机甲由其他发令者操作，已跳过", moved, pos.X, pos.Y, denied)
+	} else {
+		res.Code = model.CodeOK
+		res.Message = fmt.Sprintf("%d 个单位正前往 (%d,%d)", moved, pos.X, pos.Y)
+	}
 	res.Status = model.StatusExecuted
-	res.Code = model.CodeOK
-	res.Message = fmt.Sprintf("%d 个单位正前往 (%d,%d)", moved, pos.X, pos.Y)
 	return res, events
 }
 
@@ -210,7 +220,7 @@ type attackPayload struct {
 // execAttack 处理 attack 命令：指定攻击目标（单位 / 建筑 / 黑雾）。
 // 目标在射程外时自动靠近（机甲与普通单位同一语义），进入射程后按冷却开火。
 // 目标可以是敌方建筑（resolveCombatTarget 支持 unit / building / enemy_force 三类）。
-func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.Command, p attackPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, issuerID string, cmd model.Command, p attackPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	attackers, cmdErr := resolveCommandUnits(ws, playerID, cmd)
@@ -241,7 +251,12 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 	var events []*model.GameEvent
 	engaged := 0
 	approaching := 0
+	denied := 0
 	for _, attacker := range attackers {
+		if operatorDenied(ws, playerID, issuerID, attacker) {
+			denied++
+			continue
+		}
 		model.SyncMechaCapabilities(attacker, ws.Players[playerID])
 		if !unitCanTarget(attacker, target) {
 			return mechaJobFailed(model.CodeInvalidTarget, "武器无法攻击该目标")
@@ -319,13 +334,21 @@ func (gc *GameCore) execAttack(ws *model.WorldState, playerID string, cmd model.
 
 	res.Status = model.StatusExecuted
 	res.Code = model.CodeOK
+	if denied > 0 {
+		res.Code = model.CodeNotOperator
+	}
 	switch {
+	case engaged == 0 && denied > 0:
+		res.Message = fmt.Sprintf("%d 台机甲由其他发令者操作，没有单位接受攻击指令", denied)
 	case engaged == 0:
 		res.Message = "没有单位接受攻击指令"
 	case approaching > 0:
 		res.Message = fmt.Sprintf("%d 个单位正前往攻击%s", engaged, targetDisplayName(ws, target))
 	default:
 		res.Message = fmt.Sprintf("%d 个单位正在攻击%s", engaged, targetDisplayName(ws, target))
+	}
+	if denied > 0 {
+		res.Message += fmt.Sprintf("（%d 台机甲由其他发令者操作，已跳过）", denied)
 	}
 	return res, events
 }
@@ -341,7 +364,7 @@ type unitOrderPayload struct {
 
 // execUnitOrder handles the "unit_order" command（R5 指令集 + §2 运输路线）：
 // attack_move / patrol / guard / hold / follow / retreat / stop / haul。
-func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd model.Command, p unitOrderPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, issuerID string, cmd model.Command, p unitOrderPayload) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 
 	units, cmdErr := resolveCommandUnits(ws, playerID, cmd)
@@ -352,8 +375,13 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 
 	var events []*model.GameEvent
 	ordered := 0
+	denied := 0
 	haulReply := ""
 	for _, unit := range units {
+		if operatorDenied(ws, playerID, issuerID, unit) {
+			denied++
+			continue
+		}
 		// 执行体（玩家机甲）不参与部队指令集。
 		if unit.Mecha != nil {
 			continue
@@ -476,6 +504,11 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 		ordered++
 	}
 	if ordered == 0 {
+		if denied > 0 {
+			res.Code = model.CodeNotOperator
+			res.Message = fmt.Sprintf("%d 台机甲由其他发令者操作，没有可指挥的单位", denied)
+			return res, nil
+		}
 		res.Code = model.CodeInvalidTarget
 		res.Message = "没有可指挥的单位（机甲不接受小队指令）"
 		return res, nil
@@ -487,6 +520,10 @@ func (gc *GameCore) execUnitOrder(ws *model.WorldState, playerID string, cmd mod
 		res.Message = haulReply
 	} else {
 		res.Message = fmt.Sprintf("%d 个单位已执行 %s 指令", ordered, order)
+	}
+	if denied > 0 {
+		res.Code = model.CodeNotOperator
+		res.Message += fmt.Sprintf("（%d 台机甲由其他发令者操作，已跳过）", denied)
 	}
 	return res, events
 }

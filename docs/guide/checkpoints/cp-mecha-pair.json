@@ -1,0 +1,340 @@
+{
+  "parent": "cp-base",
+  "note": "第 21 轮多机甲：从 cp-base（tick 6282）读档，只用玩家命令给战场分析基站 b-39 备料并连产两台执行体机甲，再把第一台绑给代理 builder-a、第二台保持空闲，形成「玩家 1 台 + 代理 1 台 + 空闲 1 台」的局面，供 client-web 的机甲侧栏 / 总览机甲卡片 / 接管流程做 UI 操作测试。料全部来自自家产线：从铁出货补给站 b-105 取铁块 45、铜出货补给站 b-97 取铜块 30；背包原有铁矿 16 手搓磁铁 6 批（得 6，共 8），磁线圈 4 批（2 磁铁 + 1 铜块 → 2 个，得 8，加原有 9 共 17），电路板 16 批（铁块 + 铜块 → 1 个），齿轮 3 批。两轮「铁块 16 / 齿轮 8 / 磁线圈 8 / 电路板 8 装进 b-39 → produce executor」，每台 600 tick，两台连排出厂。新机甲单位 ID 由实体计数器顺延（cp-base 重建后固定为 u-117 / u-118），出厂后空闲、空背包、满能量。最后 assign_mecha 把第一台（u-117）绑给 builder-a；玩家自己的 u-40 保持 operator=p1。契约断言：机甲档案 3 台、operator=p1 恰好 1 台、operator=builder-a 恰好 1 台、空闲恰好 1 台、对局未结束、玩家存活。",
+  "build": [
+    "快进到 tick 6283",
+    "从 b-105 取铁块 45、b-97 取铜块 30",
+    "手搓磁铁 6 批、磁线圈 4 批、电路板 16 批、齿轮 3 批（用 wait_until 等每批作业结束）",
+    "两轮：铁块 16 / 齿轮 8 / 磁线圈 8 / 电路板 8 装进 b-39，然后 produce b-39 executor",
+    "等 mecha_count_gte(3)（两台新机甲出厂），推进到 tick 8300",
+    "assign_mecha u-111 operator=builder-a（第二台 u-113 保持空闲）"
+  ],
+  "steps": [
+    {
+      "advance_to_tick": 6283
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-105",
+          "item_id": "iron_ingot",
+          "quantity": 45,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-97",
+          "item_id": "copper_ingot",
+          "quantity": 30,
+          "direction": "to_player"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "recipe_id": "smelt_magnet",
+          "quantity": 6
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnet",
+        "n": 8
+      },
+      "timeout_ticks": 6000
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "recipe_id": "magnetic_coil",
+          "quantity": 4
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "magnetic_coil",
+        "n": 17
+      },
+      "timeout_ticks": 6000
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "recipe_id": "circuit_board",
+          "quantity": 16
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "circuit_board",
+        "n": 16
+      },
+      "timeout_ticks": 6000
+    },
+    {
+      "cmd": {
+        "type": "craft_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "recipe_id": "gear",
+          "quantity": 3
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "item_gte",
+        "player": "p1",
+        "item_id": "gear",
+        "n": 16
+      },
+      "timeout_ticks": 6000
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "iron_ingot",
+          "quantity": 16,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "gear",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "magnetic_coil",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "circuit_board",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "produce",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "unit_type": "executor"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "iron_ingot",
+          "quantity": 16,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "gear",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "magnetic_coil",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "transfer_item",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1"
+        },
+        "payload": {
+          "building_id": "b-39",
+          "item_id": "circuit_board",
+          "quantity": 8,
+          "direction": "to_building"
+        }
+      }
+    },
+    {
+      "cmd": {
+        "type": "produce",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "b-39"
+        },
+        "payload": {
+          "unit_type": "executor"
+        }
+      }
+    },
+    {
+      "wait_until": {
+        "kind": "mecha_count_gte",
+        "player": "p1",
+        "n": 3
+      },
+      "timeout_ticks": 6000
+    },
+    {
+      "cmd": {
+        "type": "assign_mecha",
+        "target": {
+          "layer": "planet",
+          "planet_id": "planet-1-1",
+          "entity_id": "u-117"
+        },
+        "payload": {
+          "operator": "builder-a"
+        }
+      }
+    },
+    {
+      "advance_to_tick": 8600
+    }
+  ],
+  "end_tick": 8600,
+  "contract": {
+    "checks": [
+      {
+        "kind": "game_not_finished"
+      },
+      {
+        "kind": "player_alive",
+        "player": "p1"
+      },
+      {
+        "kind": "mecha_count_gte",
+        "player": "p1",
+        "n": 3
+      },
+      {
+        "kind": "mecha_operator_count",
+        "player": "p1",
+        "operator": "p1",
+        "n": 1
+      },
+      {
+        "kind": "mecha_operator_count",
+        "player": "p1",
+        "operator": "builder-a",
+        "n": 1
+      },
+      {
+        "kind": "mecha_operator_count",
+        "player": "p1",
+        "operator": "",
+        "n": 1
+      }
+    ]
+  }
+}

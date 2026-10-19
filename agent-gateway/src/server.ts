@@ -632,6 +632,7 @@ export async function createGatewayServer(options: GatewayServerOptions): Promis
               currentPlayer: agent.playerId,
               serverUrl: agent.serverUrl,
               playerKey,
+              issuerId: agent.id,
             }, {
               allowedCategories: agent.policy?.commandCategories,
               allowedPlanetIds: agent.policy?.planetIds,

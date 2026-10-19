@@ -34,7 +34,7 @@ func beltAlertCore(t *testing.T) (*GameCore, *model.WorldState, *model.Building)
 		Battlefield: config.BattlefieldConfig{MapSeed: "alert-resolve", MaxTickRate: 10},
 		Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
 		Server: config.ServerConfig{
-			Port: 9999, RateLimit: 100, AlertHistoryLimit: 100,
+			Port: 9999, AlertHistoryLimit: 100,
 			ProductionMonitor: newTestMonitorConfig(),
 		},
 	}

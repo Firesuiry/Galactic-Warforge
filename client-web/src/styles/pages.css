@@ -1477,3 +1477,68 @@
     justify-self: end;
   }
 }
+
+/* 总览页「机甲」卡片（第 21 轮契约 §7.3 第 4 条）：放在资源脉搏之后。 */
+.command-mechas__scroll {
+  overflow-x: auto;
+}
+
+.command-mechas__table {
+  width: 100%;
+  border-collapse: collapse;
+  /* 12px：右栏 298px 内容宽刚好放下 6 列（13px 时状态列「复活于 tick N」会撑出 5px）。 */
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.command-mechas__table th,
+.command-mechas__table td {
+  /* 右侧窄栏（300–340px）里 6 列要放得下：列间距收紧到 4px（实测内容宽 298px）。 */
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line-1);
+  text-align: left;
+}
+
+.command-mechas__table th:first-child,
+.command-mechas__table td:first-child,
+.command-mechas__table th:last-child,
+.command-mechas__table td:last-child {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.command-mechas__table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.command-mechas__row--mine td {
+  background: rgba(57, 230, 208, 0.06);
+}
+
+.command-mechas__operator--me {
+  color: var(--accent);
+}
+
+.command-mechas__id {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+}
+
+.command-mechas__num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.command-mechas__idle {
+  color: var(--text-dim);
+}
+
+.command-mechas__dead {
+  color: #ff9a9a;
+}
+
+.command-mechas__empty {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}

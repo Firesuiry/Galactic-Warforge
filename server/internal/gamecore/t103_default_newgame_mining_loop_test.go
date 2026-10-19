@@ -27,7 +27,7 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 		t.Fatal("expected p1 base building")
 	}
 
-	execState := player.ExecutorForPlanet(ws.PlanetID)
+	execState := starterMecha(ws, player.PlayerID)
 	if execState == nil {
 		t.Fatal("expected active executor state")
 	}
@@ -80,7 +80,7 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 
 	// Fresh games no longer bootstrap matrices: the first research must wait
 	// for the industry chain, while mining works from the initial tech.
-	if got := player.Inventory[model.ItemElectromagneticMatrix]; got != 0 {
+	if got := starterMecha(ws, player.PlayerID).Inventory[model.ItemElectromagneticMatrix]; got != 0 {
 		t.Fatalf("expected fresh bootstrap without matrices, got %d", got)
 	}
 	startRes, _ := execCommand(core, model.CmdStartResearch, ws, "p1", model.Command{
@@ -98,7 +98,7 @@ func TestT103DefaultNewGameCanKeepFirstLabAndStartFirstMiningIncome(t *testing.T
 		t.Fatal("expected first wind_turbine")
 	}
 
-	towerPos, minePos, ok := findReachableStarterMiningRoute(ws, execUnit.Position, execState.OperateRange, wind.Position)
+	towerPos, minePos, ok := findReachableStarterMiningRoute(ws, execUnit.Position, model.ExecutorOperateRange(), wind.Position)
 	if !ok {
 		t.Fatalf("expected reachable mining route near executor=%+v wind=%+v", execUnit.Position, wind.Position)
 	}

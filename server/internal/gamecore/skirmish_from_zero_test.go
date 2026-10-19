@@ -454,7 +454,7 @@ func (op *zeroOpening) buildNext() {
 	// 不产生回执。矿机同样自查（实测剩下 28 条回执全是采矿机的「缺少 N 个
 	// 电路板/磁线圈/齿轮/铁块」——采矿机的料由 `feedIndustry` 从自己的机器里取，
 	// 一样是「料够了才发命令」）。
-	if !op.player.HasItems(buildingCost(s.btype)) {
+	if !starterMecha(op.ws, op.player.PlayerID).HasItems(buildingCost(s.btype)) {
 		op.pendingShort = true
 		return
 	}
@@ -510,7 +510,7 @@ func (op *zeroOpening) powerRescue() bool {
 	ws := op.ws
 	// 第 16 轮起建造门槛是背包物品（矿池已删除）：风机要齿轮/铁块/磁线圈。
 	def, ok := model.BuildingDefinitionByID(model.BuildingTypeWindTurbine)
-	if !ok || !op.player.HasItems(def.BuildCost.Items) {
+	if !ok || !starterMecha(op.ws, op.player.PlayerID).HasItems(def.BuildCost.Items) {
 		return false
 	}
 	if ws.Construction != nil {
@@ -600,13 +600,13 @@ func (op *zeroOpening) sweepInventory() {
 	}
 	// 物品按 ID 排序：dumpToIndustry 会下发 transfer_item 命令，map 迭代顺序
 	// 会让同一状态下发命令的顺序每次不同（脚本化玩家的确定性要求）。
-	items := make([]string, 0, len(op.player.Inventory))
-	for item := range op.player.Inventory {
+	items := make([]string, 0, len(starterMecha(op.ws, op.player.PlayerID).Inventory))
+	for item := range starterMecha(op.ws, op.player.PlayerID).Inventory {
 		items = append(items, item)
 	}
 	sort.Strings(items)
 	for _, item := range items {
-		qty := op.player.Inventory[item]
+		qty := starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 		if qty <= 0 || needed[item] {
 			continue
 		}
@@ -1140,7 +1140,7 @@ func (op *zeroOpening) feedIndustry() {
 		if b == nil || qty <= 0 || b.Storage == nil {
 			return
 		}
-		avail := player.Inventory[item]
+		avail := starterMecha(ws, player.PlayerID).Inventory[item]
 		if respectReserve {
 			avail -= reserve[item]
 		}
@@ -1176,7 +1176,7 @@ func (op *zeroOpening) feedIndustry() {
 		if itemRoom <= 0 {
 			return
 		}
-		n := min(qty, min(room, min(itemRoom, player.Inventory[item])))
+		n := min(qty, min(room, min(itemRoom, starterMecha(ws, player.PlayerID).Inventory[item])))
 		if n <= 0 {
 			return
 		}
@@ -1263,7 +1263,7 @@ func (op *zeroOpening) feedIndustry() {
 		// 都没进站，电磁学永远开不了工）。
 		{"electromagnetic_matrix", model.ItemElectromagneticMatrix},
 	} {
-		allow := withdrawCap[recipe.item] - player.Inventory[recipe.item]
+		allow := withdrawCap[recipe.item] - starterMecha(ws, player.PlayerID).Inventory[recipe.item]
 		if allow <= 0 {
 			continue
 		}
@@ -1290,15 +1290,15 @@ func (op *zeroOpening) feedIndustry() {
 			if b == nil || b.Storage == nil || b.Runtime.StateReason != stateReasonOutputBlocked {
 				continue
 			}
-			allow := blockedIngotCap - player.Inventory[recipe.item]
+			allow := blockedIngotCap - starterMecha(ws, player.PlayerID).Inventory[recipe.item]
 			if allow <= 0 {
 				continue
 			}
-			before := player.Inventory[recipe.item]
+			before := starterMecha(ws, player.PlayerID).Inventory[recipe.item]
 			withdraw(b, recipe.item, allow)
 			// 取出来的锭立刻送回吃它的制造台（齿轮/电路板/磁线圈都要锭），
 			// 背包只当周转站：否则锭堆在背包里，手搓批次因背包满而不结算。
-			if moved := player.Inventory[recipe.item] - before; moved > 0 {
+			if moved := starterMecha(ws, player.PlayerID).Inventory[recipe.item] - before; moved > 0 {
 				op.dumpToIndustry(recipe.item, moved)
 			}
 		}
@@ -1342,7 +1342,7 @@ func (op *zeroOpening) feedIndustry() {
 			// 矿石的去处：背包留一点自用（熔炉要料时喂得进去），其余倒进储物仓。
 			// 只搬「背包上限以内的量 + 储物仓装得下的量」，绝不把背包灌满——
 			// 背包满了手搓与建造全停（实测 200/200 时整局卡在「背包已满」）。
-			allow := oreBackpackCapFor(s.item) - player.Inventory[s.item]
+			allow := oreBackpackCapFor(s.item) - starterMecha(ws, player.PlayerID).Inventory[s.item]
 			if allow > 0 {
 				free := op.mechaCapacity() - 20 - op.inventoryUsed()
 				if free > 0 {
@@ -1400,8 +1400,8 @@ func (op *zeroOpening) feedIndustry() {
 		}
 		return total
 	}
-	coilStock := stockOf("magnetic_coil") + player.Inventory[model.ItemMagneticCoil]
-	cbStock := stockOf("circuit_board") + player.Inventory[model.ItemCircuitBoard]
+	coilStock := stockOf("magnetic_coil") + starterMecha(ws, player.PlayerID).Inventory[model.ItemMagneticCoil]
+	cbStock := stockOf("circuit_board") + starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard]
 	if coilStock < coilStockCap {
 		for _, b := range byRecipe["magnetic_coil"] {
 			load(b, model.ItemMagnet, 20, chainReserve)
@@ -1456,7 +1456,7 @@ func (op *zeroOpening) feedIndustry() {
 	// 研究站自己用配方搓矩阵（更慢，还跟手搓抢料）。矩阵由机甲手搓后送进研究站。
 	// 补给站：步兵弹药。
 	if supply != nil {
-		load(supply, model.ItemAmmoBullet, player.Inventory[model.ItemAmmoBullet], true)
+		load(supply, model.ItemAmmoBullet, starterMecha(ws, player.PlayerID).Inventory[model.ItemAmmoBullet], true)
 	}
 	// 研究站：把机甲手搓的电磁矩阵送进站里（研究站在结算时消耗 OutputBuffer 里的矩阵）。
 	// 玩家不会站在机器旁边手动搬矩阵，这里由脚本的「物流」代劳。
@@ -1491,19 +1491,19 @@ func (op *zeroOpening) relieveBackpack(byRecipe map[string][]*model.Building, de
 	// 矿机取出来的矿石留在背包里只会顶满背包；产线要的料一律按缺口送回。
 	for _, item := range minableOreItemIDs {
 		op.feedOreToSmelters(byRecipe)
-		if op.player.Inventory[item] > oreBackpackCapFor(item) {
+		if starterMecha(op.ws, op.player.PlayerID).Inventory[item] > oreBackpackCapFor(item) {
 			op.dumpOreToDepots(depots, item)
 		}
 	}
 	// 中间品与副产物倒回正缺料的机器（dumpToIndustry 只倒进吃这种料的机器）；
 	// 没有机器吃（例如电路板攒过头、石头矿）就倒进储物仓。
-	items := make([]string, 0, len(op.player.Inventory))
-	for item := range op.player.Inventory {
+	items := make([]string, 0, len(starterMecha(op.ws, op.player.PlayerID).Inventory))
+	for item := range starterMecha(op.ws, op.player.PlayerID).Inventory {
 		items = append(items, item)
 	}
 	sort.Strings(items)
 	for _, item := range items {
-		qty := op.player.Inventory[item]
+		qty := starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 		if qty <= 0 || needed[item] {
 			continue
 		}
@@ -1512,7 +1512,7 @@ func (op *zeroOpening) relieveBackpack(byRecipe map[string][]*model.Building, de
 		}
 		before := qty
 		op.dumpToIndustry(item, qty)
-		if op.player.Inventory[item] >= before {
+		if starterMecha(op.ws, op.player.PlayerID).Inventory[item] >= before {
 			op.dumpOreToDepots(depots, item)
 		}
 	}
@@ -1536,19 +1536,19 @@ func (op *zeroOpening) relieveBackpackFull(depots []*model.Building) {
 	// 1) 先把背包里的矿喂给缺料的熔炉（矿变成锭才有出口），喂不下的倒堆场。
 	op.feedOreToSmelters(op.byRecipeCache())
 	for _, item := range minableOreItemIDs {
-		if op.player.Inventory[item] > oreBackpackCapFor(item) {
+		if starterMecha(op.ws, op.player.PlayerID).Inventory[item] > oreBackpackCapFor(item) {
 			op.dumpOreToDepots(depots, item)
 		}
 	}
 	// 2) 其余堆料（子弹、电路板、磁线圈、磁铁、石砖、锭…）整包倒堆场。
 	// 堆场满了就跳过，等堆场自己被 feedIndustry 抽干（矿喂熔炉、子弹进补给站）。
-	items := make([]string, 0, len(op.player.Inventory))
-	for item := range op.player.Inventory {
+	items := make([]string, 0, len(starterMecha(op.ws, op.player.PlayerID).Inventory))
+	for item := range starterMecha(op.ws, op.player.PlayerID).Inventory {
 		items = append(items, item)
 	}
 	sort.Strings(items)
 	for _, item := range items {
-		if op.player.Inventory[item] <= 0 || isManuallyMinableOre(item) {
+		if starterMecha(op.ws, op.player.PlayerID).Inventory[item] <= 0 || isManuallyMinableOre(item) {
 			continue
 		}
 		op.dumpOreToDepots(depots, item)
@@ -1644,7 +1644,7 @@ func (op *zeroOpening) feedResearchMatrices(lab *model.Building) {
 	if lab == nil || lab.Storage == nil {
 		return
 	}
-	have := op.player.Inventory[model.ItemElectromagneticMatrix]
+	have := starterMecha(op.ws, op.player.PlayerID).Inventory[model.ItemElectromagneticMatrix]
 	if have <= 0 {
 		return
 	}
@@ -1673,10 +1673,10 @@ func (op *zeroOpening) surplus(item string) int {
 		}
 		used += b.Storage.ItemQuantity(item)
 	}
-	if used > op.player.Inventory[item] {
+	if used > starterMecha(op.ws, op.player.PlayerID).Inventory[item] {
 		return 0
 	}
-	return op.player.Inventory[item] - used
+	return starterMecha(op.ws, op.player.PlayerID).Inventory[item] - used
 }
 
 // driveMecha 机甲作业：按「接下来几步建造 + 手搓预留」的缺口，采矿 / 手搓 / 补能。
@@ -1687,7 +1687,7 @@ func (op *zeroOpening) driveMecha() {
 		return
 	}
 	// 补能：核心低于 20 且有煤就烧一块（煤是手动采矿的副产品，开局就能采）。
-	if exec.Mecha.Energy < 20 && exec.Mecha.Job == nil && op.player.Inventory[model.ItemCoal] > 0 {
+	if exec.Mecha.Energy < 20 && exec.Mecha.Job == nil && starterMecha(op.ws, op.player.PlayerID).Inventory[model.ItemCoal] > 0 {
 		execCommand(op.core, model.CmdRefuelMecha, ws, "p1", model.Command{
 			Target:  model.CommandTarget{Layer: "planet", EntityID: exec.ID},
 			Payload: map[string]any{"item_id": model.ItemCoal, "count": 2},
@@ -1743,7 +1743,7 @@ func (op *zeroOpening) nextMechaAction(exec *model.Unit) (mechaAction, bool) {
 			}
 			ready := true
 			for _, in := range action.recipe.Inputs {
-				if op.player.Inventory[in.ItemID] < in.Quantity*action.batches {
+				if starterMecha(op.ws, op.player.PlayerID).Inventory[in.ItemID] < in.Quantity*action.batches {
 					ready = false
 					break
 				}
@@ -1802,7 +1802,7 @@ func (op *zeroOpening) planForSteps(step int) []mechaAction {
 					break
 				}
 			}
-			have := op.player.Inventory[model.ItemElectromagneticMatrix] +
+			have := starterMecha(op.ws, op.player.PlayerID).Inventory[model.ItemElectromagneticMatrix] +
 				lab.Storage.OutputQuantity(model.ItemElectromagneticMatrix)
 			if want > have {
 				need[model.ItemElectromagneticMatrix] += want - have
@@ -1909,7 +1909,7 @@ func (op *zeroOpening) collectBarracksNeeds(need map[string]int) {
 // 矿机不挖矿，玩家看到「产物阻塞」就会把矿送去熔炉）。
 func (op *zeroOpening) feedOreToSmelters(byRecipe map[string][]*model.Building) {
 	for _, item := range minableOreItemIDs {
-		have := op.player.Inventory[item]
+		have := starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 		if have <= 0 {
 			continue
 		}
@@ -1972,7 +1972,7 @@ func (op *zeroOpening) drawOreFromDepots(depots []*model.Building, byRecipe map[
 				}
 			}
 		}
-		need -= op.player.Inventory[item]
+		need -= starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 		if need <= 0 {
 			continue
 		}
@@ -2086,7 +2086,7 @@ func (op *zeroOpening) dumpOreToDepotsFrom(m *model.Building, depots []*model.Bu
 	for i := 0; i < 16; i++ {
 		// 1) 背包里超出上限的矿先倒进储物仓，腾出背包。
 		for _, depot := range depots {
-			excess := op.player.Inventory[item] - cap
+			excess := starterMecha(op.ws, op.player.PlayerID).Inventory[item] - cap
 			if excess <= 0 {
 				break
 			}
@@ -2171,7 +2171,7 @@ func (op *zeroOpening) planFor(item string, want int, out *[]mechaAction, depth 
 	if want <= 0 || depth > 5 {
 		return
 	}
-	have := op.player.Inventory[item]
+	have := starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 	// 已在建造队列里的物品也算「在路上」：施工任务完成时才扣料，这里不重复备。
 	if have >= want {
 		return
@@ -2208,7 +2208,7 @@ func (op *zeroOpening) planFor(item string, want int, out *[]mechaAction, depth 
 			if in.Quantity <= 0 {
 				continue
 			}
-			if b := op.player.Inventory[in.ItemID] / in.Quantity; b < capped {
+			if b := starterMecha(op.ws, op.player.PlayerID).Inventory[in.ItemID] / in.Quantity; b < capped {
 				capped = b
 			}
 		}
@@ -2386,7 +2386,7 @@ func runFromZeroMatch(t *testing.T, seed string) {
 	// （出了矩阵 = 电磁学只差产量，不是死锁）。pt1011 的建造队列更慢，到 tick
 	// 45000 还没轮到最后那台矩阵制造台（建造失败回执里 972 次「制造台缺 4 个
 	// 电路板」），这时只记录，不判死锁。
-	matrices := player.Inventory[model.ItemElectromagneticMatrix]
+	matrices := starterMecha(ws, player.PlayerID).Inventory[model.ItemElectromagneticMatrix]
 	matrixMachineBuilt := false
 	for _, b := range ws.Buildings {
 		if b == nil || b.OwnerID != "p1" || b.Storage == nil {
@@ -2527,14 +2527,14 @@ func recipeConsumesItem(recipeID, item string) bool {
 
 // inventoryUsed 背包已占用的格数（机甲背包按格计，每格堆叠该物品的 stack_limit 件）。
 func (op *zeroOpening) inventoryUsed() int {
-	return op.player.InventorySlotsUsed()
+	return starterMecha(op.ws, op.player.PlayerID).Inventory.SlotsUsed()
 }
 
 // oreInBackpack 背包里全部原矿（手动可采的固体矿）的件数。
 func (op *zeroOpening) oreInBackpack() int {
 	total := 0
 	for _, item := range minableOreItemIDs {
-		total += op.player.Inventory[item]
+		total += starterMecha(op.ws, op.player.PlayerID).Inventory[item]
 	}
 	return total
 }

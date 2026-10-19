@@ -166,11 +166,12 @@ function createSummaryPayload() {
         player_id: "p1",
         is_alive: true,
         resources: { energy: 140 },
-        inventory: {
-          iron_ore: 24,
-          silicon_ore: 8,
-          stone_ore: 3,
-        },
+        mechas: [{
+          unit_id: 'u-1', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: { iron_ore: 24, silicon_ore: 8, stone_ore: 3 },
+          inventory_slots_used: 3, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+        }],
         tech: {
           player_id: "p1",
           current_research: {

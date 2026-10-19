@@ -345,7 +345,12 @@ function createSummary(options?: {
       p1: {
         player_id: "p1",
         is_alive: true,
-        ...(options?.inventory ? { inventory: options.inventory } : {}),
+        // 契约 §6：背包挂在机甲档案上（players[me].mechas[]）。
+        mechas: [{
+          unit_id: 'u-1', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: options?.inventory ?? {}, inventory_slots_used: 1, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+        }],
         resources: { energy: 80,
         },
         tech: {

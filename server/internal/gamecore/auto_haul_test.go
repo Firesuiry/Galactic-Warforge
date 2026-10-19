@@ -754,7 +754,7 @@ func haulTestCoreWithFaceTB(tb testing.TB, faceSize int) (*GameCore, *model.Worl
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{MapSeed: "auto-haul", MaxTickRate: 10},
 		Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
-		Server:      config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server:      config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},

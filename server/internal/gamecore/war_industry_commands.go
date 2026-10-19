@@ -14,7 +14,7 @@ type queueMilitaryProductionPayload struct {
 	Count           int    `json:"count" payload:"required"`
 }
 
-func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID string, cmd model.Command, p queueMilitaryProductionPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID string, cmd model.Command, p queueMilitaryProductionPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := ws.Players[playerID]
 	if player == nil {
@@ -103,9 +103,9 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 	}
 	componentCost, assemblyCost := deriveMilitaryProductionCost(blueprint)
 	totalCost := mergeItemAmounts(scaleItemAmounts(componentCost, count), scaleItemAmounts(assemblyCost, count))
-	if !player.HasItems(totalCost) {
+	if mecha.Record == nil || !mecha.Record.HasItems(totalCost) {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "库存不足，无法下达军工生产订单"
+		res.Message = "机甲背包库存不足，无法下达军工生产订单"
 		return res, nil
 	}
 
@@ -123,7 +123,7 @@ func (gc *GameCore) execQueueMilitaryProduction(ws *model.WorldState, playerID s
 		return res, nil
 	}
 
-	player.DeductItems(totalCost)
+	mecha.Record.DeductItems(totalCost)
 	orderID := nextWarIndustryID(industry, "war-prod")
 	componentTicks, assemblyTicks := deriveMilitaryProductionTicks(factory, blueprint, repeatBonusPercent)
 	order := &model.WarProductionOrder{
@@ -170,7 +170,7 @@ type refitUnitPayload struct {
 	TargetBlueprintID string `json:"target_blueprint_id" payload:"required"`
 }
 
-func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd model.Command, p refitUnitPayload) (model.CommandResult, []*model.GameEvent) {
+func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd model.Command, p refitUnitPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	res := model.CommandResult{Status: model.StatusFailed}
 	player := ws.Players[playerID]
 	if player == nil {
@@ -245,12 +245,12 @@ func (gc *GameCore) execRefitUnit(ws *model.WorldState, playerID string, cmd mod
 		return res, nil
 	}
 	cost := deriveRefitCost(sourceBlueprint, targetBlueprint, fleet.Units[0].Count)
-	if !player.HasItems(cost) {
+	if mecha.Record == nil || !mecha.Record.HasItems(cost) {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "库存不足，无法下达改装订单"
+		res.Message = "机甲背包库存不足，无法下达改装订单"
 		return res, nil
 	}
-	player.DeductItems(cost)
+	mecha.Record.DeductItems(cost)
 	delete(systemRuntime.Fleets, fleet.ID)
 
 	order := &model.WarRefitOrder{

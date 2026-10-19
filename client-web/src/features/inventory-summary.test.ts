@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inventorySlotUsage, inventoryStackRows, itemSlots, pickKeyItems, sortedInventory } from '@/features/inventory-summary';
+import { inventoryStackRows, itemSlots, pickKeyItems, sortedInventory } from '@/features/inventory-summary';
 
 describe('顶栏关键库存', () => {
   it('按优先级取持有量 > 0 的前 4 项', () => {
@@ -20,13 +20,6 @@ describe('背包格数（DSP 口径）', () => {
     expect(itemSlots(100, 100)).toBe(1);
     expect(itemSlots(101, 100)).toBe(2);
     expect(itemSlots(300, 0)).toBe(300);
-  });
-
-  it('读服务端下发的占用/上限；缺失或非法时返回 null', () => {
-    expect(inventorySlotUsage({ inventory_slots_used: 12, inventory_slots_total: 40 })).toEqual({ used: 12, total: 40 });
-    expect(inventorySlotUsage({ inventory_slots_used: 99, inventory_slots_total: 40 })).toEqual({ used: 40, total: 40 });
-    expect(inventorySlotUsage({})).toBeNull();
-    expect(inventorySlotUsage(null)).toBeNull();
   });
 
   it('背包面板每项带堆叠上限与占用格数', () => {

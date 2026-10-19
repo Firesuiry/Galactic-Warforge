@@ -284,7 +284,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	ws, home, _ := distributorTestWorld(t)
 	player := ws.Players["p1"]
-	player.Inventory[model.ItemLogisticsBot] = 2
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemLogisticsBot] = 2
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
 
@@ -292,7 +292,7 @@ func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	if res.Status != model.StatusFailed || res.Code != model.CodeValidationFailed {
 		t.Fatalf("install without research must fail validation, got %+v", res)
 	}
-	if len(ws.LogisticsBots) != 0 || player.Inventory[model.ItemLogisticsBot] != 2 {
+	if len(ws.LogisticsBots) != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 2 {
 		t.Fatalf("rejected install must not consume items or register bots: %+v", ws.LogisticsBots)
 	}
 
@@ -351,7 +351,7 @@ func TestLogisticsBotMaxRangeFlightInstallsAndReloads(t *testing.T) {
 	// 一趟 2×79 的配送要预付 158 能量，默认 100 不够（充满到容量 1000）。
 	home.Distributor.Energy = home.Distributor.EnergyCapacity
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
-	ws.Players["p1"].Inventory[model.ItemLogisticsBot] = 1
+	starterMecha(ws, "p1").EnsureInventory()[model.ItemLogisticsBot] = 1
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
 	if res, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd); res.Code != model.CodeOK || len(ws.LogisticsBots) != 1 {
@@ -408,14 +408,15 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	placeBuilding(ws, lab)
 
 	// 击杀 hive：dark_fog_matrix 必掉，进入击杀者玩家背包。
-	looter := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	looter := spawnLootKillerMecha(ws, "p1", model.Position{X: 2, Y: 2})
 	looter.AttackTarget = "hive-research"
 	spawnLootTestForce(ws, "hive-research", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 	settleUnitCombat(ws, nil)
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("hive should be destroyed, remaining %+v", ws.EnemyForces.Forces)
 	}
-	looted := player.Inventory[model.ItemDarkFogMatrix]
+	// 战利品进击杀者机甲（looter）的背包；玩家身份的开局机甲是另一台。
+	looted := ws.Players["p1"].MechaByUnitID(looter.ID).Inventory[model.ItemDarkFogMatrix]
 	if looted < 1 {
 		t.Fatalf("dark_fog_matrix must reach killer inventory, got %d", looted)
 	}
@@ -434,8 +435,10 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 		t.Fatalf("looted trigger item must reveal the hidden tech, got %q", res.Message)
 	}
 
-	// 把掉落矩阵转入研究站：全链闭合，研究入队。
-	tres, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
+	// 把掉落矩阵转入研究站：全链闭合，研究入队。战利品在 looter 的背包里，
+	// 取放按发令者机甲解析：把 looter 绑给专用发令者。
+	ws.Players["p1"].MechaByUnitID(looter.ID).Operator = "p1-looter"
+	tres, _ := execCommandAs(core, model.CmdTransferItem, ws, "p1", "p1-looter", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": lab.ID,

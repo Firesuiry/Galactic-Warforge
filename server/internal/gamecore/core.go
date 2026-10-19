@@ -138,8 +138,8 @@ func New(cfg *config.Config, maps *mapmodel.Universe, q *queue.CommandQueue, bus
 	return core
 }
 
-func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstrapConfig) {
-	if ps == nil {
+func applyPlayerBootstrap(ps *model.PlayerState, record *model.MechaRecord, bootstrap config.PlayerBootstrapConfig) {
+	if ps == nil || record == nil {
 		return
 	}
 	if !hasBootstrap(bootstrap) {
@@ -156,7 +156,7 @@ func applyPlayerBootstrap(ps *model.PlayerState, bootstrap config.PlayerBootstra
 		}
 		items = append(items, model.ItemAmount{ItemID: item.ItemID, Quantity: item.Quantity})
 	}
-	ps.AddItems(items, 0)
+	record.AddItems(items, 0)
 	for _, techID := range bootstrap.CompletedTechs {
 		if techID == "" || ps.Tech == nil {
 			continue
@@ -510,7 +510,7 @@ func (gc *GameCore) executeRequest(qr *model.QueuedRequest) ([]model.CommandResu
 			continue
 		}
 
-		res, evts, executed := gc.dispatchCommand(qr.PlayerID, player, cmd)
+		res, evts, executed := gc.dispatchCommand(qr.PlayerID, issuerIDOf(qr.PlayerID, qr.Request.IssuerID), player, cmd)
 		if !executed {
 			res.CommandIndex = i
 			results = append(results, res)
@@ -537,6 +537,8 @@ func commandResultEvent(qr *model.QueuedRequest, cmd model.Command, res model.Co
 		"status":        res.Status,
 		"code":          res.Code,
 		"message":       res.Message,
+		"issuer_type":   qr.Request.IssuerType,
+		"issuer_id":     issuerIDOf(qr.PlayerID, qr.Request.IssuerID),
 	}
 	if res.Validation != nil {
 		payload["validation"] = res.Validation

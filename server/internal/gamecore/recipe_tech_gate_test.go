@@ -183,10 +183,10 @@ func TestHandcraftGatedSmeltingRecipe(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 3}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 3}
 
 	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("steel", 1))
-	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 3 {
+	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 3 {
 		t.Fatalf("locked steel handcraft bypass: %+v", result)
 	}
 
@@ -196,7 +196,7 @@ func TestHandcraftGatedSmeltingRecipe(t *testing.T) {
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 60)
-	if player.Inventory[model.ItemSteel] != 1 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemSteel] != 1 {
 		t.Fatal("unlocked steel handcraft did not produce steel")
 	}
 }

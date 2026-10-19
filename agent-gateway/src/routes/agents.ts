@@ -165,7 +165,9 @@ export async function handleAgentRoutes(
   if (request.method === 'POST' && url.pathname === '/agents') {
     const payload = await readJsonBody<CreateAgentPayload>(request);
     const now = new Date().toISOString();
-    const id = payload.id || randomUUID();
+    // 统一 agent id 形态为 `agent-<uuid>`（与 agent.create 一致）：issuer_id 直接用它，
+    // 日志 / 绑定表 / `mecha list` 的 Operator 列不会出现两套写法。
+    const id = payload.id || `agent-${randomUUID()}`;
     const threadId = `thread-${id}`;
     const playerKeySecretId = `agent-${id}-player-key`;
 
@@ -363,6 +365,7 @@ export async function handleAgentRoutes(
                 currentPlayer: agent.playerId,
                 serverUrl: agent.serverUrl,
                 playerKey,
+                issuerId: agent.id,
               }, {
                 allowedCategories: agent.policy?.commandCategories,
                 allowedPlanetIds: agent.policy?.planetIds,

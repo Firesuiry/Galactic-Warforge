@@ -88,6 +88,7 @@ import {
 import { usePlanetViewStore } from "@/features/planet-map/store";
 import { useSessionSnapshot } from "@/hooks/use-session";
 import { MechaControls } from "./MechaControls";
+import { selectMechaById, selectMyMecha } from "@/features/mecha/model";
 import { isInIsolatedNetwork } from "./power-status";
 import { LogisticsStationControls } from "./LogisticsStationControls";
 import { DistributorControls } from "./DistributorControls";
@@ -992,6 +993,7 @@ export function PlanetEntityPanel({
   onCommandSettled,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
+  const myMecha = selectMyMecha(summary, session.playerId);
   const { selected } = usePlanetViewStore(
     useShallow((state) => ({
       selected: state.selected,
@@ -1244,7 +1246,7 @@ export function PlanetEntityPanel({
           onCommandSettled={onCommandSettled}
           onOpenWorkflow={onOpenWorkflow}
           planetId={planet.planet_id}
-          playerInventory={summary?.players?.[session.playerId]?.inventory}
+          playerInventory={myMecha?.inventory}
         />
         {Object.values(planet.buildings ?? {}).filter(candidate => candidate.distributor?.host_building_id === building.id || candidate.id === building.distributor?.host_building_id).map(candidate => (
           <button key={candidate.id} className="secondary-button" onClick={() => usePlanetViewStore.getState().setSelected({ kind: 'building', id: candidate.id, position: candidate.position })}>
@@ -1285,8 +1287,8 @@ export function PlanetEntityPanel({
           </dl>
         </section>
 
-        {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
-        {building.type === "logistics_distributor" && building.distributor ? <DistributorControls key={building.id} building={building} host={Object.values(planet.buildings ?? {}).find(candidate => candidate.id === building.distributor?.host_building_id)} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={summary?.players?.[session.playerId]?.inventory} /> : null}
+        {logisticsStation?.state && building.type !== "orbital_collector" ? <LogisticsStationControls key={building.id} building={building} state={logisticsStation.state} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={myMecha?.inventory} /> : null}
+        {building.type === "logistics_distributor" && building.distributor ? <DistributorControls key={building.id} building={building} host={Object.values(planet.buildings ?? {}).find(candidate => candidate.id === building.distributor?.host_building_id)} runtime={runtime} catalog={catalog} planetId={planet.planet_id} canControl={building.owner_id === session.playerId} inventory={myMecha?.inventory} /> : null}
 
         {showLogisticsDetails ? (
           <>
@@ -1533,7 +1535,15 @@ export function PlanetEntityPanel({
             <p className="subtle-text">单位不在当前镜头窗口：下面显示的是最后一次见到的状态，面板保持可用。</p>
           </section>
         ) : null}
-        <MechaControls unit={unit} catalog={catalog} planetId={planet.planet_id} canControl={unit.owner_id === session.playerId} player={summary?.players?.[session.playerId]} tickRate={tickRate} />
+        <MechaControls
+          boundMecha={myMecha}
+          catalog={catalog}
+          mecha={selectMechaById(summary, session.playerId, unit.id)}
+          planetId={planet.planet_id}
+          player={summary?.players?.[session.playerId]}
+          tickRate={tickRate}
+          unit={unit}
+        />
         <section className="planet-side-section">
           <div className="section-title">单位详情</div>
           <UnitCard card={unitCardFromRuntimeUnit(unit, translateUnitType(unit.type), catalog)} />

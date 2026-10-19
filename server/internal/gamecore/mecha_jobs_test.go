@@ -34,9 +34,9 @@ func setTestInventory(ws *model.WorldState, unit *model.Unit, used int) int {
 	player := ws.Players[unit.OwnerID]
 	model.SyncMechaCapabilities(unit, player)
 	slots := unit.Mecha.InventorySlots
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 	if used > 0 {
-		player.Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
+		starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
 	return slots
 }
@@ -46,7 +46,7 @@ func fillTestInventory(ws *model.WorldState, unit *model.Unit) int {
 	player := ws.Players[unit.OwnerID]
 	model.SyncMechaCapabilities(unit, player)
 	slots := unit.Mecha.InventorySlots
-	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
 	return slots
 }
 
@@ -69,7 +69,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 	if result, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	if node.Remaining != 2 || ws.Players["p1"].Inventory[model.ItemCoal] != 0 {
+	if node.Remaining != 2 || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 0 {
 		t.Fatal("mining completed instantly")
 	}
 	// 首批开工扣 3 能（tick 20），期间跨了 24、28 两个回能 tick 各 +1：
@@ -79,7 +79,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 		t.Fatalf("mining ignored tick cost: energy=%d", unit.Mecha.Energy)
 	}
 	advancePersonalTicks(ws, 1)
-	if node.Remaining != 1 || unit.Mecha.Job.CompletedBatches != 1 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+	if node.Remaining != 1 || unit.Mecha.Job.CompletedBatches != 1 || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 1 {
 		t.Fatal("first mining batch incorrect")
 	}
 	// 第二批开工再扣 3 能，到 tick 40 时跨了 32、36、40 三个回能 tick：
@@ -89,7 +89,7 @@ func TestManualMiningConsumesRealNodeTimeEnergyAndCanRefuel(t *testing.T) {
 		t.Fatalf("mining did not stop at requested/depleted amount: energy=%d", unit.Mecha.Energy)
 	}
 	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
-	if result.Code != model.CodeOK || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+	if result.Code != model.CodeOK || unit.Mecha.Energy != 100 || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 1 {
 		t.Fatalf("mined coal could not fuel executor: %+v", result)
 	}
 }
@@ -116,14 +116,14 @@ func TestManualMiningPausesOnDistanceEnergyAndConcurrentExhaustion(t *testing.T)
 	}
 	unit.Mecha.Energy = 10
 	advancePersonalTicks(ws, 10)
-	if node.Remaining != 2 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+	if node.Remaining != 2 || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 1 {
 		t.Fatal("mining failed to resume")
 	}
 	node.Remaining = 0
 	energyBefore := unit.Mecha.Energy
 	advancePersonalTicks(ws, 1)
 	// 节点枯竭：作业结束、不再扣能（被动回能可能 +1，所以只断言不小于原值）。
-	if unit.Mecha.Job != nil || unit.Mecha.Energy < energyBefore || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+	if unit.Mecha.Job != nil || unit.Mecha.Energy < energyBefore || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 1 {
 		t.Fatal("exhausted shared node consumed energy or duplicated resources")
 	}
 }
@@ -132,17 +132,17 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 3}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 3}
 	result, initialEvents := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 3))
 	if result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
-	if player.Inventory[model.ItemIronIngot] != 0 || player.Inventory[model.ItemGear] != 0 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 {
 		t.Fatal("craft did not reserve exactly three inputs")
 	}
 	// 首批开工扣 3 能（tick 20），到 tick 40 完成首批；期间回能 tick 把核心补回上限。
 	advancePersonalTicks(ws, 20)
-	if player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 || unit.Mecha.Job.ReservedInputs[0].Quantity != 2 {
 		t.Fatalf("craft batch accounting incorrect: %+v", unit.Mecha)
 	}
 	advancePersonalTicks(ws, 5)
@@ -155,11 +155,11 @@ func TestHandcraftReservesMaterialsAndRefundsOnlyUncompletedBatches(t *testing.T
 		t.Fatal("event history aliases live job")
 	}
 	result, _ = execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}})
-	if result.Code != model.CodeOK || unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 2 || player.Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 {
+	if result.Code != model.CodeOK || unit.Mecha.Job != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 2 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 || unit.Mecha.Energy != 100 {
 		t.Fatal("cancel duplicated or lost items / refunded consumed energy")
 	}
 	refundMechaJob(ws, unit)
-	if player.Inventory[model.ItemIronIngot] != 2 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 2 {
 		t.Fatal("refund not idempotent")
 	}
 }
@@ -168,7 +168,7 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 1, model.ItemCoal: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 1, model.ItemCoal: 2}
 	// 被动回能是「每 4 tick +1」且只在 tick%4==0 时结算：把 tick 对齐到 1（模 4）后，
 	// 连续 3 tick 都不会回能，可以干净地断言「能量不足就不推进」。
 	unit.Mecha.Energy = 0
@@ -177,7 +177,7 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 2)
-	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 20 || player.Inventory[model.ItemGear] != 0 {
+	if unit.Mecha.Job.State != "no_energy" || unit.Mecha.Job.RemainingTicks != 20 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 {
 		t.Fatal("craft advanced without enough energy")
 	}
 	result, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
@@ -185,7 +185,7 @@ func TestHandcraftNoEnergyResumesFromRefuelWithoutConsumingInputsTwice(t *testin
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 20)
-	if unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 0 || player.Inventory[model.ItemGear] != 1 || player.Inventory[model.ItemCoal] != 1 {
+	if unit.Mecha.Job != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 1 {
 		t.Fatal("resume changed material accounting")
 	}
 }
@@ -201,7 +201,9 @@ func TestMechaJobValidationIsAtomic(t *testing.T) {
 		{"zero", "gear", 0, "p1", model.CodeValidationFailed},
 		{"fraction", "gear", 1.5, "p1", model.CodeValidationFailed},
 		{"negative", "gear", -1, "p1", model.CodeValidationFailed},
-		{"owner", "gear", 1, "p2", model.CodeNotOwner},
+		// 第 21 轮：craft 忽略 target.entity_id、按发令者解析机甲；p2 不存在
+		// → EXECUTOR_UNAVAILABLE（不再从目标机甲判 NOT_OWNER）。
+		{"owner", "gear", 1, "p2", model.CodeExecutorUnavailable},
 		{"advanced", "quantum_chip", 1, "p1", model.CodeInvalidTarget},
 		{"chemistry", "oil_fractionation", 1, "p1", model.CodeInvalidTarget},
 		{"matrix", "electromagnetic_matrix", 1, "p1", model.CodeInvalidTarget},
@@ -210,9 +212,9 @@ func TestMechaJobValidationIsAtomic(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ws, unit := personalJobTestWorld()
-			ws.Players["p1"].Inventory = model.ItemInventory{model.ItemIronIngot: 2}
+			starterMecha(ws, "p1").Inventory = model.ItemInventory{model.ItemIronIngot: 2}
 			result, _ := execCommand(&GameCore{}, model.CmdCraftItem, ws, tc.owner, handcraftCommand(tc.recipe, tc.quantity))
-			if result.Code != tc.code || unit.Mecha.Job != nil || unit.Mecha.Energy != 100 || ws.Players["p1"].Inventory[model.ItemIronIngot] != 2 {
+			if result.Code != tc.code || unit.Mecha.Job != nil || unit.Mecha.Energy != 100 || starterMecha(ws, "p1").Inventory[model.ItemIronIngot] != 2 {
 				t.Fatalf("rejected job mutated state: %+v", result)
 			}
 		})
@@ -241,7 +243,7 @@ func TestMechaCraftJobSnapshotCloneRestoreAndDeathRefund(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	core := &GameCore{}
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 2}
 	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -257,7 +259,7 @@ func TestMechaCraftJobSnapshotCloneRestoreAndDeathRefund(t *testing.T) {
 		t.Fatal(err)
 	}
 	advancePersonalTicks(restored, 17)
-	if restored.Players["p1"].Inventory[model.ItemGear] != 2 || restored.Units[unit.ID].Mecha.Job != nil {
+	if starterMecha(restored, "p1").Inventory[model.ItemGear] != 2 || restored.Units[unit.ID].Mecha.Job != nil {
 		t.Fatal("restored job failed to complete exactly once")
 	}
 	if saved.Units[unit.ID].Mecha.Job.RemainingTicks != 17 || unit.Mecha.Job.RemainingTicks != 17 {
@@ -276,7 +278,7 @@ func TestMechaCraftJobSnapshotCloneRestoreAndDeathRefund(t *testing.T) {
 	}
 	unit.HP = 0
 	advancePersonalTicks(ws, 1)
-	if unit.Mecha.Job != nil || player.Inventory[model.ItemIronIngot] != 1 || player.Inventory[model.ItemGear] != 1 {
+	if unit.Mecha.Job != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 1 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 {
 		t.Fatal("death refund lost or duplicated materials")
 	}
 }
@@ -294,8 +296,8 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 	core := New(cfg, mapgen.Generate(mapCfg, cfg.Battlefield.MapSeed), queue.New(), NewEventBus(), nil)
 	ws := core.World()
 	player := ws.Players["p1"]
-	unit := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID]
-	if player.Inventory[model.ItemCoal] != 0 {
+	unit := ws.Units[starterMecha(ws, player.PlayerID).UnitID]
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 0 {
 		t.Fatal("test unexpectedly has bootstrap coal")
 	}
 	var coal *model.ResourceNodeState
@@ -327,12 +329,12 @@ func TestNormalNewGameMinesCoalAndRefuelsWithoutBootstrapInventory(t *testing.T)
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 10)
-	if player.Inventory[model.ItemCoal] != 1 || coal.Remaining != before-1 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 1 || coal.Remaining != before-1 {
 		t.Fatal("ordinary new game did not mine real coal")
 	}
 	energy := unit.Mecha.Energy
 	result, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 1}})
-	if result.Code != model.CodeOK || unit.Mecha.Energy <= energy || player.Inventory[model.ItemCoal] != 0 {
+	if result.Code != model.CodeOK || unit.Mecha.Energy <= energy || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 0 {
 		t.Fatalf("ordinary start cannot refuel with mined coal: %+v", result)
 	}
 	t.Logf("new game coal %s at %+v: remaining %d->%d; energy %d->%d", coal.ID, coal.Position, before, coal.Remaining, energy, unit.Mecha.Energy)
@@ -342,7 +344,7 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 2}
 	if result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); result.Code != model.CodeOK {
 		t.Fatal(result)
 	}
@@ -361,8 +363,8 @@ func TestMechaJobDeathThroughAttackRefundsRemainingReservation(t *testing.T) {
 		ws.Tick++
 		settleUnitCombat(ws, nil)
 	}
-	if ws.Units[unit.ID] != nil || player.Inventory[model.ItemIronIngot] != 1 || player.Inventory[model.ItemGear] != 1 {
-		t.Fatalf("combat deletion lost/duplicated reservation: %+v inventory=%v unit=%+v", result, player.Inventory, ws.Units[unit.ID])
+	if ws.Units[unit.ID] != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 1 || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 {
+		t.Fatalf("combat deletion lost/duplicated reservation: %+v inventory=%v unit=%+v", result, starterMecha(ws, player.PlayerID).Inventory, ws.Units[unit.ID])
 	}
 }
 
@@ -370,9 +372,9 @@ func TestHandcraftRequiresRecipeResearchAndDoesNotReserveOnFailure(t *testing.T)
 	ws, unit := personalJobTestWorld()
 	player := ws.Players["p1"]
 	core := &GameCore{}
-	player.Inventory = model.ItemInventory{model.ItemCoal: 2}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: 2}
 	result, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("coal_to_graphite", 1))
-	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || player.Inventory[model.ItemCoal] != 2 {
+	if result.Code != model.CodeValidationFailed || unit.Mecha.Job != nil || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 2 {
 		t.Fatalf("locked recipe bypass: %+v", result)
 	}
 	player.Tech.CompletedTechs["smelting_purification"] = 1
@@ -381,13 +383,13 @@ func TestHandcraftRequiresRecipeResearchAndDoesNotReserveOnFailure(t *testing.T)
 		t.Fatal(result)
 	}
 	advancePersonalTicks(ws, 30)
-	if player.Inventory[model.ItemEnergeticGraphite] != 1 || player.Inventory[model.ItemCoal] != 0 {
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemEnergeticGraphite] != 1 || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 0 {
 		t.Fatal("unlocked handcraft fuel recipe failed")
 	}
 }
 
 // 回归（试玩 1014 问题 1）：背包任何路径都不能超过机甲格数上限。
-// 根因是手搓产出直接 player.AddItems(output) 不看容量：
+// 根因是手搓产出直接 starterMecha(ws, player.PlayerID).AddItems(output) 不看容量：
 // 背包正好满格时搓出一批磁铁就超了，此后「取出」全部报「背包已满」。
 // 第 17 轮（U5）起容量按格计：每格堆叠该物品的 stack_limit 件。
 func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
@@ -397,8 +399,8 @@ func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 	slots := setTestInventory(ws, unit, 0)
 	coalPerSlot := model.ItemStackSize(model.ItemCoal)
 	// 背包顶满：启动 2 批 gear 时一次性预留 2 个铁块（1 格），背包先腾出 1 格。
-	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * coalPerSlot, model.ItemIronIngot: 2}
-	if got := player.InventorySlotsUsed(); got != slots {
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * coalPerSlot, model.ItemIronIngot: 2}
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	if res, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 2)); res.Code != model.CodeOK {
@@ -407,25 +409,25 @@ func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 	// gear 一批 20 tick：产出 1 个齿轮（1 格）。预留的 2 个铁块只占 1 格，
 	// 第一批吃掉 1 个后剩下 1 个仍留在作业预留里（不在背包），齿轮占回那 1 格。
 	advancePersonalTicks(ws, 20)
-	if got := player.InventorySlotsUsed(); got != slots || player.Inventory[model.ItemGear] != 1 || player.Inventory[model.ItemIronIngot] != 0 {
-		t.Fatalf("first batch must keep the bag full: %v", player.Inventory)
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("first batch must keep the bag full: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	// 把齿轮那格换成煤（背包仍然满格、且没有齿轮可叠加）：下一批没有空位，
 	// 不得产出、不得超上限，作业停在 inventory_full 等腾空。
-	delete(player.Inventory, model.ItemGear)
-	player.Inventory[model.ItemCoal] += coalPerSlot
-	if got := player.InventorySlotsUsed(); got != slots {
+	delete(starterMecha(ws, player.PlayerID).Inventory, model.ItemGear)
+	starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] += coalPerSlot
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	advancePersonalTicks(ws, 20)
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("craft output pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if got := player.InventorySlotsUsed(); got != slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("blocked batch must leave the bag untouched, got %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemGear] != 0 || player.Inventory[model.ItemIronIngot] != 0 {
-		t.Fatalf("blocked batch consumed or duplicated items: %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("blocked batch consumed or duplicated items: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	if unit.Mecha.Job == nil || unit.Mecha.Job.State != "inventory_full" || unit.Mecha.Job.CompletedBatches != 1 {
 		t.Fatalf("job must stall as inventory_full with progress kept: %+v", unit.Mecha.Job)
@@ -439,13 +441,13 @@ func TestMechaCraftOutputNeverExceedsInventoryCapacity(t *testing.T) {
 			energyBefore, unit.Mecha.Energy, ticksBefore, unit.Mecha.Job.RemainingTicks)
 	}
 	// 腾出 1 个空位（取走一格煤）：第二批自动继续，仍然不超上限。
-	player.Inventory[model.ItemCoal] -= coalPerSlot
+	starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] -= coalPerSlot
 	advancePersonalTicks(ws, 20)
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("resumed craft pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemGear] != 1 {
-		t.Fatalf("resumed batch did not produce: %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 {
+		t.Fatalf("resumed batch did not produce: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	if unit.Mecha.Job != nil {
 		t.Fatalf("job should be finished after the second batch: %+v", unit.Mecha.Job)
@@ -460,13 +462,13 @@ func TestManualMiningNeverExceedsInventoryCapacity(t *testing.T) {
 	core := &GameCore{}
 	slots := setTestInventory(ws, unit, 0)
 	perSlot := model.ItemStackSize(model.ItemIronOre)
-	player.Inventory = model.ItemInventory{model.ItemIronOre: slots * perSlot}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronOre: slots * perSlot}
 	node := addManualCoal(ws, 3)
 	if res, _ := execCommand(core, model.CmdMineResource, ws, "p1", manualMineCommand(3)); res.Code != model.CodeOK {
 		t.Fatalf("mine start: %+v", res)
 	}
 	advancePersonalTicks(ws, 10)
-	if got := player.InventorySlotsUsed(); got != slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("full bag must not gain mined items: %d/%d", got, slots)
 	}
 	if node.Remaining != 3 {
@@ -476,12 +478,12 @@ func TestManualMiningNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatalf("mining job must stall as inventory_full: %+v", unit.Mecha.Job)
 	}
 	// 腾出一格（拿走一整摞铁矿）：采矿自动继续。
-	delete(player.Inventory, model.ItemIronOre)
+	delete(starterMecha(ws, player.PlayerID).Inventory, model.ItemIronOre)
 	advancePersonalTicks(ws, 10)
-	if node.Remaining != 2 || player.Inventory[model.ItemCoal] != 1 {
-		t.Fatalf("mining did not resume after freeing space: node=%d inv=%v", node.Remaining, player.Inventory)
+	if node.Remaining != 2 || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 1 {
+		t.Fatalf("mining did not resume after freeing space: node=%d inv=%v", node.Remaining, starterMecha(ws, player.PlayerID).Inventory)
 	}
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("resumed mining pushed the bag over capacity: %d/%d", got, slots)
 	}
 }
@@ -494,23 +496,23 @@ func TestMechaJobRefundNeverExceedsInventoryCapacity(t *testing.T) {
 	slots := setTestInventory(ws, unit, 0)
 	perSlot := model.ItemStackSize(model.ItemCoal)
 	// 启动时扣留 3 批 gear 的原料（3 铁块，1 格），背包里再放满煤占位。
-	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 3}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 3}
 	if res, _ := execCommand(core, model.CmdCraftItem, ws, "p1", handcraftCommand("gear", 3)); res.Code != model.CodeOK {
 		t.Fatalf("craft start: %+v", res)
 	}
 	// 铁矿变成预留原料，背包空出 1 格，用别的物品占满。
-	player.Inventory[model.ItemStoneOre] = 1
-	if got := player.InventorySlotsUsed(); got != slots {
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemStoneOre] = 1
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got != slots {
 		t.Fatalf("setup inventory = %d slots, want %d", got, slots)
 	}
 	if res, _ := execCommand(core, model.CmdCancelMechaJob, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}}); res.Code != model.CodeOK {
 		t.Fatalf("cancel: %+v", res)
 	}
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("refund pushed the bag over capacity: %d/%d", got, slots)
 	}
-	if player.Inventory[model.ItemIronIngot] != 0 {
-		t.Fatalf("full bag should have discarded the refund, got %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("full bag should have discarded the refund, got %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	if unit.Mecha.Job != nil {
 		t.Fatalf("job not cleared: %+v", unit.Mecha.Job)

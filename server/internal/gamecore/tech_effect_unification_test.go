@@ -244,16 +244,15 @@ func stackCascadeFixture(t *testing.T) (*model.WorldState, *model.PlayerState, *
 		PlayerID:  "p1",
 		IsAlive:   true,
 		Resources: model.Resources{Energy: 0},
-		Inventory: model.ItemInventory{},
 	}
-	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("u-1", 1, 10, 2, 0))
 	ws.Players["p1"] = player
-	ws.Units["u-1"] = &model.Unit{
-		ID:       "u-1",
-		Type:     model.UnitTypeExecutor,
-		OwnerID:  "p1",
-		Position: model.Position{X: 1, Y: 1},
-	}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-1"
+	execUnit.OwnerID = "p1"
+	execUnit.Position = model.Position{X: 1, Y: 1}
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
 
 	base := newBuilding("lab-base", model.BuildingTypeMatrixLab, "p1", model.Position{X: 3, Y: 3})
 	placeBuilding(ws, base)
@@ -290,7 +289,7 @@ func TestDemolishBaseCascadesStackedLayers(t *testing.T) {
 	// Each layer refunds the same 50% item rule as the base（第 16 轮起返还只有物品）。
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
 	for _, item := range perLayer.Items {
-		if got, want := player.Inventory[item.ItemID], 3*item.Quantity; got != want {
+		if got, want := starterMecha(ws, player.PlayerID).Inventory[item.ItemID], 3*item.Quantity; got != want {
 			t.Fatalf("cascade refund %s=%d, want %d", item.ItemID, got, want)
 		}
 	}
@@ -327,8 +326,8 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 	if res.Code != model.CodeOK || base.Job == nil || base.Job.Type != model.BuildingJobDemolish {
 		t.Fatalf("demolish job not started: %+v job=%+v", res, base.Job)
 	}
-	if player.InventoryCount() != 0 {
-		t.Fatalf("refund must wait for job completion, got %+v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory.Count() != 0 {
+		t.Fatalf("refund must wait for job completion, got %+v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	settleBuildingJobs(ws, nil)
@@ -339,7 +338,7 @@ func TestDemolishJobCompletionCascadesStackedLayers(t *testing.T) {
 	}
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
 	for _, item := range perLayer.Items {
-		if got, want := player.Inventory[item.ItemID], 3*item.Quantity; got != want {
+		if got, want := starterMecha(ws, player.PlayerID).Inventory[item.ItemID], 3*item.Quantity; got != want {
 			t.Fatalf("job-path cascade refund %s=%d, want %d", item.ItemID, got, want)
 		}
 	}
@@ -370,7 +369,7 @@ func TestDemolishMiddleLayerCascadesUpwardOnly(t *testing.T) {
 	}
 	perLayer := model.BuildingDemolishRefundWithRate(model.BuildingTypeMatrixLab, 1, 0.5)
 	for _, item := range perLayer.Items {
-		if got, want := player.Inventory[item.ItemID], 2*item.Quantity; got != want {
+		if got, want := starterMecha(ws, player.PlayerID).Inventory[item.ItemID], 2*item.Quantity; got != want {
 			t.Fatalf("middle-layer cascade refund %s=%d, want %d", item.ItemID, got, want)
 		}
 	}

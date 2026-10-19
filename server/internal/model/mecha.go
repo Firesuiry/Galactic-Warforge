@@ -150,9 +150,6 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 	m.MaxEnergy = spec.MaxEnergy + int(TechEffectValue(player, "core_capacity"))
 	m.MaxShield = int(TechEffectValue(player, "shield_capacity"))
 	m.InventorySlots = spec.InventorySlots + int(TechEffectValue(player, "mecha_inventory_slots"))
-	if player != nil {
-		player.InventorySlots = m.InventorySlots
-	}
 	m.Energy = max(0, min(m.Energy, m.MaxEnergy))
 	m.Shield = max(0, min(m.Shield, m.MaxShield))
 	// Logistics requests may not ask for more than the backpack can hold; the
@@ -188,6 +185,13 @@ func SyncMechaCapabilities(unit *Unit, player *PlayerState) {
 		attack = int(float64(attack) * (1.0 + dmgBonus))
 	}
 	unit.Attack, unit.Defense, unit.AttackRange = attack, base.Defense, base.AttackRange
+}
+
+// MechaInventorySlots 返回该玩家机甲的背包格数（units.yaml executor.mecha.inventory_slots
+// + 科技 mecha_inventory_slots）；玩家所有机甲相同。
+func MechaInventorySlots(player *PlayerState) int {
+	spec := executorMechaSpec()
+	return spec.InventorySlots + int(TechEffectValue(player, "mecha_inventory_slots"))
 }
 
 // ApplyUnitDamage routes all ordinary world-unit damage through the same shield.

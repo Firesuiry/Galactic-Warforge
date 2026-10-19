@@ -39,15 +39,19 @@ func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 		if player == nil {
 			t.Fatalf("expected player %s", playerID)
 		}
-		// 第 16 轮：开局物资是实物（config-dev 的 bootstrap.items 直接进背包）。
-		if player.Inventory[model.ItemIronIngot] != 96 || player.Inventory[model.ItemGear] != 32 {
-			t.Fatalf("unexpected bootstrap inventory for %s: %+v", playerID, player.Inventory)
+		// 第 16 轮：开局物资是实物；第 21 轮起背包挂在开局机甲档案上。
+		mecha := player.MechaByOperator(playerID)
+		if mecha == nil {
+			t.Fatalf("expected starter mecha for %s", playerID)
+		}
+		if mecha.Inventory[model.ItemIronIngot] != 96 || mecha.Inventory[model.ItemGear] != 32 {
+			t.Fatalf("unexpected bootstrap inventory for %s: %+v", playerID, mecha.Inventory)
 		}
 		if player.Resources.Energy != 0 {
 			t.Fatalf("unexpected bootstrap energy for %s: %+v", playerID, player.Resources)
 		}
-		if player.Inventory[model.ItemElectromagneticMatrix] != 0 {
-			t.Fatalf("expected %s to start without bootstrapped matrices (industry chain required), got %+v", playerID, player.Inventory)
+		if mecha.Inventory[model.ItemElectromagneticMatrix] != 0 {
+			t.Fatalf("expected %s to start without bootstrapped matrices (industry chain required), got %+v", playerID, mecha.Inventory)
 		}
 	}
 }

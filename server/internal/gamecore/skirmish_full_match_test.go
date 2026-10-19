@@ -274,7 +274,7 @@ func runSkirmishFullMatch(t *testing.T, seed string) {
 // executorForPlayer 玩家在本星球的执行体单位。
 func executorForPlayer(t *testing.T, ws *model.WorldState, playerID string) *model.Unit {
 	t.Helper()
-	state := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID)
+	state := starterMecha(ws, playerID)
 	if state == nil {
 		t.Fatalf("%s has no executor on %s", playerID, ws.PlanetID)
 	}

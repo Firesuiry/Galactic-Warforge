@@ -35,7 +35,7 @@ func newBotTestCore(t *testing.T, botDifficulty string) *GameCore {
 				},
 			}},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 1000},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -85,7 +85,7 @@ func TestA1BotRunsEconomy(t *testing.T) {
 	if player == nil {
 		t.Fatal("bot player missing")
 	}
-	t.Logf("p2 buildings=%d power=%d miners=%d inventory=%v", p2buildings, power, miners, player.Inventory)
+	t.Logf("p2 buildings=%d power=%d miners=%d inventory=%v", p2buildings, power, miners, starterMecha(ws, player.PlayerID).Inventory)
 }
 
 // bot 出兵并在达标后进攻（命令走队列，可见于命令日志语义）。
@@ -169,7 +169,7 @@ func TestA1BotBuildsTurretWhenThreatened(t *testing.T) {
 	p2 := ws.Players["p2"]
 	grantTechs(ws, "p2", "weapon_system")
 	p2.Resources.Energy = 2000
-	inv := p2.EnsureInventory()
+	inv := starterMecha(ws, p2.PlayerID).EnsureInventory()
 	inv[model.ItemCircuitBoard] = 8
 	inv[model.ItemGear] = 16
 	inv[model.ItemIronIngot] = 16
@@ -220,7 +220,7 @@ func TestA1BotProducesMechaWhenAffordable(t *testing.T) {
 	p2 := ws.Players["p2"]
 	p2.Resources.Energy = 200
 	// 清空会让研究站建得起的物品，避免研究命令挤掉出兵。
-	p2.Inventory = model.ItemInventory{}
+	starterMecha(ws, p2.PlayerID).Inventory = model.ItemInventory{}
 	pos := botBuildSpotNear(ws, home, 24, model.BuildingTypeWindTurbine, "")
 	if pos == nil {
 		t.Fatal("no factory site")
@@ -307,7 +307,7 @@ func TestA1BotDecisionsDeterministic(t *testing.T) {
 	grantTechs(ws, "p2", "weapon_system")
 	p2 := ws.Players["p2"]
 	p2.Resources.Energy = 2000
-	inv := p2.EnsureInventory()
+	inv := starterMecha(ws, p2.PlayerID).EnsureInventory()
 	inv[model.ItemCircuitBoard] = 8
 	inv[model.ItemGear] = 16
 	inv[model.ItemIronIngot] = 16
@@ -552,7 +552,7 @@ func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
 	core := newBotTestCore(t, "hard")
 	ws := core.World()
 	player := ws.Players["p2"]
-	player.Inventory[model.ItemCoal] = 4
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = 4
 	var exec *model.Unit
 	for _, u := range ws.Units {
 		if u.OwnerID == "p2" && u.Mecha != nil {
@@ -568,7 +568,7 @@ func TestBotCancelsCraftToMineCoalBeforeStarving(t *testing.T) {
 	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); !ok {
 		t.Fatalf("expected cancel_mecha_job when coal is nearly out, got %+v", cmds)
 	}
-	player.Inventory[model.ItemCoal] = botCoalReserve
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCoal] = botCoalReserve
 	cmds = core.planBotCommands(ws, "p2", botTuningFor("hard"))
 	if _, ok := botFirstCmd(cmds, model.CmdCancelMechaJob); ok {
 		t.Fatal("must not cancel handcrafting while coal reserve is sufficient")
@@ -599,7 +599,7 @@ func TestBotCraftsIngredientWhenBelowRecipeQuantity(t *testing.T) {
 	core := newBotTestCore(t, "hard")
 	ws := core.World()
 	player := ws.Players["p2"]
-	player.Inventory = model.ItemInventory{model.ItemMagnet: 1, model.ItemCopperIngot: 7, model.ItemIronOre: 900}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemMagnet: 1, model.ItemCopperIngot: 7, model.ItemIronOre: 900}
 	cmd, ok := core.botCraftFor(ws, "p2", []string{model.ItemMagneticCoil}, botTuningFor("hard"))
 	if !ok {
 		t.Fatal("bot must craft the missing ingredient")

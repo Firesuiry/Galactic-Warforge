@@ -811,9 +811,8 @@ func killUnit(ws *model.WorldState, unit *model.Unit, killerID, killerOwnerID, s
 	recordCombatUnitKill(ws, unit.OwnerID, killerOwnerID)
 	if unit.Type == model.UnitTypeExecutor {
 		if player := ws.Players[unit.OwnerID]; player != nil {
-			if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil && exec.UnitID == unit.ID {
-				exec.RespawnAtTick = ws.Tick + model.ExecutorRespawnTicks()
-				player.SetPlanetExecutor(ws.PlanetID, exec)
+			if record := player.MechaByUnitID(unit.ID); record != nil {
+				record.RespawnAtTick = ws.Tick + model.ExecutorRespawnTicks()
 			}
 		}
 	}

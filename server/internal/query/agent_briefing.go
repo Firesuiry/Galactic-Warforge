@@ -36,17 +36,15 @@ type AgentBriefing struct {
 
 // AgentBriefingSelf is the calling player's compact identity + economy + tech.
 type AgentBriefingSelf struct {
-	PlayerID  string              `json:"player_id"`
-	TeamID    string              `json:"team_id,omitempty"`
-	Role      string              `json:"role,omitempty"`
-	IsAlive   bool                `json:"is_alive"`
-	Resources model.Resources     `json:"resources"`
-	Inventory model.ItemInventory `json:"inventory,omitempty"`
-	// InventorySlotsUsed / InventorySlotsTotal 是背包按格计的占用与上限
-	// （DSP 口径：每格按物品 stack_limit 堆叠）。
-	InventorySlotsUsed  int                `json:"inventory_slots_used"`
-	InventorySlotsTotal int                `json:"inventory_slots_total"`
-	Tech                *AgentBriefingTech `json:"tech,omitempty"`
+	PlayerID  string          `json:"player_id"`
+	TeamID    string          `json:"team_id,omitempty"`
+	Role      string          `json:"role,omitempty"`
+	IsAlive   bool            `json:"is_alive"`
+	Resources model.Resources `json:"resources"`
+	// Mechas 是本玩家的机甲卡片（按 unit_id 排序）；背包挂在机甲上，玩家级
+	// inventory 字段已删除。
+	Mechas []MechaView        `json:"mechas,omitempty"`
+	Tech   *AgentBriefingTech `json:"tech,omitempty"`
 	// FocusPlanetID 是该玩家当前的视图焦点/默认落点行星（F4）。
 	FocusPlanetID string `json:"focus_planet_id,omitempty"`
 }
@@ -114,6 +112,10 @@ func (ql *Layer) AgentBriefing(
 		briefing.Fleets = append(briefing.Fleets, compactBriefingFleet(fleet))
 	}
 
+	// 机甲视图包含其它已加载行星的状态：在锁外逐行星取快照（每个世界各自
+	// 的读锁内），避免与 withLockedWorlds 的写锁顺序交叉，也不递归持读锁。
+	mechaViews := MechaViews(ws.Players[playerID], worlds)
+
 	ws.RLock()
 	defer ws.RUnlock()
 
@@ -127,7 +129,7 @@ func (ql *Layer) AgentBriefing(
 	briefing.VictoryRule = victory.VictoryRule
 
 	player := ws.Players[playerID]
-	briefing.Self = buildBriefingSelf(player, playerID)
+	briefing.Self = buildBriefingSelf(player, playerID, mechaViews)
 	if player != nil && player.Stats != nil {
 		briefing.EnergyStats = player.Stats.EnergyStats
 		briefing.CombatStats = player.Stats.CombatStats
@@ -141,7 +143,7 @@ func (ql *Layer) AgentBriefing(
 	return briefing
 }
 
-func buildBriefingSelf(player *model.PlayerState, playerID string) AgentBriefingSelf {
+func buildBriefingSelf(player *model.PlayerState, playerID string, mechaViews []MechaView) AgentBriefingSelf {
 	self := AgentBriefingSelf{PlayerID: playerID}
 	if player == nil {
 		return self
@@ -152,11 +154,7 @@ func buildBriefingSelf(player *model.PlayerState, playerID string) AgentBriefing
 	self.IsAlive = player.IsAlive
 	self.Resources = player.Resources
 	self.FocusPlanetID = player.FocusPlanetID
-	if player.Inventory != nil {
-		self.Inventory = player.Inventory.Clone()
-	}
-	self.InventorySlotsUsed = player.InventorySlotsUsed()
-	self.InventorySlotsTotal = player.InventorySlots
+	self.Mechas = mechaViews
 	if player.Tech != nil {
 		self.Tech = compactBriefingTech(player.Tech)
 	}

@@ -152,7 +152,7 @@ func findOpenTileNearExecutor(ws *model.WorldState, playerID string) (*model.Pos
 	if player == nil {
 		return nil, fmt.Errorf("player %s missing", playerID)
 	}
-	execState := player.ExecutorForPlanet(ws.PlanetID)
+	execState := starterMecha(ws, player.PlayerID)
 	if execState == nil {
 		return nil, fmt.Errorf("player %s has no executor on %s", playerID, ws.PlanetID)
 	}
@@ -161,7 +161,7 @@ func findOpenTileNearExecutor(ws *model.WorldState, playerID string) (*model.Pos
 		return nil, fmt.Errorf("executor unit %s missing", execState.UnitID)
 	}
 	center := execUnit.Position
-	for dist := 0; dist <= execState.OperateRange; dist++ {
+	for dist := 0; dist <= model.ExecutorOperateRange(); dist++ {
 		for y := center.Y - dist; y <= center.Y+dist; y++ {
 			for x := center.X - dist; x <= center.X+dist; x++ {
 				pos := model.Position{X: x, Y: y}
@@ -183,5 +183,5 @@ func findOpenTileNearExecutor(ws *model.WorldState, playerID string) (*model.Pos
 			}
 		}
 	}
-	return nil, fmt.Errorf("no open tile within range %d of executor at %v", execState.OperateRange, center)
+	return nil, fmt.Errorf("no open tile within range %d of executor at %v", model.ExecutorOperateRange(), center)
 }

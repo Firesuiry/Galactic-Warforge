@@ -29,7 +29,7 @@ func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *mode
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -79,13 +79,18 @@ func f4ConstructionTaskCount(ws *model.WorldState, playerID string) int {
 	return n
 }
 
-// 双行星各自建造：p1 焦点切到 planet-1-1 后直接建造（焦点路由）；
-// p2 焦点保持 planet-1-2 原地建造；p1 再用 target.planet_id 显式在
-// planet-1-2 建造。三条命令各自命中目标行星，互不拖拽。
+// 双行星各自建造：p1 用 planet-1-1 上的机甲建造（不带 planet_id，路由到
+// 机甲所在行星），p2 用玩家身份的机甲（出生星球 planet-1-2）原地建造，
+// p1 再用 target.planet_id 显式在 planet-1-2 建造（用该行星上的独立发令者）。
+// 三条命令各自命中目标行星。
 func TestF4DualPlanetIndependentBuild(t *testing.T) {
 	core, planetA, planetB := newF4DualPlanetCore(t, "off")
-	grantAllItems(planetA, "p1", 100)
-	grantAllItems(planetA, "p2", 100)
+	// 第 21 轮起一个发令者只绑一台机甲、命令落在机甲所在行星：玩家身份的
+	// 机甲在出生星球 planet-1-2；planet-1-1 的开局机甲空闲，改绑给独立
+	// 发令者才能验证「行星路由第 3 条」与「显式 planet_id」。
+	grantAllItems(planetB, "p2", 100)
+	grantAllItemsToMecha(bindMechaToIssuer(t, planetA, "p1", "p1-agent-a"), 100)
+	grantAllItemsToMecha(bindMechaToIssuer(t, planetB, "p1", "p1-agent-b"), 100)
 
 	// p1 切换焦点到 planet-1-1。
 	res := issueInternalCommand(core, "p1", model.Command{
@@ -99,9 +104,9 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 		t.Fatalf("global active planet must not move, got %s", core.ActivePlanetID())
 	}
 
-	// p1 在焦点行星（planet-1-1）建造：不带 planet_id。
+	// p1 在 planet-1-1 建造：不带 planet_id，按发令者机甲所在行星路由。
 	p1PosA := f4OpenTileNear(t, planetA, f4BasePos(t, planetA, "p1"))
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-a", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &p1PosA},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -116,7 +121,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 		t.Fatalf("p1 task leaked to planet-1-2, got %d", got)
 	}
 
-	// p2 焦点仍是 planet-1-2（未被 p1 拖拽），原地建造。
+	// p2 焦点仍是 planet-1-2（未被 p1 拖拽），用玩家身份的机甲原地建造。
 	if got := planetB.Players["p2"].FocusPlanetID; got != "planet-1-2" {
 		t.Fatalf("p2 focus should stay planet-1-2, got %s", got)
 	}
@@ -138,7 +143,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 
 	// p1 显式 target.planet_id 在 planet-1-2 建造（覆盖焦点）。
 	p1PosB := f4OpenTileNear(t, planetB, f4BasePos(t, planetB, "p1"))
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-b", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &p1PosB, PlanetID: "planet-1-2"},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -152,7 +157,7 @@ func TestF4DualPlanetIndependentBuild(t *testing.T) {
 
 	// 显式指定未加载行星 → 路由失败。
 	badPos := p1PosB
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-b", model.Command{
 		Type:    model.CmdBuild,
 		Target:  model.CommandTarget{Position: &badPos, PlanetID: "planet-9-9"},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
@@ -289,8 +294,8 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	// 跨行星同 ID：手动把两颗行星的执行体改成同号，复现实体 ID 撞号。
 	// 细分网格后各行星的 ID 分配序列不再天然对齐（出生点/建筑占地都会消耗 ID），
 	// 所以这里显式构造撞号，测试的仍是「撞号时按焦点行星路由 + planet_id 消歧」。
-	execA := planetB.Players["p1"].ExecutorForPlanet("planet-1-1")
-	execB := planetB.Players["p1"].ExecutorForPlanet("planet-1-2")
+	execA := mechaOnPlanet(planetB, "p1", "planet-1-1")
+	execB := mechaOnPlanet(planetB, "p1", "planet-1-2")
 	if execA == nil || execB == nil {
 		t.Fatal("expected p1 executors on both planets")
 	}
@@ -305,7 +310,13 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	const collidingID = "u-dup-exec"
 	delete(planetA.Units, execA.UnitID)
 	delete(planetB.Units, execB.UnitID)
+	mechasA := planetA.Players["p1"].EnsureMechas()
+	mechasB := planetB.Players["p1"].EnsureMechas()
+	delete(mechasA, execA.UnitID)
+	delete(mechasB, execB.UnitID)
 	execA.UnitID, execB.UnitID = collidingID, collidingID
+	mechasA[collidingID] = execA
+	mechasB[collidingID] = execB
 	unitA.ID, unitB.ID = collidingID, collidingID
 	planetA.Units[collidingID] = unitA
 	planetB.Units[collidingID] = unitB
@@ -394,18 +405,21 @@ func TestF4NonActivePlanetEnemyCombatSettles(t *testing.T) {
 func TestF4WarIndustrySettlesOnNonActivePlanet(t *testing.T) {
 	core, planetA, planetB := newF4DualPlanetCore(t, "off")
 	grantTechs(planetA, "p1", "prototype")
-	grantItems(planetA, "p1",
-		model.ItemAmount{ItemID: model.ItemCircuitBoard, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemProcessor, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemTitaniumAlloy, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemQuantumChip, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemDeuteriumFuelRod, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemFrameMaterial, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemMicrocrystalline, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemGraphene, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemCarbonNanotube, Quantity: 80},
-		model.ItemAmount{ItemID: model.ItemEnergeticGraphite, Quantity: 80},
-	)
+	// 玩家身份的机甲在出生星球 planet-1-2；queue_military_production 要求
+	// 发令者机甲在本星球，所以把 planet-1-1 的开局机甲改绑给独立发令者。
+	recordA := bindMechaToIssuer(t, planetA, "p1", "p1-agent-a")
+	recordA.EnsureInventory()
+	for _, item := range []struct {
+		id  string
+		qty int
+	}{
+		{model.ItemCircuitBoard, 80}, {model.ItemProcessor, 80}, {model.ItemTitaniumAlloy, 80},
+		{model.ItemQuantumChip, 80}, {model.ItemDeuteriumFuelRod, 80}, {model.ItemFrameMaterial, 80},
+		{model.ItemMicrocrystalline, 80}, {model.ItemGraphene, 80}, {model.ItemCarbonNanotube, 80},
+		{model.ItemEnergeticGraphite, 80},
+	} {
+		recordA.Inventory[item.id] += item.qty
+	}
 
 	base := f4BasePos(t, planetA, "p1")
 	factory := newBuilding("f4-factory", model.BuildingTypeRecomposingAssembler, "p1", f4OpenTileNear(t, planetA, base))
@@ -438,7 +452,7 @@ func TestF4WarIndustrySettlesOnNonActivePlanet(t *testing.T) {
 	}
 
 	// queue_military_production 按 building_id 路由到 planet-1-1（p1 焦点在 planet-1-2）。
-	res := issueInternalCommand(core, "p1", model.Command{
+	res := issueInternalCommandAs(core, "p1", "p1-agent-a", model.Command{
 		Type: model.CmdQueueMilitaryProduction,
 		Payload: map[string]any{
 			"building_id":       factory.ID,
@@ -472,7 +486,7 @@ func TestF4WarIndustrySettlesOnNonActivePlanet(t *testing.T) {
 	// 直接注入就绪载荷，验证 deploy_squad 落在建筑所在行星而非焦点行星。
 	hubState := ensureWarDeploymentHubState(player.EnsureWarIndustry(), hub.ID, 0)
 	hubState.ReadyPayloads["raider_f4"] = 1
-	res = issueInternalCommand(core, "p1", model.Command{
+	res = issueInternalCommandAs(core, "p1", "p1-agent-a", model.Command{
 		Type:    model.CmdDeploySquad,
 		Payload: map[string]any{"building_id": hub.ID, "blueprint_id": "raider_f4", "count": 1},
 	})

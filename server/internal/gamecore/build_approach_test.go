@@ -9,7 +9,7 @@ func TestPhase1BuildApproachWaitsAndMoves(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	executor := player.ExecutorForPlanet(ws.PlanetID)
+	executor := starterMecha(ws, player.PlayerID)
 	unit := ws.Units[executor.UnitID]
 	var target *model.Position
 	site := findApproachSite(t, core, ws, "p1", model.BuildingTypeWindTurbine, 2)
@@ -17,7 +17,7 @@ func TestPhase1BuildApproachWaitsAndMoves(t *testing.T) {
 
 	def, _ := model.BuildingDefinitionByID(model.BuildingTypeWindTurbine)
 	player.Resources.Energy = 1000
-	player.AddItems(def.BuildCost.Items, 0)
+	starterMecha(ws, player.PlayerID).AddItems(def.BuildCost.Items, 0)
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Target: model.CommandTarget{Position: target}, Payload: map[string]any{"building_type": "wind_turbine", "auto_approach": true, "rotation": 90}})
 	if res.Code != model.CodeOK || !unit.HasPath() {
 		t.Fatalf("approach rejected: %+v", res)
@@ -39,7 +39,7 @@ func TestPhase1BuildApproachWaitsAndMoves(t *testing.T) {
 		ws.Tick++
 		settleUnitMovement(ws)
 	}
-	if unit.HasPath() || core.requireBuildRange(ws, "p1", *target) != nil {
+	if unit.HasPath() || core.requireBuildRange(ws, "p1", mechaContext{Record: starterMecha(ws, "p1"), Unit: ws.Units[starterMecha(ws, "p1").UnitID], Player: ws.Players["p1"], World: ws}, *target) != nil {
 		t.Fatal("executor never reached build range")
 	}
 	core.settleConstructionQueue(ws)
@@ -70,10 +70,7 @@ func findApproachSite(t *testing.T, core *GameCore, ws *model.WorldState, player
 			b.HP = 0 // 让开建造中心，退回执行体作业半径
 		}
 	}
-	if exec := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID); exec != nil && exec.OperateRange < 12 {
-		exec.OperateRange = 12
-	}
-	exec := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID)
+	exec := starterMecha(ws, playerID)
 	start := model.Position{}
 	if exec != nil {
 		if u := ws.Units[exec.UnitID]; u != nil {
@@ -86,7 +83,7 @@ func findApproachSite(t *testing.T, core *GameCore, ws *model.WorldState, player
 		if !ws.FootprintFits(p, def.Footprint, btype, "") {
 			continue
 		}
-		unit, path := planBuildApproach(ws, playerID, p)
+		unit, path := planBuildApproach(ws, starterMecha(ws, playerID).UnitID, p)
 		if unit == nil || len(path) < minPath {
 			continue
 		}

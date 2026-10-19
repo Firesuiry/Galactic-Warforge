@@ -681,7 +681,11 @@ func haulIsStorageSink(building *model.Building) bool {
 	if fns.Deployment != nil && building.Type != model.BuildingTypeBattlefieldAnalysisBase {
 		return false
 	}
-	// 单位生产建筑（兵营/战车工厂/机场）的 storage 是生产料仓。
+	// 单位生产建筑（兵营/战车工厂/机场）的 storage 是生产料仓。HQ 例外：
+	// 第 21 轮起基站能生产执行体机甲，但它仍是本规则要保留的落货点。
+	if building.Type == model.BuildingTypeBattlefieldAnalysisBase {
+		return true
+	}
 	def, ok := model.BuildingDefinitionByID(building.Type)
 	return ok && !def.CanProduceUnits
 }

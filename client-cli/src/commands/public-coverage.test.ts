@@ -7,10 +7,30 @@ import { fileURLToPath } from 'node:url';
 import { PUBLIC_COMMAND_DEFINITIONS } from '@gw/shared/command-catalog';
 
 import { api } from '../api.js';
-import { fmtSummary } from '@gw/shared/commands/format';
+import { fmtMechaInventory, fmtSummary } from '@gw/shared/commands/format';
+import type { MechaView } from '@gw/shared/types';
 import { COMMANDS, dispatch } from './index.js';
 
 const originalFetch = globalThis.fetch;
+
+function mecha(unitId: string, operator: string, overrides: Partial<MechaView> = {}): MechaView {
+  return {
+    unit_id: unitId,
+    planet_id: 'planet-1-1',
+    operator,
+    alive: true,
+    respawn_at_tick: 0,
+    position: { x: 1, y: 2, z: 0 },
+    inventory: {},
+    inventory_slots_used: 0,
+    inventory_slots_total: 40,
+    operate_range: 18,
+    concurrent_tasks: 2,
+    construction_active: 0,
+    construction_pending: 0,
+    ...overrides,
+  };
+}
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -98,7 +118,7 @@ describe('observation query CLI paths', () => {
               player_id: 'p1',
               is_alive: true,
               resources: { energy: 4 },
-              inventory: { steel: 2, iron_ingot: 1 },
+              mechas: [mecha('u-6', 'p1', { inventory: { steel: 2, iron_ingot: 1 }, inventory_slots_used: 2 })],
             },
           },
         });
@@ -136,6 +156,7 @@ describe('observation query CLI paths', () => {
     assert.match(gets[3] ?? '', /entity_kind=building/);
     assert.match(gets[3] ?? '', /entity_id=b-1/);
     assert.match(summary, /Tick:/);
+    assert.match(summary, /Inventory u-6/);
     assert.match(summary, /steel:2/);
     assert.match(stats, /by_item=steel:2/);
     assert.match(catalog, /build/);
@@ -144,7 +165,7 @@ describe('observation query CLI paths', () => {
 });
 
 describe('summary inventory rendering', () => {
-  it('prints player inventory so craft and transfer results are visible', () => {
+  it('lists mecha ids in the player table', () => {
     const out = fmtSummary({
       tick: 4,
       active_planet_id: 'planet-1-1',
@@ -152,25 +173,19 @@ describe('summary inventory rendering', () => {
       map_height: 8,
       surface: { topology: 'cube_sphere', face_size: 4 },
       players: {
-        p1: { player_id: 'p1', is_alive: true, executor: { unit_id: 'u-6' }, inventory: { steel: 1, coal: 0 } },
+        p1: { player_id: 'p1', is_alive: true, mechas: [mecha('u-6', 'p1')] },
       },
     } as never);
-    assert.match(out, /Inventory p1: steel:1/);
     assert.match(out, /u-6/);
+  });
+
+  it('prints the bound mecha backpack so craft and transfer results are visible', () => {
+    const out = fmtMechaInventory(mecha('u-6', 'p1', { inventory: { steel: 1, coal: 0 }, inventory_slots_used: 3, inventory_slots_total: 40 }));
+    assert.match(out, /Inventory u-6 \[3\/40 slots\]: steel:1/);
     assert.doesNotMatch(out, /coal/);
   });
 
-  it('prints backpack slot usage when the server reports it', () => {
-    const out = fmtSummary({
-      tick: 4,
-      active_planet_id: 'planet-1-1',
-      map_width: 8,
-      map_height: 8,
-      surface: { topology: 'cube_sphere', face_size: 4 },
-      players: {
-        p1: { player_id: 'p1', is_alive: true, executor: { unit_id: 'u-6' }, inventory: { steel: 1 }, inventory_slots_used: 3, inventory_slots_total: 40 },
-      },
-    } as never);
-    assert.match(out, /Inventory p1 \[3\/40 slots\]: steel:1/);
+  it('hints how to bind a mecha when the issuer has none', () => {
+    assert.match(fmtMechaInventory(undefined), /未绑定机甲：mecha list \/ mecha assign <id>/);
   });
 });

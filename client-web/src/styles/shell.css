@@ -580,6 +580,7 @@
 .top-nav__inventory-btn { display:flex; gap:4px; padding:0; border:0; background:none; color:inherit; cursor:pointer; min-width:0; overflow:hidden; }
 .top-nav__inventory-btn:hover .top-nav__chip { border-color:var(--border-glow); }
 .top-nav__chip-label { font-size:.68rem; color:var(--text-muted); max-width:4.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.top-nav__chip--inventory-summary { white-space:nowrap; }
 .top-nav__inventory-panel { position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:220px; max-height:360px; overflow-y:auto; padding:8px 10px; border:1px solid var(--border-glow, #39e6d055); border-radius:6px; background:#08111df2; box-shadow:0 8px 24px #000a; }
 .top-nav__inventory-title { font-size:.75rem; color:var(--text-muted); margin-bottom:6px; }
 .top-nav__inventory-panel ul { list-style:none; margin:0; padding:0; display:grid; gap:3px; }
@@ -590,9 +591,10 @@
 @media(max-width:1500px) { .top-nav__chip-label { display:none; } }
 .top-nav__status { flex-wrap:nowrap; }
 /* 背包 chip 是「次要信息」：空间不够时优先裁掉它们，把位置留给电力 chip
-   （缺电告警的定位入口不能被覆盖）。实测 1200px 视口下只留 2 个才不会压到告警按钮。 */
-@media(max-width:1500px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
-@media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+2) { display:none; } }
+   （缺电告警的定位入口不能被覆盖）。第 1 个 chip 是格数/机甲 ID（契约要求可见），
+   后面才是关键物品 chip，所以裁切从第 4 / 第 3 个开始。 */
+@media(max-width:1500px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+4) { display:none; } }
+@media(max-width:1400px) { .top-nav__inventory-btn .top-nav__chip:nth-child(n+3) { display:none; } }
 .top-nav__status { min-width:0; }
 
 /* ============================================================
@@ -884,4 +886,12 @@
   color: var(--text-dim);
   font-size: 0.72rem;
   white-space: nowrap;
+}
+
+/* 未绑定机甲：灰色只读 chip（契约 §7.3 第 1 条，悬浮提示去行星上接管）。 */
+.top-nav__chip--muted {
+  border-color: rgba(138, 148, 166, 0.32);
+  background: rgba(138, 148, 166, 0.07);
+  color: var(--text-muted);
+  cursor: help;
 }

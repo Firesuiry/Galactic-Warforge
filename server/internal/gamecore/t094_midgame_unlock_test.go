@@ -20,8 +20,13 @@ func TestT094OfficialMidgameBuildCommandsAreNoLongerBlockedByResearch(t *testing
 		t.Fatal("expected player p1")
 	}
 
-	if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
-		exec.OperateRange = 100
+	// 作业半径来自 units.yaml（全局），测试只关心研究门槛：把机甲挪到目标附近。
+	exec := starterMecha(ws, player.PlayerID)
+	if exec == nil {
+		t.Fatal("expected p1 mecha")
+	}
+	if unit := ws.Units[exec.UnitID]; unit != nil {
+		unit.Position = model.Position{X: 9, Y: 7}
 	}
 
 	cases := []struct {

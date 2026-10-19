@@ -205,6 +205,7 @@ func (gc *GameCore) planBotCommands(ws *model.WorldState, playerID string, tunin
 type botSurvey struct {
 	home         *model.Position
 	executor     *model.Unit
+	mechaRecord  *model.MechaRecord
 	soldiers     []*model.Unit // 士兵与 mecha，按实体 ID 排序
 	soldierCount int
 	mechaCount   int
@@ -275,7 +276,14 @@ func (gc *GameCore) surveyBotWorld(ws *model.WorldState, playerID string) *botSu
 			continue
 		}
 		if u.Mecha != nil {
-			survey.executor = u
+			player := ws.Players[playerID]
+			if player == nil || player.MechaByUnitID(u.ID) == nil {
+				continue
+			}
+			if survey.executor == nil {
+				survey.executor = u
+				survey.mechaRecord = player.MechaByUnitID(u.ID)
+			}
 			continue
 		}
 		switch u.Type {
@@ -808,12 +816,16 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 		return false
 	}
 	player := ws.Players[playerID]
+	record := player.MechaByUnitID(exec.ID)
+	if record == nil {
+		return false
+	}
 	// 半能即补（手搓/移动都耗能；饿死后再启动代价大得多）。
 	if exec.Mecha.Energy*2 < exec.Mecha.MaxEnergy {
-		if qty := player.Inventory[model.ItemCoal]; qty > 0 {
+		if qty := record.Inventory[model.ItemCoal]; qty > 0 {
 			return issue(model.Command{
 				Type:    model.CmdRefuelMecha,
-				Target:  model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+				Target:  model.CommandTarget{Layer: "planet", PlanetID: ws.PlanetID},
 				Payload: map[string]any{"item_id": model.ItemCoal, "quantity": min(qty, 8)},
 			})
 		}
@@ -821,10 +833,10 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 	if job := exec.Mecha.Job; job != nil {
 		// 手搓链耗煤快于回补：煤将尽时打断手搓去采煤。否则能量归零后连采煤都做不了，
 		// 执行体永久卡在 no_energy（遭遇战 bot 曾因此在开局 3 分钟后再无建设）。
-		if job.Kind == "craft" && player.Inventory[model.ItemCoal] < botCoalReserve {
+		if job.Kind == "craft" && record.Inventory[model.ItemCoal] < botCoalReserve {
 			return issue(model.Command{
 				Type:   model.CmdCancelMechaJob,
-				Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+				Target: model.CommandTarget{Layer: "planet", PlanetID: ws.PlanetID},
 			})
 		}
 		// 采集作业因离矿点太远而停摆（例如被挤走/目标失效）：取消后下一拍
@@ -833,7 +845,7 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 		if job.Kind == "mine" && job.State == "out_of_range" {
 			return issue(model.Command{
 				Type:   model.CmdCancelMechaJob,
-				Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+				Target: model.CommandTarget{Layer: "planet", PlanetID: ws.PlanetID},
 			})
 		}
 		return false
@@ -841,7 +853,7 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 	// 缺料清单：当前建设目标所需物品。
 	missing := gc.botMaterialNeeds(ws, playerID, tuning, ctx)
 	// 燃料不多：提前采煤（手搓链随时会饿死在半路）。
-	if player.Inventory[model.ItemCoal] < 40 {
+	if record.Inventory[model.ItemCoal] < 40 {
 		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemCoal, ctx); ok {
 			return issue(cmd)
 		}
@@ -861,12 +873,12 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 	// 必须设上限：无限"备用采煤"会把机甲 200 格背包塞满煤，
 	// 之后所有物品转移都报「背包已满」，矩阵链/研究站供料全线卡死
 	// （试玩报告 D：bot 的电磁学在 tick 20000 后不再推进）。
-	if player.Inventory[model.ItemCoal] < botSpareCoalCap && botInventoryHasRoom(player, ctx.executor) {
+	if record.Inventory[model.ItemCoal] < botSpareCoalCap && botInventoryHasRoom(record, ctx.executor) {
 		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemCoal, ctx); ok {
 			return issue(cmd)
 		}
 	}
-	if botInventoryHasRoom(player, ctx.executor) {
+	if botInventoryHasRoom(record, ctx.executor) {
 		if cmd, ok := gc.botMineKind(ws, playerID, exec, model.ItemIronOre, ctx); ok {
 			return issue(cmd)
 		}
@@ -878,16 +890,20 @@ func (gc *GameCore) botEconomy(ws *model.WorldState, playerID string, tuning bot
 const botSpareCoalCap = 80
 
 // botInventoryHasRoom 机甲背包是否还有余量（留 1/4 空间给其它物料）。
-func botInventoryHasRoom(player *model.PlayerState, exec *model.Unit) bool {
-	if player == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventorySlots <= 0 {
+func botInventoryHasRoom(record *model.MechaRecord, exec *model.Unit) bool {
+	if record == nil || exec == nil || exec.Mecha == nil || exec.Mecha.InventorySlots <= 0 {
 		return true
 	}
-	return player.InventorySlotsUsed() < exec.Mecha.InventorySlots*3/4
+	return record.Inventory.SlotsUsed() < exec.Mecha.InventorySlots*3/4
 }
 
 // botMaterialNeeds 当前建设目标的物料缺口（按建设优先级：电力→矿机→制造台）。
 func (gc *GameCore) botMaterialNeeds(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) []string {
 	player := ws.Players[playerID]
+	record := player.MechaByOperator(playerID)
+	if record == nil {
+		return nil
+	}
 	need := func(btype model.BuildingType) []string {
 		def, ok := model.BuildingDefinitionByID(btype)
 		if !ok {
@@ -895,7 +911,7 @@ func (gc *GameCore) botMaterialNeeds(ws *model.WorldState, playerID string, tuni
 		}
 		var missing []string
 		for _, item := range def.BuildCost.Items {
-			if player.Inventory[item.ItemID] < item.Quantity {
+			if record.Inventory[item.ItemID] < item.Quantity {
 				missing = append(missing, item.ItemID)
 			}
 		}
@@ -945,12 +961,8 @@ func botWantsTurret(ws *model.WorldState, playerID string, tuning botTuning, ctx
 // botCraftFor 原料足够时手搓缺口物品（齿轮/电路板/锭的二级链）。
 func (gc *GameCore) botCraftFor(ws *model.WorldState, playerID string, missing []string, tuning botTuning) (model.Command, bool) {
 	player := ws.Players[playerID]
-	execState := player.ExecutorForPlanet(ws.PlanetID)
-	if execState == nil {
-		return model.Command{}, false
-	}
-	exec := ws.Units[execState.UnitID]
-	if exec == nil || exec.Mecha == nil {
+	record := player.MechaByOperator(playerID)
+	if record == nil || ws.Units[record.UnitID] == nil || ws.Units[record.UnitID].Mecha == nil {
 		return model.Command{}, false
 	}
 	for _, itemID := range missing {
@@ -963,15 +975,15 @@ func (gc *GameCore) botCraftFor(ws *model.WorldState, playerID string, missing [
 			return cmd, true
 		}
 		qty := tuning.craftBatch
-		if !botHasIngredients(player.Inventory, ingredients, qty) {
+		if !botHasIngredients(record.Inventory, ingredients, qty) {
 			qty = 1
-			if !botHasIngredients(player.Inventory, ingredients, qty) {
+			if !botHasIngredients(record.Inventory, ingredients, qty) {
 				continue
 			}
 		}
 		return model.Command{
 			Type:    model.CmdCraftItem,
-			Target:  model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+			Target:  model.CommandTarget{Layer: "planet"},
 			Payload: map[string]any{"recipe_id": recipeID, "quantity": qty},
 		}, true
 	}
@@ -1006,17 +1018,13 @@ func botCraftChain(itemID string) (recipeID string, ingredients []model.ItemAmou
 // botCraftIngredient 原料缺口时先搓原料（铁锭/铜锭）。
 func (gc *GameCore) botCraftIngredient(ws *model.WorldState, playerID string, ingredients []model.ItemAmount, tuning botTuning) (model.Command, bool) {
 	player := ws.Players[playerID]
-	execState := player.ExecutorForPlanet(ws.PlanetID)
-	if execState == nil {
-		return model.Command{}, false
-	}
-	exec := ws.Units[execState.UnitID]
-	if exec == nil || exec.Mecha == nil {
+	record := player.MechaByOperator(playerID)
+	if record == nil || ws.Units[record.UnitID] == nil || ws.Units[record.UnitID].Mecha == nil {
 		return model.Command{}, false
 	}
 	for _, ing := range ingredients {
 		// 够一份配方才算备齐：magnet 只有 1、磁线圈要 2 时也得继续搓（曾因 >0 判定卡死在采铁矿）。
-		if player.Inventory[ing.ItemID] >= ing.Quantity {
+		if record.Inventory[ing.ItemID] >= ing.Quantity {
 			continue
 		}
 		recipeID, sub := botCraftChain(ing.ItemID)
@@ -1024,15 +1032,15 @@ func (gc *GameCore) botCraftIngredient(ws *model.WorldState, playerID string, in
 			continue
 		}
 		qty := tuning.craftBatch
-		if !botHasIngredients(player.Inventory, sub, qty) {
+		if !botHasIngredients(record.Inventory, sub, qty) {
 			qty = 1
-			if !botHasIngredients(player.Inventory, sub, qty) {
+			if !botHasIngredients(record.Inventory, sub, qty) {
 				continue
 			}
 		}
 		return model.Command{
 			Type:    model.CmdCraftItem,
-			Target:  model.CommandTarget{Layer: "planet", EntityID: exec.ID},
+			Target:  model.CommandTarget{Layer: "planet"},
 			Payload: map[string]any{"recipe_id": recipeID, "quantity": qty},
 		}, true
 	}
@@ -1052,7 +1060,11 @@ func botHasIngredients(inv model.ItemInventory, ingredients []model.ItemAmount, 
 // 复合物品（如电路板 = 铁锭 + 铜锭）要沿手搓链找到背包里真正不足的那种原矿，
 // 否则会一直采同一种矿（遭遇战 bot 曾因此把铜矿采到 2770 却没有铁）。
 func (gc *GameCore) botMineFor(ws *model.WorldState, playerID string, exec *model.Unit, missingItem string, ctx *botSurvey) (model.Command, bool) {
-	oreKind := botRawOreFor(ws.Players[playerID].Inventory, missingItem)
+	record := ws.Players[playerID].MechaByOperator(playerID)
+	if record == nil {
+		return model.Command{}, false
+	}
+	oreKind := botRawOreFor(record.Inventory, missingItem)
 	if oreKind == "" {
 		oreKind = model.ItemIronOre
 	}
@@ -1100,8 +1112,8 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 			return model.Command{}, false
 		}
 	}
-	execState := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID)
-	if execState == nil {
+	record := ws.Players[playerID].MechaByOperator(playerID)
+	if record == nil || record.UnitID != exec.ID {
 		return model.Command{}, false
 	}
 	if ws.SurfaceDistance(exec.Position, node.Position) > 6 {
@@ -1118,13 +1130,13 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 		step := path[len(path)-1]
 		return model.Command{
 			Type:   model.CmdMove,
-			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, Position: &step},
+			Target: model.CommandTarget{Layer: "planet", EntityID: exec.ID, PlanetID: ws.PlanetID, Position: &step},
 		}, true
 	}
 	// 一次开采量受背包剩余空间限制：请求量超过空位会让作业停在
 	// inventory_full 等玩家腾位置，而 bot 腾不出空位就整局停摆
 	// （背包按格计：新开局 40 格，一格里能堆 stack_limit 件矿石）。
-	quantity := min(20, mechaInventoryFree(ws.Players[playerID], mechaInventorySlots(ws, exec, ws.Players[playerID]), node.Kind, 20))
+	quantity := min(20, mechaInventoryFree(record, mechaInventorySlots(ws.Players[playerID]), node.Kind, 20))
 	if quantity <= 0 {
 		return model.Command{}, false
 	}
@@ -1327,12 +1339,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 		return false
 	}
 	// 找一台附近没有己方矿机的矿点（必须在建造可达范围内：基地半径或执行体操作范围）。
-	execRange := 18
-	if ctx.executor != nil {
-		if execState := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID); execState != nil {
-			execRange = execState.OperateRange
-		}
-	}
+	execRange := model.ExecutorOperateRange()
 	// 候选矿点按「先近后远、矿种按 铁→铜→煤→石」排序（同类同距再按 ID 字典序，
 	// 保证可复现）。旧实现按节点 ID 字典序取第一个候选：基地旁的开局补矿簇 ID 形如
 	// `res-4`，字典序排在最后，而远处大矿簇 ID 形如 `planet-1-1-res-1843` 排在前面，
@@ -1690,7 +1697,7 @@ func (gc *GameCore) botProduce(ws *model.WorldState, playerID string, tuning bot
 					continue
 				}
 				ready = false
-				if ws.Players[playerID].Inventory[cost.ItemID] >= missing {
+				if record := ws.Players[playerID].MechaByOperator(playerID); record != nil && record.Inventory[cost.ItemID] >= missing {
 					return issue(model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": producer.ID, "item_id": cost.ItemID, "quantity": missing}})
 				}
 			}
@@ -1722,7 +1729,11 @@ func botCanAffordBuild(player *model.PlayerState, def model.BuildingDefinition) 
 	if player == nil {
 		return false
 	}
-	_, short := missingItem(player.Inventory, def.BuildCost.Items)
+	record := player.MechaByOperator(player.PlayerID)
+	if record == nil {
+		return false
+	}
+	_, short := missingItem(record.Inventory, def.BuildCost.Items)
 	return !short
 }
 
@@ -1739,12 +1750,7 @@ func botConstructRadius(ws *model.WorldState, playerID string, ctx *botSurvey) i
 	if radius > 0 {
 		return radius
 	}
-	if ws != nil && ws.Players[playerID] != nil {
-		if exec := ws.Players[playerID].ExecutorForPlanet(ws.PlanetID); exec != nil && exec.OperateRange > 0 {
-			return exec.OperateRange
-		}
-	}
-	return 6
+	return model.ExecutorOperateRange()
 }
 
 // botBuildSpotNear 基地附近的可建格（由内向外扫描），跳过在建格。

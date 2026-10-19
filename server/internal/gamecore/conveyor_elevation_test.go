@@ -248,7 +248,7 @@ func TestBeltElevationDoesNotBlockGroundUnits(t *testing.T) {
 
 // 放置校验：高架带压在熔炉上被拒（POSITION_OCCUPIED 中文文案）。
 func TestBuildElevationRejectsOverBuilding(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	profile := model.BuildingProfileFor(model.BuildingTypeArcSmelter, 1)
@@ -272,7 +272,7 @@ func TestBuildElevationRejectsOverBuilding(t *testing.T) {
 
 // 放置校验：高架带压在地面带/分拣器上允许。
 func TestBuildElevationAllowsOverGroundBelt(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	beltFixture(ws, "ground", pos, model.ConveyorEast, 0)
@@ -293,7 +293,7 @@ func TestBuildElevationAllowsOverGroundBelt(t *testing.T) {
 
 // 放置校验：地面造熔炉压在高架带下被拒。
 func TestBuildGroundBuildingRejectedUnderElevatedBelt(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	beltFixture(ws, "over", pos, model.ConveyorEast, 1)
@@ -308,7 +308,7 @@ func TestBuildGroundBuildingRejectedUnderElevatedBelt(t *testing.T) {
 
 // 放置校验：非传送带给 elevation、越界、高架带 auto 都被 INVALID_ELEVATION 拒绝。
 func TestBuildElevationValidation(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	cases := []struct {
@@ -337,7 +337,7 @@ func TestBuildElevationValidation(t *testing.T) {
 // 错误信息契约（§3.2）：高架层同格同层的两种冲突都回 POSITION_OCCUPIED，
 // 且中文提示要能看出「第几层、和什么冲突」——玩家据此才知道该换层还是拆东西。
 func TestBuildElevationLayerConflictMessages(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	beltFixture(ws, "layer1", pos, model.ConveyorEast, 1)
@@ -382,7 +382,7 @@ func TestConstructionReservationCrossLayerConflicts(t *testing.T) {
 	}
 
 	t.Run("ground-building-then-elevated-belt-rejected", func(t *testing.T) {
-		core := newConstructionTestCore(t, 2, 2)
+		core := newConstructionTestCore(t, 2)
 		ws := core.world
 		pos, _ := findTwoOpenTiles(ws)
 		ws.Construction = model.NewConstructionQueue()
@@ -399,7 +399,7 @@ func TestConstructionReservationCrossLayerConflicts(t *testing.T) {
 	})
 
 	t.Run("elevated-belt-then-ground-building-rejected", func(t *testing.T) {
-		core := newConstructionTestCore(t, 2, 2)
+		core := newConstructionTestCore(t, 2)
 		ws := core.world
 		pos, _ := findTwoOpenTiles(ws)
 		ws.Construction = model.NewConstructionQueue()
@@ -416,7 +416,7 @@ func TestConstructionReservationCrossLayerConflicts(t *testing.T) {
 	})
 
 	t.Run("low-logistics-ground-task-coexists", func(t *testing.T) {
-		core := newConstructionTestCore(t, 2, 2)
+		core := newConstructionTestCore(t, 2)
 		ws := core.world
 		pos, _ := findTwoOpenTiles(ws)
 		ws.Construction = model.NewConstructionQueue()

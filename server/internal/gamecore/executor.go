@@ -8,8 +8,8 @@ import (
 
 // requireBuildRange 校验建造可达性（D2）：
 // 目标处于任一己方建造中心（BuildRadius>0 的建筑，如战场分析基站）覆盖半径内即可建造；
-// 否则回退要求执行体在操作范围内（无建造中心时的兜底）。
-func (gc *GameCore) requireBuildRange(ws *model.WorldState, playerID string, target model.Position) *model.CommandResult {
+// 否则要求指定机甲（发令者绑定的那台）在 operate_range 内。
+func (gc *GameCore) requireBuildRange(ws *model.WorldState, playerID string, mecha mechaContext, target model.Position) *model.CommandResult {
 	for _, b := range ws.Buildings {
 		if b == nil || b.OwnerID != playerID || b.HP <= 0 {
 			continue
@@ -22,59 +22,38 @@ func (gc *GameCore) requireBuildRange(ws *model.WorldState, playerID string, tar
 			return nil
 		}
 	}
-	_, _, execRes := gc.requireExecutor(ws, playerID, target)
-	return execRes
+	return gc.requireMechaRange(mecha, target)
 }
 
-func (gc *GameCore) requireExecutor(ws *model.WorldState, playerID string, target model.Position) (*model.ExecutorState, *model.Unit, *model.CommandResult) {
-	player := ws.Players[playerID]
-	if player == nil {
-		res := model.CommandResult{
-			Status:  model.StatusFailed,
-			Code:    model.CodeExecutorUnavailable,
-			Message: "机甲不可用",
-		}
-		return nil, nil, &res
+// requireMechaRange 要求该机甲在 operate_range 内（建筑覆盖外的兜底）。
+func (gc *GameCore) requireMechaRange(mecha mechaContext, target model.Position) *model.CommandResult {
+	if mecha.Unit == nil || mecha.Record == nil {
+		return &model.CommandResult{Status: model.StatusFailed, Code: model.CodeExecutorUnavailable, Message: "机甲不可用"}
 	}
-	execState := player.ExecutorForPlanet(ws.PlanetID)
-	if execState == nil {
-		res := model.CommandResult{
-			Status:  model.StatusFailed,
-			Code:    model.CodeExecutorUnavailable,
-			Message: "机甲不可用",
-		}
-		return nil, nil, &res
+	operateRange := model.ExecutorOperateRange()
+	if mecha.World == nil {
+		return &model.CommandResult{Status: model.StatusFailed, Code: model.CodeExecutorUnavailable, Message: "机甲不可用"}
 	}
-	execUnit, ok := ws.Units[execState.UnitID]
-	if !ok {
-		res := model.CommandResult{
-			Status:  model.StatusFailed,
-			Code:    model.CodeExecutorUnavailable,
-			Message: fmt.Sprintf("未找到机甲单位 %s", execState.UnitID),
-		}
-		return nil, nil, &res
-	}
-	dist := ws.SurfaceDistance(execUnit.Position, target)
-	if dist > execState.OperateRange {
-		res := model.CommandResult{
+	distance := mecha.World.SurfaceDistance(mecha.Unit.Position, target)
+	if distance > operateRange {
+		return &model.CommandResult{
 			Status:  model.StatusFailed,
 			Code:    model.CodeOutOfRange,
-			Message: fmt.Sprintf("超出机甲作业范围：%d > %d", dist, execState.OperateRange),
+			Message: fmt.Sprintf("超出机甲作业范围：%d > %d", distance, operateRange),
 		}
-		return nil, nil, &res
 	}
-	return execState, execUnit, nil
+	return nil
 }
 
-func (gc *GameCore) reserveExecutorSlot(playerID string, limit int) bool {
+func (gc *GameCore) reserveExecutorSlot(unitID string, limit int) bool {
 	if limit <= 0 {
 		limit = 1
 	}
-	used := gc.executorUsage[playerID]
+	used := gc.executorUsage[unitID]
 	if used >= limit {
 		return false
 	}
-	gc.executorUsage[playerID] = used + 1
+	gc.executorUsage[unitID] = used + 1
 	return true
 }
 

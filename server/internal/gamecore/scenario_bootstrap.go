@@ -81,11 +81,14 @@ func applyScenarioBuildingBootstrap(
 	if fixed, ok := ws.FindFootprintOrigin(position, def.Footprint, buildingType, ""); ok {
 		position = fixed
 	}
+	// 场景预设建筑是配置作者直接放下的，不经过任何机甲：没有 MechaID，
+	// 材料也已在预设里给出（MaterialsDeducted = true 跳过扣料与预留）。
 	task := &model.ConstructionTask{
-		PlayerID:     buildingCfg.OwnerID,
-		BuildingType: buildingType,
-		Position:     position,
-		RecipeID:     buildingCfg.RecipeID,
+		PlayerID:          buildingCfg.OwnerID,
+		BuildingType:      buildingType,
+		Position:          position,
+		RecipeID:          buildingCfg.RecipeID,
+		MaterialsDeducted: true,
 	}
 	events, err := bootstrapCore.completeConstructionTask(ws, task)
 	if err != nil {

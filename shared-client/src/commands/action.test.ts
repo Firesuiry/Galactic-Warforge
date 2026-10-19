@@ -42,8 +42,8 @@ describe('build elevation boundary', () => {
 
 describe('mecha refuel command boundary', () => {
   it('requires a positive integer count when given', async () => {
-    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '0'], ctx), /count 必须是正整数/);
-    assert.match(await cmdRefuelMecha(['executor-1', 'fuel-1', '1.5'], ctx), /count 必须是正整数/);
+    assert.match(await cmdRefuelMecha(['fuel-1', '0'], ctx), /count 必须是正整数/);
+    assert.match(await cmdRefuelMecha(['fuel-1', '1.5'], ctx), /count 必须是正整数/);
   });
 });
 
@@ -98,27 +98,26 @@ describe('personal mecha job command validation', () => {
   for (const [name, handler] of [['mine_resource', cmdMineResource], ['craft_item', cmdCraftItem]] as const) {
     it(`${name} rejects malformed quantities before sending a command`, async () => {
       for (const quantity of ['0', '-1', '1.5', '2tail', '1e3', 'Infinity', 'NaN', '', ' 2', '9007199254740992']) {
-        const out = await handler(['executor-1', 'target-1', quantity], ctx);
+        const out = await handler(['target-1', quantity], ctx);
         assert.match(out, /quantity 必须是正整数/, `${name}: ${JSON.stringify(quantity)}`);
         assert.doesNotMatch(out, /missing authenticated player_id/);
       }
     });
     it(`${name} accepts integer quantities and leaves target validity to the server`, async () => {
       for (const quantity of ['1', '+2']) {
-        const out = await handler(['executor-1', 'server-defined-target', quantity], ctx);
+        const out = await handler(['server-defined-target', quantity], ctx);
         assert.match(out, /missing authenticated player_id/);
         assert.doesNotMatch(out, /quantity 必须是正整数/);
       }
     });
-    it(`${name} requires exactly executor, resource or recipe, and quantity`, async () => {
-      assert.match(await handler(['executor-1', 'target-1'], ctx), /Usage:/);
-      assert.match(await handler(['executor-1', 'target-1', '1', 'extra'], ctx), /Usage:/);
+    it(`${name} requires exactly resource or recipe and quantity`, async () => {
+      assert.match(await handler(['target-1'], ctx), /Usage:/);
+      assert.match(await handler(['target-1', '1', 'extra'], ctx), /Usage:/);
     });
   }
-  it('cancel_mecha_job requires exactly one executor and reaches the API for valid arguments', async () => {
-    assert.match(await cmdCancelMechaJob([], ctx), /Usage: cancel_mecha_job <executor_id>/);
-    assert.match(await cmdCancelMechaJob(['executor-1', 'extra'], ctx), /Usage:/);
-    assert.match(await cmdCancelMechaJob(['executor-1'], ctx), /missing authenticated player_id/);
+  it('cancel_mecha_job takes no executor and reaches the API for valid arguments', async () => {
+    assert.match(await cmdCancelMechaJob(['extra'], ctx), /Usage: cancel_mecha_job/);
+    assert.match(await cmdCancelMechaJob([], ctx), /missing authenticated player_id/);
   });
 });
 

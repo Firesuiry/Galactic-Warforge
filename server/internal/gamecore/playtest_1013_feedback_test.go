@@ -91,7 +91,7 @@ func TestTransferItemToPlayerSeparatesEmptyBuildingFromFullBag(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 
 	depot := newBuilding("depot-withdraw", model.BuildingTypeDepotMk1, "p1", model.Position{X: 3, Y: 1})
 	depot.Runtime.State = model.BuildingWorkRunning
@@ -120,8 +120,8 @@ func TestTransferItemToPlayerSeparatesEmptyBuildingFromFullBag(t *testing.T) {
 	if _, _, err := depot.Storage.Load(model.ItemIronIngot, 5); err != nil {
 		t.Fatal(err)
 	}
-	slots := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID].Mecha.InventorySlots
-	player.Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
+	slots := ws.Units[starterMecha(ws, player.PlayerID).UnitID].Mecha.InventorySlots
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: slots * model.ItemStackSize(model.ItemCoal)}
 	res = withdraw()
 	if res.Code != model.CodeInsufficientResource {
 		t.Fatalf("full-bag code = %s (%s)", res.Code, res.Message)
@@ -148,7 +148,7 @@ func TestTransferItemRejectsNonMatrixIntoResearchModeLab(t *testing.T) {
 	lab.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, lab)
 
-	player.Inventory = model.ItemInventory{model.ItemCircuitBoard: 4}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCircuitBoard: 4}
 	res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
@@ -166,12 +166,12 @@ func TestTransferItemRejectsNonMatrixIntoResearchModeLab(t *testing.T) {
 	if got := lab.Storage.OutputQuantity(model.ItemCircuitBoard); got != 0 {
 		t.Fatalf("rejected transfer must not load the lab, got %d", got)
 	}
-	if player.Inventory[model.ItemCircuitBoard] != 4 {
-		t.Fatalf("rejected transfer must not consume inventory, got %d", player.Inventory[model.ItemCircuitBoard])
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard] != 4 {
+		t.Fatalf("rejected transfer must not consume inventory, got %d", starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard])
 	}
 
 	// 矩阵照常装入：研究站的库存就是研究耗材。
-	player.Inventory[model.ItemElectromagneticMatrix] = 3
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemElectromagneticMatrix] = 3
 	res, _ = execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
@@ -188,7 +188,7 @@ func TestTransferItemRejectsNonMatrixIntoResearchModeLab(t *testing.T) {
 	}
 
 	// 切成生产模式后，研究站按普通制造建筑对待，原料可以装入。
-	player.Inventory[model.ItemCircuitBoard] = 4
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemCircuitBoard] = 4
 	if r, _ := execCommand(core, model.CmdSetRecipe, ws, "p1", setRecipeCmd(lab.ID, model.ItemElectromagneticMatrix)); r.Code != model.CodeOK {
 		t.Fatalf("switch lab to production: %+v", r)
 	}

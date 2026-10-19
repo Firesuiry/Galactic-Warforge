@@ -130,13 +130,21 @@ function createSummary() {
       p1: {
         player_id: "p1",
         is_alive: true,
-        executor: {
+        mechas: [{
           unit_id: "exec-1",
-          build_efficiency: 1,
+          planet_id: "planet-1-1",
+          operator: "p1",
+          alive: true,
+          respawn_at_tick: 0,
+          position: { x: 1, y: 1, z: 0 },
+          inventory: {},
+          inventory_slots_used: 0,
+          inventory_slots_total: 40,
           operate_range: 6,
           concurrent_tasks: 1,
-          research_boost: 0,
-        },
+          construction_active: 0,
+          construction_pending: 0,
+        }],
         tech: {
           player_id: "p1",
           completed_techs: ["dyson_sphere_program"],
@@ -705,5 +713,28 @@ describe("采集建筑覆盖范围（coverage_radius）与服务端 ValidateColl
     const assessment = assessBuildTiles(catalog as never, "mining_machine", planetWithOreAt(7, 7) as never, { x: 1, y: 1, z: 0 });
     expect(assessment?.buildable).toBe(false);
     expect(assessment?.blockedTiles).toContainEqual(expect.objectContaining({ x: 1, y: 1, reason: "missing_resource" }));
+  });
+});
+
+describe('未绑定机甲的建造预检（审查 #7）', () => {
+  it('assessBuildTiles 传 mechaUnbound：本地拦建造，原因优先于缺料', () => {
+    const catalog = createCatalog() as never;
+    const planet = {
+      planet_id: 'planet-1-1',
+      surface: { topology: 'cube_sphere', face_size: 8 },
+      map_width: 24,
+      map_height: 16,
+      terrain: Array.from({ length: 16 }, () => Array.from({ length: 24 }, () => 'buildable')),
+      buildings: {},
+      units: {},
+      resources: [],
+    } as never;
+    const assessment = assessBuildTiles(catalog, 'wind_turbine', planet, { x: 1, y: 1, z: 0 }, 'p1', 0, undefined, undefined, 0, true)!;
+    expect(assessment.mechaUnbound).toBe(true);
+    expect(assessment.buildable).toBe(false);
+    // 没有背包 ≠ 全部造价都缺。
+    expect(assessment.missingItems).toEqual([]);
+    expect(shouldBlockBuildLocally(assessment)).toBe(true);
+    expect(describeBuildBlock(assessment)).toBe('未绑定机甲：先在行星上接管一台');
   });
 });

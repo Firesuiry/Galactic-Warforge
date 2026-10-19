@@ -29,7 +29,7 @@ func newEnclosureTestCore(t *testing.T) *GameCore {
 // findExecutorUnit 返回 p1 的机甲实体。
 func findExecutorUnit(t *testing.T, ws *model.WorldState) *model.Unit {
 	t.Helper()
-	state := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID)
+	state := starterMecha(ws, "p1")
 	if state == nil {
 		t.Fatal("expected p1 executor state")
 	}

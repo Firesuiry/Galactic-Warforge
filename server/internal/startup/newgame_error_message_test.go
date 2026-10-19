@@ -10,7 +10,7 @@ import (
 // 新局请求的校验失败回执必须是中文（试玩报告 #12：字段名 enemy_difficulty /
 // building_id 这类裸字段名裸露给玩家）。
 func TestNewGameValidationMessagesAreChinese(t *testing.T) {
-	rt, err := NewRuntime(config.ServerConfig{Port: 9090, RateLimit: 100, DataDir: t.TempDir()}, nil)
+	rt, err := NewRuntime(config.ServerConfig{Port: 9090, DataDir: t.TempDir()}, nil)
 	if err != nil {
 		t.Fatalf("new runtime: %v", err)
 	}

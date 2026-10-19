@@ -29,7 +29,10 @@ export function MechaLogisticsControls({ unit, catalog, planetId, inventory }: {
     setPending(true);
     try {
       await submitPlanetCommand({ commandType: 'configure_mecha_logistics', planetId, focus: { entityId: unit.id },
-        execute: () => client.cmdConfigureMechaLogistics(unit.id, Object.fromEntries(rows.map(({ item, min, max }) => [item, { min, max }]))),
+        execute: () => client.cmdConfigureMechaLogistics(
+          Object.fromEntries(rows.map(({ item, min, max }) => [item, { min, max }])),
+          planetId,
+        ),
         fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
       });
     } finally { setPending(false); }

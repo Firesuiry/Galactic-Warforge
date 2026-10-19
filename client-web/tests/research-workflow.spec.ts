@@ -234,13 +234,30 @@ function createSummary(completedTechIds: string[]) {
         is_alive: true,
         resources: { energy: 80,
         },
-        // 背包：「装入建筑」下拉只列「背包里有 ∩ 目标建筑真会收」的物品
+        // 背包挂在「我的机甲」上（第 21 轮契约 §6），玩家本身不再有 inventory。
+        // 「装入建筑」下拉只列「背包里有 ∩ 目标建筑真会收」的物品
         // （listTransferItemOptions，c484aa4 起）。发射类建筑收一切仓储物品，
         // 所以这里给发射井/弹射器备好太阳帆与运载火箭。
-        inventory: {
-          solar_sail: 10,
-          small_carrier_rocket: 10,
-        },
+        mechas: [
+          {
+            unit_id: "u-1",
+            planet_id: "planet-1-1",
+            operator: "p1",
+            alive: true,
+            respawn_at_tick: 0,
+            position: { x: 1, y: 1, z: 0 },
+            inventory: {
+              solar_sail: 10,
+              small_carrier_rocket: 10,
+            },
+            inventory_slots_used: 2,
+            inventory_slots_total: 40,
+            operate_range: 18,
+            concurrent_tasks: 2,
+            construction_active: 0,
+            construction_pending: 0,
+          },
+        ],
         tech: {
           player_id: "p1",
           completed_techs: completedTechIds,

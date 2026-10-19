@@ -9,6 +9,7 @@ import type { AlertEntry, EnergyStats, PlayerState } from "@shared/types";
 import { isAlertActive } from "@shared/alerts";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
+import type { MechaView } from "@/features/mecha/model";
 import {
   translateAlertType,
   translateBuildingType,
@@ -46,6 +47,8 @@ export interface EarlyGameNextAction {
 export interface ResolveEarlyGameNextInput {
   activePlanetId: string;
   player?: PlayerState | null;
+  /** 我的机甲（summary.mechas 里 operator = 自己）；背包数量从它的档案读。 */
+  myMecha?: MechaView | null;
   energy?: EnergyStats | null;
   /** 已过滤噪声后的产线告警，优先级最高。 */
   alerts?: AlertEntry[];
@@ -67,8 +70,9 @@ function planetPath(planetId: string, query?: Record<string, string>) {
   return `${base}?${params.toString()}`;
 }
 
-function inventoryQty(player: PlayerState | null | undefined, itemId: string) {
-  const inv = player?.inventory;
+/** 背包数量读「我的机甲」（契约 §7.3：玩家本身不再有 inventory）。 */
+function inventoryQty(myMecha: MechaView | null | undefined, itemId: string) {
+  const inv = myMecha?.inventory;
   if (!inv) {
     return 0;
   }
@@ -96,7 +100,7 @@ export function resolveEarlyGameNextAction(
   const dysonUnlocked =
     completed.has(DYSON_ORBIT_TECH) || completed.has(RAY_RECEIVER_TECH);
   const current = player?.tech?.current_research;
-  const matrixQty = inventoryQty(player, MATRIX_ITEM);
+  const matrixQty = inventoryQty(input.myMecha, MATRIX_ITEM);
   const productionOutput = player?.stats?.production_stats?.total_output ?? 0;
   const logisticsThroughput = player?.stats?.logistics_stats?.throughput ?? 0;
 

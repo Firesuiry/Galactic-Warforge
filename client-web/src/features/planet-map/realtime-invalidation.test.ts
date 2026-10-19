@@ -57,6 +57,17 @@ describe('planet event refresh scheduling', () => {
     };
   }
 
+  it('summary 事件同时失效行星页 summary 与顶栏 shell-summary（审查 #21）', async () => {
+    const planetSummary = observe('summary');
+    const shellSummary = observe('shell-summary');
+    planetSummary.setServer(1);
+    shellSummary.setServer(1);
+    scheduler.schedule({ summary: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(planetSummary.requests()).toBe(1);
+    expect(shellSummary.requests()).toBe(1);
+  });
+
   it('commits slow responses during sustained events and eventually includes the final event', async () => {
     const scene = observe();
     for (let value = 1; value <= 16; value++) {

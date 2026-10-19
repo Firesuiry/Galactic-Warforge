@@ -10,8 +10,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-105"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-105",
@@ -26,8 +25,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-97"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-97",
@@ -42,8 +40,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "circuit_board",
@@ -118,8 +115,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-105"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-105",
@@ -134,8 +130,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "gear",
@@ -448,8 +443,7 @@
         "type": "craft_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "u-40"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "recipe_id": "gear",
@@ -471,8 +465,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-39"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-39",
@@ -487,8 +480,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-39"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-39",
@@ -503,8 +495,7 @@
         "type": "transfer_item",
         "target": {
           "layer": "planet",
-          "planet_id": "planet-1-1",
-          "entity_id": "b-39"
+          "planet_id": "planet-1-1"
         },
         "payload": {
           "building_id": "b-39",

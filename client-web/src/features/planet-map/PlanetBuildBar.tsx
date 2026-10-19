@@ -32,6 +32,7 @@ import {
   initialBuildDirection,
   isConveyorBeltBuilding,
   listBuildingRecipes,
+  MECHA_UNBOUND_REASON,
   nextBeltDirection,
   type BuildCatalogEntryView,
 } from '@/features/planet-map/build-workflow';
@@ -42,6 +43,7 @@ import { missingUnlockTechIds } from '@/features/planet-map/tech-gate';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { usePlanetViewStore } from '@/features/planet-map/store';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { selectMyMecha } from '@/features/mecha/model';
 import { translateBuildingCategory, translateBuildingType } from '@/i18n/translate';
 
 interface PlanetBuildBarProps {
@@ -139,6 +141,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
    * 背包补齐（不再缺任何物品）或卡片随分类切走后也会自动收起，避免清单过期。
    */
   const [shortageNotice, setShortageNotice] = useState<string | null>(null);
+  /** 未绑定机甲时点建造卡：状态行给「去接管」，不进建造模式。 */
+  const [unboundNotice, setUnboundNotice] = useState(false);
 
   const workflow = useMemo(() => deriveBuildWorkflowView({
     catalog,
@@ -228,17 +232,24 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildMode, setInteractionMode]);
 
-  const inventory = summary?.players?.[session.playerId]?.inventory;
+  // 背包读「我的机甲」档案（契约 §7.3）；未绑定时没有可扣料的背包——那是「未绑定机甲」，
+  // 不是「所有造价都缺」（建造由机甲执行，服务端会回 EXECUTOR_UNAVAILABLE）。
+  const myMecha = selectMyMecha(summary, session.playerId);
+  const inventory = myMecha?.inventory;
+  const mechaUnbound = !myMecha;
   const activeShortage = useMemo(() => {
     if (!activeBuildingType) {
       return '';
+    }
+    if (mechaUnbound) {
+      return MECHA_UNBOUND_REASON;
     }
     return describeBuildShortage(
       catalog?.buildings?.find((entry) => entry.id === activeBuildingType),
       inventory,
       (itemId) => getItemDisplayName(catalog, itemId),
     );
-  }, [activeBuildingType, catalog, inventory]);
+  }, [activeBuildingType, catalog, inventory, mechaUnbound]);
 
   /**
    * 分类页签里列出的建筑（试玩 1016 U6）：未解锁建筑**按分类**默认可见，
@@ -263,6 +274,11 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
     () => (shortageEntry ? compareBuildItems(shortageEntry, inventory).filter((item) => item.short) : []),
     [shortageEntry, inventory],
   );
+  useEffect(() => {
+    if (!mechaUnbound) {
+      setUnboundNotice(false);
+    }
+  }, [mechaUnbound]);
   useEffect(() => {
     if (!shortageNotice) {
       return;
@@ -378,6 +394,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
       <div className="planet-build-bar__detail" role="tooltip" data-testid="planet-build-detail">
         <strong>{translateBuildingType(detailEntry.id, detailEntry.name)}</strong>
         {locked ? <span className="is-short">未解锁{unlockCondition ? `：需要科技 ${unlockCondition}` : ''}</span> : null}
+        {mechaUnbound ? (
+          <span className="is-short">{MECHA_UNBOUND_REASON}</span>
+        ) : (
+          <>
         <span className="planet-build-bar__detail-head">背包有 / 需要</span>
         {compareBuildItems(detailEntry, inventory).map((item) => (
           <span key={item.item_id} className={item.short ? 'is-short' : ''}>
@@ -385,6 +405,8 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           </span>
         ))}
         {detailShortage ? <span className="is-short">缺：{detailShortage}</span> : null}
+          </>
+        )}
       </div>
     );
   })() : null;
@@ -421,10 +443,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
             const name = translateBuildingType(entry.id, entry.name);
             const cost = formatCost(entry, (itemId) => getItemDisplayName(catalog, itemId));
             const items = compareBuildItems(entry, inventory);
-            const unaffordable = !locked && items.some((item) => item.short);
+            const unaffordable = !locked && !mechaUnbound && items.some((item) => item.short);
             const unlockCondition = locked ? formatUnlockCondition(catalog, entry, completedTechIds) : '';
             const itemText = items.map((item) => `${getItemDisplayName(catalog, item.item_id)} ${item.owned}/${item.quantity}${item.short ? '（不足）' : ''}`).join('、');
-            const title = `${name}${cost ? ` · ${cost}` : ''}${itemText ? ` · 物品（背包有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需研究：${unlockCondition}` : ''}（点击查看解锁条件）` : ''}`;
+            const title = `${name}${cost ? ` · ${cost}` : ''}${mechaUnbound ? ` · ${MECHA_UNBOUND_REASON}` : ''}${itemText ? ` · 物品（背包有/需要）：${itemText}` : ''}${locked ? ` · 未解锁${unlockCondition ? ` · 需研究：${unlockCondition}` : ''}（点击查看解锁条件）` : ''}`;
             return (
               <button
                 key={entry.id}
@@ -450,6 +472,15 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                     return;
                   }
                   setLockedNotice(null);
+                  if (mechaUnbound) {
+                    // 建造由机甲执行：未绑定时点卡只给原因，不进建造模式、不发请求。
+                    setShortageNotice(null);
+                    setUnboundNotice(true);
+                    if (buildMode) {
+                      exitInteractionMode();
+                    }
+                    return;
+                  }
                   if (unaffordable) {
                     // 不进建造模式：把「还缺什么」直接显示在建造栏底部，并清掉正在进行的建造模式，
                     // 避免玩家以为已经进入放置状态。
@@ -572,7 +603,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           <div className="planet-build-bar__status">
             {activeShortage ? (
               <span className="planet-build-bar__shortage" role="status" data-testid="planet-build-shortage">
-                无法建造：缺少 {activeShortage}
+                {mechaUnbound ? `无法建造：${activeShortage}` : `无法建造：缺少 ${activeShortage}`}
               </span>
             ) : (
               <span className="planet-build-bar__hint">
@@ -651,6 +682,23 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
                 ))}
               </select>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+      {/* 未绑定机甲：点建造卡后给原因（不发命令）；已绑定时自动收起。 */}
+      {!buildMode && unboundNotice && mechaUnbound ? (
+        <div className="planet-build-bar__footer" data-testid="planet-build-unbound">
+          <div className="planet-build-bar__status">
+            <span className="planet-build-bar__shortage" role="status">
+              无法建造：{MECHA_UNBOUND_REASON}
+            </span>
+            <button
+              className="planet-build-bar__control"
+              type="button"
+              onClick={() => setUnboundNotice(false)}
+            >
+              知道了
+            </button>
           </div>
         </div>
       ) : null}

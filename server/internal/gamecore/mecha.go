@@ -3,6 +3,7 @@ package gamecore
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	"siliconworld/internal/model"
 )
@@ -23,45 +24,36 @@ func spendMechaEnergy(unit *model.Unit, cost int) *model.CommandResult {
 	return nil
 }
 
-// mechaInventorySlots 返回该玩家在本行星的机甲背包格数上限（执行体
-// inventory_slots）。unit 为空时回退到玩家在本行星的执行体；找不到执行体
-// 时返回 0（不限），只有测试世界或尚未生成执行体的场景会这样。
+// mechaInventorySlots 返回该玩家机甲的背包格数上限（units.yaml executor.mecha
+// .inventory_slots + 科技 mecha_inventory_slots）；0 = 不限（测试世界）。
 //
-// 所有「往玩家背包装物品」的路径都必须经过它：玩家背包就是机甲背包，
-// 容量按格计（每格堆叠该物品的 stack_limit 件），inventory_slots 科技既然
-// 限制取出与物流请求，就不能让采矿/手搓产出、退款、战利品把背包顶到上限之上。
-func mechaInventorySlots(ws *model.WorldState, unit *model.Unit, player *model.PlayerState) int {
-	if unit == nil && ws != nil && player != nil {
-		if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
-			unit = ws.Units[exec.UnitID]
-		}
-	}
-	if unit == nil || unit.Mecha == nil {
+// 所有「往机甲背包装物品」的路径都必须经过它：容量按格计（每格堆叠该物品
+// 的 stack_limit 件），inventory_slots 科技既然限制取出与物流请求，就不能让
+// 采矿/手搓产出、退款、战利品把背包顶到上限之上。
+func mechaInventorySlots(player *model.PlayerState) int {
+	if player == nil {
 		return 0
 	}
-	if unit.Mecha.InventorySlots <= 0 {
-		return 0
-	}
-	return unit.Mecha.InventorySlots
+	return model.MechaInventorySlots(player)
 }
 
 // mechaInventoryFree 返回在 slots 格上限下还能再装下多少件 itemID
 // （slots <= 0 表示不限）。与 PlayerState.AddItems 的裁剪口径一致。
-func mechaInventoryFree(player *model.PlayerState, slots int, itemID string, request int) int {
-	if player == nil || request <= 0 {
+func mechaInventoryFree(record *model.MechaRecord, slots int, itemID string, request int) int {
+	if record == nil || request <= 0 {
 		return 0
 	}
 	if slots <= 0 {
 		return request
 	}
-	return min(request, player.InventoryFreeSlotsFor(itemID, slots))
+	return min(request, record.Inventory.FreeSlotsFor(itemID, slots))
 }
 
 // mechaInventoryFullMessage 统一的「背包已满」回执：按格计（已用/总格数）。
-func mechaInventoryFullMessage(player *model.PlayerState, slots int) string {
+func mechaInventoryFullMessage(record *model.MechaRecord, slots int) string {
 	used := 0
-	if player != nil {
-		used = player.InventorySlotsUsed()
+	if record != nil {
+		used = record.Inventory.SlotsUsed()
 	}
 	return fmt.Sprintf("背包已满（已用 %d/%d 格）", used, slots)
 }
@@ -79,8 +71,16 @@ func itemAmountTotal(items []model.ItemAmount) int {
 
 func settleMechas(ws *model.WorldState) []*model.GameEvent {
 	events := settleExecutorRespawns(ws)
-	for _, unit := range ws.Units {
-		if unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
+	// 按 unit ID 排序遍历：mecha_state_changed 事件顺序随 map 迭代漂移会
+	// 影响回放/快照对比的确定性（与 settleMechaCharging 对齐）。
+	ids := make([]string, 0, len(ws.Units))
+	for id := range ws.Units {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		unit := ws.Units[id]
+		if unit == nil || unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
 			continue
 		}
 		beforeMecha := model.MechaState{}
@@ -117,20 +117,12 @@ type refuelMechaPayload struct {
 	Count int `json:"count"`
 }
 
-func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd model.Command, p refuelMechaPayload) (model.CommandResult, []*model.GameEvent) {
+// execRefuelMecha 由发令者机甲给自己补能：燃料从它自己的背包里扣。
+func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd model.Command, p refuelMechaPayload, mecha mechaContext) (model.CommandResult, []*model.GameEvent) {
 	fail := func(code model.ResultCode, message string) (model.CommandResult, []*model.GameEvent) {
 		return model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}, nil
 	}
-	unit := ws.Units[cmd.Target.EntityID]
-	if unit == nil {
-		return fail(model.CodeEntityNotFound, "未找到机甲单位")
-	}
-	if unit.OwnerID != playerID {
-		return fail(model.CodeNotOwner, "不能给其他玩家的机甲补能")
-	}
-	if unit.Type != model.UnitTypeExecutor {
-		return fail(model.CodeInvalidTarget, "只能给玩家机甲补能")
-	}
+	unit, record := mecha.Unit, mecha.Record
 	itemID, count := p.ItemID, p.Count
 	if count == 0 {
 		count = 1
@@ -142,21 +134,16 @@ func (gc *GameCore) execRefuelMecha(ws *model.WorldState, playerID string, cmd m
 	if !ok || fuel.MechaFuelEnergy <= 0 {
 		return fail(model.CodeInvalidTarget, "该物品不能作为机甲燃料")
 	}
-	player := ws.Players[playerID]
-	if player == nil {
-		return fail(model.CodeEntityNotFound, "未找到玩家")
-	}
-	model.SyncMechaCapabilities(unit, player)
 	m := unit.Mecha
 	if m.Energy >= m.MaxEnergy || m.FuelEnergy > 0 {
 		return fail(model.CodeInvalidTarget, "机甲核心已满或仍有未用完的燃料能量")
 	}
 	missing := m.MaxEnergy - m.Energy
-	used := min(count, (missing+fuel.MechaFuelEnergy-1)/fuel.MechaFuelEnergy, player.Inventory[itemID])
+	used := min(count, (missing+fuel.MechaFuelEnergy-1)/fuel.MechaFuelEnergy, record.Inventory[itemID])
 	if used <= 0 {
 		return fail(model.CodeInsufficientResource, fmt.Sprintf("背包里没有「%s」", fuel.Name))
 	}
-	player.DeductItems([]model.ItemAmount{{ItemID: itemID, Quantity: used}})
+	record.DeductItems([]model.ItemAmount{{ItemID: itemID, Quantity: used}})
 	available := used * fuel.MechaFuelEnergy
 	charge := min(missing, available)
 	m.Energy += charge

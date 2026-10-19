@@ -11,7 +11,8 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 	if ctx.executor == nil || ctx.executor.Mecha == nil {
 		return false
 	}
-	if ctx.executor.Mecha.Energy*2 < ctx.executor.Mecha.MaxEnergy || ws.Players[owner].Inventory[model.ItemCoal] < 40 {
+	record := ws.Players[owner].MechaByUnitID(ctx.executor.ID)
+	if record == nil || ctx.executor.Mecha.Energy*2 < ctx.executor.Mecha.MaxEnergy || record.Inventory[model.ItemCoal] < 40 {
 		return false
 	}
 	if ctx.powerCount < tuning.powerTarget || ctx.minerCount < tuning.minerTarget {
@@ -416,7 +417,11 @@ func (gc *GameCore) botFeedBuilding(ws *model.WorldState, owner string, ctx *bot
 	if n <= 0 || b.Storage == nil {
 		return model.Command{}, false
 	}
-	if qty := min(n, ws.Players[owner].Inventory[item]); qty > 0 {
+	record := ws.Players[owner].MechaByOperator(owner)
+	if record == nil {
+		return model.Command{}, false
+	}
+	if qty := min(n, record.Inventory[item]); qty > 0 {
 		return botTransferCommand(b.ID, item, qty, "to_building"), true
 	}
 	return gc.botEnsureItem(ws, owner, ctx, item, n, map[string]bool{})
@@ -438,7 +443,11 @@ func botRecipeFor(player *model.PlayerState, item string) (model.RecipeDefinitio
 
 func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSurvey, item string, quantity int, visiting map[string]bool) (model.Command, bool) {
 	player := ws.Players[owner]
-	if player.Inventory[item] >= quantity || visiting[item] {
+	record := player.MechaByOperator(owner)
+	if record == nil {
+		return model.Command{}, false
+	}
+	if record.Inventory[item] >= quantity || visiting[item] {
 		return model.Command{}, false
 	}
 	visiting[item] = true
@@ -473,14 +482,14 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 			if exports <= 0 {
 				continue
 			}
-			return botTransferCommand(b.ID, item, min(quantity-player.Inventory[item], exports), "to_player"), true
+			return botTransferCommand(b.ID, item, min(quantity-record.Inventory[item], exports), "to_player"), true
 		}
 		exports := b.ExportableItemQuantity(item)
 		if b.Runtime.Functions.Collect == nil && b.Runtime.Functions.Production == nil {
 			continue
 		}
 		if exports > 0 {
-			return botTransferCommand(b.ID, item, min(quantity-player.Inventory[item], exports), "to_player"), true
+			return botTransferCommand(b.ID, item, min(quantity-record.Inventory[item], exports), "to_player"), true
 		}
 	}
 	recipe, ok := botRecipeFor(player, item)
@@ -496,7 +505,7 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 	batches := 1
 	for _, o := range recipe.Outputs {
 		if o.ItemID == item {
-			batches = min(8, max(1, (quantity-player.Inventory[item]+o.Quantity-1)/o.Quantity))
+			batches = min(8, max(1, (quantity-record.Inventory[item]+o.Quantity-1)/o.Quantity))
 		}
 	}
 	// 已有机器在跑这个配方：先喂机器，只有机器吃不下的部分才留给机甲手搓。
@@ -511,7 +520,7 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 			if needed <= 0 {
 				continue
 			}
-			if n := min(needed, player.Inventory[input.ItemID]); n > 0 {
+			if n := min(needed, record.Inventory[input.ItemID]); n > 0 {
 				return botTransferCommand(b.ID, input.ItemID, n, "to_building"), true
 			}
 			if cmd, ok := gc.botEnsureItem(ws, owner, ctx, input.ItemID, needed, visiting); ok {
@@ -524,14 +533,14 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 	}
 	if recipe.HandcraftAllowed {
 		for _, input := range recipe.Inputs {
-			if player.Inventory[input.ItemID] < input.Quantity*batches {
+			if record.Inventory[input.ItemID] < input.Quantity*batches {
 				return gc.botEnsureItem(ws, owner, ctx, input.ItemID, input.Quantity*batches, visiting)
 			}
 		}
 		if ctx.executor.Mecha.Job != nil {
 			return model.Command{}, false
 		}
-		return model.Command{Type: model.CmdCraftItem, Target: model.CommandTarget{Layer: "planet", EntityID: ctx.executor.ID}, Payload: map[string]any{"recipe_id": recipe.ID, "quantity": batches}}, true
+		return model.Command{Type: model.CmdCraftItem, Target: model.CommandTarget{Layer: "planet"}, Payload: map[string]any{"recipe_id": recipe.ID, "quantity": batches}}, true
 	}
 	// 已有机器在跑这个配方：喂机器而不是新建产线。
 	for _, b := range ctx.assemblers {
@@ -543,7 +552,7 @@ func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSu
 			if needed <= 0 {
 				continue
 			}
-			if n := min(needed, player.Inventory[input.ItemID]); n > 0 {
+			if n := min(needed, record.Inventory[input.ItemID]); n > 0 {
 				return botTransferCommand(b.ID, input.ItemID, n, "to_building"), true
 			}
 			if cmd, ok := gc.botEnsureItem(ws, owner, ctx, input.ItemID, needed, visiting); ok {
@@ -588,8 +597,12 @@ func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx 
 	if !ok {
 		return model.Command{}, false
 	}
+	record := player.MechaByOperator(owner)
+	if record == nil {
+		return model.Command{}, false
+	}
 	for _, cost := range def.BuildCost.Items {
-		if player.Inventory[cost.ItemID] < cost.Quantity {
+		if record.Inventory[cost.ItemID] < cost.Quantity {
 			return gc.botEnsureItem(ws, owner, ctx, cost.ItemID, cost.Quantity, visiting)
 		}
 	}
@@ -607,7 +620,7 @@ func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx 
 	if recipe != "" {
 		payload["recipe_id"] = recipe
 	}
-	return model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Layer: "planet", Position: pos}, Payload: payload}, true
+	return model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Layer: "planet", PlanetID: ws.PlanetID, Position: pos}, Payload: payload}, true
 }
 
 func botArmyPreference(ctx *botSurvey, tuning botTuning) []model.UnitType {
@@ -679,8 +692,12 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 			return model.Command{}, false
 		}
 		def, _ := model.BuildingDefinitionByID(model.BuildingTypeTeslaTower)
+		record := ws.Players[owner].MechaByOperator(owner)
+		if record == nil {
+			return model.Command{}, false
+		}
 		for _, cost := range def.BuildCost.Items {
-			if ws.Players[owner].Inventory[cost.ItemID] < cost.Quantity {
+			if record.Inventory[cost.ItemID] < cost.Quantity {
 				return gc.botEnsureItem(ws, owner, ctx, cost.ItemID, cost.Quantity, map[string]bool{})
 			}
 		}
@@ -689,7 +706,7 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 		}
 		pos := botTowerStep(ws, anchor.Position, b.Position, reach)
 		// 只放能朝目标推进的塔：地形挡住时跳过这座建筑，避免原地堆塔。
-		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, *pos) != nil {
+		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, mechaContext{Record: ws.Players[owner].MechaByOperator(owner), World: ws}, *pos) != nil {
 			continue
 		}
 		// 复用与 execBuild 相同的围死校验：拉线时的电塔同样不能把基地封死

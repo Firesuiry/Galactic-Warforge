@@ -9,62 +9,24 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"siliconworld/internal/gamecore"
 	"siliconworld/internal/model"
 	"siliconworld/internal/query"
 	"siliconworld/internal/startup"
 )
-
-// rateLimiter is a simple per-player token bucket
-type rateLimiter struct {
-	mu         sync.Mutex
-	tokens     map[string]int
-	lastRefill map[string]time.Time
-	limit      int // max tokens (commands/s)
-}
-
-func newRateLimiter(limit int) *rateLimiter {
-	return &rateLimiter{
-		tokens:     make(map[string]int),
-		lastRefill: make(map[string]time.Time),
-		limit:      limit,
-	}
-}
-
-func (rl *rateLimiter) Allow(playerID string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	last, ok := rl.lastRefill[playerID]
-	if !ok || now.Sub(last) >= time.Second {
-		rl.tokens[playerID] = rl.limit
-		rl.lastRefill[playerID] = now
-	}
-
-	if rl.tokens[playerID] <= 0 {
-		return false
-	}
-	rl.tokens[playerID]--
-	return true
-}
 
 // Server is the HTTP server wrapping game services.
 // F1 热重置：Server 不再持有 core/bus/queue；所有 handler 通过 rt.Current()
 // 取当前对局 Session 再访问其中的组件（一局内整体原子替换）。
 type Server struct {
 	rt *startup.Runtime
-	rl *rateLimiter
 }
 
 // New creates and configures the HTTP server
 func New(rt *startup.Runtime) *Server {
-	return &Server{
-		rt: rt,
-		rl: newRateLimiter(rt.ServerConfig().RateLimit),
-	}
+	return &Server{rt: rt}
 }
 
 // session 返回当前对局 session；nil 表示尚未 boot（不应发生）。
@@ -206,7 +168,7 @@ func (s *Server) handleStateSummary(w http.ResponseWriter, r *http.Request, play
 		return
 	}
 	ws := sess.Core.World()
-	sum := sess.Query.Summary(ws, playerID, sess.Core.Victory())
+	sum := sess.Query.Summary(ws, playerID, sess.Core.Victory(), sess.Core.Worlds())
 	writeJSON(w, http.StatusOK, sum)
 }
 
@@ -552,13 +514,31 @@ func (s *Server) handleWarTheaters(w http.ResponseWriter, r *http.Request, playe
 	writeJSON(w, http.StatusOK, view)
 }
 
+// validateIssuer 按契约 §1 校验 HTTP 发令者：player 必须等于鉴权玩家（403），
+// agent 必须符合 ID 规则且不得等于玩家 ID（400），bot 仅服务端内部可用（400）。
+func validateIssuer(issuerType, issuerID, playerID string) string {
+	switch issuerType {
+	case "player":
+		if issuerID != playerID {
+			return "issuer_id does not match authenticated player"
+		}
+	case "agent":
+		if !gamecore.ValidOperatorID(issuerID) {
+			return "issuer_id must match ^[A-Za-z0-9_.:-]{1,64}$ for issuer_type agent"
+		}
+		if issuerID == playerID {
+			return "issuer_id must not equal the authenticated player id for issuer_type agent"
+		}
+	case "bot":
+		return "issuer_type bot is reserved for the server"
+	default:
+		return "issuer_type must be player or agent"
+	}
+	return ""
+}
+
 // handleCommands handles POST /commands
 func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID string) {
-	if !s.rl.Allow(playerID) {
-		writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
-		return
-	}
-
 	sess := s.requireSession(w)
 	if sess == nil {
 		return
@@ -584,8 +564,12 @@ func (s *Server) handleCommands(w http.ResponseWriter, r *http.Request, playerID
 		writeError(w, http.StatusBadRequest, "issuer_id is required")
 		return
 	}
-	if req.IssuerType == "player" && req.IssuerID != playerID {
-		writeError(w, http.StatusForbidden, "issuer_id does not match authenticated player")
+	if msg := validateIssuer(req.IssuerType, req.IssuerID, playerID); msg != "" {
+		status := http.StatusBadRequest
+		if req.IssuerType == "player" {
+			status = http.StatusForbidden
+		}
+		writeError(w, status, msg)
 		return
 	}
 	if len(req.Commands) == 0 {

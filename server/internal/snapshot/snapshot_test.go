@@ -22,11 +22,18 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		TeamID:         "team-1",
 		Role:           "commander",
 		Resources:      model.Resources{Energy: 55},
-		InventorySlots: 40,
 		IsAlive:        true,
+		Mechas: map[string]*model.MechaRecord{
+			"unit-1": {
+				UnitID:        "unit-1",
+				PlanetID:      ws.PlanetID,
+				Operator:      "agent-a",
+				Inventory:     model.ItemInventory{"iron_ingot": 12, "gear": 3},
+				RespawnAtTick: 1234,
+			},
+		},
 	}
 	player.SetPermissions([]string{"build", "move"})
-	player.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState("unit-1", 1.2, 3, 2, 1.1))
 	ws.Players[player.PlayerID] = player
 
 	resource := &model.ResourceNodeState{
@@ -192,8 +199,14 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	if !restored.Players[player.PlayerID].HasPermission(model.CmdBuild) {
 		t.Fatalf("player permissions not restored")
 	}
-	if got := restored.Players[player.PlayerID].InventorySlots; got != 40 {
-		t.Fatalf("player inventory slots not restored: %d", got)
+	restoredMecha := restored.Players[player.PlayerID].Mechas["unit-1"]
+	if restoredMecha == nil {
+		t.Fatalf("mecha record not restored: %+v", restored.Players[player.PlayerID].Mechas)
+	}
+	if restoredMecha.UnitID != "unit-1" || restoredMecha.PlanetID != ws.PlanetID ||
+		restoredMecha.Operator != "agent-a" || restoredMecha.RespawnAtTick != 1234 ||
+		restoredMecha.Inventory["iron_ingot"] != 12 || restoredMecha.Inventory["gear"] != 3 {
+		t.Fatalf("mecha record roundtrip mismatch: %+v", restoredMecha)
 	}
 	if restored.Pipelines == nil || restored.Pipelines.Nodes == nil || restored.Pipelines.Segments == nil {
 		t.Fatalf("pipeline snapshot missing")

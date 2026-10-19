@@ -282,9 +282,9 @@ func TestCatalogReturnsMetadataSlices(t *testing.T) {
 	if len(view.Buildings) == 0 || len(view.Items) == 0 || len(view.Recipes) == 0 || len(view.Techs) == 0 {
 		t.Fatalf("expected non-empty catalog slices, got %+v", view)
 	}
-	// 10 = 9 个战斗/支援单位 + 运输机器人（transport_robot，§2）。
-	if len(view.WorldUnits) != 10 {
-		t.Fatalf("expected exactly 10 public world units, got %d", len(view.WorldUnits))
+	// 11 = 9 个战斗/支援单位 + 运输机器人（transport_robot，§2）+ 执行体机甲（第 21 轮起可生产）。
+	if len(view.WorldUnits) != 11 {
+		t.Fatalf("expected exactly 11 public world units, got %d", len(view.WorldUnits))
 	}
 	worldUnitIDs := map[string]bool{}
 	for _, entry := range view.WorldUnits {

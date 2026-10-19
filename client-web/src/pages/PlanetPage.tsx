@@ -50,7 +50,8 @@ import type { TheaterZoneGeometry } from "@/features/planet-map/squad-commands";
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { usePlanetInteractions } from "@/features/planet-map/use-planet-interactions";
 import { usePlanetRtsHotkeys } from "@/features/planet-map/use-planet-rts-hotkeys";
-import { formatInventorySummary, inventorySlotUsage } from "@/features/inventory-summary";
+import { formatInventorySummary } from "@/features/inventory-summary";
+import { foreignOperatedMechaIds, mechaSlotUsage, selectMyMecha } from "@/features/mecha/model";
 import {
   extractAlertFromEvent,
   parseEnabledLayers,
@@ -326,16 +327,21 @@ export function PlanetPage() {
   // tick 速率是运行参数（server.tick_rate_override 可覆盖存档设置）：
   // 机甲剩余时间换算必须用 /games/current 的 max_tick_rate，不能用写死的 10。
   const currentGameQuery = useCurrentGameQuery();
-  // 机甲批量进度（主界面常驻横幅 + 完成通知）：与 scene/catalog 同源，
-  // 放在 query 定义之后、任何早返回之前，避免 hooks 出现在条件分支后。
-  const mechaJob = useMechaJobProgress(catalogQuery.data, sceneQuery.data, session.playerId, currentGameQuery.data?.max_tick_rate ?? 0);
-
   const summaryQuery = useQuery({
     queryKey: ["summary", session.serverUrl, session.playerId],
     queryFn: () => client.fetchSummary(),
     enabled: Boolean(planetId),
     refetchInterval: 2000,
   });
+
+  // 机甲批量进度（主界面常驻横幅 + 完成通知）：与 scene/catalog/summary 同源，
+  // 放在 query 定义之后、任何早返回之前，避免 hooks 出现在条件分支后。
+  const mechaJob = useMechaJobProgress(
+    catalogQuery.data,
+    sceneQuery.data,
+    currentGameQuery.data?.max_tick_rate ?? 0,
+    selectMyMecha(summaryQuery.data, session.playerId),
+  );
 
   const statsQuery = useQuery({
     queryKey: ["stats", session.serverUrl, session.playerId],
@@ -498,9 +504,19 @@ export function PlanetPage() {
     if (home) usePlanetViewStore.getState().setHomeTile(home);
   }, [guideEntities, sceneQuery.data, session.playerId]);
 
+  // 背包读「我的机甲」（契约 §7.3）：建造扣料、放料提示都按这台机甲算。
+  const myMecha = selectMyMecha(summaryQuery.data, session.playerId);
+  const myMechaInventory = myMecha?.inventory;
+  // 契约 §3.1：别人绑定的本方机甲拒绝 move/attack（NOT_OPERATOR），批量选择器先剔除。
+  const foreignMechaIds = useMemo(
+    () => foreignOperatedMechaIds(summaryQuery.data, session.playerId),
+    [summaryQuery.data, session.playerId],
+  );
   const interactions = usePlanetInteractions({
     catalog: catalogQuery.data,
-    inventory: summaryQuery.data?.players?.[session.playerId]?.inventory,
+    foreignMechaIds,
+    inventory: myMechaInventory,
+    mechaUnbound: !myMecha,
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
     knownOwnUnits,
@@ -521,6 +537,7 @@ export function PlanetPage() {
     planet: sceneQuery.data,
     runtime: runtimeQuery.data,
     knownOwnUnits,
+    foreignMechaIds,
     interactions,
   });
 
@@ -774,8 +791,8 @@ export function PlanetPage() {
   const stats = statsQuery.data;
   const currentPlayer = summary?.players?.[session.playerId];
   const liveTick = Math.max(summary?.tick ?? 0, planet.tick);
-  const inventorySummary = formatInventorySummary(currentPlayer?.inventory);
-  const slotUsage = inventorySlotUsage(currentPlayer);
+  const inventorySummary = formatInventorySummary(myMechaInventory);
+  const slotUsage = mechaSlotUsage(myMecha);
   const currentResearchName = getTechDisplayName(
     catalog,
     currentPlayer?.tech?.current_research?.tech_id ?? "",
@@ -927,7 +944,8 @@ export function PlanetPage() {
           key={planet.planet_id}
           alerts={liveAlerts}
           catalog={catalog}
-          inventory={summary?.players?.[session.playerId]?.inventory}
+          inventory={myMechaInventory}
+          mechaUnbound={!myMecha}
           darkFogHostile={darkFogHostile}
           fog={planet}
           networks={networks}
@@ -956,7 +974,7 @@ export function PlanetPage() {
           )}
         />
         </Suspense>
-        <BuildPlacementHint catalog={catalog} inventory={summary?.players?.[session.playerId]?.inventory} planet={planet} playerId={session.playerId} runtime={runtime} />
+        <BuildPlacementHint catalog={catalog} inventory={myMechaInventory} mechaUnbound={!myMecha} planet={planet} playerId={session.playerId} runtime={runtime} />
         {/* 视图切换按钮组已随 2D「平面战术」视图删除（只剩 3D）；恒星系入口保留。 */}
         {systemId ? (
           <div className="planet-view-switch" aria-label="地图视图">
@@ -1030,12 +1048,20 @@ export function PlanetPage() {
                 {slotUsage ? (
                   <div
                     className={`hero-chip${slotUsage.used >= slotUsage.total ? " hero-chip--danger" : ""}`}
-                    title={`背包格数（每格按物品堆叠上限装填）：已用 ${slotUsage.used} / ${slotUsage.total} 格`}
+                    title={`背包格数（每格按物品堆叠上限装填）：已用 ${slotUsage.used} / ${slotUsage.total} 格 · 机甲 ${myMecha?.unit_id}`}
                   >
                     <Icon iconKey="iron_ingot" color="#5fb0ff" size={18} />
-                    <span>背包 {slotUsage.used}/{slotUsage.total} 格</span>
+                    <span>背包 {slotUsage.used}/{slotUsage.total} 格 · {myMecha?.unit_id}</span>
                   </div>
-                ) : null}
+                ) : (
+                  <div
+                    className="hero-chip hero-chip--muted"
+                    title="在行星上选中一台机甲 → 接管"
+                  >
+                    <Icon iconKey="iron_ingot" color="#8a94a6" size={18} />
+                    <span>未绑定机甲</span>
+                  </div>
+                )}
                 <div className="hero-chip">
                   <Icon iconKey="ray_receiver" color="#39e6d0" size={18} />
                   <span>
@@ -1068,6 +1094,7 @@ export function PlanetPage() {
             }}
             planet={planet}
             squads={runtime.combat_squads}
+            summary={summary}
           />
           <PlanetBuildBar
             catalog={catalog}
@@ -1149,7 +1176,7 @@ export function PlanetPage() {
               buildings: guideEntities.buildings,
               units: [...guideEntities.units, ...guideEntities.fogUnits],
               legions: ownLegions(runtime.combat_squads, session.playerId),
-              playerInventory: currentPlayer?.inventory,
+              playerInventory: myMechaInventory,
               tech: currentPlayer?.tech,
               catalog,
               darkFogHostile,

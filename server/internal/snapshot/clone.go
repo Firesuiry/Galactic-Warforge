@@ -15,8 +15,6 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 		TeamID:          ps.TeamID,
 		Role:            ps.Role,
 		Resources:       ps.Resources,
-		Inventory:       ps.Inventory.Clone(),
-		InventorySlots:  ps.InventorySlots,
 		IsAlive:         ps.IsAlive,
 		FocusPlanetID:   ps.FocusPlanetID,
 		DarkFog:         ps.DarkFog,
@@ -30,14 +28,13 @@ func clonePlayer(ps *model.PlayerState) *model.PlayerState {
 	if len(ps.Permissions) > 0 {
 		cp.Permissions = append([]string(nil), ps.Permissions...)
 	}
-	if len(ps.Executors) > 0 {
-		cp.Executors = make(map[string]*model.ExecutorState, len(ps.Executors))
-		for planetID, exec := range ps.Executors {
-			if exec == nil {
+	if len(ps.Mechas) > 0 {
+		cp.Mechas = make(map[string]*model.MechaRecord, len(ps.Mechas))
+		for unitID, mecha := range ps.Mechas {
+			if mecha == nil {
 				continue
 			}
-			copyExec := *exec
-			cp.Executors[planetID] = &copyExec
+			cp.Mechas[unitID] = mecha.Clone()
 		}
 	}
 	return cp

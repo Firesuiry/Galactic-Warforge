@@ -211,6 +211,16 @@ export const PUBLIC_COMMAND_DEFINITIONS: PublicCommandDefinition[] = [
     webSurface: "required",
   },
   {
+    id: "assign_mecha",
+    apiCommandName: "assign_mecha",
+    cliCommandName: "mecha",
+    category: "management",
+    permissionCategory: "management",
+    layer: "planet",
+    requiresActivePlanet: true,
+    webSurface: "required",
+  },
+  {
     id: "configure_logistics_slot",
     apiCommandName: "configure_logistics_slot",
     cliCommandName: "configure_logistics_slot",

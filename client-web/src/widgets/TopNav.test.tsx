@@ -74,8 +74,10 @@ describe('TopNav save', () => {
             p1: {
               player_id: 'p1',
               resources: { energy: 1 },
-              inventory: { iron_ore: 7, copper_ore: 2 },
               is_alive: true,
+              mechas: [{ unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+                inventory: { iron_ore: 7, copper_ore: 2 }, inventory_slots_used: 2, inventory_slots_total: 40,
+                operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
             },
           },
         }));
@@ -131,8 +133,10 @@ describe('TopNav save', () => {
             p1: {
               player_id: 'p1',
               resources: { energy: 1 },
-              inventory: { silicon_ore: 5 },
               is_alive: true,
+              mechas: [{ unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+                inventory: { silicon_ore: 5 }, inventory_slots_used: 1, inventory_slots_total: 40,
+                operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
             },
           },
         }));
@@ -178,8 +182,10 @@ describe('TopNav save', () => {
             p1: {
               player_id: 'p1',
               resources: { energy: 140 },
-              inventory: {},
               is_alive: true,
+              mechas: [{ unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+                inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40,
+                operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
             },
           },
         }));
@@ -216,10 +222,10 @@ describe('TopNav save', () => {
             p1: {
               player_id: 'p1',
               resources: { energy: 1 },
-              inventory: { iron_ore: 250, gear: 30 },
-              inventory_slots_used: 4,
-              inventory_slots_total: 40,
               is_alive: true,
+              mechas: [{ unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+                inventory: { iron_ore: 250, gear: 30 }, inventory_slots_used: 4, inventory_slots_total: 40,
+                operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
             },
           },
         }));
@@ -244,9 +250,9 @@ describe('TopNav save', () => {
 
     renderTopNav();
     const button = await screen.findByRole('button', { name: '背包库存' });
-    await waitFor(() => expect(button).toHaveAttribute('title', '背包库存 · 4/40 格（点击展开全部）'));
+    await waitFor(() => expect(button).toHaveAttribute('title', '背包库存 · 4/40 格 · 机甲 u-3（点击展开全部）'));
     await user.click(button);
-    expect(await screen.findByText('背包库存 · 2 种 · 已用 4/40 格')).toBeInTheDocument();
+    expect(await screen.findByText('背包库存 · 2 种 · 已用 4/40 格 · 机甲 u-3')).toBeInTheDocument();
     expect(await screen.findByText('3 格')).toBeInTheDocument();
     expect(await screen.findByText('1 格')).toBeInTheDocument();
   });
@@ -449,5 +455,100 @@ describe('TopNav save', () => {
     expect(await screen.findByText('玩家')).toBeInTheDocument();
     expect(screen.getByText('p1')).toBeInTheDocument();
     expect(screen.getByText(/localhost:5173/)).toBeInTheDocument();
+  });
+});
+
+describe('顶栏背包 chip（契约 §7.3）', () => {
+  beforeEach(() => {
+    useSessionStore.getState().setSession({
+      serverUrl: 'http://localhost:5173',
+      playerId: 'p1',
+      playerKey: 'key_player_1',
+    });
+  });
+
+  function stubSummary(players: unknown) {
+    const alertsStub = stubAlerts();
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = new URL(String(input));
+      const alertResponse = alertsStub(url);
+      if (alertResponse) {
+        return Promise.resolve(alertResponse);
+      }
+      if (url.pathname === '/state/summary') {
+        return Promise.resolve(jsonResponse({ tick: 12, active_planet_id: 'planet-1-1', players }));
+      }
+      if (url.pathname === '/state/stats') {
+        return Promise.resolve(jsonResponse({
+          player_id: 'p1',
+          tick: 12,
+          energy_stats: { generation: 10, consumption: 8, storage: 0, current_stored: 0, shortage_ticks: 0 },
+        }));
+      }
+      throw new Error(`unexpected request ${url.pathname}`);
+    }));
+  }
+
+  it('未绑定机甲：灰色 chip「未绑定机甲」+ 悬浮提示', async () => {
+    stubSummary({
+      p1: {
+        player_id: 'p1',
+        resources: { energy: 1 },
+        is_alive: true,
+        mechas: [{ unit_id: 'u-3', planet_id: 'planet-1-1', operator: 'builder-a', alive: true, respawn_at_tick: 0,
+          inventory: { iron_ore: 9 }, inventory_slots_used: 1, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
+      },
+    });
+    renderTopNav();
+    const chip = await screen.findByTitle('在行星上选中一台机甲 → 接管');
+    expect(chip).toHaveTextContent('未绑定机甲');
+    expect(chip.className).toContain('top-nav__chip--muted');
+    expect(screen.queryByRole('button', { name: '背包库存' })).toBeNull();
+  });
+
+  it('已绑定：可见「背包 used/total 格 · 机甲ID」chip + 关键物品 chip，点击展开完整面板', async () => {
+    stubSummary({
+      p1: {
+        player_id: 'p1',
+        resources: { energy: 1 },
+        is_alive: true,
+        mechas: [{ unit_id: 'u-7', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: { iron_ingot: 9 }, inventory_slots_used: 1, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
+      },
+    });
+    renderTopNav();
+    const user = userEvent.setup();
+    const button = await screen.findByTitle('背包库存 · 1/40 格 · 机甲 u-7（点击展开全部）');
+    // 格数与机甲 ID 是可见文字 chip（契约 §7.3 第 1 条），排在关键物品 chip 之前。
+    expect(button).toHaveTextContent('背包 1/40 格 · u-7');
+    const summaryChip = button.querySelector('.top-nav__chip--inventory-summary');
+    expect(summaryChip).not.toBeNull();
+    expect(summaryChip).toHaveTextContent('背包 1/40 格 · u-7');
+    // 关键物品 chip 保留。
+    expect(button).toHaveTextContent('铁块9');
+    // 点格数 chip 与点关键物品 chip 一样展开完整面板。
+    await user.click(summaryChip as HTMLElement);
+    expect(await screen.findByRole('dialog', { name: '完整库存' })).toHaveTextContent('背包库存 · 1 种 · 已用 1/40 格 · 机甲 u-7');
+    await user.click(screen.getByRole('button', { name: '背包库存' }));
+    expect(screen.queryByRole('dialog', { name: '完整库存' })).toBeNull();
+  });
+
+  it('已绑定但背包为空：只显示格数 chip，不再叠「背包空」空态', async () => {
+    stubSummary({
+      p1: {
+        player_id: 'p1',
+        resources: { energy: 1 },
+        is_alive: true,
+        mechas: [{ unit_id: 'u-8', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+          inventory: {}, inventory_slots_used: 0, inventory_slots_total: 40,
+          operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 0 }],
+      },
+    });
+    renderTopNav();
+    const button = await screen.findByTitle('背包库存 · 0/40 格 · 机甲 u-8（点击展开全部）');
+    expect(button).toHaveTextContent('背包 0/40 格 · u-8');
+    expect(button).not.toHaveTextContent('背包空');
   });
 });

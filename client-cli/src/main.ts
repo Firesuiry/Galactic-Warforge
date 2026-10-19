@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { fmtEvent } from '@gw/shared/commands/format';
 import { DEFAULT_PLAYERS } from '@gw/shared/config';
 
-import { api } from './api.js';
+import { api, issuerFromEnv } from './api.js';
 import { SERVER_URL } from './config.js';
 import { startRepl } from './repl.js';
 import { startSSE, setEventPrinter } from './sse.js';
@@ -13,6 +13,10 @@ function banner() {
   console.log(chalk.bold.cyan('║') + chalk.bold('  SiliconWorld CLI  v0.1        ') + chalk.bold.cyan('║'));
   console.log(chalk.bold.cyan('╚════════════════════════════════╝'));
   console.log(chalk.dim(`Server: ${SERVER_URL}`));
+  const issuer = issuerFromEnv();
+  if (issuer && !('error' in issuer)) {
+    console.log(chalk.cyan(`Issuer: agent:${issuer.issuerId}（SW_ISSUER）`));
+  }
   console.log('');
 }
 
@@ -65,6 +69,11 @@ async function selectPlayer(): Promise<{ id: string; key: string }> {
 
 async function main() {
   banner();
+  const issuer = issuerFromEnv();
+  if (issuer && 'error' in issuer) {
+    // 配置错误直接退出：不带着「玩家本人」身份继续跑，否则所有命令会以错误身份发令。
+    process.exit(1);
+  }
 
   const online = await checkServer();
   if (!online) {

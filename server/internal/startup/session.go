@@ -196,7 +196,7 @@ type NewGamePlayer struct {
 }
 
 // NewGameRequest 是 POST /games/new 的请求体。
-// 新局默认完整继承启动配置（battlefield 全字段 + 同名玩家的 bootstrap/bot/executor/permissions），
+// 新局默认完整继承启动配置（battlefield 全字段 + 同名玩家的 bootstrap/bot/permissions），
 // 只有请求里显式给出的字段才覆盖；地图规则沿用服务端启动时的 mapconfig 文件，仅允许通过 map_seed 换地图。
 type NewGameRequest struct {
 	MapSeed         string          `json:"map_seed,omitempty"`         // 空则随机生成
@@ -475,8 +475,8 @@ func (rt *Runtime) buildConfig(req *NewGameRequest) (*config.Config, error) {
 	return cfg, nil
 }
 
-// inheritedPlayerConfig 取启动配置中同名玩家的定义作为新局默认值（含 executor/
-// permissions/bootstrap/bot）；没有同名玩家时返回零值，交由 ApplyDefaults 补默认。
+// inheritedPlayerConfig 取启动配置中同名玩家的定义作为新局默认值（含 permissions/
+// bootstrap/bot）；没有同名玩家时返回零值，交由 ApplyDefaults 补默认。
 func inheritedPlayerConfig(source *config.Config, playerID string) config.PlayerConfig {
 	if source == nil {
 		return config.PlayerConfig{}

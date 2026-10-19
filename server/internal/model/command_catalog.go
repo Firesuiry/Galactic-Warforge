@@ -134,24 +134,23 @@ var commandSpecs = []CommandStructureSpec{
 	},
 	{
 		Type:                  CmdRefuelMecha,
-		RequiredTargetFields:  []string{"entity_id"},
 		RequiredPayloadFields: []string{"item_id"},
 		OptionalPayloadFields: []string{"count"},
-		Constraints:           []string{"payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。"},
+		Constraints:           []string{"由发令者绑定的机甲给自己补能；payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。"},
 	},
 	{
 		Type:                  CmdMineResource,
-		RequiredTargetFields:  []string{"entity_id"},
 		RequiredPayloadFields: []string{"resource_id", "quantity"},
+		Constraints:           []string{"由发令者绑定的机甲执行；未绑定/不在本星球/阵亡返回 EXECUTOR_UNAVAILABLE。"},
 	},
 	{
 		Type:                  CmdCraftItem,
-		RequiredTargetFields:  []string{"entity_id"},
 		RequiredPayloadFields: []string{"recipe_id", "quantity"},
+		Constraints:           []string{"由发令者绑定的机甲手搓，原料从它的背包扣。"},
 	},
 	{
-		Type:                 CmdCancelMechaJob,
-		RequiredTargetFields: []string{"entity_id"},
+		Type:        CmdCancelMechaJob,
+		Constraints: []string{"取消发令者绑定机甲的当前作业，未完成部分的原料退回它的背包。"},
 	},
 	{
 		Type:                  CmdProduce,
@@ -185,7 +184,6 @@ var commandSpecs = []CommandStructureSpec{
 	},
 	{
 		Type:                  CmdConfigureMechaLogistics,
-		RequiredTargetFields:  []string{"entity_id"},
 		RequiredPayloadFields: []string{"requests"},
 	},
 	{
@@ -437,6 +435,13 @@ var commandSpecs = []CommandStructureSpec{
 	{
 		Type:                  CmdRefitUnit,
 		RequiredPayloadFields: []string{"building_id", "unit_id", "target_blueprint_id"},
+		Constraints:           []string{"改装费从发令者机甲背包扣；机甲须在本星球（不要求距离）。"},
+	},
+	{
+		Type:                  CmdAssignMecha,
+		RequiredTargetFields:  []string{"entity_id"},
+		RequiredPayloadFields: []string{"operator"},
+		Constraints:           []string{"target.entity_id = 机甲单位 ID；payload.operator 必填（\"\" = 解绑）。同玩家的任何发令者都能改绑本方机甲；operator 已绑别的机甲时那台自动解绑。"},
 	},
 	{
 		Type:                  CmdBuildDysonNode,

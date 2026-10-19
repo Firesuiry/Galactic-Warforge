@@ -63,10 +63,19 @@ func TestOrbitalCollectorBuildAdmittedOnGasGiant(t *testing.T) {
 	grantTechs(ws, "p1", "gas_giants")
 	player := ws.Players["p1"]
 	player.Resources.Energy = 100000
+	// 第 21 轮：build 由发令者机甲执行，必须把一台机甲放到 gas-1 上。
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	gasMecha := &stats
+	gasMecha.ID = "u-gas"
+	gasMecha.OwnerID = "p1"
+	gasMecha.Position = model.Position{X: 0, Y: 0}
+	gasWs.Units[gasMecha.ID] = gasMecha
+	// 玩家身份已绑定 planet-1-1 的开局机甲：这台 gas-1 机甲改绑给专用发令者。
+	player.EnsureMechas()[gasMecha.ID] = &model.MechaRecord{UnitID: gasMecha.ID, PlanetID: gasWs.PlanetID, Operator: "p1-gas"}
 	// 故意不发放建造物品：若通过气态巨星校验，应在物品成本处失败。
 	pos := model.Position{X: 0, Y: 0}
 
-	res, _ := execCommand(core, model.CmdBuild, gasWs, "p1", model.Command{
+	res, _ := execCommandAs(core, model.CmdBuild, gasWs, "p1", "p1-gas", model.Command{
 		Type:   model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos},
 		Payload: map[string]any{

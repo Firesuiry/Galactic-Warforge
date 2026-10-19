@@ -19,9 +19,12 @@ const (
 
 // ConstructionTask captures a queued build operation.
 type ConstructionTask struct {
-	AutoApproach      bool              `json:"auto_approach,omitempty"`
-	ID                string            `json:"id"`
-	PlayerID          string            `json:"player_id"`
+	AutoApproach bool   `json:"auto_approach,omitempty"`
+	ID           string `json:"id"`
+	PlayerID     string `json:"player_id"`
+	// MechaID 是下单时发令者的机甲：预留、暂停判定、落成扣料、取消退料都只看
+	// 这台机甲的背包（不跨机甲凑料）。
+	MechaID           string            `json:"mecha_id,omitempty"`
 	RegionID          string            `json:"region_id,omitempty"`
 	BuildingType      BuildingType      `json:"building_type"`
 	Position          Position          `json:"position"`

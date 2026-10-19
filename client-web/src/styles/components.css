@@ -946,3 +946,11 @@ input.sw-checkbox:disabled {
 
 .toast__action { margin-top:6px; padding:3px 12px; border-radius:4px; border:1px solid #ff8a8a88; background:#ff57571f; color:#ffd2d2; font-size:.75rem; font-weight:600; cursor:pointer; }
 .toast__action:hover { background:#ff575740; }
+
+/* 未绑定机甲的背包 chip：灰化只读（契约 §7.3 第 1 条）。 */
+.hero-chip--muted {
+  border-color: rgba(138, 148, 166, 0.35);
+  background: rgba(138, 148, 166, 0.08);
+  color: var(--text-muted);
+  cursor: help;
+}

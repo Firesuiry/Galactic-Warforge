@@ -29,8 +29,10 @@ import "siliconworld/internal/model"
 //	dark_fog_hostile    {bool}          黑雾对该玩家是否敌对
 //	dark_fog_calmed     {tick}          自 tick 起该玩家出现过 dark_fog_calmed（冷静期到期恢复中立）
 //	enemy_attack_seen   {bool}          该玩家是否已被敌方玩家造成过伤害/损失
+//	mecha_count_gte     {n}             该玩家名下的机甲档案数 >= n（含阵亡待复活）
+//	mecha_operator_count {operator, n}  绑定到该操作者的机甲数 == n（operator 空串 = 空闲机甲）
 //
-// 「玩家可用物资」口径：PlayerState.Inventory（就是机甲背包——采矿、手搓、战利品都落这里，
+// 「玩家可用物资」口径：所有机甲背包之和（采矿、手搓、战利品都落这里，
 // 也是 transfer / build 的扣料来源）。第 16 轮去掉资金维度后建造/升级只扣背包物品，
 // 玩家级资源池只剩 resources.energy（电网结余的只读展示）。
 
@@ -53,6 +55,8 @@ type ContractCheck struct {
 	Boolean  bool            `json:"bool,omitempty"`
 	// Radius 是 unit_near 的搜索半径（格，按 cube-sphere 图距）。
 	Radius int `json:"radius,omitempty"`
+	// Operator 是 mecha_operator_count 的操作者（issuer_id）；空串表示「空闲机甲」。
+	Operator string `json:"operator,omitempty"`
 }
 
 // Contract 是一份状态契约。

@@ -719,23 +719,23 @@ export async function cmdRefitUnit(args: string[], { api }: CommandContext): Pro
 
 export async function cmdRefuelMecha(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
-  if (parsed.positionals.length < 2) {
-    return fmtError('Usage: refuel_mecha <executor_id> <fuel_item_id> [count] [--planet <planet_id>]');
+  if (parsed.positionals.length < 1) {
+    return fmtError('Usage: refuel_mecha <fuel_item_id> [count] [--planet <planet_id>]');
   }
-  const countArg = parsed.positionals[2];
+  const countArg = parsed.positionals[1];
   const count = countArg === undefined ? undefined : parseIntegerArg(countArg);
   if (countArg !== undefined && (!/^\+?[1-9]\d*$/.test(countArg) || count === undefined || count <= 0)) {
     return fmtError('count 必须是正整数');
   }
   try {
     const catalog = await api.fetchCatalog();
-    const fuel = (catalog.items ?? []).find((entry) => entry.id === parsed.positionals[1]) as
+    const fuel = (catalog.items ?? []).find((entry) => entry.id === parsed.positionals[0]) as
       | ({ mecha_fuel_energy?: number })
       | undefined;
     if (!fuel || typeof fuel.mecha_fuel_energy !== 'number' || fuel.mecha_fuel_energy <= 0) {
-      return fmtError(`fuel_item_id 不支持机甲燃料: ${parsed.positionals[1]}`);
+      return fmtError(`fuel_item_id 不支持机甲燃料: ${parsed.positionals[0]}`);
     }
-    return fmtCommandResponse(await api.cmdRefuelMecha(parsed.positionals[0], parsed.positionals[1], count, getStringOption(parsed, 'planet')));
+    return fmtCommandResponse(await api.cmdRefuelMecha(parsed.positionals[0], count, getStringOption(parsed, 'planet')));
   } catch (e) {
     return fmtError(toErrorMessage(e));
   }
@@ -1053,26 +1053,26 @@ export async function cmdDemolishDyson(args: string[], { api }: CommandContext):
 
 export async function cmdMineResource(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
-  if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: mine_resource <executor_id> <resource_id> <quantity> [--planet <planet_id>]');
-  const quantity = parseIntegerArg(parsed.positionals[2]);
-  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await api.cmdMineResource(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
+  if (args.includes('--help') || parsed.positionals.length !== 2) return fmtError('Usage: mine_resource <resource_id> <quantity> [--planet <planet_id>]');
+  const quantity = parseIntegerArg(parsed.positionals[1]);
+  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[1]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await api.cmdMineResource(parsed.positionals[0], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
 export async function cmdCraftItem(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
-  if (args.includes('--help') || parsed.positionals.length !== 3) return fmtError('Usage: craft_item <executor_id> <recipe_id> <quantity> [--planet <planet_id>]');
-  const quantity = parseIntegerArg(parsed.positionals[2]);
-  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[2]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
-  try { return fmtCommandResponse(await api.cmdCraftItem(parsed.positionals[0], parsed.positionals[1], quantity, getStringOption(parsed, 'planet'))); }
+  if (args.includes('--help') || parsed.positionals.length !== 2) return fmtError('Usage: craft_item <recipe_id> <quantity> [--planet <planet_id>]');
+  const quantity = parseIntegerArg(parsed.positionals[1]);
+  if (!/^\+?[1-9]\d*$/.test(parsed.positionals[1]) || quantity === undefined || !Number.isSafeInteger(quantity) || quantity <= 0) return fmtError("quantity 必须是正整数");
+  try { return fmtCommandResponse(await api.cmdCraftItem(parsed.positionals[0], quantity, getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 
 export async function cmdCancelMechaJob(args: string[], { api }: CommandContext): Promise<string> {
   const parsed = parseArgs(args);
-  if (args.includes('--help') || parsed.positionals.length !== 1) return fmtError('Usage: cancel_mecha_job <executor_id> [--planet <planet_id>]');
-  try { return fmtCommandResponse(await api.cmdCancelMechaJob(parsed.positionals[0], getStringOption(parsed, 'planet'))); }
+  if (args.includes('--help') || parsed.positionals.length !== 0) return fmtError('Usage: cancel_mecha_job [--planet <planet_id>]');
+  try { return fmtCommandResponse(await api.cmdCancelMechaJob(getStringOption(parsed, 'planet'))); }
   catch (error) { return fmtError(toErrorMessage(error)); }
 }
 

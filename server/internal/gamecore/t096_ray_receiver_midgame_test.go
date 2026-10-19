@@ -19,8 +19,15 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 	if player == nil {
 		t.Fatal("expected player p1")
 	}
-	if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
-		exec.OperateRange = 100
+	// 每颗行星各有一台开局机甲，Operator 都是玩家 ID：命令按发令者解析，
+	// 这里把本行星的机甲改绑给专用发令者，避免解析到别的行星。
+	exec := mechaOnPlanet(ws, player.PlayerID, ws.PlanetID)
+	if exec == nil {
+		t.Fatal("expected p1 mecha")
+	}
+	exec.Operator = "p1-here"
+	if unit := ws.Units[exec.UnitID]; unit != nil {
+		unit.Position = model.Position{X: 6, Y: 6}
 	}
 
 	wind := newBuilding("wind-t096", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
@@ -41,7 +48,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 		model.RegisterPowerGridBuilding(ws, building)
 	}
 
-	modeRes := issueInternalCommand(core, "p1", model.Command{
+	modeRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdSetRayReceiverMode,
 		Payload: map[string]any{
 			"building_id": receiver.ID,
@@ -54,7 +61,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 
-	baselineSummary := ql.Summary(ws, "p1", core.Victory())
+	baselineSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	baselineStats := ql.Stats(ws, "p1")
 	baselineNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {
@@ -66,7 +73,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 	baselineSupply := totalPowerNetworkSupply(baselineNetworks)
 	baselinePhotons := receiver.Storage.OutputQuantity(model.ItemCriticalPhoton)
 
-	buildNodeRes := issueInternalCommand(core, "p1", model.Command{
+	buildNodeRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdBuildDysonNode,
 		Payload: map[string]any{
 			"system_id":    "sys-1",
@@ -80,7 +87,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 		t.Fatalf("build dyson node: %s (%s)", buildNodeRes.Code, buildNodeRes.Message)
 	}
 
-	transferSailRes := issueInternalCommand(core, "p1", model.Command{
+	transferSailRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": ejector.ID,
@@ -92,7 +99,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 		t.Fatalf("transfer solar sail: %s (%s)", transferSailRes.Code, transferSailRes.Message)
 	}
 
-	transferRocketRes := issueInternalCommand(core, "p1", model.Command{
+	transferRocketRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
 			"building_id": silo.ID,
@@ -104,7 +111,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 		t.Fatalf("transfer rocket: %s (%s)", transferRocketRes.Code, transferRocketRes.Message)
 	}
 
-	launchSailRes := issueInternalCommand(core, "p1", model.Command{
+	launchSailRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdLaunchSolarSail,
 		Payload: map[string]any{
 			"building_id":  ejector.ID,
@@ -117,7 +124,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 		t.Fatalf("launch solar sail: %s (%s)", launchSailRes.Code, launchSailRes.Message)
 	}
 
-	launchRocketRes := issueInternalCommand(core, "p1", model.Command{
+	launchRocketRes := issueInternalCommandAs(core, "p1", "p1-here", model.Command{
 		Type: model.CmdLaunchRocket,
 		Payload: map[string]any{
 			"building_id": silo.ID,
@@ -132,7 +139,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 
 	core.processTick()
 
-	postSummary := ql.Summary(ws, "p1", core.Victory())
+	postSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	postStats := ql.Stats(ws, "p1")
 	postNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {

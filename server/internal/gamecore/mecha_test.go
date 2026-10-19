@@ -17,6 +17,7 @@ func mechaTestWorld() (*model.WorldState, *model.Unit) {
 	unit.Position = model.Position{X: 1, Y: 1}
 	ws.Units[unit.ID] = &unit
 	ws.TileUnits[model.TileKey(1, 1)] = []string{unit.ID}
+	registerMecha(ws, "p1", &unit)
 	return ws, &unit
 }
 
@@ -36,6 +37,7 @@ func mechaTestWorldFar() (*model.WorldState, *model.Unit) {
 	unit.Position = model.Position{X: 1, Y: 1}
 	ws.Units[unit.ID] = &unit
 	ws.TileUnits[model.TileKey(1, 1)] = []string{unit.ID}
+	registerMecha(ws, "p1", &unit)
 	return ws, &unit
 }
 
@@ -110,7 +112,7 @@ func TestPlayerMechaMovementConsumesPathEnergyAndRejectsAtomically(t *testing.T)
 func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing.T) {
 	ws, unit := mechaTestWorld()
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemCoal: 8, model.ItemAntimatterFuelRod: 1}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: 8, model.ItemAntimatterFuelRod: 1}
 	unit.Mecha.Energy = 50
 	core := &GameCore{}
 	refuel := func(item string, n int) model.CommandResult {
@@ -120,17 +122,17 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 	if res := refuel(model.ItemCoal, 8); res.Code != model.CodeOK {
 		t.Fatal(res)
 	}
-	if unit.Mecha.Energy != 100 || player.Inventory[model.ItemCoal] != 6 {
+	if unit.Mecha.Energy != 100 || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 6 {
 		t.Fatal("refueling should only consume two coal")
 	}
-	if res := refuel(model.ItemCoal, 1); res.Code != model.CodeInvalidTarget || player.Inventory[model.ItemCoal] != 6 {
+	if res := refuel(model.ItemCoal, 1); res.Code != model.CodeInvalidTarget || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 6 {
 		t.Fatal("full core consumed fuel")
 	}
 	unit.Mecha.Energy = 0
 	if res := refuel(model.ItemAntimatterFuelRod, 1); res.Code != model.CodeOK {
 		t.Fatal(res)
 	}
-	if unit.Mecha.Energy != 100 || unit.Mecha.FuelEnergy != 900 || player.Inventory[model.ItemAntimatterFuelRod] != 0 {
+	if unit.Mecha.Energy != 100 || unit.Mecha.FuelEnergy != 900 || starterMecha(ws, player.PlayerID).Inventory[model.ItemAntimatterFuelRod] != 0 {
 		t.Fatalf("lost fuel energy: %+v", unit.Mecha)
 	}
 	unit.Mecha.Energy = 80
@@ -149,15 +151,15 @@ func TestPlayerMechaRefuelingUsesRealInventoryAndRetainsFuelRemainder(t *testing
 func TestPlayerMechaRefuelCountDefaultsToOneAndBurnsUntilFull(t *testing.T) {
 	ws, unit := mechaTestWorld()
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemCoal: 3}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: 3}
 	unit.Mecha.Energy = 0
 	core := &GameCore{}
 	res, _ := execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal}})
-	if res.Code != model.CodeOK || player.Inventory[model.ItemCoal] != 2 || unit.Mecha.Energy != 25 {
+	if res.Code != model.CodeOK || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 2 || unit.Mecha.Energy != 25 {
 		t.Fatalf("default count must burn one coal: %+v %+v", res, unit.Mecha)
 	}
 	res, _ = execCommand(core, model.CmdRefuelMecha, ws, "p1", model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": model.ItemCoal, "count": 10}})
-	if res.Code != model.CodeOK || player.Inventory[model.ItemCoal] != 0 || unit.Mecha.Energy != 75 {
+	if res.Code != model.CodeOK || starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] != 0 || unit.Mecha.Energy != 75 {
 		t.Fatalf("count must burn what is available: %+v %+v", res, unit.Mecha)
 	}
 }
@@ -165,21 +167,23 @@ func TestPlayerMechaRefuelCountDefaultsToOneAndBurnsUntilFull(t *testing.T) {
 func TestPlayerMechaRefuelValidationDoesNotConsumeInventory(t *testing.T) {
 	ws, unit := mechaTestWorld()
 	unit.Mecha.Energy = 0
-	ws.Players["p1"].Inventory = model.ItemInventory{model.ItemIronOre: 5, model.ItemCoal: 1}
+	starterMecha(ws, "p1").Inventory = model.ItemInventory{model.ItemIronOre: 5, model.ItemCoal: 1}
 	core := &GameCore{}
 	for _, tc := range []struct {
 		owner, item string
 		quantity    any
 		code        model.ResultCode
 	}{
-		{"p2", model.ItemCoal, 1, model.CodeNotOwner},
+		// 第 21 轮：refuel 忽略 target.entity_id、按发令者解析机甲；
+		// p2 不存在 → EXECUTOR_UNAVAILABLE。
+		{"p2", model.ItemCoal, 1, model.CodeExecutorUnavailable},
 		{"p1", model.ItemIronOre, 1, model.CodeInvalidTarget},
 		{"p1", model.ItemCoal, -1, model.CodeValidationFailed},
 		{"p1", model.ItemCoal, 1.5, model.CodeValidationFailed},
 		{"p1", model.ItemAntimatterFuelRod, 1, model.CodeInsufficientResource},
 	} {
 		res, _ := execCommand(core, model.CmdRefuelMecha, ws, tc.owner, model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"item_id": tc.item, "count": tc.quantity}})
-		if res.Code != tc.code || unit.Mecha.Energy != 0 || ws.Players["p1"].Inventory[model.ItemCoal] != 1 {
+		if res.Code != tc.code || unit.Mecha.Energy != 0 || starterMecha(ws, "p1").Inventory[model.ItemCoal] != 1 {
 			t.Fatalf("case=%+v result=%+v", tc, res)
 		}
 	}
@@ -292,7 +296,7 @@ func TestPlayerMechaCoreResearchConsumesLabMatricesBeforeIncreasingCapacity(t *t
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	unit := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID]
+	unit := ws.Units[starterMecha(ws, player.PlayerID).UnitID]
 	unit.Mecha.Energy = 23
 	lab := newBuilding("mecha-research-lab", model.BuildingTypeMatrixLab, "p1", model.Position{X: 6, Y: 6})
 	lab.Runtime.State = model.BuildingWorkRunning

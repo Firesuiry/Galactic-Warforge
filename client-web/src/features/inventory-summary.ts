@@ -57,23 +57,6 @@ export function sortedInventory(inventory: ItemInventory | undefined) {
     .map(([id, quantity]) => ({ id, quantity }));
 }
 
-/** 背包容量（DSP 格数口径）：已用格数 / 总格数；总格数缺失时返回 null。 */
-export interface InventorySlotUsage {
-  used: number;
-  total: number;
-}
-
-/**
- * 读服务端下发的背包格数占用（/state/summary 的 `inventory_slots_used` /
- * `inventory_slots_total`）。旧服务端不返回时返回 null，UI 不显示容量提示。
- */
-export function inventorySlotUsage(player?: { inventory_slots_used?: number; inventory_slots_total?: number } | null): InventorySlotUsage | null {
-  const total = player?.inventory_slots_total ?? 0;
-  if (!Number.isFinite(total) || total <= 0) return null;
-  const used = Math.max(0, player?.inventory_slots_used ?? 0);
-  return { used: Math.min(used, total), total };
-}
-
 /**
  * 单件物品占用的背包格数：ceil(数量 / 该物品的 stack_limit)。
  * 目录里查不到 stack_limit 时按 1 格算（与服务端 model.ItemSlots 一致）。

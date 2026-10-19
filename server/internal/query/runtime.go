@@ -109,8 +109,10 @@ type LogisticsShipView struct {
 }
 
 type ConstructionTaskView struct {
-	ID                string                  `json:"id"`
-	PlayerID          string                  `json:"player_id"`
+	ID       string `json:"id"`
+	PlayerID string `json:"player_id"`
+	// MechaID 是下单时的发令者机甲（预留/暂停/扣料/退料都看它）。
+	MechaID           string                  `json:"mecha_id,omitempty"`
 	RegionID          string                  `json:"region_id,omitempty"`
 	BuildingType      model.BuildingType      `json:"building_type"`
 	BuildingName      string                  `json:"building_name,omitempty"`
@@ -516,6 +518,7 @@ func collectConstructionTasks(ws *model.WorldState, playerID string) []Construct
 		}
 		costItems := append([]model.ItemAmount(nil), task.Cost.Items...)
 		out = append(out, ConstructionTaskView{
+			MechaID:           task.MechaID,
 			ID:                task.ID,
 			PlayerID:          task.PlayerID,
 			RegionID:          task.RegionID,

@@ -7,9 +7,9 @@ import (
 	"siliconworld/internal/terrain"
 )
 
-// countActiveExecutorUsage 统计每名玩家在所有已加载行星上的执行体占用
-// （建造任务 + 建筑生产作业），供并发任务上限校验使用（F4：命令可落在
-// 任意已加载行星，占用也必须跨行星聚合）。
+// countActiveExecutorUsage 统计每台机甲在所有已加载行星上的占用
+// （建造任务 + 建筑升级/拆除作业），供并发任务上限校验使用（F4：命令可落在
+// 任意已加载行星，占用也必须跨行星聚合）。键 = 机甲单位 ID。
 func countActiveExecutorUsage(worlds []*model.WorldState) map[string]int {
 	usage := make(map[string]int)
 	for _, ws := range worlds {
@@ -17,17 +17,17 @@ func countActiveExecutorUsage(worlds []*model.WorldState) map[string]int {
 			continue
 		}
 		for _, building := range ws.Buildings {
-			if building == nil || building.Job == nil {
+			if building == nil || building.Job == nil || building.Job.MechaID == "" {
 				continue
 			}
-			usage[building.OwnerID]++
+			usage[building.Job.MechaID]++
 		}
 		if ws.Construction != nil {
 			for _, task := range ws.Construction.Tasks {
-				if task == nil || task.State != model.ConstructionInProgress {
+				if task == nil || task.State != model.ConstructionInProgress || task.MechaID == "" {
 					continue
 				}
-				usage[task.PlayerID]++
+				usage[task.MechaID]++
 			}
 		}
 	}
@@ -77,7 +77,7 @@ func settleBuildingJobs(ws *model.WorldState, alerts *AlertHistory) []*model.Gam
 				})
 			}
 		case model.BuildingJobDemolish:
-			events = append(events, demolishBuilding(ws, alerts, building, job.RefundRate)...)
+			events = append(events, demolishBuilding(ws, alerts, building, job.RefundRate, job.MechaID)...)
 		}
 	}
 	return events
@@ -112,7 +112,7 @@ func applyUpgrade(building *model.Building, level int, prevState model.BuildingW
 
 // demolishBuilding 移除一座建筑（含叠在其上的层），返还材料并发 entity_destroyed。
 // alerts 非 nil 时同步解除该建筑名下仍成立的全部产线告警。
-func demolishBuilding(ws *model.WorldState, alerts *AlertHistory, building *model.Building, refundRate float64) []*model.GameEvent {
+func demolishBuilding(ws *model.WorldState, alerts *AlertHistory, building *model.Building, refundRate float64, mechaID string) []*model.GameEvent {
 	if ws == nil || building == nil {
 		return nil
 	}
@@ -125,14 +125,16 @@ func demolishBuilding(ws *model.WorldState, alerts *AlertHistory, building *mode
 		if ws.Buildings[layer.ID] != layer {
 			continue
 		}
-		events = append(events, demolishBuilding(ws, alerts, layer, refundRate)...)
+		events = append(events, demolishBuilding(ws, alerts, layer, refundRate, mechaID)...)
 	}
 
 	refund := model.BuildingDemolishRefundWithRate(building.Type, building.Level, refundRate)
 	player := ws.Players[building.OwnerID]
-	if player != nil {
-		// 拆除返还同样受机甲背包上限约束（背包永远不会超过上限）。
-		player.AddItems(refund.Items, mechaInventorySlots(ws, nil, player))
+	if player != nil && mechaID != "" {
+		if record := player.MechaByUnitID(mechaID); record != nil {
+			// 拆除返还进发令者机甲背包，同样受背包格数上限约束（超出部分丢弃）。
+			record.AddItems(refund.Items, mechaInventorySlots(player))
+		}
 	}
 
 	entityID := building.ID

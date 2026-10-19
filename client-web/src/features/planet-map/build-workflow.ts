@@ -33,6 +33,7 @@ import {
 } from "@/features/planet-commands/error-hints";
 
 import { normalizeCompletedTechIds } from "@/features/planet-map/research-workflow";
+import { selectMyMecha, type MechaView } from "@/features/mecha/model";
 import {
   isBuildingUnlocked,
   isRecipeUnlocked,
@@ -40,8 +41,8 @@ import {
 } from "@/features/planet-map/tech-gate";
 
 /**
- * 执行体操作范围兜底值（cell）：summary 缺 `executor.operate_range` 时用它，
- * 与 server/config*.yaml 的 `executor.operate_range`（细分网格 ×3 后为 18）一致。
+ * 执行体操作范围兜底值（cell）：summary 的 `mechas[].operate_range` 缺失时用它，
+ * 与 `server/data/units.yaml` 的 `executor.mecha.operate_range`（细分网格 ×3 后为 18）一致。
  */
 export const DEFAULT_OPERATE_RANGE = 18;
 
@@ -77,6 +78,8 @@ export interface BuildCatalogGroup {
 export interface BuildReachability {
   executorUnitId?: string;
   executorPosition?: Position;
+  /** 我的机甲档案（未绑定 / 不在本星球时为 undefined）。 */
+  executorMecha?: MechaView;
   moveRange?: number;
   operateRange?: number;
   distance?: number;
@@ -127,6 +130,11 @@ export interface BuildTileAssessment {
   unexploredTiles: number;
   /** 背包缺少的建造物品（只在传入背包时计算）。 */
   missingItems: BuildItemShortage[];
+  /**
+   * 发令者未绑定机甲（契约 §7.3）：建造由机甲执行，服务端会回 EXECUTOR_UNAVAILABLE。
+   * 与「缺料」是两回事——未绑定时背包不存在，不能把所有造价项都算成缺料。
+   */
+  mechaUnbound?: boolean;
 }
 
 /**
@@ -198,11 +206,15 @@ export function describeBuildShortage(
  * 「该格已有其他玩家的建筑：X」/「该格已有你的施工任务：传送带 Mk.I（排队中）」。
  * 本地仍然拦截（不发命令），但玩家看到的文字与服务端一致（试玩 1011 E）。
  */
+export const MECHA_UNBOUND_REASON = "未绑定机甲：先在行星上接管一台";
+
 export function describeBuildBlock(
   assessment: BuildTileAssessment,
   itemName: (itemId: string) => string = (id) => id,
   buildingName: (buildingType: string) => string = (type) => type,
 ): string {
+  // 未绑定机甲排在缺料之前：背包都不存在，「缺料」是假原因（契约 §7.3）。
+  if (assessment.mechaUnbound) return MECHA_UNBOUND_REASON;
   if (assessment.missingItems.length > 0) {
     return `缺少 ${assessment.missingItems.map((item) => `${itemName(item.item_id)} ${item.quantity - item.owned}`).join('、')}`;
   }
@@ -252,6 +264,7 @@ function describeTileOccupant(
  */
 export function shouldBlockBuildLocally(assessment: BuildTileAssessment | undefined): boolean {
   if (!assessment) return false;
+  if (assessment.mechaUnbound) return true;
   if (assessment.missingItems.length > 0) return true;
   const primary = primaryBlockedTile(assessment);
   if (!primary) return false;
@@ -350,11 +363,13 @@ function buildReachability(
   playerId: string,
   selectedPosition?: Position,
 ) {
-  const executorState = summary?.players?.[playerId]?.executor;
-  const executorUnitId = executorState?.unit_id;
+  // 契约 §7.3：建造扣料/走位按「我的机甲」（summary.mechas 里 operator = 自己），
+  // 不再读 players[me].executor。档案自带 operate_range（units.yaml executor.mecha）。
+  const myMecha = selectMyMecha(summary, playerId);
+  const executorUnitId = myMecha?.unit_id;
   const executor = executorUnitId ? planet.units?.[executorUnitId] : undefined;
   const moveRange = executor?.move_range;
-  const operateRange = executorState?.operate_range;
+  const operateRange = myMecha?.operate_range;
   const distance = executor?.position && selectedPosition
     ? surfaceDistanceWithin(executor.position, selectedPosition, planet.surface.face_size, operateRange ?? DEFAULT_OPERATE_RANGE)
     : undefined;
@@ -362,6 +377,7 @@ function buildReachability(
   return {
     executorUnitId,
     executorPosition: executor?.position,
+    executorMecha: myMecha,
     moveRange,
     operateRange,
     distance,
@@ -401,6 +417,8 @@ function buildTileAssessment(input: {
   selectedPosition?: Position;
   /** 第 19 轮多层传送带：目标高度 0–4（缺省 0）。 */
   elevation?: number;
+  /** 发令者未绑定机甲（建造由机甲执行，本地直接拦）。 */
+  mechaUnbound?: boolean;
 }) {
   if (!input.selectedPosition) {
     return undefined;
@@ -410,6 +428,7 @@ function buildTileAssessment(input: {
     (candidate) => candidate.id === input.buildingType,
   );
   const anchor = toTilePoint(input.selectedPosition);
+  // 未绑定机甲时没有背包：缺料清单留空，由 mechaUnbound 单独说明（不是「所有造价都缺」）。
   const missingItems: BuildItemShortage[] = input.inventory
     ? compareBuildItems(entry, input.inventory).filter((item) => item.short).map(({ short: _short, ...item }) => item)
     : [];
@@ -469,7 +488,7 @@ function buildTileAssessment(input: {
         blockingBuildingOwn: Boolean(input.playerId) && mounted.owner_id === input.playerId,
       } : {}),
     });
-    return { footprint, anchor, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0 && missingItems.length === 0, blockedTiles, unexploredTiles, missingItems, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
+    return { footprint, anchor, terrain, terrainBuildable: true, buildable: blockedTiles.length === 0 && missingItems.length === 0 && !input.mechaUnbound, blockedTiles, unexploredTiles, missingItems, mechaUnbound: input.mechaUnbound, blockingBuildingId: mounted?.id } satisfies BuildTileAssessment;
   }
 
   // 覆盖格（占地 + 采集圈）：锚点判断与阻挡扫描共用，避免两处坐标推导漂移。
@@ -607,10 +626,11 @@ function buildTileAssessment(input: {
     terrainBuildable: primaryTerrain === "buildable" || canPrepareTerrain(primaryTerrain),
     blockingBuildingId,
     blockingResourceId,
-    buildable: blockedTiles.length === 0 && missingItems.length === 0,
+    buildable: blockedTiles.length === 0 && missingItems.length === 0 && !input.mechaUnbound,
     blockedTiles,
     unexploredTiles,
     missingItems,
+    mechaUnbound: input.mechaUnbound,
   } satisfies BuildTileAssessment;
 }
 
@@ -620,6 +640,15 @@ function buildApproachPlan(path?: PlanetPathView): BuildApproachPlan | undefined
 }
 
 function buildPreflightHints(reachability: BuildReachability) {
+  // 未绑定机甲：建造无从扣料/走位（服务端回 EXECUTOR_UNAVAILABLE），先提示去接管。
+  if (!reachability.executorUnitId && !reachability.executorMecha) {
+    return [{
+      tone: "warning" as const,
+      title: MECHA_UNBOUND_REASON,
+      detail: "建造由你的机甲执行：在行星上选中一台机甲 → 接管。",
+      suggestedAction: "move_executor" as const,
+    }];
+  }
   if (
     !reachability.executorUnitId
     || !reachability.executorPosition
@@ -706,8 +735,9 @@ export function assessBuildTiles(
   inventory?: ItemInventory,
   runtime?: PlanetRuntimeView,
   elevation?: number,
+  mechaUnbound?: boolean,
 ): BuildTileAssessment | undefined {
-  return buildTileAssessment({ catalog, buildingType, planet, runtime, selectedPosition: position, playerId, rotation, inventory, elevation });
+  return buildTileAssessment({ catalog, buildingType, planet, runtime, selectedPosition: position, playerId, rotation, inventory, elevation, mechaUnbound });
 }
 
 /** 传送带类建筑：放置时需要指定输出方向（服务端按方向对接输入端口）。 */

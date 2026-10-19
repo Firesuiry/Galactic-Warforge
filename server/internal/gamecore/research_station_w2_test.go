@@ -355,7 +355,7 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 // --- mass_construction 区域并发 ---------------------------------------------
 
 func TestMassConstructionRaisesRegionConcurrentLimit(t *testing.T) {
-	core := newConstructionTestCore(t, 10, 1)
+	core := newConstructionTestCore(t, 1)
 	ws := core.world
 	player := ws.Players["p1"]
 	// grantAllTechs 给了 1 级；先移除以便对比基线。
@@ -397,10 +397,12 @@ func TestMassConstructionRaisesRegionConcurrentLimit(t *testing.T) {
 		t.Fatalf("need 3 open tiles in one region, got %d", len(positions))
 	}
 
+	mecha := starterMecha(ws, "p1")
 	for i, pos := range positions {
 		task := &model.ConstructionTask{
 			ID:           fmt.Sprintf("mass-%d", i),
 			PlayerID:     "p1",
+			MechaID:      mecha.UnitID,
 			RegionID:     constructionRegionKey(ws, pos),
 			BuildingType: model.BuildingTypeSolarPanel,
 			Position:     pos,
@@ -429,8 +431,10 @@ func TestMassConstructionRaisesRegionConcurrentLimit(t *testing.T) {
 
 	player.Tech.CompletedTechs["mass_construction"] = 2 // 区域并发 +2
 	core.settleConstructionQueue(ws)
-	if got := countInProgress(); got != 3 {
-		t.Fatalf("mass_construction L2: in-progress = %d, want 3", got)
+	// 每台机甲同时最多 concurrent_tasks（2）个施工中任务，第 3 个仍在排队：
+	// 区域上限放开后，限制来自机甲并发而不是区域。
+	if got := countInProgress(); got != model.ExecutorConcurrentTasks() {
+		t.Fatalf("mass_construction L2: in-progress = %d, want %d (mecha concurrent limit)", got, model.ExecutorConcurrentTasks())
 	}
 }
 

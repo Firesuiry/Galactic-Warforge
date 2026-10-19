@@ -23,7 +23,7 @@ func newTestCore(t *testing.T) *gamecore.GameCore {
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -79,12 +79,12 @@ func TestExecutorSpawnedForPlayer(t *testing.T) {
 	defer ws.RUnlock()
 
 	p1 := ws.Players["p1"]
-	if p1 == nil || p1.ExecutorForPlanet(ws.PlanetID) == nil {
+	if p1 == nil || p1.MechaByOperator(p1.PlayerID) == nil {
 		t.Fatal("expected executor for player p1")
 	}
-	execUnit := ws.Units[p1.ExecutorForPlanet(ws.PlanetID).UnitID]
+	execUnit := ws.Units[p1.MechaByOperator(p1.PlayerID).UnitID]
 	if execUnit == nil {
-		t.Fatalf("executor unit %s not found", p1.ExecutorForPlanet(ws.PlanetID).UnitID)
+		t.Fatalf("executor unit %s not found", p1.MechaByOperator(p1.PlayerID).UnitID)
 	}
 	if execUnit.Type != model.UnitTypeExecutor {
 		t.Fatalf("expected executor unit type, got %s", execUnit.Type)

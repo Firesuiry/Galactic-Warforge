@@ -9,7 +9,7 @@ import {
   cmdAgentUpdate,
 } from './agent.js';
 import { cmdGameNew, cmdGameStatus } from './game.js';
-import { cmdEvents, cmdStatus, cmdSwitch } from './util.js';
+import { cmdAs, cmdEvents, cmdStatus, cmdSwitch } from './util.js';
 
 /** CLI 命令表 = 共享游戏命令 + 终端会话 / 网关管理 / 开局命令。 */
 export const COMMANDS: Record<string, CommandEntry<ReplContext>> = {
@@ -20,6 +20,7 @@ export const COMMANDS: Record<string, CommandEntry<ReplContext>> = {
   agent_message: { handler: cmdAgentMessage },
   agent_thread: { handler: cmdAgentThread },
   switch: { handler: cmdSwitch },
+  as: { handler: cmdAs, completions: [] },
   events: { handler: cmdEvents },
   status: { handler: cmdStatus },
   game_new: { handler: cmdGameNew },

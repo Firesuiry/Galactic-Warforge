@@ -66,11 +66,6 @@ players:
     team_id: "team-1"
     role: "admin"
     permissions: ["*"]
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
     # 开局物资包（第 16 轮：去掉资金维度后改为实物）。数量 = 「3 风机 + 2 矿机 +
     # 1 熔炉 + 3 电塔 + 20 传送带 + 4 分拣器」的合成料，再加约 20% 余量：
     #   gear 27→32、circuit_board 12→15、iron_ingot 80→96、
@@ -100,16 +95,10 @@ players:
     # （决策更慢）、不袭扰补给线；与 battlefield.enemy_difficulty 保持一致，
     # 两处都是「先降难度」的取法。
     bot: "easy"
-    executor:
-      build_efficiency: 1.0
-      operate_range: 18
-      concurrent_tasks: 2
-      research_boost: 0.0
     bootstrap: *skirmish_kit
 
 server:
   port: 18082
-  rate_limit: 20
   event_history_limit: 2000
   snapshot_max_events: 200
   alert_history_limit: 1000

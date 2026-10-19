@@ -89,7 +89,7 @@ func TestT095OfficialMidgameRayReceiverPowerModeStopsPhotonGrowthAndBackfeedsGri
 	}
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
-	baselineSummary := ql.Summary(ws, "p1", core.Victory())
+	baselineSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	baselineStats := ql.Stats(ws, "p1")
 	baselineNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {
@@ -105,7 +105,7 @@ func TestT095OfficialMidgameRayReceiverPowerModeStopsPhotonGrowthAndBackfeedsGri
 		core.processTick()
 	}
 
-	postSummary := ql.Summary(ws, "p1", core.Victory())
+	postSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	postStats := ql.Stats(ws, "p1")
 	postNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {

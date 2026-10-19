@@ -37,7 +37,6 @@ func buildSharedPlayers(cfg *config.Config) map[string]*model.PlayerState {
 			ps.Bot = &model.BotRuntimeState{}
 		}
 		ps.SetPermissions(p.Permissions)
-		applyPlayerBootstrap(ps, p.Bootstrap)
 		players[p.PlayerID] = ps
 	}
 	return players
@@ -60,7 +59,11 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	return ws
 }
 
-func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig) {
+// seedPlayerOutposts 在每颗行星给每个玩家建基地与一台开局机甲。开局机甲是
+// 玩家级唯一的一台：只有出生星球（starterPlanetID）上的那台绑定
+// Operator = PlayerID 并领取 bootstrap，其它行星上的机甲保持空闲（契约 §2.2
+// 「一个 issuer 至多绑一台机甲」）。
+func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig, starterPlanetID string) {
 	if ws == nil || len(players) == 0 {
 		return
 	}
@@ -71,7 +74,7 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 	}
 	// Guarantee iron/copper within mining reach of every final base so the
 	// matrix production chain is not blocked by distant mapgen veins.
-	ensureStarterResourceNodes(ws, planet, basePositions, spawnMineDistance(players))
+	ensureStarterResourceNodes(ws, planet, basePositions, spawnMineDistance())
 	for i, p := range players {
 		ps := ws.Players[p.PlayerID]
 		if ps == nil {
@@ -126,7 +129,15 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)
-		ps.SetPlanetExecutor(ws.PlanetID, model.NewExecutorState(execID, p.Executor.BuildEfficiency, p.Executor.OperateRange, p.Executor.ConcurrentTasks, p.Executor.ResearchBoost))
+		// 开局机甲：只有出生星球上的那台 Operator = PlayerID（人类 GUI / 未设
+		// 代理名的 CLI 直接用玩家身份发令），bootstrap 物资也只进它的背包；
+		// 其它行星的开局机甲保持空闲，由玩家用 assign_mecha 分配给代理。
+		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID}
+		if ws.PlanetID == starterPlanetID {
+			record.Operator = p.PlayerID
+			applyPlayerBootstrap(ps, record, p.Bootstrap)
+		}
+		ps.EnsureMechas()[execID] = record
 	}
 }
 
@@ -176,7 +187,7 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 		}
 	}
 	positions := computeStartPositions(&config.Config{Players: players}, ws.Surface())
-	mineDist := spawnMineDistance(players)
+	mineDist := spawnMineDistance()
 	for i := range positions {
 		positions[i] = relocateSpawnNearResources(ws, positions[i], mineDist)
 	}
@@ -185,20 +196,8 @@ func spawnPositionsFor(ws *model.WorldState, planet *mapmodel.Planet, players []
 
 // spawnMineDistance is the max surface graph distance allowed between a spawn and
 // the nearest resource node, leaving room for the executor's adjacent tile.
-func spawnMineDistance(players []config.PlayerConfig) int {
-	operateRange := 0
-	for _, p := range players {
-		if p.Executor.OperateRange <= 0 {
-			continue
-		}
-		if operateRange == 0 || p.Executor.OperateRange < operateRange {
-			operateRange = p.Executor.OperateRange
-		}
-	}
-	if operateRange <= 0 {
-		operateRange = 18
-	}
-	dist := operateRange - 2
+func spawnMineDistance() int {
+	dist := model.ExecutorOperateRange() - 2
 	if dist < 1 {
 		dist = 1
 	}
@@ -399,6 +398,10 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 			activePlanet = candidate
 		}
 	}
+	activePlanetID := ""
+	if activePlanet != nil {
+		activePlanetID = activePlanet.ID
+	}
 	players := buildSharedPlayers(cfg)
 	spaceRuntime := model.NewSpaceRuntimeState()
 
@@ -425,7 +428,7 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 			continue
 		}
 		planet, _ := maps.Planet(planetID)
-		seedPlayerOutposts(ws, planet, cfg.Players)
+		seedPlayerOutposts(ws, planet, cfg.Players, activePlanetID)
 		// bootstrap 还会注入开局矿簇并整地，基线必须在这之后重建一次，
 		// 否则读档会把 bootstrap 注入的矿当成「相对基线的差异」丢掉。
 		ws.SetResourceBaseline()
@@ -436,10 +439,6 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	}
 	seedWarIndustryAnchors(worlds)
 
-	activePlanetID := ""
-	if activePlanet != nil {
-		activePlanetID = activePlanet.ID
-	}
 	for _, ps := range players {
 		// F4：新玩家的初始焦点 = 其出生行星（即全局默认活动行星）。
 		ps.FocusPlanetID = activePlanetID

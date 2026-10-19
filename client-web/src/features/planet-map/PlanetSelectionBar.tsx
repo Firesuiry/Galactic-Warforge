@@ -6,7 +6,7 @@ import { AmmunitionBar } from "@/features/war/components/AmmunitionBar";
 
 import { useState } from 'react';
 import { surfaceDistanceWithin } from '@shared/surface';
-import type { AlertEntry, Building, CatalogView, CombatSquad, CommandResponse, Position } from '@shared/types';
+import type { AlertEntry, Building, CatalogView, CombatSquad, CommandResponse, Position, StateSummary } from '@shared/types';
 import { haulUnreachableDetail, isAlertActive } from '@shared/alerts';
 
 import { Icon } from '@/common/Icon';
@@ -27,6 +27,7 @@ import { usePlanetViewStore } from '@/features/planet-map/store';
 import { MECHA_MINE_ENERGY_PER_ITEM, MECHA_MINE_RANGE, MECHA_MINE_TICKS_PER_ITEM } from '@/features/planet-map/mecha-costs';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
+import { foreignOperatedMechaIds, selectMechaById, selectMyMecha } from '@/features/mecha/model';
 import { translateBuildingState, translateUnitType } from '@/i18n/translate';
 
 interface PlanetSelectionBarProps {
@@ -36,6 +37,8 @@ interface PlanetSelectionBarProps {
   planet: PlanetRenderView;
   /** C4：战斗小队列表（planet_runtime.combat_squads），小队选中面板的实体源。 */
   squads?: CombatSquad[];
+  /** /state/summary：采集面板据此找「我的机甲」（operator 等于自己）。 */
+  summary?: StateSummary;
   /**
    * 当前仍成立的产线告警：运输机器人选中条据此显示 `haul_unreachable`
    * （「这台机器人到不了目标」），玩家才知道它为什么空转。
@@ -86,7 +89,7 @@ export function findNearbyMinableResource(planet: PlanetRenderView, catalog: Cat
   return best?.resource;
 }
 
-export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, alerts }: PlanetSelectionBarProps) {
+export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squads, summary }: PlanetSelectionBarProps) {
   const client = useApiClient();
   const session = useSessionSnapshot();
   const selected = usePlanetViewStore((state) => state.selected);
@@ -143,15 +146,22 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
   // 多选面板（C1）：≥2 个单位时显示构成与批量指令入口
   const aliveSelection = selectedUnits.filter((id) => planet.units?.[id]?.owner_id === session.playerId);
   if (aliveSelection.length >= 2) {
-    const composition = summarizeUnitSelection(planet, aliveSelection)
+    // 契约 §3.1：别人绑定的本方机甲不进可下令集合（move/attack 会被逐个拒绝 NOT_OPERATOR），
+    // 框选时可能一起选进来，这里过滤并计数提示。
+    const foreignMechaIds = foreignOperatedMechaIds(summary, session.playerId);
+    const skippedForeign = aliveSelection.filter((id) => foreignMechaIds.has(id)).length;
+    const commandableSelection = aliveSelection.filter((id) => !foreignMechaIds.has(id));
+    const composition = summarizeUnitSelection(planet, commandableSelection)
       .map((entry) => `${translateUnitType(entry.type)}×${entry.count}`)
       .join(' · ');
-    const orderEligible = aliveSelection.filter((id) => !planet.units?.[id]?.mecha);
+    const orderEligible = commandableSelection.filter((id) => !planet.units?.[id]?.mecha);
     // 运输机器人（§4）：多选可一次设同一路线（同一 unit_order haul 带 entity_ids）。
-    const robotIds = aliveSelection.filter((id) => isTransportRobot(planet.units?.[id]));
+    const robotIds = commandableSelection.filter((id) => isTransportRobot(planet.units?.[id]));
     const orderButtons: { label: string; title: string; action: () => void }[] = [
-      { label: '移动', title: '右键点地也可移动', action: () => setInteractionMode({ kind: 'move' }) },
-      { label: '攻击', title: '右键点敌也可攻击', action: () => setInteractionMode({ kind: 'attack' }) },
+      ...(commandableSelection.length > 0 ? [
+        { label: '移动', title: '右键点地也可移动', action: () => setInteractionMode({ kind: 'move' as const }) },
+        { label: '攻击', title: '右键点敌也可攻击', action: () => setInteractionMode({ kind: 'attack' as const }) },
+      ] : []),
       ...(robotIds.length > 0 ? [
         {
           label: allAutoHaul(robotIds.map((id) => planet.units?.[id])) ? '自动搬运 ✓' : '自动搬运',
@@ -184,9 +194,18 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
       <div className="planet-selection-bar" data-testid="planet-selection-bar">
         <Icon iconKey="soldier" size={20} />
         <div className="planet-selection-bar__info">
-          <strong>已选 {aliveSelection.length} 个单位</strong>
-          {aliveSelection.some(id=>planet.units?.[id]?.combat_state==='no_ammunition')?<span role="alert">{aliveSelection.filter(id=>planet.units?.[id]?.combat_state==='no_ammunition').length} 个单位弹药耗尽</span>:null}
+          <strong>
+            {commandableSelection.length > 0
+              ? `已选 ${commandableSelection.length} 个单位`
+              : `已选 ${aliveSelection.length} 个单位`}
+          </strong>
+          {commandableSelection.some(id=>planet.units?.[id]?.combat_state==='no_ammunition')?<span role="alert">{commandableSelection.filter(id=>planet.units?.[id]?.combat_state==='no_ammunition').length} 个单位弹药耗尽</span>:null}
           <span className="planet-selection-bar__meta">{composition}</span>
+          {skippedForeign > 0 ? (
+            <span className="planet-selection-bar__meta" data-testid="selection-skipped-foreign">
+              已跳过 {skippedForeign} 台他人机甲
+            </span>
+          ) : null}
           <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击 · Ctrl+数字编队</span>
         </div>
         <div className="planet-selection-bar__actions">
@@ -217,8 +236,14 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
   if (selected.kind === 'resource') {
     const resource = planet.resources?.find(entry => entry.id === selected.id);
     if (!resource) return null;
-    const ownMechas = Object.values(planet.units ?? {}).filter(unit => unit.owner_id === session.playerId && unit.type === 'executor' && unit.mecha);
-    const mecha = ownMechas.find(unit => surfaceDistanceWithin(unit.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined) ?? ownMechas[0];
+    // 「我的机甲」= summary 里 operator 等于自己的那台（契约 §7.3）：采集命令不再带 entity_id，
+    // 服务端按发令者绑定的机甲执行；这里只用来显示能量/作业/距离。
+    const myMecha = selectMyMecha(summary, session.playerId);
+    const mecha = myMecha ? planet.units?.[myMecha.unit_id] : undefined;
+    // `/scene` 只返回相机窗口内的实体：同星球但镜头移开时 `planet.units` 里没有它，
+    // 不能当成「不在本星球」——按档案的 planet_id 判断。
+    const mechaElsewhere = myMecha && myMecha.planet_id !== planet.planet_id ? myMecha.planet_id : undefined;
+    const mechaOutOfView = Boolean(myMecha) && !mecha && !mechaElsewhere;
     const inRange = mecha && surfaceDistanceWithin(mecha.position, resource.position, planet.surface.face_size, MECHA_MINE_RANGE) !== undefined;
     const solid = catalog?.items?.some(item => item.id === resource.kind && item.form === 'solid') && resource.behavior === 'finite';
     const quantity = quantityDraft?.resourceId === resource.id
@@ -231,7 +256,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
       <div className="planet-selection-bar__info">
         <strong>{getItemDisplayName(catalog, resource.kind)}</strong>
         <span className="planet-selection-bar__meta">剩余 {resource.remaining ?? '—'} · ({resource.position.x}, {resource.position.y})</span>
-        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
+        <span className="planet-selection-bar__meta">{!solid ? '需要采集设施' : !myMecha ? '未绑定机甲：在行星上选中一台机甲 → 接管' : mechaElsewhere ? `你的机甲在 ${mechaElsewhere}，不在本星球` : mechaOutOfView ? '你的机甲不在当前视野：把镜头移过去或先移动到矿点' : !mecha ? '本地暂无己方机甲' : !inRange ? `请将机甲移动到矿点 ${MECHA_MINE_RANGE} 格内` : mecha.mecha?.job ? '机甲正在执行任务，请先完成或取消' : !enough ? '矿点剩余数量不足' : `每件 ${MECHA_MINE_TICKS_PER_ITEM} tick · 消耗 ${count * MECHA_MINE_ENERGY_PER_ITEM} 核心能量`}</span>
       </div>
       {solid && mecha ? <form className="planet-selection-bar__actions" onSubmit={async event => {
         event.preventDefault();
@@ -239,7 +264,7 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
         setMiningPending(true);
         try {
           await submitPlanetCommand({ commandType: 'mine_resource', planetId: planet.planet_id, focus: { entityId: mecha.id },
-            execute: () => client.cmdMineResource(mecha.id, resource.id, count),
+            execute: () => client.cmdMineResource(resource.id, count, planet.planet_id),
             fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
           });
         } finally { setMiningPending(false); }
@@ -326,7 +351,16 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
       );
     }
     const ownUnit = unit.owner_id === session.playerId;
-    const underfootResource = ownUnit && unit.mecha ? findNearbyMinableResource(planet, catalog, unit.position) : undefined;
+    // 契约 §3.1：采集命令由**发令者自己**绑定的机甲执行；move/attack 对别人绑定的机甲
+    // 逐个拒绝 NOT_OPERATOR。这里按档案的 operator 区分「我的 / 空闲 / 别人绑定」三态，
+    // 不能让选择条在非我的机甲上摆出会失败的命令按钮。
+    const mechaProfile = unit.mecha ? selectMechaById(summary, session.playerId, unit.id) : undefined;
+    const mechaOperator = mechaProfile?.operator ?? '';
+    const foreignOperated = Boolean(unit.mecha && mechaOperator && mechaOperator !== session.playerId);
+    const idleMecha = Boolean(unit.mecha && !mechaOperator);
+    const underfootResource = ownUnit && unit.mecha && !foreignOperated
+      ? findNearbyMinableResource(planet, catalog, unit.position)
+      : undefined;
     // 运输机器人卡死提示（第 16 轮契约 haul_unreachable）：只看仍然成立、且 details.unit_id
     // 就是这台机器人的告警——服务端告警的 building_id/building_type 是**目标建筑**，
     // 只有 details.unit_id 指向机器人。
@@ -378,14 +412,21 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
           {unit.mecha ? <span className="planet-selection-bar__meta">
             能量 {unit.mecha.energy}/{unit.mecha.max_energy} · 护盾 {unit.mecha.shield}/{unit.mecha.max_shield}
           </span> : null}
-          {ownUnit ? <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击</span> : null}
+          {ownUnit && !foreignOperated ? <span className="planet-selection-bar__hint">右键地面移动 · 右键敌人攻击</span> : null}
+          {foreignOperated ? (
+            <span className="planet-selection-bar__meta" data-testid="mecha-foreign-operator">
+              由 {mechaOperator} 操作 · 在工作台接管
+            </span>
+          ) : null}
         </div>
         {ownUnit ? (
           <div className="planet-selection-bar__actions">
             {onShowDetail ? <button className="secondary-button" type="button" onClick={onShowDetail}>
               {unit.mecha ? '机甲详情' : '详情'}
             </button> : null}
-            {underfootResource ? (
+            {/* 采集由发令者自己的机甲执行（契约 §3.1）：空闲机甲上显示该按钮会误导；
+                别人绑定的机甲则完全不给命令按钮（见上方提示行）。 */}
+            {!idleMecha && !foreignOperated && underfootResource ? (
               <button
                 className="secondary-button"
                 type="button"
@@ -395,95 +436,99 @@ export function PlanetSelectionBar({ catalog, onShowDetail, planet, squads, aler
                 采集脚下{getItemDisplayName(catalog, underfootResource.kind)}
               </button>
             ) : null}
-            <button
-              className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
-              type="button"
-              title="M · 也可直接右键点地移动"
-              onClick={() => {
-                sfx.uiClick();
-                if (activeMode?.kind === 'move') {
-                  exitInteractionMode();
-                } else {
-                  setInteractionMode({ kind: 'move' });
-                }
-              }}
-            >
-              {activeMode?.kind === 'move' ? '取消移动' : '移动'}
-            </button>
-            <button
-              className={`secondary-button${activeMode?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
-              type="button"
-              title="也可直接右键点敌攻击"
-              onClick={() => {
-                sfx.uiClick();
-                if (activeMode?.kind === 'attack') {
-                  exitInteractionMode();
-                } else {
-                  setInteractionMode({ kind: 'attack' });
-                }
-              }}
-            >
-              {activeMode?.kind === 'attack' ? '取消攻击' : '攻击'}
-            </button>
-            {!unit.mecha ? (
+            {!foreignOperated ? (
               <>
                 <button
-                  className={`secondary-button${activeMode?.kind === 'unit_order' && activeMode.order === 'attack_move' ? ' planet-selection-bar__active' : ''}`}
+                  className={`secondary-button${activeMode?.kind === 'move' ? ' planet-selection-bar__active' : ''}`}
                   type="button"
-                  title="A · 攻击移动：点击目标点，沿途交战"
+                  title="M · 也可直接右键点地移动"
                   onClick={() => {
                     sfx.uiClick();
-                    setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
-                  }}
-                >
-                  攻击移动
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  title="H · 原地坚守：不追击，射程内自动开火"
-                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
-                >
-                  坚守
-                </button>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  title="S · 停止当前命令，回到待命"
-                  onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
-                >
-                  停止
-                </button>
-              </>
-            ) : null}
-            {/* 运输机器人（§2.1）：自动搬运（出厂默认，切换按钮高亮）/ 设置运输（进入固定路线）/ 停止（进入待命）。 */}
-            {isTransportRobot(unit) ? (
-              <>
-                <button
-                  className={`secondary-button${transportHaulMode(unit) === 'auto' ? ' planet-selection-bar__active' : ''}`}
-                  type="button"
-                  title="切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料"
-                  onClick={() => submit('unit_order', () => client.cmdAutoHaul(unit.id), { entityId: unit.id })}
-                >
-                  自动搬运
-                </button>
-                <button
-                  className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
-                  type="button"
-                  title="依次点击起点建筑、终点建筑；物品留空由服务端取终点能接收的第一种"
-                  onClick={() => {
-                    sfx.uiClick();
-                    if (activeMode?.kind === 'haul') {
+                    if (activeMode?.kind === 'move') {
                       exitInteractionMode();
                     } else {
-                      setInteractionMode({ kind: 'haul' });
+                      setInteractionMode({ kind: 'move' });
                     }
                   }}
                 >
-                  {activeMode?.kind === 'haul'
-                    ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
-                    : '设置运输'}
+                  {activeMode?.kind === 'move' ? '取消移动' : '移动'}
                 </button>
+                <button
+                  className={`secondary-button${activeMode?.kind === 'attack' ? ' planet-selection-bar__active' : ''}`}
+                  type="button"
+                  title="也可直接右键点敌攻击"
+                  onClick={() => {
+                    sfx.uiClick();
+                    if (activeMode?.kind === 'attack') {
+                      exitInteractionMode();
+                    } else {
+                      setInteractionMode({ kind: 'attack' });
+                    }
+                  }}
+                >
+                  {activeMode?.kind === 'attack' ? '取消攻击' : '攻击'}
+                </button>
+                {!unit.mecha ? (
+                  <>
+                    <button
+                      className={`secondary-button${activeMode?.kind === 'unit_order' && activeMode.order === 'attack_move' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="A · 攻击移动：点击目标点，沿途交战"
+                      onClick={() => {
+                        sfx.uiClick();
+                        setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
+                      }}
+                    >
+                      攻击移动
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      title="H · 原地坚守：不追击，射程内自动开火"
+                      onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'hold'), { entityId: unit.id })}
+                    >
+                      坚守
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      title="S · 停止当前命令，回到待命"
+                      onClick={() => submit('unit_order', () => client.cmdUnitOrder(unit.id, 'stop'), { entityId: unit.id })}
+                    >
+                      停止
+                    </button>
+                  </>
+                ) : null}
+                {/* 运输机器人（§2.1）：自动搬运（出厂默认，切换按钮高亮）/ 设置运输（进入固定路线）/ 停止（进入待命）。 */}
+                {isTransportRobot(unit) ? (
+                  <>
+                    <button
+                      className={`secondary-button${transportHaulMode(unit) === 'auto' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="切回全局自动搬运（出厂默认）：自动给本行星缺料的建筑送料"
+                      onClick={() => submit('unit_order', () => client.cmdAutoHaul(unit.id), { entityId: unit.id })}
+                    >
+                      自动搬运
+                    </button>
+                    <button
+                      className={`secondary-button${activeMode?.kind === 'haul' ? ' planet-selection-bar__active' : ''}`}
+                      type="button"
+                      title="依次点击起点建筑、终点建筑；物品留空由服务端取终点能接收的第一种"
+                      onClick={() => {
+                        sfx.uiClick();
+                        if (activeMode?.kind === 'haul') {
+                          exitInteractionMode();
+                        } else {
+                          setInteractionMode({ kind: 'haul' });
+                        }
+                      }}
+                    >
+                      {activeMode?.kind === 'haul'
+                        ? (activeMode.fromBuildingId ? '已选起点，点终点' : '点起点建筑')
+                        : '设置运输'}
+                    </button>
+                  </>
+                ) : null}
               </>
             ) : null}
           </div>

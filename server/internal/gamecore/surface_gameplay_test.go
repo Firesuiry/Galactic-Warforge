@@ -153,7 +153,14 @@ func TestSurfaceMultiTileConstructionReservationAndDemolition(t *testing.T) {
 	}
 	ws := model.NewWorldState("test", 8)
 	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1"}
-	task := &model.ConstructionTask{ID: "wide", PlayerID: "p1", BuildingType: def.ID, Position: model.Position{X: 7, Y: 4}}
+	// 第 21 轮：施工任务扣料/落成按任务所属机甲的背包。
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	execUnit := &stats
+	execUnit.ID = "u-1"
+	execUnit.OwnerID = "p1"
+	ws.Units[execUnit.ID] = execUnit
+	registerMecha(ws, "p1", execUnit)
+	task := &model.ConstructionTask{ID: "wide", PlayerID: "p1", MechaID: execUnit.ID, BuildingType: def.ID, Position: model.Position{X: 7, Y: 4}}
 	if err := ws.Construction.Enqueue(ws, task); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +187,7 @@ func TestSurfaceMultiTileConstructionReservationAndDemolition(t *testing.T) {
 	for _, b := range ws.Buildings {
 		building = b
 	}
-	demolishBuilding(ws, nil, building, 0)
+	demolishBuilding(ws, nil, building, 0, "")
 	if len(ws.TileBuilding) != 0 || len(ws.Buildings) != 0 {
 		t.Fatal("demolition did not release full footprint")
 	}

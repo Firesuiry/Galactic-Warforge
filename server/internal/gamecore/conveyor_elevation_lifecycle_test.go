@@ -11,10 +11,10 @@ import (
 // 通过真实 build 命令（入队 → 落成）验证高架带全流程。
 func buildElevatedWorld(t *testing.T) (*GameCore, *model.WorldState) {
 	t.Helper()
-	core := newConstructionTestCore(t, 4, 4)
+	core := newConstructionTestCore(t, 4)
 	ws := core.world
 	// 机甲放到地图中间，保证建造范围（operate_range 100）覆盖测试格。
-	execState := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID)
+	execState := starterMecha(ws, "p1")
 	if execState == nil {
 		t.Fatal("test world has no executor")
 	}
@@ -72,7 +72,7 @@ func TestElevatedBeltBuildLifecycle(t *testing.T) {
 	}
 
 	// 拆掉：BeltLayers 同步释放。
-	core.execDemolish(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: id}}, noPayload{})
+	core.execDemolish(ws, "p1", model.Command{Target: model.CommandTarget{EntityID: id}}, noPayload{}, mechaContext{Record: starterMecha(ws, "p1"), Unit: ws.Units[starterMecha(ws, "p1").UnitID], Player: ws.Players["p1"], World: ws})
 	if ws.BeltLayerAt(pos.X, pos.Y, 2) != "" {
 		t.Fatal("demolished elevated belt still indexed")
 	}
@@ -205,7 +205,7 @@ func TestElevatedBeltDemolishRefundsAndKeepsGroundBuilding(t *testing.T) {
 		t.Fatalf("index ground sorter: %v", err)
 	}
 	ws.Construction = model.NewConstructionQueue()
-	ws.Players["p1"].Inventory = model.ItemInventory{}
+	starterMecha(ws, "p1").Inventory = model.ItemInventory{}
 
 	refund := model.BuildingDemolishRefundWithRate(belt.Type, belt.Level, model.BuildingDemolishRuleFor(belt.Type).RefundRate)
 	if len(refund.Items) == 0 {
@@ -218,7 +218,7 @@ func TestElevatedBeltDemolishRefundsAndKeepsGroundBuilding(t *testing.T) {
 		t.Fatalf("demolish elevated belt failed: %+v", res)
 	}
 	for _, item := range refund.Items {
-		if got := ws.Players["p1"].Inventory[item.ItemID]; got < item.Quantity {
+		if got := starterMecha(ws, "p1").Inventory[item.ItemID]; got < item.Quantity {
 			t.Fatalf("refund %s: got %d, want >= %d", item.ItemID, got, item.Quantity)
 		}
 	}

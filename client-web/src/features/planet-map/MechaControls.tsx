@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import type { CatalogView, CommandResponse, PlayerState, Unit } from '@shared/types';
+import type { CatalogView, CommandResponse, ItemInventory, PlayerState, Unit } from '@shared/types';
 import { getItemDisplayName, getRecipeDisplayName, getTechDisplayName } from './model';
 import { normalizeCompletedTechIds } from './research-workflow';
 import { isRecipeUnlocked } from './tech-gate';
 import { useApiClient } from '@/hooks/use-api-client';
 import { submitPlanetCommand } from '@/features/planet-commands/executor';
+import { rejectionPlayerMessage } from '@/common/player-facing-error';
 import { PLANET_COMMAND_RECOVERY_EVENT_TYPES } from '@/features/planet-commands/store';
 import { MechaLogisticsControls } from './MechaLogisticsControls';
 import { mechaCraftEnergyPerBatch, MECHA_MINE_RANGE } from './mecha-costs';
 import { usePlanetViewStore } from './store';
+import type { MechaView } from '@/features/mecha/model';
+import { mechaOperatorLabel, mechaSlotUsage } from '@/features/mecha/model';
+import { useSessionSnapshot } from '@/hooks/use-session';
 
 /** 补满所需燃料块数：按缺口向上取整，受背包持有量限制（服务端同样按缺口截断）。 */
 export function refuelFullQuantity(missingEnergy: number, fuelEnergy: number, owned: number) {
@@ -80,27 +84,59 @@ export function craftBlockReason(input: {
   return null;
 }
 
-/** All values and fuel choices come from the authoritative scene and catalog. */
-export function MechaControls({ unit, catalog, planetId, canControl, player, tickRate }: {
-  unit: Unit; catalog?: CatalogView; planetId: string; canControl: boolean; player?: PlayerState;
+/**
+ * 机甲侧栏（契约 §7.3 第 2 条）。最上方「操作者」一行决定三态：
+ * - `mecha.operator === 自己`：显示全部控件，背包数字读**这台机甲**的档案；
+ * - 别人的：只读信息（核心能量、背包格数）+「接管」按钮，隐藏手搓/采集/补能/配送控件；
+ * - 空闲：显示「空闲机甲」+「接管」按钮。
+ *
+ * `player` 只用来读科技与研究状态；背包一律读 `mecha.inventory`（机甲档案）。
+ */
+export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, player, tickRate }: {
+  unit: Unit; catalog?: CatalogView; planetId: string;
+  /** 这台机甲的档案（summary.players[me].mechas 里按 unit_id 找到）；缺失时按空闲处理。 */
+  mecha?: MechaView;
+  /** 当前发令者已绑定的机甲（用于「接管后 <旧ID> 变为空闲」提示）。 */
+  boundMecha?: MechaView;
+  player?: PlayerState;
   /** 服务端实际 tick 速率（/games/current 的 max_tick_rate）；缺省按 10 换算。 */
   tickRate?: number;
 }) {
   const client = useApiClient();
+  const session = useSessionSnapshot();
+  const playerId = session.playerId;
   const [fuelId, setFuelId] = useState('coal');
   const [pending, setPending] = useState(false);
+  const [assignPending, setAssignPending] = useState(false);
+  /** 接管被服务端拒绝时的原因（按回执，不按客户端预期）。 */
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const inventory: ItemInventory | undefined = mecha?.inventory;
+  /** 只有自己的机甲档案才会出现在 summary 里；别人玩家的机甲只读、不给「接管」。 */
+  const isOwnUnit = Boolean(playerId) && unit.owner_id === playerId;
+  // 操作者口径统一走 `mecha.operator`（契约 §6）：别人的单位拿不到档案时显示「其他玩家」，
+  // 不能拿 owner_id 冒充操作者（那是玩家 ID，不是绑定到机甲的 issuer）。
+  const operator = mecha?.operator ?? '';
+  const isMine = isOwnUnit && operator === playerId;
+  const operatorLabel = !isOwnUnit
+    ? '其他玩家'
+    : isMine
+      ? '我'
+      : operator
+        ? mechaOperatorLabel(operator, playerId)
+        : '空闲机甲';
+  const slotUsage = mechaSlotUsage(mecha);
   // 配方选择放在行星视图 store：详情面板会随「选中单位是否落在场景窗口内」卸载重挂，
   // 组件内 state 会丢，下拉框跳回第一个可用配方（试玩 1013 bug-1013-2）。
   const recipeId = usePlanetViewStore((state) => state.craftRecipeId);
   const setRecipeId = usePlanetViewStore((state) => state.setCraftRecipeId);
   const [batches, setBatches] = useState(1);
-  const mecha = unit.mecha;
-  if (!mecha) return null;
+  const unitMecha = unit.mecha;
+  if (!unitMecha) return null;
   const fuels = catalog?.items?.filter(item => (item.mecha_fuel_energy ?? 0) > 0) ?? [];
   const fuel = fuels.find(item => item.id === fuelId) ?? fuels[0];
-  const full = mecha.energy >= mecha.max_energy || mecha.fuel_energy > 0;
-  const fuelOwned = fuel ? player?.inventory?.[fuel.id] ?? 0 : 0;
-  const fillQuantity = fuel ? refuelFullQuantity(mecha.max_energy - mecha.energy, fuel.mecha_fuel_energy ?? 0, fuelOwned) : 0;
+  const full = unitMecha.energy >= unitMecha.max_energy || unitMecha.fuel_energy > 0;
+  const fuelOwned = fuel ? inventory?.[fuel.id] ?? 0 : 0;
+  const fillQuantity = fuel ? refuelFullQuantity(unitMecha.max_energy - unitMecha.energy, fuel.mecha_fuel_energy ?? 0, fuelOwned) : 0;
   const recipes = catalog?.recipes?.filter(recipe => recipe.handcraft_allowed) ?? [];
   const completed = new Set(normalizeCompletedTechIds(player?.tech));
   // 配方科技门控统一走 tech-gate（对齐服务端 CanUseRecipeTech：无门控=基础配方，有门控则任一完成即可）。
@@ -108,10 +144,10 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
   const recipe = recipes.find(entry => entry.id === recipeId) ?? recipes.find(entry => isUnlocked(entry)) ?? recipes[0];
   const missingTech = recipe && !isUnlocked(recipe);
   const count = Number.isFinite(batches) ? Math.max(1, Math.min(999, Math.floor(batches))) : 1;
-  const missingItems = recipe?.inputs.some(input => (player?.inventory?.[input.item_id] ?? 0) < input.quantity * count);
+  const missingItems = recipe?.inputs.some(input => (inventory?.[input.item_id] ?? 0) < input.quantity * count);
   // 缺料时按钮禁用，并把缺什么说清楚：只看「背包原料不足」玩家不知道差几个（试玩 1013 C/D）。
   const missingInputs = (recipe?.inputs ?? []).flatMap(input => {
-    const owned = player?.inventory?.[input.item_id] ?? 0;
+    const owned = inventory?.[input.item_id] ?? 0;
     const required = input.quantity * count;
     return owned < required
       ? [{ itemId: input.item_id, owned, required }]
@@ -120,14 +156,14 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
   const missingInputsText = missingInputs
     .map(input => `${getItemDisplayName(catalog, input.itemId)}（背包 ${input.owned} / 需要 ${input.required}）`)
     .join('、');
-  const job = mecha.job;
+  const job = unitMecha.job;
   const totalBatches = job ? totalJobBatches(job) : 0;
   const remainingTicks = job ? remainingJobTicks(job) : 0;
   const craftBlockReasonText = craftBlockReason({
     hasRecipe: Boolean(recipe),
     missingTech: Boolean(missingTech),
     missingItems: Boolean(missingItems),
-    hasPlayer: Boolean(player),
+    hasPlayer: Boolean(mecha),
     job,
     jobRecipeName: job?.recipe_id ? getRecipeDisplayName(catalog, job.recipe_id) : '',
     resourceName: job?.resource_id ? getItemDisplayName(catalog, job.resource_id) : '',
@@ -142,18 +178,68 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
       });
     } finally { setPending(false); }
   }
+  async function assignToMe() {
+    if (assignPending || !playerId) return;
+    setAssignPending(true);
+    try {
+      const response = await submitPlanetCommand({
+        commandType: 'assign_mecha',
+        planetId,
+        focus: { entityId: unit.id },
+        execute: () => client.cmdAssignMecha(mecha?.unit_id ?? unit.id, playerId, planetId),
+        fetchAuthoritativeSnapshot: () => client.fetchEventSnapshot({ event_types: [...PLANET_COMMAND_RECOVERY_EVENT_TYPES], limit: 50 }),
+      });
+      // 以服务端回执为准：被拒绝时把原因留在面板上（toast 之外的第二处可见反馈）。
+      // submitPlanetCommand 在请求异常时返回 undefined——失败原因已由它弹 toast，这里不再重复。
+      if (!response) return;
+      if (!response.accepted || response.results.every((result) => result.status !== 'executed' && result.status !== 'accepted')) {
+        setAssignError(rejectionPlayerMessage(response.results, '服务端拒绝了接管'));
+      } else {
+        setAssignError(null);
+      }
+    } finally { setAssignPending(false); }
+  }
+  const canControl = isMine;
+  const takeoverHint = isOwnUnit && boundMecha && boundMecha.unit_id !== unit.id
+    ? `接管后 ${boundMecha.unit_id} 变为空闲`
+    : null;
   return (
     <section className="planet-side-section mecha-controls" aria-label="机甲核心">
-      {canControl ? <MechaLogisticsControls unit={unit} catalog={catalog} planetId={planetId} inventory={player?.inventory} /> : null}
+      {/* 操作者行（契约 §7.3 第 2 条）：三态决定下面的控件是否出现。 */}
+      <div className="mecha-operator" aria-label="机甲操作者">
+        <div className="mecha-operator__line">
+          <span className="mecha-operator__label">操作者</span>
+          <strong className="mecha-operator__value">
+            {operatorLabel}
+          </strong>
+          <span className="mecha-operator__id">{unit.id}</span>
+          {!isMine && isOwnUnit ? (
+            <button
+              className="secondary-button mecha-operator__takeover"
+              disabled={assignPending || !playerId}
+              onClick={() => void assignToMe()}
+              type="button"
+            >
+              {assignPending ? '接管中…' : '接管'}
+            </button>
+          ) : null}
+        </div>
+        {!isMine && takeoverHint ? <p className="muted mecha-operator__hint">{takeoverHint}</p> : null}
+        {!isMine && assignError ? <p className="mecha-operator__error" role="alert">{assignError}</p> : null}
+        {!isMine && mecha && slotUsage ? (
+          <p className="muted mecha-operator__readonly">背包 {slotUsage.used}/{slotUsage.total} 格</p>
+        ) : null}
+      </div>
+      {canControl ? <MechaLogisticsControls unit={unit} catalog={catalog} planetId={planetId} inventory={inventory} /> : null}
       <div className="section-title">机甲核心</div>
-      <label>核心能量 <strong>{mecha.energy} / {mecha.max_energy}</strong>
-        <meter aria-label="核心能量" min={0} max={mecha.max_energy} value={mecha.energy} />
+      <label>核心能量 <strong>{unitMecha.energy} / {unitMecha.max_energy}</strong>
+        <meter aria-label="核心能量" min={0} max={unitMecha.max_energy} value={unitMecha.energy} />
       </label>
-      <label>能量护盾 <strong>{mecha.shield} / {mecha.max_shield}</strong>
-        <meter aria-label="能量护盾" min={0} max={Math.max(1, mecha.max_shield)} value={mecha.shield} />
+      <label>能量护盾 <strong>{unitMecha.shield} / {unitMecha.max_shield}</strong>
+        <meter aria-label="能量护盾" min={0} max={Math.max(1, unitMecha.max_shield)} value={unitMecha.shield} />
       </label>
-      <p className="muted">燃料余能 {mecha.fuel_energy} · 每次攻击耗能 {mecha.attack_energy_cost} · 每格移动耗能 {mecha.move_energy_cost}</p>
-      <p className="muted">{mecha.max_shield > 0 ? `脱战 ${mecha.shield_recharge_delay} tick 后消耗核心能量恢复护盾。` : '研究能量护盾科技后解锁护盾。'}</p>
+      <p className="muted">燃料余能 {unitMecha.fuel_energy} · 每次攻击耗能 {unitMecha.attack_energy_cost} · 每格移动耗能 {unitMecha.move_energy_cost}</p>
+      <p className="muted">{unitMecha.max_shield > 0 ? `脱战 ${unitMecha.shield_recharge_delay} tick 后消耗核心能量恢复护盾。` : '研究能量护盾科技后解锁护盾。'}</p>
       <p className="muted">靠近运行中的供电塔可自动充电。</p>
       {job ? <section className="mecha-job" aria-label="机甲任务">
         <strong>{job.kind === 'mine' ? '手动采集中' : `制造 ${getRecipeDisplayName(catalog, job.recipe_id ?? '')}`}</strong>
@@ -167,12 +253,12 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
         </div>
         <p>本批剩余 {job.remaining_ticks} tick · 剩余 {job.remaining_batches} 批 · 预计还需 {formatDuration(remainingTicks, tickRate)}</p>
         <p>{job.state === 'no_energy' ? '核心能量不足，补能后自动继续。' : job.state === 'out_of_range' ? `距离矿点过远，回到 ${MECHA_MINE_RANGE} 格内继续采集。` : job.state === 'inventory_full' ? '背包已满（按格计：每格可堆叠该物品的堆叠上限），装不下的产出不会丢失：腾出空位后自动继续。' : `工作中 · 每批开工消耗 ${job.energy_per_batch} 核心能量`}</p>
-        {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(unit.id))}>取消机甲任务</button> : null}
+        {canControl ? <button className="secondary-button" disabled={pending} onClick={() => void submit('cancel_mecha_job', () => client.cmdCancelMechaJob(planetId))}>取消机甲任务</button> : null}
       </section> : null}
       {canControl ? <form onSubmit={async event => {
         event.preventDefault();
         if (!fuel || full || pending || fillQuantity <= 0) return;
-        await submit('refuel_mecha', () => client.cmdRefuelMecha(unit.id, fuel.id, fillQuantity));
+        await submit('refuel_mecha', () => client.cmdRefuelMecha(fuel.id, fillQuantity, planetId));
       }}>
         <label>背包燃料
           <select aria-label="机甲燃料" value={fuel?.id ?? ''} onChange={event => setFuelId(event.target.value)}>
@@ -184,7 +270,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
             {pending ? '提交中…' : fillQuantity > 0 ? `补满（${fillQuantity} 个）` : '补满'}
           </button>
           <button className="secondary-button" type="button" disabled={!fuel || full || pending || fuelOwned <= 0}
-            onClick={() => { if (fuel) void submit('refuel_mecha', () => client.cmdRefuelMecha(unit.id, fuel.id, 1)); }}>
+            onClick={() => { if (fuel) void submit('refuel_mecha', () => client.cmdRefuelMecha(fuel.id, 1, planetId)); }}>
             补 1 个
           </button>
         </div>
@@ -192,8 +278,8 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
       </form> : null}
       {canControl ? <form aria-label="个人制造" onSubmit={event => {
         event.preventDefault();
-        if (!recipe || missingTech || missingItems || job || pending || !player) return;
-        void submit('craft_item', () => client.cmdCraftItem(unit.id, recipe.id, count));
+        if (!recipe || missingTech || missingItems || job || pending || !mecha) return;
+        void submit('craft_item', () => client.cmdCraftItem(recipe.id, count, planetId));
       }}>
         <div className="section-title">个人制造</div>
         <label>个人制造配方
@@ -203,7 +289,7 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
         </label>
         <label>制造批数<input aria-label="制造批数" type="number" min={1} max={999} step={1} value={batches} onChange={event => setBatches(Number(event.target.value))} /></label>
         {recipe ? <>
-          <p>原料：{recipe.inputs.map(input => `${getItemDisplayName(catalog, input.item_id)} ${input.quantity * count}（背包 ${player ? player.inventory?.[input.item_id] ?? 0 : '…'}）`).join('、') || '无'}</p>
+          <p>原料：{recipe.inputs.map(input => `${getItemDisplayName(catalog, input.item_id)} ${input.quantity * count}（背包 ${mecha ? inventory?.[input.item_id] ?? 0 : '…'}）`).join('、') || '无'}</p>
           <p>产物：{[...recipe.outputs, ...(recipe.byproducts ?? [])].map(output => `${getItemDisplayName(catalog, output.item_id)} ${output.quantity * count}`).join('、')}</p>
           <p>耗时 {recipe.duration * count} tick · 核心耗能 {mechaCraftEnergyPerBatch(recipe.duration) * count}（每批 {mechaCraftEnergyPerBatch(recipe.duration)}）</p>
           {craftBlockReasonText
@@ -213,9 +299,9 @@ export function MechaControls({ unit, catalog, planetId, canControl, player, tic
                 {missingInputsText && !job ? ` 缺少：${missingInputsText}` : ''}
               </p>
             )
-            : missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !player ? <p role="status">正在读取背包…</p> : null}
+            : missingTech ? <p role="status">需要科技：{recipe.tech_unlock?.map(id => getTechDisplayName(catalog, id)).join(' 或 ')}</p> : !mecha ? <p role="status">正在读取背包…</p> : null}
         </> : <p>暂无可手工制造的配方。</p>}
-        <button className="secondary-button" disabled={!recipe || missingTech || missingItems || Boolean(job) || pending || !player} type="submit">开始制造</button>
+        <button className="secondary-button" disabled={!recipe || missingTech || missingItems || Boolean(job) || pending || !mecha} type="submit">开始制造</button>
         <p className="muted">制造时预留原料；取消会退回未完成部分。</p>
       </form> : null}
     </section>

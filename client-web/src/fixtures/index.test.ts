@@ -18,7 +18,7 @@ describe('fixture fetch', () => {
     expect(payload).toMatchObject({
       planet_id: 'planet-1-1',
       building_count: 3,
-      unit_count: 2,
+      unit_count: 3,
       resource_count: 3,
     });
     expect(payload.terrain).toBeUndefined();
