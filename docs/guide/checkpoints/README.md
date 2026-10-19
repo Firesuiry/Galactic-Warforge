@@ -15,7 +15,7 @@ GOCACHE=/tmp/gw-go-cache GOTOOLCHAIN=local /home/firesuiry/sdk/go1.25.0/bin/go \
 [存档点回归测试](../存档点回归测试.md)，工具用法见 [试玩速查](../试玩速查.md)。
 
 **第 16 轮（实物经济 + DSP 分拣器）之后**：所有构建记录只用玩家命令挣材料
-（采矿 / 手搓 / 产线），禁止管理员发料；存档格式 v3（`gamedir.CurrentFormatVersion = 3`，第 16 轮去资金语义；文档旧口径曾写作 v4，以常量与存档里的 `format_version` 为准），旧存档点一律读不进来。
+（采矿 / 手搓 / 产线），禁止管理员发料；存档格式 v4（`gamedir.CurrentFormatVersion = 4`，第 21 轮机甲档案；检查点 manifest `checkpoint.FormatVersion = 2`），旧存档点一律读不进来。
 
 ## 层表（2026-10-17，第 19 轮重建）
 
