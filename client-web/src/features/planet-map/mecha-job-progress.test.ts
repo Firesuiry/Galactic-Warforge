@@ -5,6 +5,7 @@ import type { CatalogView, MechaJob, Unit } from '@shared/types';
 import {
   completionToast,
   deriveMechaJobProgress,
+  findOwnExecutor,
   formatRemaining,
   jobRemainingTicks,
   jobTotalBatches,
@@ -81,6 +82,17 @@ describe('机甲批量进度', () => {
   it('无任务 / 无机甲返回 null', () => {
     expect(deriveMechaJobProgress(catalog, executor(undefined))).toBeNull();
     expect(deriveMechaJobProgress(catalog, undefined)).toBeNull();
+  });
+
+  it('未绑定机甲时不回落到「己方第一台机甲」（审查 #6）', () => {
+    const planet = { units: { 'u-7': executor(undefined), 'u-8': { ...executor(undefined), id: 'u-8' } } } as never;
+    expect(findOwnExecutor(planet, undefined)).toBeUndefined();
+    expect(findOwnExecutor(planet, null)).toBeUndefined();
+    // 已绑定：只认这台（按 unit_id），不按 owner 猜。
+    const mecha = { unit_id: 'u-8' } as never;
+    expect(findOwnExecutor(planet, mecha)?.id).toBe('u-8');
+    // 绑定的机甲不在当前场景窗口：也不回落到别人的机甲。
+    expect(findOwnExecutor(planet, { unit_id: 'u-404' } as never)).toBeUndefined();
   });
 
   it('完成通知文案走中文名（不出现裸 id）', () => {
