@@ -103,17 +103,17 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 		return fail("需先研究解锁 logistics_bot 配方（distribution_logistics）")
 	}
 	count := 0
-	var mecha mechaContext
+	var record *model.MechaRecord
 	if source == "player" {
-		var failure *model.CommandResult
-		mecha, failure = issuerMecha(ws, player, issuerID)
+		mecha, failure := issuerMecha(ws, player, issuerID)
 		if failure != nil {
 			return *failure, nil
 		}
 		if rangeRes := gc.requireBuildRange(ws, playerID, mecha, b.Position); rangeRes != nil {
 			return *rangeRes, nil
 		}
-		count = mecha.Record.Inventory[model.ItemLogisticsBot]
+		record = mecha.Record
+		count = record.Inventory[model.ItemLogisticsBot]
 	} else {
 		count = host.Storage.OutputQuantity(model.ItemLogisticsBot)
 	}
@@ -132,7 +132,7 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 		added = append(added, bot.ID)
 	}
 	if source == "player" {
-		mecha.Record.DeductItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
+		record.DeductItems([]model.ItemAmount{{ItemID: model.ItemLogisticsBot, Quantity: n}})
 	} else {
 		host.Storage.Provide(model.ItemLogisticsBot, n)
 	}
@@ -143,7 +143,7 @@ func (gc *GameCore) execInstallLogisticsBot(ws *model.WorldState, playerID strin
 	if source == "player" {
 		events = append(events, &model.GameEvent{
 			EventType: model.EvtResourceChanged, VisibilityScope: playerID,
-			Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": mecha.Record.Inventory[model.ItemLogisticsBot], "mecha_id": mecha.Record.UnitID},
+			Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemLogisticsBot, "inventory_qty": record.Inventory[model.ItemLogisticsBot], "mecha_id": record.UnitID},
 		})
 	}
 	return model.CommandResult{Status: model.StatusExecuted, Code: model.CodeOK, Message: fmt.Sprintf("已安装 %d 个物流机器人", n)}, events
