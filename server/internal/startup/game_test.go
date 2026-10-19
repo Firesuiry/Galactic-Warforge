@@ -76,7 +76,6 @@ func TestBootstrapExistingDirKeepsExternalRuntimeOverrides(t *testing.T) {
 	writeSavedGame(t, gameDir, savedGameOptions{Tick: 12})
 	writeRuntimeOverrideConfig(t, cfgPath, runtimeOverrideOptions{
 		Port:                    19090,
-		RateLimit:               77,
 		EventHistoryLimit:       1,
 		AlertHistoryLimit:       1,
 		AutoSaveIntervalSeconds: 5,
@@ -88,7 +87,7 @@ func TestBootstrapExistingDirKeepsExternalRuntimeOverrides(t *testing.T) {
 	}
 	defer app.Stop()
 
-	if app.Current().Config.Server.Port != 19090 || app.Current().Config.Server.RateLimit != 77 {
+	if app.Current().Config.Server.Port != 19090 {
 		t.Fatalf("expected runtime overrides preserved")
 	}
 	if app.Current().Config.Server.EventHistoryLimit != 1 || app.Current().Config.Server.AlertHistoryLimit != 1 {
@@ -140,7 +139,12 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 	app.Current().Core.World().Lock()
 	app.Current().Core.World().Tick = 42
 	// 第 16 轮起没有矿物池：用背包物品 + 电网结余证明状态被持久化并恢复。
-	app.Current().Core.World().Players["p1"].AddItems([]model.ItemAmount{{ItemID: model.ItemQuantumChip, Quantity: 5}}, 0)
+	// 背包挂在机甲档案上：往开局机甲背包里放物品。
+	starterMecha := app.Current().Core.World().Players["p1"].MechaByOperator("p1")
+	if starterMecha == nil {
+		t.Fatal("expected starter mecha for p1")
+	}
+	starterMecha.AddItems([]model.ItemAmount{{ItemID: model.ItemQuantumChip, Quantity: 5}}, 0)
 	app.Current().Core.World().Players["p1"].Resources.Energy = 77
 	app.Current().Core.World().Unlock()
 	if _, err := app.Current().Core.Save("manual"); err != nil {
@@ -172,8 +176,12 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 		t.Fatalf("expected %d buildings after resume, got %d", baseCount, got)
 	}
 	player := resumed.Current().Core.World().Players["p1"]
-	if player == nil || player.Resources.Energy != 77 || player.Inventory[model.ItemQuantumChip] != 5 {
+	if player == nil || player.Resources.Energy != 77 {
 		t.Fatalf("expected player state restored, got %+v", player)
+	}
+	restoredMecha := player.MechaByOperator("p1")
+	if restoredMecha == nil || restoredMecha.Inventory[model.ItemQuantumChip] != 5 {
+		t.Fatalf("expected mecha backpack restored, got %+v", restoredMecha)
 	}
 }
 
@@ -338,8 +346,9 @@ overrides:
 	if player.Resources.Energy != 0 {
 		t.Fatalf("unexpected bootstrap resources: %+v", player.Resources)
 	}
-	if player.Inventory[model.ItemFrameMaterial] != 6 || player.Inventory[model.ItemQuantumChip] != 4 {
-		t.Fatalf("unexpected bootstrap inventory: %+v", player.Inventory)
+	bootstrapMecha := player.MechaByOperator("p1")
+	if bootstrapMecha == nil || bootstrapMecha.Inventory[model.ItemFrameMaterial] != 6 || bootstrapMecha.Inventory[model.ItemQuantumChip] != 4 {
+		t.Fatalf("unexpected bootstrap mecha backpack: %+v", bootstrapMecha)
 	}
 	if player.Tech == nil || player.Tech.CompletedTechs["gas_giants"] == 0 || player.Tech.CompletedTechs["vertical_launching"] == 0 {
 		t.Fatalf("expected bootstrap techs applied, got %+v", player.Tech)
@@ -362,7 +371,6 @@ type externalOverrideOptions struct {
 
 type runtimeOverrideOptions struct {
 	Port                    int
-	RateLimit               int
 	EventHistoryLimit       int
 	AlertHistoryLimit       int
 	AutoSaveIntervalSeconds int
@@ -446,12 +454,11 @@ players:
 %sserver:
   data_dir: %s
   port: %d
-  rate_limit: %d
   event_history_limit: %d
   alert_history_limit: %d
   auto_save_interval_seconds: %d
   tick_rate_override: %d
-`, battlefield.MapSeed, battlefield.MaxTickRate, playerBlock.String(), gameDir, opts.Port, opts.RateLimit, opts.EventHistoryLimit, opts.AlertHistoryLimit, opts.AutoSaveIntervalSeconds, opts.TickRateOverride)
+`, battlefield.MapSeed, battlefield.MaxTickRate, playerBlock.String(), gameDir, opts.Port, opts.EventHistoryLimit, opts.AlertHistoryLimit, opts.AutoSaveIntervalSeconds, opts.TickRateOverride)
 	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}

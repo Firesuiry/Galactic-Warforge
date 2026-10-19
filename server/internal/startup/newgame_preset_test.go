@@ -111,9 +111,8 @@ server:
 	if p1.Role != "admin" || p1.TeamID != "team-1" {
 		t.Fatalf("p1 role/team not inherited: %+v", p1)
 	}
-	if p1.Executor.OperateRange != 7 || p1.Executor.ConcurrentTasks != 3 {
-		t.Fatalf("p1 executor not inherited: %+v", p1.Executor)
-	}
+	// 第 21 轮：执行体参数从 config.PlayerConfig.Executor 挪到 units.yaml executor.mecha，
+	// 玩家配置不再有 executor 段。
 	if p2.Bot != "hard" || len(p2.Bootstrap.Items) != 1 {
 		t.Fatalf("p2 bot/bootstrap not inherited: %+v", p2)
 	}
@@ -123,12 +122,17 @@ server:
 	if player == nil {
 		t.Fatal("p1 missing from new world")
 	}
-	if player.Inventory[model.ItemIronIngot] != 100 || player.Inventory[model.ItemGear] != 40 {
-		t.Fatalf("p1 inventory not bootstrapped: %+v", player.Inventory)
+	p1Mecha := player.MechaByOperator("p1")
+	if p1Mecha == nil || p1Mecha.Inventory[model.ItemIronIngot] != 100 || p1Mecha.Inventory[model.ItemGear] != 40 {
+		t.Fatalf("p1 mecha backpack not bootstrapped: %+v", p1Mecha)
 	}
 	botPlayer := sess.Core.World().Players["p2"]
-	if botPlayer == nil || botPlayer.Inventory[model.ItemCircuitBoard] != 12 {
-		t.Fatalf("p2 bootstrap missing: %+v", botPlayer)
+	if botPlayer == nil {
+		t.Fatal("p2 missing from new world")
+	}
+	botMecha := botPlayer.MechaByOperator("p2")
+	if botMecha == nil || botMecha.Inventory[model.ItemCircuitBoard] != 12 {
+		t.Fatalf("p2 bootstrap missing: %+v", botMecha)
 	}
 }
 
@@ -201,7 +205,8 @@ server:
 	}
 	// 覆盖后的 bootstrap 生效：新局只发 7 个石材（不再继承预设的 100 铁块）。
 	player := sess.Core.World().Players["p1"]
-	if player.Inventory[model.ItemStoneBrick] != 7 || player.Inventory[model.ItemIronIngot] != 0 {
-		t.Fatalf("p1 bootstrap override not applied: %+v (want 7 stone_brick, 0 iron_ingot)", player.Inventory)
+	mecha := player.MechaByOperator("p1")
+	if mecha == nil || mecha.Inventory[model.ItemStoneBrick] != 7 || mecha.Inventory[model.ItemIronIngot] != 0 {
+		t.Fatalf("p1 bootstrap override not applied: %+v (want 7 stone_brick, 0 iron_ingot)", mecha)
 	}
 }

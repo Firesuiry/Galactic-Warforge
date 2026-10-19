@@ -23,7 +23,6 @@ func newTickOverrideServer(t *testing.T, override int) (*gateway.Server, *startu
 		},
 		Server: config.ServerConfig{
 			Port:             9090,
-			RateLimit:        100,
 			DataDir:          dir,
 			CheckpointDir:    dir + "/checkpoints",
 			TickRateOverride: override,

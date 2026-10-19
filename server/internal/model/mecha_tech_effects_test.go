@@ -98,8 +98,8 @@ func TestSyncMechaCapabilitiesInventorySlotsClampLogisticsRequests(t *testing.T)
 	if untouched.Min != 10 || untouched.Max != 50 {
 		t.Fatalf("request within capacity must stay, got %+v", untouched)
 	}
-	if player.InventorySlots != 50 {
-		t.Fatalf("sync must publish slots to the player state, got %d", player.InventorySlots)
+	if slots := MechaInventorySlots(player); slots != 50 {
+		t.Fatalf("mecha inventory slots should be 50, got %d", slots)
 	}
 }
 

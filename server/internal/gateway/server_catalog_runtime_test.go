@@ -71,7 +71,7 @@ func newTwoPlanetRuntimeServer(t *testing.T) (*gateway.Server, *gamecore.GameCor
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9090},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},

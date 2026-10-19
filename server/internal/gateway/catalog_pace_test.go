@@ -25,7 +25,7 @@ func TestCatalogEndpointScalesTechCostByPace(t *testing.T) {
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1", Role: "admin"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9090},
 	}
 	if err := config.ApplyDefaults(cfg); err != nil {
 		t.Fatalf("apply defaults: %v", err)

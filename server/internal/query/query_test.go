@@ -185,8 +185,10 @@ func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 		PlayerID:  "p1",
 		TeamID:    "p1",
 		IsAlive:   true,
-		Inventory: model.ItemInventory{"iron_ore": 8},
-		Stats:     model.NewPlayerStats("p1"),
+		Mechas: map[string]*model.MechaRecord{
+			"u-1": {UnitID: "u-1", PlanetID: planetID, Operator: "p1", Inventory: model.ItemInventory{"iron_ore": 8}},
+		},
+		Stats: model.NewPlayerStats("p1"),
 	}
 	ws.Players["p2"] = &model.PlayerState{
 		PlayerID: "p2",
@@ -199,7 +201,7 @@ func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 		Reason:      "game_win",
 		VictoryRule: "hybrid",
 		TechID:      "mission_complete",
-	})
+	}, map[string]*model.WorldState{planetID: ws})
 
 	if summary.ActivePlanetID != planetID {
 		t.Fatalf("expected active planet %s, got %s", planetID, summary.ActivePlanetID)
@@ -213,22 +215,55 @@ func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 	if summary.VictoryRule != "hybrid" {
 		t.Fatalf("expected victory_rule hybrid, got %q", summary.VictoryRule)
 	}
-	if summary.Players["p2"].Inventory != nil {
-		t.Fatalf("expected enemy inventory to stay hidden, got %+v", summary.Players["p2"])
+	if len(summary.Players["p2"].Mechas) != 0 {
+		t.Fatalf("expected enemy mechas to stay hidden, got %+v", summary.Players["p2"].Mechas)
+	}
+	if len(summary.Players["p1"].Mechas) != 1 || summary.Players["p1"].Mechas[0].Inventory["iron_ore"] != 8 {
+		t.Fatalf("expected own mecha view with inventory, got %+v", summary.Players["p1"].Mechas)
 	}
 }
 
-func TestStateSummaryExecutorIsActivePlanetExecutor(t *testing.T) {
+func TestStateSummaryExposesMechas(t *testing.T) {
 	ql, ws, planetID := newPlanetQueryFixture(t, 20, 20)
 	p1 := &model.PlayerState{PlayerID: "p1", TeamID: "p1", IsAlive: true}
-	p1.SetPlanetExecutor(planetID, model.NewExecutorState("u-here", 1, 6, 2, 0))
-	p1.SetPlanetExecutor("other-planet", model.NewExecutorState("u-there", 1, 6, 2, 0))
+	p1.EnsureMechas()["u-here"] = &model.MechaRecord{
+		UnitID: "u-here", PlanetID: planetID, Operator: "p1",
+		Inventory: model.ItemInventory{"iron_ore": 3},
+	}
+	p1.Mechas["u-away"] = &model.MechaRecord{UnitID: "u-away", PlanetID: "other-planet"}
+	p1.Mechas["u-dead"] = &model.MechaRecord{UnitID: "u-dead", PlanetID: planetID, Operator: "p2", RespawnAtTick: 500}
 	ws.Players["p1"] = p1
 	ws.Players["p2"] = &model.PlayerState{PlayerID: "p2", TeamID: "p2", IsAlive: true}
-	p2 := ws.Players["p2"]
-	p2.SetPlanetExecutor(planetID, model.NewExecutorState("u-enemy", 1, 6, 2, 0))
+	ws.Units["u-here"] = &model.Unit{ID: "u-here", OwnerID: "p1", Type: model.UnitTypeExecutor, HP: 100, Position: model.Position{X: 5, Y: 6}}
 
-	raw, err := json.Marshal(ql.Summary(ws, "p1", model.VictoryState{}))
+	worlds := map[string]*model.WorldState{planetID: ws}
+	summary := ql.Summary(ws, "p1", model.VictoryState{}, worlds)
+
+	mechas := summary.Players["p1"].Mechas
+	if len(mechas) != 3 {
+		t.Fatalf("expected 3 mecha views, got %+v", mechas)
+	}
+	// Sorted by unit_id: u-away, u-dead, u-here.
+	if mechas[0].UnitID != "u-away" || mechas[1].UnitID != "u-dead" || mechas[2].UnitID != "u-here" {
+		t.Fatalf("mechas must be sorted by unit_id, got %+v", mechas)
+	}
+	away := mechas[0]
+	if away.Alive || away.Position != nil || away.PlanetID != "other-planet" {
+		t.Fatalf("mecha on another planet should be reported without position, got %+v", away)
+	}
+	dead := mechas[1]
+	if dead.Alive || dead.RespawnAtTick != 500 || dead.Operator != "p2" {
+		t.Fatalf("dead mecha view mismatch: %+v", dead)
+	}
+	here := mechas[2]
+	if !here.Alive || here.Position == nil || here.Position.X != 5 || here.Position.Y != 6 {
+		t.Fatalf("alive mecha view should carry position, got %+v", here)
+	}
+	if here.Inventory["iron_ore"] != 3 || here.InventorySlotsUsed != 1 || here.InventorySlotsTotal <= 0 {
+		t.Fatalf("unexpected inventory view: %+v", here)
+	}
+
+	raw, err := json.Marshal(summary)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,18 +273,18 @@ func TestStateSummaryExecutorIsActivePlanetExecutor(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	var exec model.ExecutorState
-	if err := json.Unmarshal(decoded.Players["p1"]["executor"], &exec); err != nil || exec.UnitID != "u-here" {
-		t.Fatalf("expected executor of active planet, got %s (%v)", decoded.Players["p1"]["executor"], err)
+	var views []MechaView
+	if err := json.Unmarshal(decoded.Players["p1"]["mechas"], &views); err != nil || len(views) != 3 {
+		t.Fatalf("expected mechas list in summary JSON, got %s (%v)", decoded.Players["p1"]["mechas"], err)
 	}
-	if _, ok := decoded.Players["p1"]["executors"]; !ok {
-		t.Fatalf("expected executors map, got %s", raw)
+	if _, ok := decoded.Players["p1"]["inventory"]; ok {
+		t.Fatalf("player-level inventory must be gone, got %s", raw)
 	}
-	if _, ok := decoded.Players["p1"]["player_id"]; !ok {
-		t.Fatalf("expected flattened player fields, got %s", raw)
+	if _, ok := decoded.Players["p1"]["executors"]; ok {
+		t.Fatalf("executors map must be gone, got %s", raw)
 	}
-	if _, leaked := decoded.Players["p2"]["executor"]; leaked {
-		t.Fatalf("enemy executor must stay hidden, got %s", raw)
+	if _, ok := decoded.Players["p2"]["mechas"]; ok {
+		t.Fatalf("enemy mechas must stay hidden, got %s", raw)
 	}
 }
 
@@ -570,7 +605,9 @@ func TestAgentBriefingAggregatesSelfWarFleetAlertsAndCommands(t *testing.T) {
 		Role:      "commander",
 		IsAlive:   true,
 		Resources: model.Resources{Energy: 80},
-		Inventory: model.ItemInventory{"iron_ore": 12},
+		Mechas: map[string]*model.MechaRecord{
+			"u-1": {UnitID: "u-1", PlanetID: planetID, Operator: "p1", Inventory: model.ItemInventory{"iron_ore": 12}},
+		},
 		Tech: &model.PlayerTechState{
 			PlayerID: "p1",
 			CompletedTechs: map[string]int{

@@ -31,7 +31,7 @@ func newTestServer(t *testing.T) (*gateway.Server, *gamecore.GameCore) {
 			{PlayerID: "p1", Key: "key1", Role: "admin"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9090},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -422,7 +422,7 @@ func TestPostCommandsPermissionDenied(t *testing.T) {
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1", Role: "observer"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9090},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -798,7 +798,7 @@ func TestMetricsEndpointIncludesDroppedEvents(t *testing.T) {
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9090},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},

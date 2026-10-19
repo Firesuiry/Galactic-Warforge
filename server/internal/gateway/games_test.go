@@ -30,7 +30,7 @@ func newResettableServer(t *testing.T) (*gateway.Server, *startup.Runtime, strin
 		Players: []config.PlayerConfig{
 			{PlayerID: "p1", Key: "key1", Role: "admin"},
 		},
-		Server: config.ServerConfig{Port: 9090, RateLimit: 100, DataDir: dataDir},
+		Server: config.ServerConfig{Port: 9090, DataDir: dataDir},
 	}
 	if err := config.ApplyDefaults(cfg); err != nil {
 		t.Fatalf("apply defaults: %v", err)
@@ -104,7 +104,7 @@ func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 	// 用背包物品证明旧局状态与新局互不串味）。
 	oldSess := rt.Current()
 	oldSess.Core.World().Lock()
-	oldSess.Core.World().Players["p1"].AddItems([]model.ItemAmount{{ItemID: "quantum_chip", Quantity: 7}}, 0)
+	oldSess.Core.World().Players["p1"].MechaByOperator("p1").AddItems([]model.ItemAmount{{ItemID: "quantum_chip", Quantity: 7}}, 0)
 	oldSess.Core.World().Unlock()
 	oldSess.Bus.Subscribe("legacy-sub", nil)
 
@@ -113,8 +113,12 @@ func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 		t.Fatalf("old summary: %d", rec.Code)
 	}
 	oldSummary := decodeGameBody(t, rec)
-	if got := oldSummary["players"].(map[string]any)["p1"].(map[string]any)["inventory"].(map[string]any)["quantum_chip"]; got != float64(7) {
-		t.Fatalf("old world inventory mismatch: %v", got)
+	oldMechas, _ := oldSummary["players"].(map[string]any)["p1"].(map[string]any)["mechas"].([]any)
+	if len(oldMechas) != 1 {
+		t.Fatalf("expected one mecha in old summary, got %v", oldMechas)
+	}
+	if got := oldMechas[0].(map[string]any)["inventory"].(map[string]any)["quantum_chip"]; got != float64(7) {
+		t.Fatalf("old world mecha inventory mismatch: %v", got)
 	}
 
 	// admin 开新局：换种子、关黑雾、sandbox 胜利模式、全新玩家。
