@@ -11,7 +11,7 @@ import { useSessionStore } from '@/stores/session';
 
 const { mockClient } = vi.hoisted(() => ({
   mockClient: {
-    sendCommands: vi.fn().mockResolvedValue({ accepted: false, request_id: 'r-mine' }),
+    cmdMineResource: vi.fn().mockResolvedValue({ accepted: false, request_id: 'r-mine' }),
     cmdUpgrade: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-up' }),
     cmdDemolish: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-de' }),
     cmdAutoHaul: vi.fn().mockResolvedValue({ accepted: true, request_id: 'r-auto' }),
@@ -469,11 +469,7 @@ it('collects selected solid resource using own nearby mecha and chosen quantity'
   await user.type(quantity, '3');
   await user.click(screen.getByRole('button', { name: '手动采集' }));
   // 契约 §3.1：采集不再带 target.entity_id，由发令者绑定的机甲执行。
-  expect(mockClient.sendCommands).toHaveBeenCalledWith([{
-    type: 'mine_resource',
-    target: { layer: 'planet', planet_id: 'planet-1-1' },
-    payload: { resource_id: 'ore-1', quantity: 3 },
-  }]);
+  expect(mockClient.cmdMineResource).toHaveBeenCalledWith('ore-1', 3, 'planet-1-1');
 });
 
 it('blocks distant or busy mecha and offers no mining control for another player or fluids', () => {

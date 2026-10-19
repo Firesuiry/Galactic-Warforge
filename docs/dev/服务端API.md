@@ -187,7 +187,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 | 命令 | 层级 | target 必填 | payload | CLI 动词 | 说明 |
 |---|---|---|---|---|---|
-| `assign_mecha` | — | `entity_id` | `operator` | — | — |
+| `assign_mecha` | planet | `entity_id` | `operator` | `mecha` | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
 | `attack` | planet | — | `target_entity_id` | `attack` | Attack target entity |
 | `blockade_planet` | planet | — | `task_force_id`, `planet_id` | `blockade_planet` | Issue a blockade intent against one planet |
 | `blueprint_create` | planet | — | `blueprint_id`, `domain`, `name?`, `base_frame_id?`, `base_hull_id?` | `blueprint_create` | Create a draft warfare blueprint |

@@ -167,7 +167,7 @@ as                                     # 临时恢复为玩家本人发令
 <!-- BEGIN GENERATED COMMANDS -->
 <!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GAME_COMMANDS/COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->
 
-### 游戏命令（64 条，对应 `POST /commands`）
+### 游戏命令（65 条，对应 `POST /commands`）
 
 | 动词 | 用法 | API 命令 | 权限类别 | 说明 |
 |---|---|---|---|---|
@@ -207,6 +207,7 @@ as                                     # 临时恢复为玩家本人发令
 | `install_logistics_vehicle` | `install_logistics_vehicle <station_id> <logistics_drone\|logistics_vessel> <quantity> [--source player\|station]` | `install_logistics_vehicle` | management | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | `launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]` | `launch_rocket` | management | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | `launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]` | `launch_solar_sail` | management | Launch loaded solar sails from an EM Rail Ejector |
+| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | `assign_mecha` | management | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
 | `mine_resource` | `mine_resource <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算） |
 | `move` | `move <entity_id> <x> <y> [--z <z>]` | `move` | combat | Move entity to position |
 | `order` | `order <entity_id[,entity_id...]> <attack_move\|patrol\|guard\|hold\|follow\|retreat\|stop> [x y] [--target <entity_id>] [--planet <planet_id>]` | `unit_order` | combat | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |
@@ -236,11 +237,10 @@ as                                     # 临时恢复为玩家本人发令
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（21 条，agent 可用）
+### 查询命令（20 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
-| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | 列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
 | `health` | — | Server status and current tick |
 | `metrics` | — | Runtime metrics |
 | `summary` | — | Game summary (resources, players, map) |

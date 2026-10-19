@@ -7,10 +7,17 @@ import { MechaControls, craftBlockReason, refuelFullQuantity } from './MechaCont
 import { shouldRefreshPlanet, shouldRefreshSummary } from './model';
 import { usePlanetViewStore } from './store';
 
-const { client } = vi.hoisted(() => ({ client: {
-  sendCommands: vi.fn().mockResolvedValue({ accepted: false, request_id: 'command' }),
-  fetchEventSnapshot: vi.fn(),
-} }));
+const { client } = vi.hoisted(() => {
+  const response = () => Promise.resolve({ accepted: false, request_id: 'command' });
+  return { client: {
+    cmdRefuelMecha: vi.fn(response),
+    cmdCraftItem: vi.fn(response),
+    cmdCancelMechaJob: vi.fn(response),
+    cmdConfigureMechaLogistics: vi.fn(response),
+    cmdAssignMecha: vi.fn(response),
+    fetchEventSnapshot: vi.fn(),
+  } };
+});
 vi.mock('@/hooks/use-api-client', () => ({ useApiClient: () => client }));
 const unit: Unit = {
   id: 'u-1', owner_id: 'p1', type: 'executor', position: { x: 3, y: 2, z: 0 },
@@ -63,10 +70,10 @@ it('uses server fuel metadata and submits the selected fuel for this mecha', asy
   expect(screen.getByRole('meter', { name: '核心能量' })).toHaveAttribute('value', '40');
   expect(screen.queryByRole('option', { name: /铁块/ })).toBeNull();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '补满（3 个）' })); });
-  await vi.waitFor(() => expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'refuel_mecha', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { item_id: 'coal', count: 3 } }]));
+  await vi.waitFor(() => expect(client.cmdRefuelMecha).toHaveBeenCalledWith('coal', 3, 'planet-1-1'));
   fireEvent.change(screen.getByRole('combobox', { name: '机甲燃料' }), { target: { value: 'custom_fuel' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '补 1 个' })); });
-  await vi.waitFor(() => expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'refuel_mecha', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { item_id: 'custom_fuel', count: 1 } }]));
+  await vi.waitFor(() => expect(client.cmdRefuelMecha).toHaveBeenCalledWith('custom_fuel', 1, 'planet-1-1'));
 });
 
 it('prevents refuel when full or fuel remains and exposes no controls on another player', () => {
@@ -107,7 +114,7 @@ it('shows actual backpack stock, computes batches and submits personal crafting'
   expect(screen.getByText('原料：铁块 3（背包 5）')).toBeInTheDocument();
   expect(screen.getByText('耗时 12 tick · 核心耗能 3（每批 1）')).toBeInTheDocument();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '开始制造' })); });
-  expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'craft_item', target: { layer: 'planet', planet_id: 'planet-1-1' }, payload: { recipe_id: 'gear', quantity: 3 } }]);
+  expect(client.cmdCraftItem).toHaveBeenCalledWith('gear', 3, 'planet-1-1');
 });
 
 it('blocks locked recipes and insufficient ingredients before submitting', () => {
@@ -118,7 +125,7 @@ it('blocks locked recipes and insufficient ingredients before submitting', () =>
   fireEvent.change(screen.getByLabelText('个人制造配方'), { target: { value: 'locked' } });
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('需要科技');
-  expect(client.sendCommands).not.toHaveBeenCalled();
+  expect(client.cmdCraftItem).not.toHaveBeenCalled();
 });
 
 it('shows paused job progress, cancels it and hides all controls on another player', async () => {
@@ -130,7 +137,7 @@ it('shows paused job progress, cancels it and hides all controls on another play
   expect(screen.getByText('已完成 1 / 3')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: '取消机甲任务' })); });
-  expect(client.sendCommands).toHaveBeenCalledWith([{ type: 'cancel_mecha_job', target: { layer: 'planet', planet_id: 'planet-1-1' } }]);
+  expect(client.cmdCancelMechaJob).toHaveBeenCalledWith('planet-1-1');
   rerender(<MechaControls unit={{ ...busy, owner_id: 'p2' }} catalog={craftingCatalog} planetId="planet-1-1" />);
   expect(screen.queryByRole('button')).toBeNull();
   expect(screen.queryByRole('combobox')).toBeNull();
@@ -159,7 +166,7 @@ it('回归（试玩 1013 D）：缺料时保持玩家选中的配方，并在按
   expect(screen.getByRole('button', { name: '开始制造' })).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('背包原料不足');
   expect(screen.getByRole('status')).toHaveTextContent('缺少：铁块（背包 5 / 需要 9）');
-  expect(client.sendCommands).not.toHaveBeenCalled();
+  expect(client.cmdCraftItem).not.toHaveBeenCalled();
 });
 
 it('explains the busy job instead of claiming the backpack is short', () => {
@@ -258,11 +265,7 @@ describe('操作者行（契约 §7.3）', () => {
   it('接管发 assign_mecha：target.entity_id = 机甲 ID，payload.operator = 自己', async () => {
     render(<MechaControls unit={unit} catalog={craftingCatalog} planetId="planet-1-1" mecha={mechaRecord({ operator: 'builder-a' })} />);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '接管' })); });
-    expect(client.sendCommands).toHaveBeenCalledWith([{
-      type: 'assign_mecha',
-      target: { layer: 'planet', entity_id: 'u-1', planet_id: 'planet-1-1' },
-      payload: { operator: 'p1' },
-    }]);
+    expect(client.cmdAssignMecha).toHaveBeenCalledWith('u-1', 'p1', 'planet-1-1');
   });
 });
 

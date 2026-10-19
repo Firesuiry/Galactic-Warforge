@@ -156,5 +156,9 @@ describe('issuer serialization', () => {
     }]);
     await api.cmdAssignMecha('u-3', '');
     assert.deepEqual((body.commands as Array<{ payload: unknown }>)[0].payload, { operator: '' });
+    await api.cmdAssignMecha('u-3', 'builder', 'planet-1-1');
+    assert.deepEqual((body.commands as Array<{ target: unknown }>)[0].target, {
+      layer: 'planet', entity_id: 'u-3', planet_id: 'planet-1-1',
+    });
   });
 });
