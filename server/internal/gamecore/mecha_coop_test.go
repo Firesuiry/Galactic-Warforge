@@ -485,6 +485,19 @@ func TestMechaCoop_06_MoveSkipsOnlyForeignOperatedMecha(t *testing.T) {
 			t.Fatalf("unit %s should path to %+v, got %+v", unit.ID, dest, got)
 		}
 	}
+	// 真实 tick 推进：被放行的三个单位真的动起来，被跳过的机甲原地不动。
+	posBefore := map[string]model.Position{mechaA.ID: mechaA.Position, mechaC.ID: mechaC.Position, soldier.ID: soldier.Position}
+	for i := 0; i < 5; i++ {
+		core.processTick()
+	}
+	for _, unit := range []*model.Unit{mechaA, mechaC, soldier} {
+		if unit.Position == posBefore[unit.ID] {
+			t.Fatalf("unit %s should have moved from %+v", unit.ID, posBefore[unit.ID])
+		}
+	}
+	if mechaB.Position != beforeB || mechaB.HasPath() {
+		t.Fatalf("foreign-operated mecha must stay put: pos=%+v path=%v", mechaB.Position, mechaB.Path)
+	}
 }
 
 // 契约 §8-7：背包满时 transfer_item to_player 只按本机甲剩余格数截断，
