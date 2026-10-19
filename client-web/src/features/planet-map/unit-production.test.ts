@@ -1,4 +1,5 @@
 import { isUnitProducerBuilding, listUnitsForBuildingType, listWorldProduceUnits, orderBuildingsForProduce } from '@/features/planet-map/unit-production';
+import { formatUnitCost } from '@/features/planet-map/model';
 
 describe('unit-production 配对', () => {
   const catalog = {
@@ -10,6 +11,20 @@ describe('unit-production 配对', () => {
     world_units: [
       { id: 'soldier', producer: 'barracks', production_mode: 'world_produce' },
       { id: 'transport_robot', producer: 'battlefield_analysis_base', production_mode: 'world_produce' },
+      // 第 21 轮契约 §5：executor（执行体机甲）改成可生产单位，producer = 战场分析基站。
+      {
+        id: 'executor',
+        name: '执行体机甲',
+        producer: 'battlefield_analysis_base',
+        production_mode: 'world_produce',
+        production_ticks: 600,
+        cost: [
+          { item_id: 'iron_ingot', quantity: 16 },
+          { item_id: 'gear', quantity: 8 },
+          { item_id: 'magnetic_coil', quantity: 8 },
+          { item_id: 'circuit_board', quantity: 8 },
+        ],
+      },
       { id: 'combat_drone', producer: 'airfield', production_mode: 'factory_recipe' },
     ],
   } as never;
@@ -20,8 +35,8 @@ describe('unit-production 配对', () => {
   ];
 
   it('只列 world_produce 单位，按 producer 配对', () => {
-    expect(listWorldProduceUnits(catalog).map((unit) => unit.id)).toEqual(['soldier', 'transport_robot']);
-    expect(listUnitsForBuildingType(catalog, 'battlefield_analysis_base').map((unit) => unit.id)).toEqual(['transport_robot']);
+    expect(listWorldProduceUnits(catalog).map((unit) => unit.id)).toEqual(['soldier', 'transport_robot', 'executor']);
+    expect(listUnitsForBuildingType(catalog, 'battlefield_analysis_base').map((unit) => unit.id)).toEqual(['transport_robot', 'executor']);
     expect(listUnitsForBuildingType(catalog, 'airfield')).toEqual([]);
   });
 
@@ -42,5 +57,20 @@ describe('unit-production 配对', () => {
     } as never;
     expect(isUnitProducerBuilding(noMarker, 'barracks')).toBe(true);
     expect(orderBuildingsForProduce(noMarker, own).map((building) => building.id)).toEqual(['b1', 'b2', 'b3']);
+  });
+
+  it('executor 出现在基站生产面板，造价文案含铁块/齿轮/磁线圈/电路板与 600 tick', () => {
+    const items = {
+      items: [
+        { id: 'iron_ingot', name: '铁块' },
+        { id: 'gear', name: '齿轮' },
+        { id: 'magnetic_coil', name: '磁线圈' },
+        { id: 'circuit_board', name: '电路板' },
+      ],
+    } as never;
+    const executor = listUnitsForBuildingType(catalog, 'battlefield_analysis_base')
+      .find((unit) => unit.id === 'executor');
+    expect(executor).toBeDefined();
+    expect(formatUnitCost(items, executor!)).toBe('铁块 × 16、齿轮 × 8、磁线圈 × 8、电路板 × 8 · 600 tick');
   });
 });

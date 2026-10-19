@@ -952,6 +952,27 @@ const catalog = {
       color: '#ffd43b',
     },
   ],
+  // 第 21 轮契约 §5：executor（执行体机甲）在战场分析基站量产。
+  world_units: [
+    {
+      id: 'executor',
+      name: '执行体机甲',
+      domain: 'planet',
+      runtime_class: 'world_unit',
+      public: true,
+      production_mode: 'world_produce',
+      producer: 'battlefield_analysis_base',
+      production_ticks: 600,
+      cost: [
+        { item_id: 'iron_ingot', quantity: 16 },
+        { item_id: 'gear', quantity: 8 },
+        { item_id: 'magnetic_coil', quantity: 8 },
+        { item_id: 'circuit_board', quantity: 8 },
+      ],
+      query_scopes: ['planet'],
+      commands: ['move', 'attack'],
+    },
+  ],
   techs: [
     {
       id: 'electromagnetism',
