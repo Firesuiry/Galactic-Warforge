@@ -19,14 +19,13 @@
 | 401 | 缺少或无效的 Bearer key（热重置后旧 key 也返回 401） |
 | 403 | 越权：`issuer_id` 与鉴权玩家不一致；`/save` `/rollback` `/games/new` `/checkpoints` 写接口非 `role=admin` |
 | 404 | 实体不存在或对当前玩家不可见 |
-| 429 | 超过每玩家命令速率限制（`server.rate_limit`） |
 | 500 | 存档写盘失败等内部错误 |
 
 ### 行星坐标
 
 行星统一为立方体球面六面网格。各查询返回 `surface: {topology: "cube_sphere", face_size: N}`；`map_width = 3N`、`map_height = 2N` 只是存储图集尺寸，x/y 不具有平面邻接语义，距离和方向一律按球面邻接计算（可跨面）。配置只用 `planet.face_size`，旧平面存档拒绝加载。面序与坐标协议见 [3D与画质](../guide/3D与画质.md)。
 
-**细分网格（2026-10-12 起）**：`Position` 的单位从"格"细化为 cell（1 旧格 = 3×3 cell），坐标系不变、仍是一套整数。世界尺度不变，因此地图 `face_size` 与出生点/资源坐标、`units.yaml` 与建筑/战斗数据里的**距离类数值整体 ×3**（`move_speed`、攻击/视野/建造/补给/配送半径、电网覆盖与连接距离、炮塔射程、黑雾与 bot 的各类半径和基地布局偏移）；时间类数值（tick、冷却、生产时长）不变，传送带 `throughput`（件/tick）也不变（视觉上物料按 cell 走，世界速度自然变成原来的 1/3）。旧存档/存档点因坐标语义改变**直接拒绝加载**（存档 `format_version` 1 → 2；随后快照改为只存地形游程与资源差异，`format_version` 2 → 3），不提供兼容层。
+**细分网格（2026-10-12 起）**：`Position` 的单位从"格"细化为 cell（1 旧格 = 3×3 cell），坐标系不变、仍是一套整数。世界尺度不变，因此地图 `face_size` 与出生点/资源坐标、`units.yaml` 与建筑/战斗数据里的**距离类数值整体 ×3**（`move_speed`、攻击/视野/建造/补给/配送半径、电网覆盖与连接距离、炮塔射程、黑雾与 bot 的各类半径和基地布局偏移）；时间类数值（tick、冷却、生产时长）不变，传送带 `throughput`（件/tick）也不变（视觉上物料按 cell 走，世界速度自然变成原来的 1/3）。旧存档/存档点因坐标语义改变**直接拒绝加载**（存档 `format_version` 1 → 2；随后快照改为只存地形游程与资源差异，`format_version` 2 → 3；第 21 轮机甲档案改为 `mechas` map，`format_version` 3 → 4、检查点 manifest `format_version` 1 → 2），不提供兼容层。
 
 **快照体积（2026-10-12 起）**：网格边长 ×3 后世界状态整体 ×9，整幅地形（遭遇战 49.8 万 cell）与全部资源节点（3.4 万个）的静态字段一度被整表写进快照，tick 0 就有 57MB，自动存档/存档点/读档全被拖垮。现在凡「可由地图配置 + seed 确定性重建」的数据都不进快照：地形只存非 buildable 格的行内游程（实测 2597 条 / 77KB），资源只存与基线的差异（`remaining`/`current_yield`/`depleted`，tick 0 约 14 个节点）。tick 0 快照 132KB、读档后再存 149KB，均在 2MB 软上限内（`snapshot_max_bytes` 未调整）。读档时基线由 `mapgen` 重建的地图模型挂回。
 
@@ -38,7 +37,7 @@
   - 目录不存在或为空：按本次 `-config` 与 `-map-config` 新建一局，对外服务前先写出首个存档。
   - 两个文件都合法：续档；存档内的 `battlefield`、`players`、`map_config` 优先于外部配置。
   - 只有其一或目录非空但不完整：拒绝启动。
-- 续档时仍可被外部覆盖的纯运行参数：`server.port`、`rate_limit`、`event_history_limit`、`snapshot_max_events`、`alert_history_limit`、`auto_save_interval_seconds`、`tick_rate_override`。
+- 续档时仍可被外部覆盖的纯运行参数：`server.port`、`event_history_limit`、`snapshot_max_events`、`alert_history_limit`、`auto_save_interval_seconds`、`tick_rate_override`。
 - `server.game_data_dir`（可选）：游戏数据目录，放整套 `items/recipes/techs/buildings/units/combat/war.yaml`，非空时替换内置 `server/data/`；启动时做完整引用校验，失败即拒绝启动并列出全部错误。格式见 [数据配置文件](数据配置文件.md)。与 `data_dir`（存档）是两回事。
 - 自动保存默认每 60 秒覆盖 `save.json`，`auto_save_interval_seconds = 0` 关闭；只有一个存档槽，手动保存同样覆盖。
 - `server.tick_rate_override`（可选，默认 0）：进程级 tick 速率覆盖。0 = 不覆盖，沿用新局或存档里固化的 `battlefield.max_tick_rate`；非 0 时取 1..1000（校验同 `max_tick_rate`），新开局、启动恢复、热加载存档点后的实际 tick 速率以及 `GET /games/current` 的 `max_tick_rate` 都用它。tick 速率是运行参数，覆盖值不写进 `meta.json`，同一个存档点可以用不同速率读档（试玩用 3 慢跑、构建段用 100 快进，见 [存档点回归测试](../guide/存档点回归测试.md) 第 7 节）。
@@ -115,7 +114,14 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 }
 ```
 
-- `request_id`、`issuer_type`、`issuer_id`、非空 `commands` 必填；`issuer_type=player` 时 `issuer_id` 必须等于鉴权玩家（否则 403）。
+- `request_id`、`issuer_type`、`issuer_id`、非空 `commands` 必填。
+- 发令者（issuer）规则：
+  - `player`：`issuer_id` 必须等于鉴权玩家，否则 403；GUI 与未设代理名的 CLI 用这一种。
+  - `agent`：`issuer_id` 须匹配 `^[A-Za-z0-9_.:-]{1,64}$` 且不得等于本玩家 ID，否则 400；子代理 CLI、agent-gateway 智能体用这一种。
+  - `bot`：仅服务端内部使用，HTTP 传入一律 400；其它类型 → 400 `issuer_type must be player or agent`。
+  - 服务端内部调用（测试、脚本化开局、checkpointbuild）`IssuerID` 为空时按玩家 ID 处理。
+- `command_result` 事件的 payload 带 `issuer_type`、`issuer_id`；审计同样记录，`GET /audit?issuer_id=` 可过滤。
+- **不再有限流**：`POST /commands` 每秒可提交任意条数（旧的每玩家令牌桶已删除）。
 - `target` 可含 `layer`（`galaxy|system|planet`）、`galaxy_id`、`system_id`、`planet_id`、`entity_id`、`entity_ids`、`position {x, y, z?}`；各命令所需字段见 [命令一览](#命令一览)，机器可读版本见 `GET /catalog/commands`。
 - 权限：按玩家 `permissions`（`*` 为全部）逐条校验，无权限直接拒绝。
 
@@ -147,7 +153,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 结果码
 
-`OK`、`INVALID_TARGET`、`NOT_OWNER`、`OUT_OF_RANGE`、`INSUFFICIENT_RESOURCE`、`DUPLICATE`、`VALIDATION_FAILED`、`ENTITY_NOT_FOUND`、`POSITION_OCCUPIED`、`INVALID_ELEVATION`、`UNAUTHORIZED`、`EXECUTOR_UNAVAILABLE`、`EXECUTOR_BUSY`、`GAME_FINISHED`。
+`OK`、`INVALID_TARGET`、`NOT_OWNER`、`NOT_OPERATOR`、`OUT_OF_RANGE`、`INSUFFICIENT_RESOURCE`、`DUPLICATE`、`VALIDATION_FAILED`、`ENTITY_NOT_FOUND`、`POSITION_OCCUPIED`、`INVALID_ELEVATION`、`UNAUTHORIZED`、`EXECUTOR_UNAVAILABLE`、`EXECUTOR_BUSY`、`GAME_FINISHED`。
+
+`NOT_OPERATOR`：`move` / `attack` / `unit_order` 选中了别的发令者绑定的机甲——该单位逐个跳过，其余单位照常执行（命令仍为 `executed`，message 写明跳过了几台）。空闲机甲谁都能动。
+
+`EXECUTOR_UNAVAILABLE`：需要机甲的命令找不到可用的发令者机甲，message 分三种——未绑定（「<issuer> 还没有绑定机甲：先用 assign_mecha 接管一台（mecha list 查看）」）、不在本星球（「你的机甲 <id> 在 <planet>，不在本星球」）、阵亡（「机甲 <id> 已阵亡，tick <n> 复活」）。
 
 `INVALID_ELEVATION`：`build` 的 `elevation` 参数不合法（第 19 轮契约 §3.2）——非传送带给 >0（「只有传送带可以架高」）、越界（「高度只能 0–4 层」）、高架带没给明确方向（「高架传送带必须有明确的输出方向（不能是 auto）」）。`POSITION_OCCUPIED`：同格同层已有带子/施工任务，或高架带下面压着非低矮物流建筑，或地面建筑占地内有高架带；提示会写明层号与占用者。
 
@@ -159,10 +169,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 1. `target.planet_id` 显式指定（未加载时 `INVALID_TARGET`，message `planet runtime <id> not loaded`）；
 2. 命令引用的实体（`target.entity_id(s)`、`payload.building_id`、`payload.task_id` 等）所在行星；
-3. 玩家焦点行星；
-4. 全局默认行星 `active_planet_id`（仅冷启动兜底）。
+3. **发令者绑定机甲所在行星**；
+4. 玩家焦点行星；
+5. 全局默认行星 `active_planet_id`（仅冷启动兜底）。
 
-- `build` 无可引用实体，用 `target.planet_id` 选落点，缺省为焦点行星。
+- `build` 无可引用实体，按 `target.planet_id` → 发令者机甲所在行星 → 焦点行星 选落点。
 - 不同行星的实体 ID 可能撞号，此时优先命中焦点行星；指挥另一颗行星上的同号实体须显式给 `target.planet_id`（CLI 用 `--planet`）。
 - 太空层/玩家级命令（`fleet_*`、`task_force_*`、`theater_*`、`blockade_planet`、`blueprint_*`、戴森系列、研究、扫描）中的 `planet_id` 是作战参数，不参与路由。
 - `deploy_squad` 的 `payload.planet_id` 是落点，路由仍由 `payload.building_id` 决定。
@@ -172,10 +183,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 <!-- BEGIN GENERATED COMMANDS -->
 <!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GET /catalog/commands 与 shared-client 命令目录 -->
 
-共 64 条公开命令。target 列为 `target` 必填字段；载荷列为 `payload` 字段（可选字段带 `?`）。
+共 65 条公开命令。target 列为 `target` 必填字段；载荷列为 `payload` 字段（可选字段带 `?`）。
 
 | 命令 | 层级 | target 必填 | payload | CLI 动词 | 说明 |
 |---|---|---|---|---|---|
+| `assign_mecha` | — | `entity_id` | `operator` | — | — |
 | `attack` | planet | — | `target_entity_id` | `attack` | Attack target entity |
 | `blockade_planet` | planet | — | `task_force_id`, `planet_id` | `blockade_planet` | Issue a blockade intent against one planet |
 | `blueprint_create` | planet | — | `blueprint_id`, `domain`, `name?`, `base_frame_id?`, `base_hull_id?` | `blueprint_create` | Create a draft warfare blueprint |
@@ -188,17 +200,17 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `build_dyson_node` | system | — | `system_id`, `layer_index`, `latitude`, `longitude`, `orbit_radius?` | `build_dyson_node` | Build a Dyson sphere node |
 | `build_dyson_shell` | system | — | `system_id`, `layer_index`, `latitude_min`, `latitude_max`, `coverage` | `build_dyson_shell` | Build a Dyson sphere shell |
 | `cancel_construction` | planet | — | `task_id` | `cancel_construction` | Cancel queued or running construction task |
-| `cancel_mecha_job` | planet | `entity_id` | — | `cancel_mecha_job` | 取消机甲任务并返还未完成批次原料 |
+| `cancel_mecha_job` | planet | — | — | `cancel_mecha_job` | 取消机甲任务并返还未完成批次原料 |
 | `cancel_research` | planet | — | `tech_id` | `cancel_research` | Cancel a technology in progress or queue |
 | `commission_fleet` | system | — | `building_id`, `blueprint_id`, `count`, `system_id`, `fleet_id?` | `commission_fleet` | Consume a fleet payload from a hub and create or reinforce a fleet |
 | `configure_distributor` | planet | `entity_id` | `item_id`, `mode`, `local_storage`, `player_delivery_enabled?`, `player_collection_enabled?` | `configure_distributor` | 配置仓库配送器；省略开关保留原值 |
 | `configure_logistics_slot` | planet | `entity_id` | `scope`, `item_id`, `mode`, `local_storage`, `remove?` | `configure_logistics_slot` | 配置物流物品槽；remove移除无库存、无端口或在途引用的空槽 |
 | `configure_logistics_station` | planet | `entity_id` | `input_priority?`, `output_priority?`, `drone_capacity?`, `interstellar?`, `belt_ports?` | `configure_logistics_station` | Configure logistics station capacity, priority and interstellar switches |
-| `configure_mecha_logistics` | planet | `entity_id` | `requests` | `configure_mecha_logistics` | 替换机甲配送请求，最多 8 项，none 清空 |
+| `configure_mecha_logistics` | planet | — | `requests` | `configure_mecha_logistics` | 替换机甲配送请求，最多 8 项，none 清空 |
 | `configure_sorter` | planet | `entity_id` | `filter_mode?`, `filter_items?` | `configure_sorter` | 配置分拣器物品过滤（方向由建造朝向决定） |
 | `configure_splitter` | planet | `entity_id` | `input_directions`, `output_directions`, `input_priority?`, `output_priority?`, `output_filters?` | `configure_splitter` | 完整替换分流器端口、优先级和物品过滤；省略可选项即清除 |
 | `configure_traffic_monitor` | planet | `entity_id` | `target_belt_id`, `window_ticks`, `minimum_items_per_tick`, `alerts_enabled` | `configure_traffic_monitor` | 监测相邻皮带真实流出量；none 清绑定，配置重置采样 |
-| `craft_item` | planet | `entity_id` | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
+| `craft_item` | planet | — | `recipe_id`, `quantity` | `craft_item` | 使用背包原料进行个人制造，quantity为批数（按执行体所在行星结算） |
 | `demolish` | planet | `entity_id` | — | `demolish` | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | system | — | `system_id`, `component_type`, `component_id` | `demolish_dyson` | Demolish a Dyson sphere component |
 | `deploy_squad` | planet | — | `member_ids?`, `name?`, `building_id?`, `blueprint_id?`, `count?`, `planet_id?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
@@ -212,12 +224,12 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `install_logistics_vehicle` | planet | `entity_id` | `item_id`, `quantity`, `source?` | `install_logistics_vehicle` | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | planet | — | `building_id`, `system_id`, `layer_index?`, `count?` | `launch_rocket` | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | planet | — | `building_id`, `count?`, `orbit_radius?`, `inclination?` | `launch_solar_sail` | Launch loaded solar sails from an EM Rail Ejector |
-| `mine_resource` | planet | `entity_id` | `resource_id`, `quantity` | `mine_resource` | 手动采集固体资源到背包（按执行体所在行星结算） |
+| `mine_resource` | planet | — | `resource_id`, `quantity` | `mine_resource` | 手动采集固体资源到背包（按执行体所在行星结算） |
 | `move` | planet | `position` | — | `move` | Move entity to position |
 | `produce` | planet | `entity_id` | `unit_type` | `produce` | Produce a server-public world unit（按建筑所在行星结算） |
 | `queue_military_production` | planet | — | `building_id`, `deployment_hub_id`, `blueprint_id`, `count` | `queue_military_production` | Queue military production and deliver ready payloads into a deployment hub |
 | `refit_unit` | planet | — | `building_id`, `unit_id`, `target_blueprint_id` | `refit_unit` | Send a squad or fleet into authoritative refit |
-| `refuel_mecha` | planet | `entity_id` | `item_id`, `count?` | `refuel_mecha` | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
+| `refuel_mecha` | planet | — | `item_id`, `count?` | `refuel_mecha` | Refuel an executor mecha: burn up to count fuel items (default 1) until the core is full |
 | `restore_construction` | planet | — | `task_id` | `restore_construction` | Restore a cancelled construction task |
 | `scan_galaxy` | galaxy | `galaxy_id` | — | `scan_galaxy` | 登记星系到星图（不改地表迷雾） |
 | `scan_planet` | planet | `planet_id` | — | `scan_planet` | 登记星球到星图（不改地表迷雾） |
@@ -243,15 +255,20 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **附加约束**（来自目录 `constraints`）：
 
+- `assign_mecha`：target.entity_id = 机甲单位 ID；payload.operator 必填（"" = 解绑）。同玩家的任何发令者都能改绑本方机甲；operator 已绑别的机甲时那台自动解绑。
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
 - `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。 elevation 只对 conveyor_belt_mk1/2/3 有效（0–4，缺省 0 = 地面）；高架带必须有明确 direction（不能 auto），地面占用只能是空地或低矮物流建筑。
+- `cancel_mecha_job`：取消发令者绑定机甲的当前作业，未完成部分的原料退回它的背包。
 - `configure_sorter`：只配置过滤（全量替换，省略即 allow + 空清单）；分拣器方向由建造朝向决定（背面取货、正面放货），传 input_directions / output_directions 一律拒绝（第 16 轮契约 §2）。
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
+- `craft_item`：由发令者绑定的机甲手搓，原料从它的背包扣。
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
+- `mine_resource`：由发令者绑定的机甲执行；未绑定/不在本星球/阵亡返回 EXECUTOR_UNAVAILABLE。
 - `move`：实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。 F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。
-- `refuel_mecha`：payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。
+- `refit_unit`：改装费从发令者机甲背包扣；机甲须在本星球（不要求距离）。
+- `refuel_mecha`：由发令者绑定的机甲给自己补能；payload.count 可选，缺省 1：最多烧几块燃料，烧到核心满为止；背包不足时烧掉现有的。
 - `set_energy_exchanger_mode`：mode must be one of charge|discharge|standby; target building must be an owned energy_exchanger
 - `set_recipe`：recipe_id omitted or empty switches a research lab back to research mode (or idles a production building); a non-empty recipe_id must be supported by the building type and unlocked by research. Production progress resets on switch; storage contents are kept.
 - `switch_active_planet`：F4：只设置该玩家的视图焦点/默认落点行星（focus_planet_id），不再修改全局活动行星；所有已加载行星始终参与结算。目标行星必须已发现、已加载且有 foothold。
@@ -263,8 +280,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.1 执行体与建造
 
-- 执行体是玩家的星球 `Unit`（`type=executor`），同时承担建造与机甲操作。`build`/`produce`/`upgrade`/`demolish` 要求执行体在操作范围内，或目标处于己方建造中心（带 `build_radius` 的建筑，目前为 `battlefield_analysis_base`，半径 72 cell）覆盖内。超距失败消息为 `executor out of range: <distance> > <operate_range>`。
-- 并发上限按玩家跨全部行星聚合：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
+- 执行体（机甲）是玩家的星球 `Unit`（`type=executor`），每个玩家可有多台。**需要机甲的命令一律由发令者（`issuer_id`）绑定的那台执行**，不再从 `target.entity_id` 取机甲：`build` / `upgrade` / `demolish` / `transfer_item` / `install_logistics_bot` / `uninstall_logistics_bot` / `install_logistics_vehicle`(source=player) / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / `queue_military_production` / `refit_unit`。解析失败统一 `EXECUTOR_UNAVAILABLE`（未绑定 / 不在本星球 / 阵亡三种消息）。
+- 距离：目标处于己方建造中心（带 `build_radius` 的建筑，目前为 `battlefield_analysis_base`，半径 72 cell）覆盖内即可远程操作；覆盖外要求该机甲在 `units.yaml executor.mecha.operate_range`（18 cell）内，超距 `OUT_OF_RANGE`「超出机甲作业范围：<distance> > <operate_range>」。`queue_military_production` / `refit_unit` 不要求距离，只要求机甲在本星球。
+- 并发上限按机甲跨全部行星聚合（每台 `executor.mecha.concurrent_tasks` = 2）：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
+- `assign_mecha`：`target.entity_id` = 机甲单位 ID，`payload.operator` 必填（`""` = 解绑；非空须匹配 `^[A-Za-z0-9_.:-]{1,64}$`，可以是本玩家 ID）。一个 issuer_id 至多绑一台机甲、一台机甲至多一个操作者；同玩家的任何发令者都能改绑本方机甲；`operator` 已绑别的机甲时那台自动解绑（事件带 `released_mecha_id`）。机甲不存在/不是本方 → `ENTITY_NOT_FOUND` / `NOT_OWNER`；复活中的机甲也可以改绑。产出 `entity_updated`：`{mecha_id, operator, released_mecha_id?}`。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。
   - **多层传送带（第 19 轮契约 §3）**：`elevation`（0–4，缺省 0 = 地面）只对 `conveyor_belt_mk1/mk2/mk3` 有效；其它建筑给 >0 → `INVALID_ELEVATION`「只有传送带可以架高」，越界同码「高度只能 0–4 层」。高架带方向：`direction` 优先，其次按 `rotation` 推（90=east、180=south、270=west、0=north），都没给时缺省 `east`；显式 `auto` 仍被拒绝（`INVALID_ELEVATION`）。高架格的地面占用只能是空地或低矮物流建筑（`conveyor_belt_*`、`splitter`、`automatic_piler`、`traffic_monitor`、`sorter_*`、`pile_sorter`，含施工中），否则 `POSITION_OCCUPIED`「高架传送带不能架在建筑上方」/「第 N 层该格下方有地面施工任务：<建筑>」；反过来，地面层造非低矮物流建筑时占地内不能有高架带或高架施工任务 → `POSITION_OCCUPIED`「上方有高架传送带」/「该格上方第 N 层已有传送带施工任务：<建筑>」。高架带不占 `TileBuilding`（地面单位可从下面走过，分拣器与建筑直连 IO 只接地面层），建筑 JSON 的 `conveyor.elevation` 表示所在层。连接规则：同层优先；同层没连上时看邻格 `a±1` 层的**纯传送带**，且必须是直行延续（`output == d'`），坡道不许转弯/侧汇；否则死头。
@@ -280,7 +299,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - 垂直叠层：对已有同类研究站/生产建筑的格子再 `build` 同类建筑会叠到上层（`position.z` 递增），上限 `1 + vertical_construction` 等级；研究站叠层共享底层库存、吞吐线性叠加。拆除任一层会级联拆除其上所有层，各层分别退款并发 `entity_destroyed`。
   - `foundation` 可在水面、熔岩、阻挡地形施工，完成后改为可建地形并在实体保存原地形；拆除恢复原地形。已有建筑占用或有待建任务时拒绝拆除；同格不能重复铺。planet/scene/overview 反映改造后的运行时地形。
   - `logistics_distributor` 指向己方 `depot_mk1/mk2` 原点，服务器设 `z=1`、不占地面，一仓一个；拆除前须先回收机器人，再拆宿主仓库。
-- `upgrade` / `demolish` 受建筑定义规则约束（是否允许、最大等级、耗时、返还率、是否要求停机）；`duration_ticks > 0` 时生成 `job`、建筑置 `paused`，完成时生效。
+- `upgrade` / `demolish` 受建筑定义规则约束（是否允许、最大等级、耗时、返还率、是否要求停机）；扣料从发令者机甲背包，`duration_ticks > 0` 时生成 `job`（记 `mecha_id`）、建筑置 `paused`，完成时生效；拆除退料进该机甲背包（背包满时超出部分丢弃）。
 - `scan_galaxy` / `scan_system` / `scan_planet`：**星图登记**，不是开图。它们把星系/恒星系/星球登记进玩家的星图（`Discovery`），供星图导航与运行时加载使用；**不揭示行星地表的迷雾**（`explored` 掩码只由视野源推进）。回执会写明"已登记到星图"或"本就在星图中（扫描只登记星图，不揭示地表迷雾）"，不要期待它改变 `explored`。
 - `set_recipe`：原地切换配方，进度清零（`remaining_ticks`、`progress_fraction`、待产出）、库存保留；省略/空 `recipe_id` 时研究站回研究模式、生产建筑转空闲；校验失败原子拒绝（`recipe_id` 未知 / 该配方不支持此建筑类型 / 配方未研究解锁 / 建筑无 `Production` 模块 / 非本人建筑）。熔炉、制造台建成后随时可用它改配方，无需拆除重建；`target.entity_id` 是建筑 ID（可带 `target.planet_id` 跨行星消歧）。
 - `transfer_item`：`direction` 可选 `to_building`（默认，从背包装入，容量不足部分装填、只扣实际量）或 `to_player`（从主仓/输出缓存取出，受本行星执行体背包格数限制；只取出装得下的部分，回执写「已取出 N 个」，一个都装不下时 `INSUFFICIENT_RESOURCE` +「背包已满（已用 N/M 格）」）。**装入落点（试玩 1014 层 06/09/10/11/12）**：只有采掘类建筑（`mining_machine` / `advanced_mining_machine` / `water_pump` / `oil_extractor` / `orbital_collector`）会把主库存搬进输出缓存（它们的输出缓存就是出货口）；其余「无配方且无输出准入清单」的建筑（兵营、补给站、炮塔、储物仓 / 储液罐、物流站、研究模式研究站、战场分析基站等）装入的物料**留在主库存 `storage.inventory`**（UI「本地存储」立刻可见，可从详情「取出」），不再搬进 `output_buffer`——旧实现每 tick 无条件搬空主库存，玩家在「本地存储」只看到 0 /「-」，以为装料失败，要展开「输出缓存」才看得到。取货（皮带 / 分拣器 / 管道）走 `ExportableItemQuantity`（= `output_buffer` + `inventory`）、研究结算走 `OutputQuantity`，都不受影响。**背包（机甲背包）容量是硬上限，且按格计（DSP 口径，第 17 轮 U5）**：背包有 `inventory_slots` 格，每种物品每格最多堆叠 `stack_limit` 件（见 `items.yaml`；矿石 100、齿轮/电路板/磁线圈 200、电磁矩阵 200、建筑 50…），占用格数 = 各物品 `ceil(数量/stack_limit)` 之和；所有入包路径（手搓产出、手动采集、取出、拆除/取消返还、配送机器人投递、黑雾战利品、卸下物流机器人）都按格裁剪，超出的部分丢弃而不是溢出；`to_building` 目标建筑须有存储（`storage` 或已初始化的地面物流站），否则 `VALIDATION_FAILED`「目标建筑没有存储」——客户端装料下拉据此只列可接收物品的建筑。`to_player` 的两种失败分开报：「<建筑>里没有可取出的「<物品>」」是建筑里真没有该物品，「背包已满（已用 N/M 格），装不下取出的「<物品>」」是执行体背包装不下（试玩报告 1013 C）。`to_building` 装入**研究模式**（未设配方）的 `matrix_lab` / `self_evolution_lab` 时只接受矩阵类物品，其它物品当场拒绝并说明「…处于研究模式，只接受矩阵（研究耗材）；「…」请送到制造台或仓库」——研究站不会消耗它们，收下只会把背包里的料锁死（试玩报告 1013 B）；把该站切到生产配方后即按普通制造建筑收料。地面物流站须先配物品槽，写入唯一站库 `logistics_station.inventory`；喷涂机只收增产剂；分馏塔与轨道采集器不开放装料。
@@ -289,7 +308,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.2 机甲（执行体）
 
-- `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_slots` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。`inventory_slots` 是背包格数（每格堆叠该物品的 `stack_limit` 件）；旧的 `inventory_capacity`（按件数）已删除。
+- 数据模型：`PlayerState.mechas`（`map[unit_id]MechaRecord`，`{unit_id, planet_id, operator, inventory, respawn_at_tick}`）；背包挂在机甲档案上，阵亡后保留到复活。`PlayerState` 不再有 `inventory` / `inventory_slots` / `executors`。
+- 开局每个玩家一台机甲，`operator = 玩家 ID`，`bootstrap.items` 进它的背包。
+- 执行体可制造：`units.yaml executor` 的 `producer: battlefield_analysis_base`、`production_ticks: 600`、成本 16 铁块 + 8 齿轮 + 8 磁线圈 + 8 电路板；走 `produce` 命令，出厂空闲（`operator=""`）、空背包、满能量，登记进 `mechas`。
+- `mecha` 字段：`energy` / `max_energy` / `fuel_energy` / `shield` / `max_shield` / `inventory_slots` / `attack_energy_cost` / `move_energy_cost` / `shield_recharge_delay` / `last_hit_tick` / `job` / `logistics_requests`。`inventory_slots` 是背包格数（每格堆叠该物品的 `stack_limit` 件），由 `units.yaml executor.mecha.inventory_slots` + 科技 `mecha_inventory_slots` 决定，玩家所有机甲相同。
 - 初始核心 100、护盾容量 0。科技（距离类数值已随细分网格 ×3）：`mecha_core` +10 核心/级；`mecha_engine` 与 `drive_engine` 各 +6 移动范围/级（基础 36 cell）；`energy_shield` +20 护盾/级；`mechanical_frame` +20 生命上限/级（基础 120，不回血）；`inventory_capacity` +5 背包格/级（基础 40 格，满级 75 格；每格按物品 `stack_limit` 堆叠）；`energy_circuit` +20% 电网充电速率/级；`universe_exploration` +3 视野/级（基础 18 cell）。研究只提高上限，不补能。
 - 自动交战（`settleMechaAutoFire`）：**机甲不会因为「正在走路」而不还手**（试玩报告 1011 新问题 C：执行移动/建造指令的机甲被 8 个兵从 120 血打到 0、一次没开火）。
   - 有路径时按 `path_intent` 分两类：玩家显式 `move` / `attack` 命令的路径（`order`）**边走边打**——不改路径、不停下，只对 `attack_range` 内的敌对目标（优先 `last_attacker_id`）按冷却开火；作业/建造驱动的行走（`task`，即 `build` + `auto_approach` 的施工自动靠近）附近有威胁时按防御处理——暂停作业、去还手（受接战锚点牵引约束），威胁消失后恢复作业并重新规划施工路径。
@@ -299,12 +321,14 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - **被动回能**：`units.yaml` 的 `executor.mecha.energy_regen_ticks`（默认 4）决定每多少 tick 自动回 1 点核心；约 0.25 点/tick，只有行军耗能（1 点/cell、0.5 cell/tick）的一半左右，长途行军不必反复回家补能，但煤（25 点/块）与电网充电仍是有效的补给手段。核心已满时不回能。
 - 移动：与普通单位同一套实时移动（沿路径按 `move_speed` 推进），起步按整条路径扣能、能量不足整条拒绝，不再有 `move_range` 限制。攻击：基础攻击 20、防御 8、射程 12 cell，射程外自动靠近，每次成功攻击耗 8 核心；目标机甲护盾先吸收（`damage_applied.shield_absorbed`）。执行体不接受 `unit_order`。
 - 自动交战：有显式 `attack` 目标时只打它，射程外自动靠近、射程内按冷却开火；空闲时（无移动路径）先还击范围内最近攻击者，再打范围内最近的敌对目标（敌方玩家单位/建筑、已对本玩家敌对的黑雾），不自动招惹中立黑雾，不写 `attack_target`，核心低于 2 发攻击耗能时不自动开火（此时会先把被打断的手搓恢复掉，避免停在"暂停作业 + 不还手"的死状态）。无作业的机甲只在射程内开火、不追击；**手搓中的机甲会被自动防御打断**——敌对单位/建筑进入 `aggro_range` 就暂停手搓（`job.paused=true`、`job.state=paused_defense`，进度与预留原料保留）、靠近到射程内还手，威胁消失后自动从原进度恢复；追击以第一次被打断的位置为锚点，超出 `aggro_range+18` 就放弃该目标回去手搓。采集（`mine`）作业不打断（离开矿点作业即失效），但采集中的机甲仍在射程内还手。**有路径的机甲不会因为「在走路」而不还手**（试玩报告 1011 新问题 C）：玩家显式 `move`/`attack` 路径（`path_intent=order`）边走边打、不改路径不停下；作业/建造驱动的行走（`path_intent=task`）有威胁时暂停作业去还手，威胁消失后恢复作业并重新规划施工路径。
-- `refuel_mecha`：`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
-- `mine_resource`：只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 6 格（cell，细分网格前为 2）内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
-- `craft_item`：配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
+- `refuel_mecha`：由发令者机甲给自己补能，燃料从它自己的背包扣；`payload.item_id` 必填，`payload.count` 可选（缺省 1，最多烧几块）。仅接受 `/catalog.items[].mecha_fuel_energy > 0` 的物品（煤 25、高能石墨 50、精炼油 40、氢 30、氢燃料棒 100、氘燃料棒 250、反物质燃料棒 1000）；实际消耗 = min(count, 补满所需件数, 背包现有)，背包没有该燃料 `INSUFFICIENT_RESOURCE`；核心满或仍有 `fuel_energy` 缓存时拒绝；多余热值留在缓存，每 tick 最多补 10。
+- `mine_resource`：由发令者机甲执行（不带 `target.entity_id`），只支持 `behavior=finite` 且 `form=solid` 的矿点，启动时须在 6 格（cell，细分网格前为 2）内且余量足够；每 10 tick 采 1 件入背包，每件耗 3 核心。
+- `craft_item`：由发令者机甲手搓（不带 `target.entity_id`），原料从它的背包扣；配方须 `handcraft_allowed=true`（`smelt_iron`、`smelt_copper`、`smelt_stone`、`smelt_magnet`、`coal_to_graphite`、`gear`、`circuit_board`、`magnetic_coil`）、科技已解锁、输入输出均为固体；启动时一次扣留全部批次原料（不足原子失败），每批 `duration` tick（不受 `pace_output` 影响），每批耗 `max(1, duration/20)` 核心（铁块 3、齿轮 1）；不递归制造前置。
 - 个人任务（`mecha.job`：`kind=mine|craft`、`remaining_ticks`、`ticks_per_batch`、`remaining_batches`、`completed_batches`、`energy_per_batch`、`state=running|no_energy|out_of_range|paused_defense|inventory_full`、`paused`、`reserved_inputs`）同时只能有一个；每批开工时一次性扣 `energy_per_batch` 核心，缺能或超距暂停、恢复后继续。`inventory_full` 表示本批产出装不进背包（按格计已满）：该批不结算（矿点不扣量、预留原料不减、`completed_batches` 不变），腾出空位后自动继续，产出与原料都不会丢失（试玩 1014：手搓产出曾无视容量把背包顶满）。`paused_defense` 是自动防御打断手搓的暂停态（`paused=true`），威胁消失后自动恢复为 `running`。`cancel_mecha_job` 返还未完成批次原料，死亡也走同一退款（只退一次）。
 - 电网充电（无需命令）：自有运行中的 `wireless_power_tower` 18 cell 内最多 10/tick（塔自耗 1/tick），`tesla_tower` 12 cell 内最多 2/tick；只用塔所在电网的剩余供电，优先保建筑用电；每机甲每 tick 只从一塔受电，优先无线塔。
-- 机甲阵亡后等待配置的 `respawn_ticks`，在己方存活 HQ 旁重生；无 HQ 不重生。
+- 机甲阵亡后等待配置的 `respawn_ticks`，在**档案所在星球**的己方存活 HQ 旁逐台重生（背包保留，能量/作业/护盾重置）；无 HQ 不重生。
+- `move` / `attack` / `unit_order` 里选中别人绑定的机甲 → 该单位跳过并记 `NOT_OPERATOR`，其余单位照常；空闲机甲谁都能动。
+- 战利品：击杀者是机甲时，存储放不下的部分进它自己的背包；非机甲击杀者丢弃。配送器出发时记下目标机甲 ID，送货/回收只针对那台机甲的背包与 `logistics_requests`；范围内每台有请求的本方机甲都会被服务。
 
 ### 5.3 世界单位、军团与生产
 
@@ -367,7 +391,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
   - 调度：供应站运输器送货（`delivery`），需求站空闲运输器可去供应站取货（`pickup`）；供需都扣除在途预约。起飞一次预扣往返能源：无人机 `2*max(1, 距离)`，船普通 `10*距离`、曲速 `30*距离`；开启曲速、距离 ≥ 20、站库有 2 份 `space_warper` 且电池足够时优先曲速。航次 `takeoff → in_flight → landing`，满仓部分卸货，归属站失效时进入 `stranded`（无回收命令）。
   - 科技实时推导：`logistics_carrier_capacity` +100 舱容/级（基础 200）、`logistics_carrier_engine` +1 航速/级（基础 2）、`drone_engine` +3 无人机速度/级（基础 4）。
   - 船按归属星球注册表返回，异星停靠时须查归属星球 runtime 并看 `current_planet_id`。
-- 仓库配送器（`target.entity_id` 为己方配送器；机甲请求指向 executor）：
+- 仓库配送器（`target.entity_id` 为己方配送器；机甲请求指向本星球上任意有请求的己方机甲）：
   - `configure_distributor`：单种固体物品，`mode=none|supply|demand`，`local_storage` ≤ 宿主容量；可选 `player_delivery_enabled` / `player_collection_enabled`（省略保留原值）。
   - `install_logistics_bot`：`source=player|storage`，最多 10 个，需 `distribution_logistics`；`uninstall_logistics_bot` 只回收空载停靠机器人。
   - `configure_mecha_logistics`：`requests: {"motor": {"min": 5, "max": 10}}` 整体替换，最多 8 种，`0 ≤ min ≤ max ≤ 1000`；max 钳制到机甲背包容量。
@@ -433,8 +457,8 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /state/summary`**
 - `tick`、`active_planet_id`（全局兜底行星）、`map_width` / `map_height` / `surface`；已宣判时 `winner` / `victory_reason` / `victory_rule`。
-- `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive` / `dark_fog`（`{hostile: bool, hostile_until_tick: int}`，黑雾对该玩家的敌对状态，不敌对时 `hostile_until_tick=0`）；仅自己返回完整状态：`resources`、`inventory`（`item_id → 数量`）、`inventory_slots_used` / `inventory_slots_total`（背包已用格数 / 总格数，DSP 口径：每格按物品 `stack_limit` 堆叠）、`permissions`、`focus_planet_id`、`executor`、`executors`（按 `planet_id`）、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
-- `executor`：即 `executors[active_planet_id]`（该行星没有执行体时省略），字段 `unit_id` / `build_efficiency` / `operate_range` / `concurrent_tasks` / `research_boost`。Web 用 `unit_id` 请求 `/path`，以 `operate_range` 为 `stop_range` 分段靠近。
+- `players`：所有玩家返回 `player_id` / `team_id` / `role` / `is_alive` / `dark_fog`（`{hostile: bool, hostile_until_tick: int}`，黑雾对该玩家的敌对状态，不敌对时 `hostile_until_tick=0`）；仅自己返回完整状态：`resources`、`permissions`、`focus_planet_id`、`mechas`、`tech`、`combat_tech`、`stats`（同 `/state/stats`）。
+- `mechas`（仅自己，按 `unit_id` 排序）：每项 `{unit_id, planet_id, operator, alive, respawn_at_tick, position?, inventory, inventory_slots_used, inventory_slots_total, operate_range, concurrent_tasks, construction_active, construction_pending}`；`operator=""` = 空闲，`position` 只在 `alive` 时给。玩家的原始 `mechas` map 不下发。客户端按自己的 `issuer_id` 找 `operator` 相同的机甲。
 - `tech`：`completed_techs`（`{tech_id: level}`）、`current_research`、`research_queue`、`total_researched`。研究条目字段：`tech_id` / `state` / `progress` / `total_cost` / `current_level` / `required_cost` / `consumed_cost` / `blocked_reason`（`waiting_lab` / `waiting_matrix` / `low_power` / `invalid_tech`）/ `speed_multiplier`（供电倍率，1 = 满速）/ `estimated_ticks_remaining` / `enqueue_tick` / `complete_tick`。矩阵 ID 统一为 `electromagnetic_matrix`、`energy_matrix`、`structure_matrix`、`information_matrix`、`gravity_matrix`、`universe_matrix`。
 - `combat_tech`：`unlocked_techs` / `current_research` / `research_progress`。
 - `resources` 只有 `energy` 一个字段（第 16 轮删除了 `minerals`）：它是电网结余的**只读展示**，不再参与建造/升级/发射的扣费。`resources.energy`、`/state/stats.energy_stats`、`/networks` 共用同一 tick 的 `PowerSettlementSnapshot`。
@@ -448,7 +472,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /state/agent-briefing`**：agent/GUI 一站式态势。
 - 参数：`alert_limit`（默认 20，受 `alert_history_limit` 限制）。
-- 字段：`tick` / `active_planet_id` / `map_width` / `map_height` / `surface`；胜负字段；`self`（`player_id` / `team_id` / `role` / `is_alive` / `focus_planet_id` / `resources` / `inventory` / `inventory_slots_used` / `inventory_slots_total` / `tech{completed_count, completed_techs[], current_research, research_queue_len, total_researched}`）；`energy_stats` / `combat_stats`；`recent_alerts`；`fleets`（`fleet_id` / `system_id` / `formation` / `state` / `unit_count` / `target` / `in_transit` / `transit_to`）；`task_forces` / `theaters`；`enemy_forces`（传感器已确认敌情）；`available_commands`（按权限过滤的公开命令类型）。不泄露敌方 inventory/tech。
+- 字段：`tick` / `active_planet_id` / `map_width` / `map_height` / `surface`；胜负字段；`self`（`player_id` / `team_id` / `role` / `is_alive` / `focus_planet_id` / `resources` / `mechas`（同 `/state/summary`，按 `unit_id` 排序）/ `tech{completed_count, completed_techs[], current_research, research_queue_len, total_researched}`）；`energy_stats` / `combat_stats`；`recent_alerts`；`fleets`（`fleet_id` / `system_id` / `formation` / `state` / `unit_count` / `target` / `in_transit` / `transit_to`）；`task_forces` / `theaters`；`enemy_forces`（传感器已确认敌情）；`available_commands`（按权限过滤的公开命令类型）。不泄露敌方 mechas/tech。
 
 ### 6.3 星图
 
@@ -487,7 +511,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `resources[]` 枯竭时带 `depleted: true`，仍保留输出。
 
 **`GET /world/planets/{planet_id}/path?unit_id=&target_x=&target_y=&stop_range=`**：为己方单位规划地表最短路径。**目标格允许落在未探索区**：服务端是权威，寻路按真实地形/建筑阻挡做（只回路线，不回未探索区的地形细节），响应新增 `explored` 表示终点是否在玩家已探索范围内。`stop_range` 0..128（默认 0）；最多 512 步；非法参数或非己方单位 400。响应 `planet_id` / `surface` / `reachable` / `distance` / `explored` / `path`（含起点）/ `waypoints`（不含起点，按单位 `move_range` 切分，供分段展示）。目标被地形阻挡或不可达时 `reachable=false, distance=-1`；实际移动仍按权威障碍校验。
-- 参数名是 `unit_id`（单位 ID，取自 `/state/summary` 的 `executor.unit_id` 或单位列表），**不是** `entity_id`：传 `entity_id` 会被当成空单位、回 400 `own unit required`（试玩报告 K）。
+- 参数名是 `unit_id`（单位 ID，取自 `/state/summary` 的 `mechas[].unit_id` 或单位列表），**不是** `entity_id`：传 `entity_id` 会被当成空单位、回 400 `own unit required`（试玩报告 K）。
 
 **`GET /world/planets/{planet_id}/inspect?entity_kind=&entity_id=|sector_id=`**：`entity_kind = building|unit|resource|sector`。返回 `planet_id` / `discovered` / `entity_kind` / `entity_id` / `title` 及对应 `building` / `unit` / `resource`。建筑与单位按可见性校验，不可见 404；资源在 runtime 未加载时回退静态地图。
 - 目标 `entity_kind=building` 是采集建筑（采矿机 / 水泵 / 抽油机等）时，另返回 `mining_item`：这台建筑**唯一**开采的矿种（目录物品 ID，见 §5.1 的 `mining_item`）。非采集建筑为空。
@@ -503,7 +527,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `logistics_stations[]`：`building_id` / `building_type` / `position` / `state`（含唯一站库 `inventory`、`slot_capacity` / `item_capacity` / `energy` / `energy_capacity` / `charge_per_tick` / `belt_ports`）/ `drone_ids` / `ship_ids`。
 - `logistics_drones[]` / `logistics_ships[]`：`station_id`（归属站）/ `target_station_id` / `capacity` / `speed` / `status` / `position` / `target_pos` / `remaining_ticks` / `cargo` / `trip_kind` / `pickup_item_id` / `pickup_quantity` / `home_pos` / `returning` / `state_reason` / `energy_cost`；船另有 `current_planet_id`、`warp_*`、`warped`、`warp_item_spent`。
 - `logistics_distributors[]`（`bot_ids` / `host_available` / `inventory`）与 `logistics_bots[]`（`position` / `home_pos` / `target_pos` / `target_kind` / `trip_kind` / `cargo` / `status` / `returning` / `energy_remaining`）。
-- `construction_tasks[]`：`id` / `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `mining_item`（采集任务排产时定下的唯一开采矿种）/ `elevation`（传送带施工任务的目标层，0–4，omitempty；0 = 地面）/ `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（执行体 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）、`footprint_occupied`（施工已走完，但占地里还站着让不开的地面单位——占地外找不到可站立的空位，落成被推迟到它走开为止，此时任务仍是 `in_progress`）；开工后清空。排队不是失败——`build` 命令本身返回成功。
+- `construction_tasks[]`：`id` / `mecha_id`（下单时的发令者机甲，预留/暂停/扣料/退料都看它）/ `building_type` / `building_name`（中文名）/ `position` / `rotation` / `recipe_id` / `mining_item`（采集任务排产时定下的唯一开采矿种）/ `elevation`（传送带施工任务的目标层，0–4，omitempty；0 = 地面）/ `cost` / `state` / `wait_reason` / `queue_index` / `remaining_ticks` / `total_ticks` / `priority` / `error` / `materials_deducted` 等。`wait_reason` 解释任务为什么还没开工：`insufficient_materials`（缺料）、`executor_concurrent_limit`（该任务所属机甲的 `concurrent_tasks` 已满）、`region_concurrent_limit`（8×8 区域并发上限 `battlefield.construction_region_concurrent_limit` 已满）、`footprint_occupied`（施工已走完，但占地里还站着让不开的地面单位——占地外找不到可站立的空位，落成被推迟到它走开为止，此时任务仍是 `in_progress`）；开工后清空。排队不是失败——`build` 命令本身返回成功。
 - `contacts[]`（同 system contacts）、`enemy_forces[]`（至少 `confirmed_type` 的接触：`id` / `type` / `position` / `strength` / `level` / `threat_level`；`id` 是 `fleet_attack` 与自动交战使用的目标 ID；hive 遗址见 `nest_ruins[]`）、`detections[]`（由 contacts 聚合的摘要）。行星传感器源 = 己方建筑（视野 / 雷达 / 信号塔）**加己方单位（含机甲）的车载传感器**（光学 + 红外 + 被动电磁，半径 = 单位 `vision_range`）——把机甲开到黑雾巢穴视野内即可让巢穴升到 `confirmed_type` 并出现在 `enemy_forces` 里（试玩报告 1010 阻断 C：此前只收集建筑传感器，`enemy_forces` 恒为空、黑雾不可见不可打）。
 
 **`GET /world/planets/{planet_id}/networks`**：电网与管网，整体来自同一 tick 的 `PowerSettlementSnapshot`。
@@ -631,7 +655,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 ```
 
 - `map_seed` 可选（缺省随机）；地图拓扑沿用启动时的 map 配置，未知字段 400。
-- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 executor / permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方的开局物资包（`bootstrap.items`）；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份物资包）。
+- `enemy_difficulty` / `victory_mode` / `players[].role` / `players[].team_id` / `players[].bot` / `players[].bootstrap` 都**缺省继承启动配置**（battlefield 全字段 + 同名玩家的 permissions / bootstrap），只有请求里显式给出的字段才覆盖。所以从大厅开的遭遇战新局会带上 `bot_first_attack_tick`、`dark_fog_calm_ticks`、`time_limit_ticks`、`pace_*` 与双方的开局物资包（`bootstrap.items`）；不传 `bootstrap` 时沿用同名玩家的配置（`config-skirmish.yaml` 里 p1/p2 都是同一份物资包）。
 - `players` 必填非空，`player_id` / `key` 必填且唯一；`role=admin|commander|observer`；`team_id` 缺省同名玩家配置，再缺省 `player_id`；`bot=easy|normal|hard`（空为人类，bot 走同一命令接口）；`bootstrap` 结构同 `config.yaml` 的 `players[].bootstrap`。
 - 语义：校验通过后先写新局 `meta.json` / `save.json`（失败 500，旧局不变）再原子切换；旧 key 立即 401，旧 SSE 被断开；并发请求串行执行，后到者覆盖。进程级配置不变。
 - 响应 `201`，结构同 `GET /games/current`（`tick=0`）。客户端须用新 key 重新登录、重新订阅 SSE 并全量拉取状态。
