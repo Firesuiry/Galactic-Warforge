@@ -1,0 +1,1214 @@
+{
+ "catalog": {
+  "buildings": [
+   {
+    "id": "arc_smelter",
+    "name": "电弧熔炉",
+    "category": "refining",
+    "subcategory": "refining",
+    "footprint": {
+     "width": 3,
+     "height": 3
+    },
+    "build_cost": {
+     "items": [
+      {
+       "item_id": "circuit_board",
+       "quantity": 4
+      },
+      {
+       "item_id": "iron_ingot",
+       "quantity": 4
+      },
+      {
+       "item_id": "magnetic_coil",
+       "quantity": 2
+      },
+      {
+       "item_id": "stone_brick",
+       "quantity": 2
+      }
+     ]
+    },
+    "buildable": true,
+    "unlock_tech": [
+     "dyson_sphere_program"
+    ],
+    "runtime_params": {
+     "energy_consume": 4,
+     "energy_generate": 0,
+     "power_priority": 0,
+     "capacity": 1,
+     "footprint": {
+      "width": 3,
+      "height": 3
+     },
+     "connection_points": [
+      {
+       "id": "power",
+       "kind": "power",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      }
+     ],
+     "io_ports": [
+      {
+       "id": "in-0",
+       "direction": "input",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      },
+      {
+       "id": "out-0",
+       "direction": "output",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      }
+     ]
+    },
+    "icon_key": "arc_smelter",
+    "color": "#e8590c"
+   },
+   {
+    "id": "wind_turbine",
+    "name": "风力涡轮机",
+    "category": "power",
+    "subcategory": "power",
+    "footprint": {
+     "width": 2,
+     "height": 2
+    },
+    "build_cost": {
+     "items": [
+      {
+       "item_id": "gear",
+       "quantity": 1
+      },
+      {
+       "item_id": "iron_ingot",
+       "quantity": 6
+      },
+      {
+       "item_id": "magnetic_coil",
+       "quantity": 3
+      }
+     ]
+    },
+    "buildable": true,
+    "unlock_tech": [
+     "dyson_sphere_program"
+    ],
+    "runtime_params": {
+     "energy_consume": 0,
+     "energy_generate": 10,
+     "power_priority": 0,
+     "capacity": 0,
+     "footprint": {
+      "width": 2,
+      "height": 2
+     },
+     "connection_points": [
+      {
+       "id": "power",
+       "kind": "power",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      }
+     ]
+    },
+    "icon_key": "wind_turbine",
+    "color": "#ffd43b"
+   }
+  ],
+  "recipes": [
+   {
+    "handcraft_allowed": true,
+    "id": "smelt_iron",
+    "name": "铁块",
+    "inputs": [
+     {
+      "item_id": "iron_ore",
+      "quantity": 1
+     }
+    ],
+    "outputs": [
+     {
+      "item_id": "iron_ingot",
+      "quantity": 1
+     }
+    ],
+    "duration": 60,
+    "energy_cost": 1,
+    "building_types": [
+     "arc_smelter",
+     "plane_smelter",
+     "negentropy_smelter"
+    ],
+    "icon_key": "smelt_iron",
+    "color": "#74c0fc"
+   },
+   {
+    "handcraft_allowed": true,
+    "id": "gear",
+    "name": "齿轮",
+    "inputs": [
+     {
+      "item_id": "iron_ingot",
+      "quantity": 1
+     }
+    ],
+    "outputs": [
+     {
+      "item_id": "gear",
+      "quantity": 1
+     }
+    ],
+    "duration": 20,
+    "energy_cost": 0,
+    "building_types": [
+     "assembling_machine_mk1",
+     "assembling_machine_mk2",
+     "assembling_machine_mk3"
+    ],
+    "icon_key": "gear",
+    "color": "#ffd43b"
+   }
+  ],
+  "items": [
+   {
+    "id": "gear",
+    "name": "齿轮",
+    "category": "component",
+    "form": "solid",
+    "stack_limit": 200,
+    "unit_volume": 1,
+    "icon_key": "gear",
+    "color": "#ffd43b"
+   },
+   {
+    "id": "iron_ingot",
+    "name": "铁块",
+    "category": "material",
+    "form": "solid",
+    "stack_limit": 100,
+    "unit_volume": 1,
+    "icon_key": "iron_ingot",
+    "color": "#74c0fc"
+   }
+  ],
+  "techs": [
+   {
+    "id": "dyson_sphere_program",
+    "name": "戴森球计划",
+    "name_en": "Dyson Sphere Program",
+    "category": "main",
+    "type": "main",
+    "level": 0,
+    "unlocks": [
+     {
+      "type": "building",
+      "id": "matrix_lab"
+     },
+     {
+      "type": "building",
+      "id": "wind_turbine"
+     },
+     {
+      "type": "building",
+      "id": "mining_machine"
+     },
+     {
+      "type": "building",
+      "id": "arc_smelter"
+     },
+     {
+      "type": "building",
+      "id": "tesla_tower"
+     },
+     {
+      "type": "building",
+      "id": "conveyor_belt_mk1"
+     },
+     {
+      "type": "building",
+      "id": "sorter_mk1"
+     },
+     {
+      "type": "building",
+      "id": "assembling_machine_mk1"
+     },
+     {
+      "type": "building",
+      "id": "barracks"
+     },
+     {
+      "type": "building",
+      "id": "supply_station"
+     },
+     {
+      "type": "recipe",
+      "id": "ammo_bullet"
+     }
+    ],
+    "icon_key": "dyson_sphere_program",
+    "color": "#9775fa"
+   },
+   {
+    "id": "electromagnetism",
+    "name": "电磁学",
+    "name_en": "Electromagnetism",
+    "category": "main",
+    "type": "main",
+    "level": 1,
+    "cost": [
+     {
+      "item_id": "electromagnetic_matrix",
+      "quantity": 20
+     }
+    ],
+    "unlocks": [
+     {
+      "type": "building",
+      "id": "depot_mk1"
+     },
+     {
+      "type": "building",
+      "id": "vehicle_factory"
+     }
+    ],
+    "leads_to": [
+     "automatic_metallurgy",
+     "basic_assembling_processes",
+     "basic_logistics_system",
+     "df_energy_shield",
+     "electromagnetic_drive",
+     "electromagnetic_matrix_technology",
+     "engine",
+     "fluid_storage",
+     "plasma_control",
+     "veins_utilization",
+     "weapon_system"
+    ],
+    "icon_key": "electromagnetism",
+    "color": "#9775fa"
+   }
+  ],
+  "world_units": [
+   {
+    "ammo_class": "bullet",
+    "ammo_capacity": 10,
+    "producer": "barracks",
+    "production_ticks": 30,
+    "cost": [
+     {
+      "item_id": "iron_ingot",
+      "quantity": 2
+     },
+     {
+      "item_id": "circuit_board",
+      "quantity": 1
+     }
+    ],
+    "id": "worker",
+    "name": "工程兵",
+    "domain": "ground",
+    "runtime_class": "world_unit",
+    "public": true,
+    "production_mode": "world_produce",
+    "query_scopes": [
+     "planet"
+    ],
+    "commands": [
+     "move",
+     "attack"
+    ],
+    "armor_class": "light",
+    "weapon_class": "gun",
+    "attack": 3,
+    "attack_range": 3,
+    "attack_cooldown_tick": 12,
+    "move_speed": 0.9,
+    "max_hp": 60
+   },
+   {
+    "ammo_class": "bullet",
+    "ammo_capacity": 40,
+    "producer": "battlefield_analysis_base",
+    "production_ticks": 600,
+    "cost": [
+     {
+      "item_id": "iron_ingot",
+      "quantity": 16
+     },
+     {
+      "item_id": "gear",
+      "quantity": 8
+     },
+     {
+      "item_id": "magnetic_coil",
+      "quantity": 8
+     },
+     {
+      "item_id": "circuit_board",
+      "quantity": 8
+     }
+    ],
+    "id": "executor",
+    "name": "执行体机甲",
+    "domain": "ground",
+    "runtime_class": "world_unit",
+    "public": true,
+    "production_mode": "world_produce",
+    "query_scopes": [
+     "planet"
+    ],
+    "commands": [
+     "move",
+     "attack"
+    ],
+    "armor_class": "heavy",
+    "weapon_class": "gun",
+    "attack": 20,
+    "attack_range": 12,
+    "attack_cooldown_tick": 6,
+    "move_speed": 1.5,
+    "max_hp": 120
+   }
+  ],
+  "research_pace": 2
+ },
+ "scene": {
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "map_width": 864,
+  "map_height": 576,
+  "surface": {
+   "topology": "cube_sphere",
+   "face_size": 288
+  },
+  "tick": 7146,
+  "bounds": {
+   "x": 25,
+   "y": 110,
+   "width": 48,
+   "height": 48
+  },
+  "buildings": {
+   "b-101": {
+    "rotation": "0",
+    "id": "b-101",
+    "type": "conveyor_belt_mk1",
+    "owner_id": "p1",
+    "position": {
+     "x": 63,
+     "y": 144,
+     "z": 0
+    },
+    "hp": 120,
+    "max_hp": 120,
+    "level": 1,
+    "vision_range": 2,
+    "runtime": {
+     "params": {
+      "energy_consume": 0,
+      "energy_generate": 0,
+      "power_priority": 0,
+      "capacity": 0,
+      "footprint": {
+       "width": 1,
+       "height": 1
+      }
+     },
+     "functions": {
+      "transport": {
+       "throughput": 1,
+       "stack_limit": 2
+      }
+     },
+     "state": "running"
+    },
+    "conveyor": {
+     "input": "north",
+     "output": "south",
+     "max_stack": 2,
+     "throughput": 1
+    }
+   },
+   "b-103": {
+    "rotation": "90",
+    "id": "b-103",
+    "type": "sorter_mk1",
+    "owner_id": "p1",
+    "position": {
+     "x": 64,
+     "y": 144,
+     "z": 0
+    },
+    "hp": 120,
+    "max_hp": 120,
+    "level": 1,
+    "vision_range": 2,
+    "runtime": {
+     "params": {
+      "energy_consume": 1,
+      "energy_generate": 0,
+      "power_priority": 0,
+      "capacity": 0,
+      "footprint": {
+       "width": 1,
+       "height": 1
+      },
+      "connection_points": [
+       {
+        "id": "power",
+        "kind": "power",
+        "offset": {
+         "x": 0,
+         "y": 0
+        },
+        "capacity": 1
+       }
+      ]
+     },
+     "functions": {
+      "sorter": {
+       "cycle_ticks": 6,
+       "range": 3
+      },
+      "energy": {
+       "output_per_tick": 0,
+       "consume_per_tick": 1,
+       "buffer": 0
+      }
+     },
+     "state": "running"
+    },
+    "sorter": {
+     "cycle_ticks": 6,
+     "range": 3,
+     "next_trip_tick": 7070,
+     "filter": {
+      "mode": "allow"
+     },
+     "last_transfer": {
+      "tick": 7064,
+      "sequence": 58,
+      "source_id": "b-101",
+      "target_id": "b-105",
+      "source_position": {
+       "x": 63,
+       "y": 144,
+       "z": 0
+      },
+      "target_position": {
+       "x": 65,
+       "y": 143,
+       "z": 0
+      },
+      "item_id": "iron_ingot",
+      "quantity": 1
+     },
+     "stall": {
+      "stalled_ticks": 77
+     }
+    },
+    "production_monitor": {
+     "samples": 0,
+     "idle_samples": 0,
+     "total_moves": 0,
+     "last_move_tick": 0,
+     "last_stats": {
+      "throughput": 0,
+      "backlog": 0,
+      "idle_ratio": 0,
+      "efficiency": 0,
+      "input_shortage": false,
+      "output_blocked": false
+     }
+    }
+   },
+   "b-105": {
+    "rotation": "0",
+    "id": "b-105",
+    "type": "supply_station",
+    "owner_id": "p1",
+    "position": {
+     "x": 65,
+     "y": 143,
+     "z": 0
+    },
+    "hp": 300,
+    "max_hp": 300,
+    "level": 1,
+    "vision_range": 6,
+    "runtime": {
+     "params": {
+      "energy_consume": 2,
+      "energy_generate": 0,
+      "power_priority": 0,
+      "capacity": 0,
+      "footprint": {
+       "width": 3,
+       "height": 3
+      },
+      "connection_points": [
+       {
+        "id": "power",
+        "kind": "power",
+        "offset": {
+         "x": 0,
+         "y": 0
+        },
+        "capacity": 1
+       }
+      ],
+      "io_ports": [
+       {
+        "id": "in-0",
+        "direction": "input",
+        "offset": {
+         "x": 0,
+         "y": 0
+        },
+        "capacity": 6
+       },
+       {
+        "id": "out-0",
+        "direction": "output",
+        "offset": {
+         "x": 0,
+         "y": 0
+        },
+        "capacity": 2
+       }
+      ]
+     },
+     "functions": {
+      "storage": {
+       "capacity": 1000,
+       "slots": 16,
+       "buffer": 200,
+       "input_priority": 2,
+       "output_priority": 1
+      },
+      "energy": {
+       "output_per_tick": 0,
+       "consume_per_tick": 2,
+       "buffer": 0
+      }
+     },
+     "state": "running"
+    },
+    "storage": {
+     "capacity": 1000,
+     "slots": 16,
+     "buffer_capacity": 200,
+     "priority": {
+      "input": 2,
+      "output": 1
+     },
+     "inventory": {
+      "iron_ingot": 58
+     }
+    }
+   }
+  },
+  "units": {
+   "u-40": {
+    "ammo_class": "bullet",
+    "ammo": 40,
+    "ammo_capacity": 40,
+    "ammo_item": "ammo_bullet",
+    "domain": "ground",
+    "id": "u-40",
+    "type": "executor",
+    "owner_id": "p1",
+    "position": {
+     "x": 49,
+     "y": 134,
+     "z": 0
+    },
+    "hp": 120,
+    "max_hp": 120,
+    "attack": 20,
+    "defense": 8,
+    "attack_range": 12,
+    "move_range": 36,
+    "vision_range": 18,
+    "mecha": {
+     "energy": 100,
+     "max_energy": 100,
+     "fuel_energy": 0,
+     "shield": 0,
+     "max_shield": 0,
+     "inventory_slots": 40,
+     "attack_energy_cost": 8,
+     "move_energy_cost": 1,
+     "shield_recharge_delay": 10,
+     "last_hit_tick": 0
+    },
+    "move_speed": 1.5,
+    "armor_class": "heavy",
+    "weapon_class": "gun",
+    "stance": "idle",
+    "attack_cooldown_ticks": 6,
+    "aggro_range": 18
+   }
+  },
+  "resources": [
+   {
+    "id": "planet-1-1-res-1693",
+    "planet_id": "planet-1-1",
+    "kind": "coal",
+    "behavior": "finite",
+    "position": {
+     "x": 42,
+     "y": 134,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-345",
+    "max_amount": 94369,
+    "remaining": 94369,
+    "base_yield": 5,
+    "current_yield": 5,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-1693-2",
+    "planet_id": "planet-1-1",
+    "kind": "coal",
+    "behavior": "finite",
+    "position": {
+     "x": 40,
+     "y": 134,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-345",
+    "max_amount": 94369,
+    "remaining": 94369,
+    "base_yield": 5,
+    "current_yield": 5,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-1693-3",
+    "planet_id": "planet-1-1",
+    "kind": "coal",
+    "behavior": "finite",
+    "position": {
+     "x": 42,
+     "y": 133,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-345",
+    "max_amount": 94369,
+    "remaining": 94369,
+    "base_yield": 5,
+    "current_yield": 5,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-1693-4",
+    "planet_id": "planet-1-1",
+    "kind": "coal",
+    "behavior": "finite",
+    "position": {
+     "x": 41,
+     "y": 135,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-345",
+    "max_amount": 94369,
+    "remaining": 94369,
+    "base_yield": 5,
+    "current_yield": 5,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "res-10",
+    "planet_id": "planet-1-1",
+    "kind": "iron_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 56,
+     "y": 140,
+     "z": 0
+    },
+    "cluster_id": "cluster-1",
+    "max_amount": 20000,
+    "remaining": 19889,
+    "base_yield": 8,
+    "current_yield": 8,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "res-2",
+    "planet_id": "planet-1-1",
+    "kind": "iron_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 54,
+     "y": 138,
+     "z": 0
+    },
+    "cluster_id": "cluster-1",
+    "max_amount": 20000,
+    "remaining": 20000,
+    "base_yield": 8,
+    "current_yield": 8,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "res-3",
+    "planet_id": "planet-1-1",
+    "kind": "iron_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 55,
+     "y": 138,
+     "z": 0
+    },
+    "cluster_id": "cluster-1",
+    "max_amount": 20000,
+    "remaining": 20000,
+    "base_yield": 8,
+    "current_yield": 8,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "res-4",
+    "planet_id": "planet-1-1",
+    "kind": "iron_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 56,
+     "y": 138,
+     "z": 0
+    },
+    "cluster_id": "cluster-1",
+    "max_amount": 20000,
+    "remaining": 20000,
+    "base_yield": 8,
+    "current_yield": 8,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3465",
+    "planet_id": "planet-1-1",
+    "kind": "copper_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 43,
+     "y": 116,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-701",
+    "max_amount": 98679,
+    "remaining": 98679,
+    "base_yield": 3,
+    "current_yield": 3,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3465-2",
+    "planet_id": "planet-1-1",
+    "kind": "copper_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 44,
+     "y": 117,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-701",
+    "max_amount": 98679,
+    "remaining": 98679,
+    "base_yield": 3,
+    "current_yield": 3,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3465-3",
+    "planet_id": "planet-1-1",
+    "kind": "copper_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 43,
+     "y": 115,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-701",
+    "max_amount": 98679,
+    "remaining": 98679,
+    "base_yield": 3,
+    "current_yield": 3,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3465-4",
+    "planet_id": "planet-1-1",
+    "kind": "copper_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 43,
+     "y": 118,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-701",
+    "max_amount": 98679,
+    "remaining": 98679,
+    "base_yield": 3,
+    "current_yield": 3,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3010",
+    "planet_id": "planet-1-1",
+    "kind": "stone_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 47,
+     "y": 127,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-609",
+    "max_amount": 85248,
+    "remaining": 85248,
+    "base_yield": 6,
+    "current_yield": 6,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3010-2",
+    "planet_id": "planet-1-1",
+    "kind": "stone_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 47,
+     "y": 125,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-609",
+    "max_amount": 85248,
+    "remaining": 85248,
+    "base_yield": 6,
+    "current_yield": 6,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3010-3",
+    "planet_id": "planet-1-1",
+    "kind": "stone_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 48,
+     "y": 128,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-609",
+    "max_amount": 85248,
+    "remaining": 85248,
+    "base_yield": 6,
+    "current_yield": 6,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   },
+   {
+    "id": "planet-1-1-res-3010-4",
+    "planet_id": "planet-1-1",
+    "kind": "stone_ore",
+    "behavior": "finite",
+    "position": {
+     "x": 47,
+     "y": 128,
+     "z": 0
+    },
+    "cluster_id": "planet-1-1-cluster-609",
+    "max_amount": 85248,
+    "remaining": 85248,
+    "base_yield": 6,
+    "current_yield": 6,
+    "min_yield": 0,
+    "regen_per_tick": 0,
+    "decay_per_tick": 0
+   }
+  ],
+  "building_count": 23,
+  "unit_count": 1,
+  "resource_count": 34404
+ },
+ "inspect_building": {
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "entity_kind": "building",
+  "entity_id": "b-55",
+  "title": "arc_smelter",
+  "building": {
+   "rotation": "0",
+   "id": "b-55",
+   "type": "arc_smelter",
+   "owner_id": "p1",
+   "position": {
+    "x": 62,
+    "y": 140,
+    "z": 0
+   },
+   "hp": 120,
+   "max_hp": 120,
+   "level": 1,
+   "vision_range": 2,
+   "runtime": {
+    "params": {
+     "energy_consume": 4,
+     "energy_generate": 0,
+     "power_priority": 0,
+     "capacity": 1,
+     "footprint": {
+      "width": 3,
+      "height": 3
+     },
+     "connection_points": [
+      {
+       "id": "power",
+       "kind": "power",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      }
+     ],
+     "io_ports": [
+      {
+       "id": "in-0",
+       "direction": "input",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      },
+      {
+       "id": "out-0",
+       "direction": "output",
+       "offset": {
+        "x": 0,
+        "y": 0
+       },
+       "capacity": 1
+      }
+     ]
+    },
+    "functions": {
+     "production": {
+      "throughput": 1,
+      "recipe_slots": 1
+     },
+     "storage": {
+      "capacity": 24,
+      "slots": 3,
+      "buffer": 8,
+      "input_priority": 2,
+      "output_priority": 1
+     },
+     "energy": {
+      "output_per_tick": 0,
+      "consume_per_tick": 4,
+      "buffer": 0
+     }
+    },
+    "state": "running"
+   },
+   "storage": {
+    "capacity": 24,
+    "slots": 3,
+    "buffer_capacity": 8,
+    "priority": {
+     "input": 2,
+     "output": 1
+    },
+    "reserve": 1,
+    "inventory": {
+     "iron_ore": 2
+    }
+   },
+   "production": {
+    "recipe_id": "smelt_iron",
+    "mode": "speed",
+    "remaining_ticks": 36,
+    "pending_outputs": [
+     {
+      "item_id": "iron_ingot",
+      "quantity": 1
+     }
+    ]
+   },
+   "production_monitor": {
+    "samples": 1421,
+    "idle_samples": 0,
+    "total_moves": 0,
+    "last_move_tick": 0,
+    "last_alert_at": {
+     "input_shortage": 6045,
+     "throughput_drop": 6045
+    },
+    "active_alerts": {
+     "input_shortage": true,
+     "throughput_drop": true
+    },
+    "last_stats": {
+     "throughput": 1,
+     "backlog": 0,
+     "idle_ratio": 0,
+     "efficiency": 0,
+     "input_shortage": true,
+     "output_blocked": false,
+     "power_state": "running"
+    }
+   }
+  }
+ },
+ "networks": {
+  "planet_id": "planet-1-1",
+  "discovered": true,
+  "available": true,
+  "active_planet_id": "planet-1-1",
+  "tick": 6659,
+  "power_networks": [
+   {
+    "id": "b-103",
+    "owner_id": "p1",
+    "supply": 30,
+    "demand": 29,
+    "allocated": 29,
+    "net": 1,
+    "shortage": false,
+    "node_ids": [
+     "b-103",
+     "b-105",
+     "b-107",
+     "b-39",
+     "b-45",
+     "b-47",
+     "b-49",
+     "b-53",
+     "b-55",
+     "b-57",
+     "b-59",
+     "b-63",
+     "b-67",
+     "b-69",
+     "b-79",
+     "b-91",
+     "b-95",
+     "b-97",
+     "b-99"
+    ]
+   }
+  ],
+  "power_coverage": [
+   {
+    "building_id": "b-103",
+    "owner_id": "p1",
+    "building_type": "sorter_mk1",
+    "position": {
+     "x": 64,
+     "y": 144,
+     "z": 0
+    },
+    "connected": true,
+    "provider_id": "b-45",
+    "network_id": "b-103",
+    "demand": 1,
+    "allocated": 1,
+    "ratio": 1,
+    "priority": 30
+   },
+   {
+    "building_id": "b-105",
+    "owner_id": "p1",
+    "building_type": "supply_station",
+    "position": {
+     "x": 65,
+     "y": 143,
+     "z": 0
+    },
+    "connected": true,
+    "provider_id": "b-45",
+    "network_id": "b-103",
+    "demand": 2,
+    "allocated": 2,
+    "ratio": 1,
+    "priority": 45
+   },
+   {
+    "building_id": "b-107",
+    "owner_id": "p1",
+    "building_type": "wind_turbine",
+    "position": {
+     "x": 68,
+     "y": 143,
+     "z": 0
+    },
+    "connected": false
+   },
+   {
+    "building_id": "b-39",
+    "owner_id": "p1",
+    "building_type": "battlefield_analysis_base",
+    "position": {
+     "x": 54,
+     "y": 144,
+     "z": 0
+    },
+    "connected": true,
+    "provider_id": "b-45",
+    "network_id": "b-103",
+    "demand": 2,
+    "allocated": 2,
+    "ratio": 1,
+    "priority": 100
+   }
+  ]
+ }
+}

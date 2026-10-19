@@ -39,8 +39,11 @@ type BuildingCatalogEntry struct {
 	UnlockTech      []string `json:"unlock_tech,omitempty"`
 	CombatRange     int      `json:"combat_range,omitempty"`
 	PowerRange      int      `json:"power_range,omitempty"`
-	IconKey         string   `json:"icon_key"`
-	Color           string   `json:"color"`
+	// RuntimeParams 1 级运行时参数（耗电/发电、IO 口、连接点），与建造出来的建筑
+	// 实例上的 runtime.params 同源。CLI catalog building <id> 靠它显示造价以外的数值。
+	RuntimeParams *model.BuildingRuntimeParams `json:"runtime_params,omitempty"`
+	IconKey       string                       `json:"icon_key"`
+	Color         string                       `json:"color"`
 }
 
 type ItemCatalogEntry struct {
@@ -117,6 +120,8 @@ func (ql *Layer) Catalog(pace float64) *CatalogView {
 			Color:      buildingCatalogColor(def.Category),
 		}
 		if runtimeDef, ok := model.BuildingRuntimeDefinitionByID(def.ID); ok {
+			params := runtimeDef.Params
+			entry.RuntimeParams = &params
 			if combat := runtimeDef.Functions.Combat; combat != nil && combat.Range > 0 {
 				entry.CombatRange = combat.Range
 			}

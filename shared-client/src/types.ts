@@ -299,8 +299,10 @@ export interface Building {
   spray_coater?: BuildingSprayCoaterState;
   production?: {
     recipe_id?: string;
+    mode?: string;
     remaining_ticks?: number;
     progress_fraction?: number;
+    pending_outputs?: ItemAmount[];
   };
   job?: BuildingJob;
   foundation_terrain?: string[];
@@ -310,6 +312,8 @@ export interface Building {
    * 覆盖框里混了别的矿种时那些矿脉一格都不采（第 16 轮契约，docs/dev/服务端API.md §5.1）。
    */
   mining_item?: string;
+  /** 产线监测快照（服务端 Building 上原样下发）：active_alerts 就是当前仍成立的问题。 */
+  production_monitor?: ProductionMonitorView;
 }
 
 export interface MechaJob {
@@ -1238,6 +1242,24 @@ export interface PlanetInspectView {
   resource?: PlanetResource;
 }
 
+export interface ProductionMonitorView {
+  samples?: number;
+  idle_samples?: number;
+  total_moves?: number;
+  last_move_tick?: number;
+  last_alert_at?: Record<string, number>;
+  active_alerts?: Record<string, boolean>;
+  last_stats?: {
+    throughput?: number;
+    backlog?: number;
+    idle_ratio?: number;
+    efficiency?: number;
+    input_shortage?: boolean;
+    output_blocked?: boolean;
+    power_state?: string;
+  };
+}
+
 export interface FogMapView {
   surface: SurfaceMetadata;
   planet_id: string;
@@ -1640,6 +1662,8 @@ export interface BuildingCatalogEntry {
   unlock_tech?: string[];
   combat_range?: number;
   power_range?: number;
+  /** 1 级运行时参数（耗电/发电、IO 口、连接点）；服务端 /catalog 直出。 */
+  runtime_params?: BuildingRuntimeParams;
   icon_key: string;
   color: string;
 }

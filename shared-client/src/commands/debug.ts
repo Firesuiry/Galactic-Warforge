@@ -179,7 +179,7 @@ export async function cmdAlertSnapshot(args: string[], { api }: CommandContext):
       // 服务端快照仍成立的在前、最新在前；已解除的条目留在历史里，标「已解除」。
       const state = alert.active === false ? chalk.dim('（已解除）') : '';
       lines.push(`[t${alert.tick}] ${severity} ${chalk.yellow(formatAlertText(alert))}${state}`);
-      lines.push(`    building=${alert.building_id} type=${alert.building_type}`);
+      lines.push(`    alert_type=${alert.alert_type} building=${alert.building_id} type=${alert.building_type}`);
     }
     if (result.next_alert_id) {
       lines.push(chalk.dim(`Next alert_id: ${result.next_alert_id}`));

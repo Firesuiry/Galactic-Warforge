@@ -6,6 +6,21 @@ import { cmdHelp } from '@gw/shared/commands/help';
 
 import { api } from '../api.js';
 
+describe('agent query command registration', () => {
+  it('registers catalog / networks / alerts with dedicated help', async () => {
+    for (const name of ['catalog', 'networks', 'alerts']) {
+      assert.ok(COMMANDS[name], `missing ${name}`);
+      const help = await dispatch(`help ${name}`, { api, currentPlayer: 'p1', rl: {} as never });
+      assert.doesNotMatch(help, /Unknown command/);
+      assert.match(help, new RegExp(`^${name} `));
+    }
+    const sceneHelp = await dispatch('help scene', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(sceneHelp, /\[planet\] \[x y width height\]/);
+    const inspectHelp = await dispatch('help inspect', { api, currentPlayer: 'p1', rl: {} as never });
+    assert.match(inspectHelp, /\[planet\] \[building\|unit\|resource\|sector\] <entity_id>/);
+  });
+});
+
 describe('save command registration', () => {
   it('registers save in command table', async () => {
     assert.ok(COMMANDS.save);

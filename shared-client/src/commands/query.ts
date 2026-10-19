@@ -24,8 +24,13 @@ import {
   fmtWarTheaters,
 } from './format.js';
 import type { PlanetSceneParams } from '../api.js';
-import { parseArgs, parseIntegerArg } from './args.js';
+import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
 import { selectMyMecha } from '../mecha.js';
+import { centeredWindow, fetchPlanetContext, type PlanetContext } from './scene-context.js';
+import { fmtInspect, fmtNetworks, fmtScene, operatorMap, SCENE_SECTION_LIMIT } from './scene-format.js';
+
+/** 省略窗口时以我的机甲为中心的边长（服务端最大窗口 257，48 够看一屏产线）。 */
+const DEFAULT_SCENE_SIZE = 48;
 
 function parseRequiredInteger(raw: string | undefined, label: string): number {
   const value = parseIntegerArg(raw);
@@ -184,42 +189,167 @@ export async function cmdTheaters(_args: string[], { api }: CommandContext): Pro
   }
 }
 
-export async function cmdScene(args: string[], { api }: CommandContext): Promise<string> {
+/**
+ * `scene [planet] [x y w h] [--near_x X --near_y Y --radius R] [--json] [--limit N|all]`
+ *
+ * - 省略 planet：我的机甲所在星球（summary.mechas 里 operator=发令者），否则焦点星球；
+ * - 省略窗口：以我的机甲为中心 48×48（无机甲时从 0,0 起）；
+ * - 位置参数一律按数字/非数字区分，不再把省略 planet 时的 x 当成 planet。
+ */
+export async function cmdScene(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
   const parsed = parseArgs(args);
-  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
+  const wantsJson = parsed.options.json === true;
+  const positionals = parsed.positionals;
+
+  let planetArg: string | undefined;
+  let windowArgs: string[];
+  if (positionals.length >= 5) {
+    [planetArg, ...windowArgs] = positionals;
+  } else if (positionals.length === 4) {
+    windowArgs = positionals;
+  } else if (positionals.length === 1) {
+    planetArg = positionals[0];
+    windowArgs = [];
+  } else if (positionals.length === 0) {
+    windowArgs = [];
+  } else {
+    return fmtError('用法: scene [planet] [x y w h] [--near_x X --near_y Y --radius R] [--json]');
+  }
+  if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
+    return fmtError(`planet 参数看起来不是星球 id：${planetArg}（用法: scene [planet] [x y w h]）`);
+  }
 
   try {
-    const request: PlanetSceneParams = {
-      x: parseRequiredInteger(parsed.positionals[1], 'x'),
-      y: parseRequiredInteger(parsed.positionals[2], 'y'),
-      width: parseRequiredInteger(parsed.positionals[3], 'width'),
-      height: parseRequiredInteger(parsed.positionals[4], 'height'),
-    };
+    const needContext = planetArg === undefined || windowArgs.length === 0;
+    const context = needContext ? await fetchPlanetContext(api, resolveIssuerId(ctx)) : undefined;
+    const planetId = planetArg ?? context!.planetId;
+
+    let request: PlanetSceneParams;
+    if (windowArgs.length === 4) {
+      request = {
+        x: parseRequiredInteger(windowArgs[0], 'x'),
+        y: parseRequiredInteger(windowArgs[1], 'y'),
+        width: parseRequiredInteger(windowArgs[2], 'width'),
+        height: parseRequiredInteger(windowArgs[3], 'height'),
+      };
+    } else {
+      const planet = await api.fetchPlanet(planetId);
+      request = centeredWindow(context?.mecha, DEFAULT_SCENE_SIZE, planet.map_width, planet.map_height);
+    }
     for (const key of ['near_x', 'near_y', 'radius'] as const) {
       if (parsed.options[key] !== undefined) request[key] = parseRequiredInteger(String(parsed.options[key]), key);
     }
-    return JSON.stringify(await api.fetchPlanetScene(planetId, request), null, 2);
+    const scene = await api.fetchPlanetScene(planetId, request);
+    if (wantsJson) {
+      return JSON.stringify(scene, null, 2);
+    }
+    const limitRaw = getStringOption(parsed, 'limit');
+    const limit = limitRaw === 'all' ? Number.POSITIVE_INFINITY : (parseIntegerArg(limitRaw) ?? SCENE_SECTION_LIMIT);
+    const summary = context === undefined ? await api.fetchSummary() : undefined;
+    const mechas = context?.mecha ? [context.mecha] : summary?.players?.[api.getAuth().playerId]?.mechas;
+    return fmtScene(scene, {
+      limit,
+      operators: operatorMap(mechas),
+      context,
+    });
   } catch (e) {
     return fmtError(String(e));
   }
 }
 
-export async function cmdInspect(args: string[], { api }: CommandContext): Promise<string> {
-  const parsed = parseArgs(args);
-  const planetId = parsed.positionals[0] ?? DEFAULT_PLANET_ID;
-  const entityKind = parsed.positionals[1];
-  const entityId = parsed.positionals[2];
+const INSPECT_KINDS = new Set(['building', 'unit', 'resource', 'sector']);
 
-  if (!entityKind || !entityId) {
-    return fmtError('用法: inspect <planet_id> <building|unit|resource|sector> <entity_id>');
+/** 由实体 id 前缀推断 inspect 类型；认不出返回 undefined。 */
+export function inferInspectKind(entityId: string): 'building' | 'unit' | 'resource' | 'sector' | undefined {
+  if (entityId.startsWith('b-')) return 'building';
+  if (entityId.startsWith('u-')) return 'unit';
+  if (entityId.startsWith('res-') || entityId.includes('-res-')) return 'resource';
+  if (/^\d+:\d+$/.test(entityId)) return 'sector';
+  return undefined;
+}
+
+/**
+ * `inspect [planet] <entity_id>` / `inspect [planet] <kind> <entity_id>`。
+ *
+ * - 省略 planet：同 `scene`（我的机甲所在星球 → 焦点星球）；
+ * - 省略 kind：按 id 前缀推断（b- 建筑、u- 单位、res- 资源、`x:y` 扇区）；
+ * - 默认输出人话摘要，`--json` 输出原始 JSON。
+ */
+export async function cmdInspect(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
+  const parsed = parseArgs(args);
+  const wantsJson = parsed.options.json === true;
+  const positionals = parsed.positionals;
+  if (hasFlag(parsed, 'help')) {
+    return '用法: inspect [planet] [building|unit|resource|sector] <entity_id> [--json]';
+  }
+  if (positionals.length === 0) {
+    return fmtError('用法: inspect [planet] [building|unit|resource|sector] <entity_id> [--json]');
+  }
+
+  let planetArg: string | undefined;
+  let kindArg: string | undefined;
+  let entityId: string;
+  if (positionals.length >= 3) {
+    [planetArg, kindArg, entityId] = positionals;
+  } else if (positionals.length === 2) {
+    const [first, second] = positionals;
+    if (INSPECT_KINDS.has(first.toLowerCase())) {
+      kindArg = first.toLowerCase();
+      entityId = second;
+    } else {
+      planetArg = first;
+      entityId = second;
+    }
+  } else {
+    entityId = positionals[0];
+  }
+  const kind = (kindArg?.toLowerCase() ?? inferInspectKind(entityId)) as
+    | 'building' | 'unit' | 'resource' | 'sector' | undefined;
+  if (!kind) {
+    return fmtError(`无法从 id 推断类型：${entityId}（显式写 inspect <planet> <building|unit|resource|sector> <id>）`);
+  }
+  if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
+    return fmtError(`planet 参数看起来不是星球 id：${planetArg}（用法: inspect [planet] [kind] <id>）`);
   }
 
   try {
-    return JSON.stringify(await api.fetchPlanetInspect(planetId, {
-      entityKind: entityKind as 'building' | 'unit' | 'resource' | 'sector',
-      entityId: entityKind === 'sector' ? undefined : entityId,
-      sectorId: entityKind === 'sector' ? entityId : undefined,
-    }), null, 2);
+    let context: PlanetContext | undefined;
+    if (planetArg === undefined) {
+      context = await fetchPlanetContext(api, resolveIssuerId(ctx));
+    }
+    const planetId = planetArg ?? context!.planetId;
+    const view = await api.fetchPlanetInspect(planetId, {
+      entityKind: kind,
+      entityId: kind === 'sector' ? undefined : entityId,
+      sectorId: kind === 'sector' ? entityId : undefined,
+    });
+    if (wantsJson) {
+      return JSON.stringify(view, null, 2);
+    }
+    const mechas = context?.mecha
+      ? [context.mecha]
+      : (await api.fetchSummary()).players?.[api.getAuth().playerId]?.mechas;
+    return fmtInspect(view, { operator: operatorMap(mechas).get(entityId) });
+  } catch (e) {
+    return fmtError(String(e));
+  }
+}
+
+export async function cmdNetworks(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
+  const parsed = parseArgs(args);
+  const wantsJson = parsed.options.json === true;
+  const planetArg = parsed.positionals[0];
+  if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
+    return fmtError(`planet 参数看起来不是星球 id：${planetArg}（用法: networks [planet] [--json]）`);
+  }
+  try {
+    const context = planetArg === undefined ? await fetchPlanetContext(api, resolveIssuerId(ctx)) : undefined;
+    const planetId = planetArg ?? context!.planetId;
+    const view = await api.fetchPlanetNetworks(planetId);
+    return wantsJson ? JSON.stringify(view, null, 2) : fmtNetworks(view, context);
   } catch (e) {
     return fmtError(String(e));
   }

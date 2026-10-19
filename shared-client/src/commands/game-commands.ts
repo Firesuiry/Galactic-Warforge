@@ -74,6 +74,7 @@ import {
   cmdRollback,
   cmdSave,
 } from './debug.js';
+import { cmdCatalog } from './catalog.js';
 import { cmdCheckpoint } from './checkpoint.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
@@ -98,6 +99,7 @@ import {
   cmdTheaters,
   cmdWarIndustry,
   cmdFog,
+  cmdNetworks,
 } from './query.js';
 
 /** 命令执行上下文：每次执行都显式携带已鉴权的 API 客户端，不依赖模块级单例。 */
@@ -132,6 +134,7 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   summary: { handler: cmdSummary },
   stats: { handler: cmdStats },
   briefing: { handler: cmdBriefing },
+  catalog: { handler: cmdCatalog, completions: ['buildings', 'building', 'recipes', 'items', 'techs', 'units'] },
   catalog_commands: { handler: cmdCatalogCommands },
   galaxy: { handler: cmdGalaxy },
   system: { handler: cmdSystem },
@@ -144,6 +147,7 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   theaters: { handler: cmdTheaters },
   scene: { handler: cmdScene },
   inspect: { handler: cmdInspect },
+  networks: { handler: cmdNetworks },
   fleet_status: { handler: cmdFleetStatus },
   fog: { handler: cmdFog },
   scan_galaxy: { handler: cmdScanGalaxy },
@@ -212,6 +216,7 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   audit: { handler: cmdAudit },
   event_snapshot: { handler: cmdEventSnapshot },
   alert_snapshot: { handler: cmdAlertSnapshot },
+  alerts: { handler: cmdAlertSnapshot },
   save: { handler: cmdSave },
   checkpoint: { handler: cmdCheckpoint, completions: ['list', 'save', 'load'] },
   replay: { handler: cmdReplay },
