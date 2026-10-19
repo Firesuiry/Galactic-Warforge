@@ -3,6 +3,7 @@ package gamecore
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	"siliconworld/internal/model"
 )
@@ -70,8 +71,16 @@ func itemAmountTotal(items []model.ItemAmount) int {
 
 func settleMechas(ws *model.WorldState) []*model.GameEvent {
 	events := settleExecutorRespawns(ws)
-	for _, unit := range ws.Units {
-		if unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
+	// 按 unit ID 排序遍历：mecha_state_changed 事件顺序随 map 迭代漂移会
+	// 影响回放/快照对比的确定性（与 settleMechaCharging 对齐）。
+	ids := make([]string, 0, len(ws.Units))
+	for id := range ws.Units {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		unit := ws.Units[id]
+		if unit == nil || unit.Type != model.UnitTypeExecutor || unit.HP <= 0 {
 			continue
 		}
 		beforeMecha := model.MechaState{}
