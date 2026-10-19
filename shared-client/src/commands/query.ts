@@ -189,6 +189,11 @@ export async function cmdTheaters(_args: string[], { api }: CommandContext): Pro
   }
 }
 
+/** fetch 抛的是 Error，直接 String(e) 会得到「Error: Error: …」；取 message。 */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * `scene [planet] [x y w h] [--near_x X --near_y Y --radius R] [--json] [--limit N|all]`
  *
@@ -244,6 +249,9 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
     if (wantsJson) {
       return JSON.stringify(scene, null, 2);
     }
+    if (!scene.discovered) {
+      return fmtError(`星球 ${planetId} 尚未发现`);
+    }
     const limitRaw = getStringOption(parsed, 'limit');
     const limit = limitRaw === 'all' ? Number.POSITIVE_INFINITY : (parseIntegerArg(limitRaw) ?? SCENE_SECTION_LIMIT);
     const summary = context === undefined ? await api.fetchSummary() : undefined;
@@ -254,7 +262,7 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
       context,
     });
   } catch (e) {
-    return fmtError(String(e));
+    return fmtError(errorMessage(e));
   }
 }
 
@@ -328,12 +336,15 @@ export async function cmdInspect(args: string[], ctx: CommandContext): Promise<s
     if (wantsJson) {
       return JSON.stringify(view, null, 2);
     }
+    if (!view.discovered) {
+      return fmtError(`星球 ${planetId} 尚未发现`);
+    }
     const mechas = context?.mecha
       ? [context.mecha]
       : (await api.fetchSummary()).players?.[api.getAuth().playerId]?.mechas;
     return fmtInspect(view, { operator: operatorMap(mechas).get(entityId) });
   } catch (e) {
-    return fmtError(String(e));
+    return fmtError(errorMessage(e));
   }
 }
 
@@ -351,7 +362,7 @@ export async function cmdNetworks(args: string[], ctx: CommandContext): Promise<
     const view = await api.fetchPlanetNetworks(planetId);
     return wantsJson ? JSON.stringify(view, null, 2) : fmtNetworks(view, context);
   } catch (e) {
-    return fmtError(String(e));
+    return fmtError(errorMessage(e));
   }
 }
 

@@ -49,7 +49,9 @@ export async function cmdCatalog(args: string[], ctx: CommandContext): Promise<s
           return fmtError('用法: catalog building <id>');
         }
         const completed = await completedTechIds(ctx);
-        return fmtCatalogBuilding(catalog, keyword, completed);
+        const found = (catalog.buildings ?? []).some((building) => building.id === keyword);
+        const out = fmtCatalogBuilding(catalog, keyword, completed);
+        return found ? out : fmtError(out);
       }
       case 'recipes': {
         const completed = await completedTechIds(ctx);
