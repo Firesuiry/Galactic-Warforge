@@ -515,6 +515,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /world/planets/{planet_id}/inspect?entity_kind=&entity_id=|sector_id=`**：`entity_kind = building|unit|resource|sector`。返回 `planet_id` / `discovered` / `entity_kind` / `entity_id` / `title` 及对应 `building` / `unit` / `resource`。建筑与单位按可见性校验，不可见 404；资源在 runtime 未加载时回退静态地图。
 - 目标 `entity_kind=building` 是采集建筑（采矿机 / 水泵 / 抽油机等）时，另返回 `mining_item`：这台建筑**唯一**开采的矿种（目录物品 ID，见 §5.1 的 `mining_item`）。非采集建筑为空。
+- 目标 `entity_kind=building` 是分拣器时，另返回 `sorter_endpoints: {pick, drop}`（背面取货端 / 正面放货端）。每端：连上时给 `building_id` / `building_type` / `building_name` / `position` / `direction`（取货端 = 背面、放货端 = 正面）/ `steps`；没连上时给 `reason`，若扫描轴上有建筑（挡住的那个）再给 `blocker_id` / `blocker_type` / `blocker_name` / `blocker_position` / `steps`。`reason` 取值：`no_building`（3 格内没有建筑）、`not_owned`（不是自己的）、`blocked_by_sorter`（被分拣器挡住）、`splitter`（分流器不能当端点）、`conveyor_inactive`（传送带未运行）、`conveyor_rejects_side`（传送带不接受这一侧插入）、`no_port`（建筑没有对应方向的端口：取货要输出口、放货要输入口）、`no_storage`（建筑没有存储）。判定与真实搬运共用同一份实现（`sorterProbeEndpoint`），不会出现「诊断说连上、实际不搬」。最近一次实际搬运仍看 `building.sorter.last_transfer`。
 - `runtime.state = no_power` 时 `state_reason` 为 `under_power`（已接网但分不到电）或 `power_no_connector` / `power_no_provider` / `power_out_of_range` / `power_capacity_full`；燃料型发电机为 `no_fuel`。
 - `runtime.state = running` 时 `state_reason` 也可为 `output_blocked`：生产建筑的整批产出在**输出缓冲与产出预留段**两处都放不下（成品不再走输入缓冲，见 §5.1 的两条通道），本 tick 的批次保留待重试（建筑本身仍在 `running`，只是产物出不去）。此时 `production_alerts` 同时报 `output_blocked`；腾出空间（取出成品 / 接上传送带）后下一 tick 自动恢复，`state_reason` 清空（试玩 1014 层 04 P1）。**采集建筑**的 `output_blocked` 判据是「输出缓冲满且主库存也满」（它的主库存就是出货缓冲）。
 - 射线接收站逐 tick 电力结算不在 inspect 中暴露，用 summary / stats / networks 验证。
@@ -772,5 +773,6 @@ GameEvent：
 - **焦点行星与全局默认行星**：`players[pid].focus_planet_id` 决定该玩家命令的默认落点；`active_planet_id` 只是冷启动兜底。所有已加载行星都在模拟。
 - **同一事实源**：summary 的 `resources.energy`、stats 的 `energy_stats`、`/networks` 共享 `PowerSettlementSnapshot`；产出统计（含采集入库）共享 `ProductionSettlementSnapshot`。不同接口之间不会出现中途值分叉。
 - **异步命令**：`accepted` ≠ 成功；以 `command_result` 为准，建造再看 `entity_created` 与 `building_state_changed`。
+- **分拣器建造回执预判**：`build` 分拣器成功排队时，回执追加当前两端的预判（例：「；取货端：b-55 电弧熔炉（西 1 格），放货端：未连上——东侧 1 格是分拣器 b-181，挡住了」；两端都连上时只写「取货端：b-55 电弧熔炉，放货端：b-105 补给站」）。预判按下单时的世界状态计算，**同玩家排队中 / 建造中的施工任务也计入**（写成「电弧熔炉（施工中，任务 c-7）」）。预判不模拟供电：假定排队中的建筑落成后处于运行状态。
 - **可见性**：单位与敌方小队受战争迷雾约束；inspect 不可见返回 404；scene 未探索格不下发地形高度与资源。
 - **持久化一致性**：存档、回放、回滚都保留 space runtime、战斗 runtime、机甲任务、配送器、分馏随机状态、结算报告；回放 `digest` 用于校验一致性。

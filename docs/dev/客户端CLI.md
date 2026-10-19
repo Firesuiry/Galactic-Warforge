@@ -122,6 +122,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 - **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
   - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
   - 默认输出人话摘要：`state[:state_reason]`、坐标/占地、HP、配方与剩余 tick、主库存/输出缓冲、`production_monitor.active_alerts`（如 `input_shortage,throughput_drop`）；单位给操作者、能量/护盾、`mecha.job`（空闲为 `idle`）、弹药；资源给矿种/剩余量/产率。
+  - 分拣器另加一行 `sorter`：两端连到了谁 + 最近一次搬运，例 `取←西 b-55 电弧熔炉(1格) | 放→东 未连上：被分拣器 b-181 挡住   last=t1234 iron_ore b-55→b-105`。没连上的原因：`3格内没有建筑` / `不是你的` / `被分拣器 … 挡住` / `被分流器 … 挡住` / `传送带 … 未运行` / `传送带 … 不接受这一侧插入` / `没有输出口|输入口` / `没有存储`。
   - `--json` 输出原始响应。
 - **catalog**：`catalog <buildings [关键词]|building <id>|recipes [--handcraft] [--building <type>] [关键词]|items [关键词]|techs [--available|--done]|units>`，一次读 `GET /catalog`。
   - `buildings`：id / 名称 / 占地 / 造价 / `unlock_tech` / 是否已解锁（对照 `summary` 已完成科技；`unlock_tech` 是「任一完成即可」，空 = 无门槛）。
