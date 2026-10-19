@@ -2,7 +2,7 @@ import chalk from 'chalk';
 
 import type { ApiClient } from '../api.js';
 import { NO_MECHA_HINT, selectMyMecha } from '../mecha.js';
-import type { ConstructionTaskView, MechaJobView, MechaView } from '../types.js';
+import type { Building, ConstructionTaskView, MechaJobView, MechaView } from '../types.js';
 import { getStringOption, parseArgs } from './args.js';
 import { fmtError, fmtOk } from './format.js';
 import { resolveIssuerId, type CommandContext } from './game-commands.js';
@@ -172,6 +172,8 @@ async function waitBuild(api: ApiClient, issuerId: string, options: WaitOptions 
   if (!mecha) {
     return fmtError(NO_MECHA_HINT);
   }
+  // 注意：summary 的 construction_pending 不是同步的——刚下完单时仍可能是 0，
+  // 所以不拿它做「队列为空」的短路，一律以 planet_runtime 的 construction_tasks 为准。
   const mechaId = mecha.unit_id;
   const planetId = mecha.planet_id;
   const now = options?.now ?? Date.now;
@@ -202,6 +204,26 @@ async function waitBuild(api: ApiClient, issuerId: string, options: WaitOptions 
     }
     return { pending: `还有 ${tasks.length} 个施工任务：${taskListText(tasks)}` };
   });
+}
+
+/**
+ * `GET /world/planets/<id>/inspect` 对不存在的实体回 404（apiFetch 抛 Error）。
+ * 等待条件里「建筑不存在」是提前返回，不是异常，所以这里把它折叠成 undefined。
+ */
+async function inspectBuilding(
+  api: ApiClient,
+  planetId: string,
+  buildingId: string,
+): Promise<Building | undefined> {
+  try {
+    const inspect = await api.fetchPlanetInspect(planetId, { entityKind: 'building', entityId: buildingId });
+    return inspect.building;
+  } catch (error) {
+    if (error instanceof Error && /not found/i.test(error.message)) {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 function itemCount(inventory: Record<string, number> | undefined, itemId: string): number {
@@ -239,15 +261,15 @@ async function waitItem(
 
   const context = await fetchPlanetContext(api, issuerId);
   return runWait(api, options, timeout, async () => {
-    const inspect = await api.fetchPlanetInspect(context.planetId, { entityKind: 'building', entityId: buildingId });
-    if (!inspect.building) {
+    const building = await inspectBuilding(api, context.planetId, buildingId);
+    if (!building) {
       return {
         stuck: `建筑 ${buildingId} 不在 ${context.planetId}`,
         stuckReason: '建筑不存在',
         pending: '',
       };
     }
-    const storage = inspect.building.storage;
+    const storage = building.storage;
     const count = itemCount(storage?.inventory, itemId) + itemCount(storage?.output_buffer, itemId);
     if (count >= quantity) {
       return { done: `建筑 ${buildingId} ${itemId} ≥ ${quantity}（当前 ${count}）`, pending: '' };
@@ -265,20 +287,34 @@ async function waitRunning(
 ): Promise<string> {
   const context = await fetchPlanetContext(api, issuerId);
   return runWait(api, options, timeout, async () => {
-    const inspect = await api.fetchPlanetInspect(context.planetId, { entityKind: 'building', entityId: buildingId });
-    if (!inspect.building) {
+    const building = await inspectBuilding(api, context.planetId, buildingId);
+    if (!building) {
       return {
         stuck: `建筑 ${buildingId} 不在 ${context.planetId}`,
         stuckReason: '建筑不存在',
         pending: '',
       };
     }
-    const runtime = inspect.building.runtime;
+    const runtime = building.runtime;
     if (runtime.state === 'running') {
       return { done: `建筑 ${buildingId} 进入 running`, pending: '' };
     }
-    const reason = runtime.state_reason ? `，reason=${runtime.state_reason}` : '';
-    return { pending: `建筑 ${buildingId} state=${runtime.state}${reason}` };
+    const parts = [`state=${runtime.state}`];
+    if (runtime.state_reason) {
+      parts.push(`reason=${runtime.state_reason}`);
+    }
+    const recipe = building.production?.recipe_id;
+    if (recipe) {
+      parts.push(`recipe=${recipe}`);
+    }
+    const alerts = building.production_monitor?.active_alerts;
+    if (alerts) {
+      const active = Object.entries(alerts).filter(([, on]) => on).map(([name]) => name);
+      if (active.length > 0) {
+        parts.push(`alerts=${active.join(',')}`);
+      }
+    }
+    return { pending: `建筑 ${buildingId} ${parts.join('，')}` };
   });
 }
 

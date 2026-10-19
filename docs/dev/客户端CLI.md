@@ -77,6 +77,24 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 - 查询命令（`briefing` / `scene` / `mecha list` 等）照常输出，`--json` 等已有选项不变。
 - `quit` / `exit` / `clear` 在非交互模式不可用（报错计入失败）。
 
+### 等待条件（`wait`）
+
+代理不必空转轮询，也不必用全局快进（多代理时 `advance` 会让所有人的时间一起跳）。`wait` 每秒查一次，默认超时 120 秒（`--timeout <秒>` 覆盖）：
+
+| 条件 | 等到什么 |
+| --- | --- |
+| `wait ticks <n>` | 游戏 tick 前进 n（`/health` 的 tick，按服务端时钟算） |
+| `wait job` | 我的机甲（`mechas.find(m => m.operator === issuer_id)`）的作业结束；当前没有作业立即返回 |
+| `wait build` | 我的机甲施工队列清空（`planet_runtime.construction_tasks` 按 `mecha_id` 过滤）；**剩下的任务全是 `pending` + `wait_reason=insufficient_materials`，或 10 秒内签名毫无变化时提前返回**，逐条列出任务、位置和原因 |
+| `wait item <物品ID> <数量>` | 我的机甲背包里该物品 ≥ 数量 |
+| `wait item <物品ID> <数量> --in <建筑ID>` | 建筑库存（`inventory` + `output_buffer`）≥ 数量；建筑不存在立即提前返回 |
+| `wait running <建筑ID>` | 建筑 `runtime.state == running`；超时消息带当前 `state`、`state_reason`、配方与仍成立的产线告警 |
+
+- 成功：`✓ 等到了：<描述>（用了 N tick / M 秒）`，退出码 0。
+- 超时或提前返回：`✗ 超时（120s，tick 前进 N）：<当前状况>` / `✗ 提前返回（<原因>，tick 前进 N）：<任务列表>`，`scripts/sw` 退出码非 0（`once.ts` 把 `✗ ` 前缀与本地 `Error:` 一样计为失败）。
+- 施工队列刚下完单时 `summary` 的 `construction_pending` 可能还是 0，`wait build` 不看它，一律以 `planet_runtime` 为准。
+- 示例：`scripts/sw craft_item gear 3 && scripts/sw wait job`；`scripts/sw wait item circuit_board 4 --in b-79`；`scripts/sw wait running b-79 --timeout 60`。
+
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `SW_SERVER` | `http://127.0.0.1:18080` | 游戏服务端 |

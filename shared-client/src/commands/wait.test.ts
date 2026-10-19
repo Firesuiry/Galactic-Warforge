@@ -220,11 +220,28 @@ describe('wait item', () => {
     assert.match(out, /✓ 等到了：建筑 b-1 gear ≥ 3（当前 3）/);
   });
 
-  it('--in 建筑不存在时提前返回', async () => {
+  it('--in 建筑不存在（404）时提前返回', async () => {
     const clock = fakeClock();
     const { api } = fakeApi({ inspects: [{ building: undefined }] });
     const out = stripAnsi(await cmdWait(['item', 'gear', '3', '--in', 'b-404'], ctx(api, clock)));
     assert.match(out, /^✗ 提前返回（建筑不存在，tick 前进 0）：建筑 b-404 不在 planet-1-1/);
+  });
+
+  it('--in 服务端 404 也按建筑不存在提前返回', async () => {
+    const clock = fakeClock();
+    const { api } = fakeApi();
+    (api as unknown as { fetchPlanetInspect: () => Promise<unknown> }).fetchPlanetInspect =
+      async () => { throw new Error('target not found'); };
+    const out = stripAnsi(await cmdWait(['item', 'gear', '3', '--in', 'b-404'], ctx(api, clock)));
+    assert.match(out, /^✗ 提前返回（建筑不存在，tick 前进 0）：建筑 b-404 不在 planet-1-1/);
+  });
+
+  it('其他接口错误照常抛出，不误判为建筑不存在', async () => {
+    const clock = fakeClock();
+    const { api } = fakeApi();
+    (api as unknown as { fetchPlanetInspect: () => Promise<unknown> }).fetchPlanetInspect =
+      async () => { throw new Error('boom'); };
+    await assert.rejects(() => cmdWait(['item', 'gear', '3', '--in', 'b-1'], ctx(api, clock)), /boom/);
   });
 });
 
@@ -241,9 +258,13 @@ describe('wait running', () => {
 
   it('超时消息给出当前 state 与原因', async () => {
     const clock = fakeClock();
-    const { api } = fakeApi({ inspects: [{ building: { runtime: { state: 'no_power', state_reason: 'out_of_range' } } }] });
+    const { api } = fakeApi({ inspects: [{ building: {
+      runtime: { state: 'no_power', state_reason: 'out_of_range' },
+      production: { recipe_id: 'gear' },
+      production_monitor: { active_alerts: { input_shortage: true, throughput_drop: false } },
+    } }] });
     const out = stripAnsi(await cmdWait(['running', 'b-1', '--timeout', '2'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（2s，tick 前进 0）：建筑 b-1 state=no_power，reason=out_of_range/);
+    assert.match(out, /^✗ 超时（2s，tick 前进 0）：建筑 b-1 state=no_power，reason=out_of_range，recipe=gear，alerts=input_shortage/);
   });
 });
 
