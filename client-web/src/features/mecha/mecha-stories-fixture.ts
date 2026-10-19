@@ -1,4 +1,4 @@
-import type { CatalogView, PlayerState, StateSummary, Unit } from '@shared/types';
+import type { CatalogView, PlayerState, Unit } from '@shared/types';
 
 import type { MechaView } from './model';
 
@@ -135,24 +135,6 @@ export const storyPlayer: PlayerState = {
   is_alive: true,
   resources: { energy: 260 },
   tech: { player_id: 'p1', completed_techs: ['dyson_sphere_program'] },
-};
-
-/** summary：总览卡片与 chip 用（4 台机甲，覆盖 我 / agent / 空闲 / 阵亡）。 */
-export const storySummary: StateSummary = {
-  tick: 128,
-  active_planet_id: 'planet-1-1',
-  surface: { topology: 'cube_sphere', face_size: 8 },
-  map_width: 24,
-  map_height: 16,
-  players: {
-    p1: {
-      player_id: 'p1',
-      is_alive: true,
-      resources: { energy: 260 },
-      mechas: allMechas,
-      tech: storyPlayer.tech,
-    },
-  },
 };
 
 export const planetNames: Record<string, string> = {
