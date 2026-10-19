@@ -54,18 +54,6 @@ func issuerMecha(ws *model.WorldState, player *model.PlayerState, issuerID strin
 	return mechaContext{Record: record, Unit: unit, Player: player, World: ws}, nil
 }
 
-// optionalIssuerMecha 在命令只在「本机甲背包」参与时才需要机甲（如装卸 source=storage）。
-func optionalIssuerMecha(ws *model.WorldState, player *model.PlayerState, issuerID string) (mechaContext, *model.CommandResult) {
-	if player == nil {
-		return mechaContext{}, &model.CommandResult{Status: model.StatusFailed, Code: model.CodeExecutorUnavailable, Message: "未找到玩家"}
-	}
-	record := player.MechaByOperator(issuerID)
-	if record == nil {
-		return mechaContext{}, nil
-	}
-	return issuerMecha(ws, player, issuerID)
-}
-
 // mechaRecordForUnit 返回某台机甲单位的档案（不存在时 nil）。
 func mechaRecordForUnit(ws *model.WorldState, unit *model.Unit) *model.MechaRecord {
 	if ws == nil || unit == nil {
@@ -78,42 +66,17 @@ func mechaRecordForUnit(ws *model.WorldState, unit *model.Unit) *model.MechaReco
 	return player.MechaByUnitID(unit.ID)
 }
 
-// taskMecha 返回施工任务所属机甲的档案：优先 task.MechaID，老数据回落到玩家
-// 第一台机甲（确定性顺序）。
+// taskMecha 返回施工任务所属机甲的档案（task.MechaID 在排产时写入）。
+// 缺 MechaID 的任务不会去借别的机甲的料：返回 nil，调用方按缺料等待处理。
 func taskMecha(ws *model.WorldState, task *model.ConstructionTask) *model.MechaRecord {
-	if ws == nil || task == nil {
+	if ws == nil || task == nil || task.MechaID == "" {
 		return nil
 	}
 	player := ws.Players[task.PlayerID]
 	if player == nil {
 		return nil
 	}
-	if task.MechaID != "" {
-		return player.MechaByUnitID(task.MechaID)
-	}
-	for _, mecha := range player.SortedMechas() {
-		return mecha
-	}
-	return nil
-}
-
-// mechaSlots 返回该档案的背包格数上限（同玩家所有机甲相同）。
-func mechaSlots(record *model.MechaRecord, player *model.PlayerState) int {
-	if record == nil {
-		return 0
-	}
-	return model.MechaInventorySlots(player)
-}
-
-// mechaInventoryOf 返回机甲的背包（不存在时 nil）。
-func mechaInventoryOf(player *model.PlayerState, unitID string) model.ItemInventory {
-	if player == nil {
-		return nil
-	}
-	if record := player.MechaByUnitID(unitID); record != nil {
-		return record.Inventory
-	}
-	return nil
+	return player.MechaByUnitID(task.MechaID)
 }
 
 // operatorDenied 判断一台机甲是否被别的发令者绑定（空闲机甲谁都能动）。

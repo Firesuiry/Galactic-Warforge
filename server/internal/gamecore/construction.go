@@ -489,7 +489,7 @@ func (gc *GameCore) settleConstructionQueue(ws *model.WorldState) []*model.GameE
 
 		record := taskMecha(ws, task)
 		if record == nil {
-			// 机甲档案已不存在（旧档/被移除）：任务保持排队，不跨机甲借料。
+			// 任务所属机甲档案缺失（数据损坏/被移除）：任务保持排队，不跨机甲借料。
 			noteConstructionWait(ws, task, "insufficient_materials")
 			continue
 		}
