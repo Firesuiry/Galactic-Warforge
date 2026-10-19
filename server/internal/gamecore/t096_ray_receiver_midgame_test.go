@@ -19,8 +19,12 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 	if player == nil {
 		t.Fatal("expected player p1")
 	}
-	if exec := player.ExecutorForPlanet(ws.PlanetID); exec != nil {
-		exec.OperateRange = 100
+	exec := starterMecha(ws, player.PlayerID)
+	if exec == nil {
+		t.Fatal("expected p1 mecha")
+	}
+	if unit := ws.Units[exec.UnitID]; unit != nil {
+		unit.Position = model.Position{X: 6, Y: 6}
 	}
 
 	wind := newBuilding("wind-t096", model.BuildingTypeWindTurbine, "p1", model.Position{X: 5, Y: 6})
@@ -54,7 +58,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 
 	ql := query.New(visibility.New(), core.Maps(), core.Discovery())
 
-	baselineSummary := ql.Summary(ws, "p1", core.Victory())
+	baselineSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	baselineStats := ql.Stats(ws, "p1")
 	baselineNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {
@@ -132,7 +136,7 @@ func TestT096OfficialMidgameRayReceiverPowerUsesSingleAuthoritativeTick(t *testi
 
 	core.processTick()
 
-	postSummary := ql.Summary(ws, "p1", core.Victory())
+	postSummary := ql.Summary(ws, "p1", core.Victory(), core.Worlds())
 	postStats := ql.Stats(ws, "p1")
 	postNetworks, ok := ql.PlanetNetworks(ws, "p1", ws.PlanetID, ws.PlanetID)
 	if !ok {

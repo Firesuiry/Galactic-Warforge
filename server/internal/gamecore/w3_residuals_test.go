@@ -284,7 +284,7 @@ func TestGaussTurretFallsBackToTitaniumAmmo(t *testing.T) {
 func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	ws, home, _ := distributorTestWorld(t)
 	player := ws.Players["p1"]
-	player.Inventory[model.ItemLogisticsBot] = 2
+	starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] = 2
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
 
@@ -292,7 +292,7 @@ func TestInstallLogisticsBotRequiresResearch(t *testing.T) {
 	if res.Status != model.StatusFailed || res.Code != model.CodeValidationFailed {
 		t.Fatalf("install without research must fail validation, got %+v", res)
 	}
-	if len(ws.LogisticsBots) != 0 || player.Inventory[model.ItemLogisticsBot] != 2 {
+	if len(ws.LogisticsBots) != 0 || starterMecha(ws, player.PlayerID).Inventory[model.ItemLogisticsBot] != 2 {
 		t.Fatalf("rejected install must not consume items or register bots: %+v", ws.LogisticsBots)
 	}
 
@@ -351,7 +351,7 @@ func TestLogisticsBotMaxRangeFlightInstallsAndReloads(t *testing.T) {
 	// 一趟 2×79 的配送要预付 158 能量，默认 100 不够（充满到容量 1000）。
 	home.Distributor.Energy = home.Distributor.EnergyCapacity
 	distributorTestLoad(t, ws, home, model.ItemIronOre, 30)
-	ws.Players["p1"].Inventory[model.ItemLogisticsBot] = 1
+	starterMecha(ws, "p1").Inventory[model.ItemLogisticsBot] = 1
 	core := &GameCore{}
 	cmd := model.Command{Target: model.CommandTarget{EntityID: home.ID}, Payload: map[string]any{"quantity": 1}}
 	if res, _ := execCommand(core, model.CmdInstallLogisticsBot, ws, "p1", cmd); res.Code != model.CodeOK || len(ws.LogisticsBots) != 1 {
@@ -408,14 +408,14 @@ func TestDarkFogLootRevealsHiddenResearch(t *testing.T) {
 	placeBuilding(ws, lab)
 
 	// 击杀 hive：dark_fog_matrix 必掉，进入击杀者玩家背包。
-	looter := spawnLootKillerUnit(ws, "p1", model.Position{X: 2, Y: 2})
+	looter := spawnLootKillerMecha(ws, "p1", model.Position{X: 2, Y: 2})
 	looter.AttackTarget = "hive-research"
 	spawnLootTestForce(ws, "hive-research", model.EnemyForceTypeHive, 10, model.Position{X: 3, Y: 2})
 	settleUnitCombat(ws, nil)
 	if len(ws.EnemyForces.Forces) != 0 {
 		t.Fatalf("hive should be destroyed, remaining %+v", ws.EnemyForces.Forces)
 	}
-	looted := player.Inventory[model.ItemDarkFogMatrix]
+	looted := starterMecha(ws, player.PlayerID).Inventory[model.ItemDarkFogMatrix]
 	if looted < 1 {
 		t.Fatalf("dark_fog_matrix must reach killer inventory, got %d", looted)
 	}

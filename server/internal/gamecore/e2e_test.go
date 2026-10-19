@@ -28,7 +28,7 @@ func newE2ETestCoreWithFace(t *testing.T, faceSize int) *GameCore {
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -180,13 +180,13 @@ func TestE2E_ProductionChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if powerPos == nil {
-		executor := ws.Units[player.ExecutorForPlanet(ws.PlanetID).UnitID]
-		for _, candidate := range ws.SurfaceDisc(executor.Position, player.ExecutorForPlanet(ws.PlanetID).OperateRange) {
+		executor := ws.Units[starterMecha(ws, player.PlayerID).UnitID]
+		for _, candidate := range ws.SurfaceDisc(executor.Position, model.ExecutorOperateRange()) {
 			if !t103IsOpenBuildTile(ws, candidate) {
 				continue
 			}
 			neighbor, _ := findAdjacentOpenTile(ws, candidate)
-			if neighbor != nil && ws.SurfaceWithin(executor.Position, *neighbor, player.ExecutorForPlanet(ws.PlanetID).OperateRange) {
+			if neighbor != nil && ws.SurfaceWithin(executor.Position, *neighbor, model.ExecutorOperateRange()) {
 				p := candidate
 				pos = &p
 				powerPos = neighbor
@@ -378,7 +378,7 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 	grantAllItems(ws, "p1", 100)
 
 	player := ws.Players["p1"]
-	beforeInventory := player.Inventory.Clone()
+	beforeInventory := starterMecha(ws, player.PlayerID).Inventory.Clone()
 
 	pos, err := findOpenTile(ws, 2)
 	if err != nil {
@@ -417,12 +417,12 @@ func TestE2E_LogisticsStationConstructionFailureDoesNotSpendMaterialsOrLeakState
 		core.processTick()
 	}
 
-	if len(player.Inventory) != len(beforeInventory) {
+	if len(starterMecha(ws, player.PlayerID).Inventory) != len(beforeInventory) {
 		t.Fatalf("expected inventory unchanged after failed completion")
 	}
 	for itemID, qty := range beforeInventory {
-		if player.Inventory[itemID] != qty {
-			t.Fatalf("expected inventory for %s unchanged at %d, got %d", itemID, qty, player.Inventory[itemID])
+		if starterMecha(ws, player.PlayerID).Inventory[itemID] != qty {
+			t.Fatalf("expected inventory for %s unchanged at %d, got %d", itemID, qty, starterMecha(ws, player.PlayerID).Inventory[itemID])
 		}
 	}
 	for _, b := range ws.Buildings {
@@ -754,7 +754,7 @@ func findOpenTileSized(ws *model.WorldState, margin int, fp model.Footprint) (*m
 		if player == nil {
 			continue
 		}
-		execState := player.ExecutorForPlanet(ws.PlanetID)
+		execState := starterMecha(ws, player.PlayerID)
 		if execState == nil {
 			continue
 		}
@@ -762,7 +762,7 @@ func findOpenTileSized(ws *model.WorldState, margin int, fp model.Footprint) (*m
 		if execUnit == nil {
 			continue
 		}
-		if pos := findOpenTileNearLocked(ws, execUnit.Position, execState.OperateRange, margin, fp); pos != nil {
+		if pos := findOpenTileNearLocked(ws, execUnit.Position, model.ExecutorOperateRange(), margin, fp); pos != nil {
 			return pos, nil
 		}
 	}

@@ -52,3 +52,29 @@ func setStarterBackpack(ws *model.WorldState, playerID string, items model.ItemI
 	}
 	record.Inventory = items.Clone()
 }
+
+// registerMecha 在测试世界里登记一台机甲单位与它的档案（Operator = playerID），
+// 供手工构造机甲单位、但没有经过开局脚本登记档案的测试使用。返回档案。
+func registerMecha(ws *model.WorldState, playerID string, unit *model.Unit) *model.MechaRecord {
+	player := ws.Players[playerID]
+	if player == nil || unit == nil {
+		return nil
+	}
+	record := &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID, Operator: playerID}
+	player.EnsureMechas()[unit.ID] = record
+	return record
+}
+
+// mechaOnPlanet 返回玩家在某颗行星上的机甲档案（按 unit_id 排序取第一台）。
+func mechaOnPlanet(ws *model.WorldState, playerID, planetID string) *model.MechaRecord {
+	player := ws.Players[playerID]
+	if player == nil {
+		return nil
+	}
+	for _, record := range player.SortedMechas() {
+		if record.PlanetID == planetID {
+			return record
+		}
+	}
+	return nil
+}

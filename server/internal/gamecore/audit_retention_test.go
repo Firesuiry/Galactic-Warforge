@@ -25,7 +25,6 @@ func auditRetentionCore(t *testing.T, auditRetention int64) (*GameCore, *persist
 		Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
 		Server: config.ServerConfig{
 			Port:                   9999,
-			RateLimit:              100,
 			SnapshotIntervalTicks:  1,
 			SnapshotRetentionCount: 60,
 			SnapshotRetentionTicks: 30,
@@ -53,7 +52,7 @@ func enqueueTick(t *testing.T, core *GameCore, q *queue.CommandQueue, tick int) 
 	t.Helper()
 	ws := core.World()
 	ws.RLock()
-	exec := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID)
+	exec := starterMecha(ws, "p1")
 	execID := exec.UnitID
 	target := findMoveTarget(ws, ws.Units[execID].Position)
 	ws.RUnlock()

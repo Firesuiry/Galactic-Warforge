@@ -222,7 +222,7 @@ func TestTrafficMonitorCrossSurfaceBindingAndRealConstruction(t *testing.T) {
 	if trafficMonitorTarget(ws, m, source.ID) != source {
 		t.Fatal("cross-face adjacent belt rejected")
 	}
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	pos, _ := findTwoOpenTiles(core.world)
 	result, _ := execCommand(core, model.CmdBuild, core.world, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "traffic_monitor"}})
 	if result.Status != model.StatusExecuted {

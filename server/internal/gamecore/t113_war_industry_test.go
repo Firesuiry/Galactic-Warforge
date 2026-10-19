@@ -32,7 +32,7 @@ func TestT113QueueMilitaryProductionSupportsPlayerBlueprintDeploymentAndLineReto
 	attachBuilding(ws, power)
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{
 		model.ItemCircuitBoard:                 80,
 		model.ItemProcessor:                    80,
 		model.ItemTitaniumAlloy:                80,
@@ -214,7 +214,7 @@ func TestT113RefitUnitReturnsFleetAsTargetBlueprint(t *testing.T) {
 	attachBuilding(ws, power)
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{
 		model.ItemCircuitBoard:  80,
 		model.ItemProcessor:     80,
 		model.ItemTitaniumAlloy: 80,

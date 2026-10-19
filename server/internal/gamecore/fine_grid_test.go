@@ -23,7 +23,7 @@ func fineGridCore(t *testing.T) (*GameCore, *model.WorldState) {
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{MapSeed: "fine-grid", MaxTickRate: 10},
 		Players:     []config.PlayerConfig{{PlayerID: "p1", Key: "key1"}},
-		Server:      config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server:      config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -326,6 +326,8 @@ func TestFineGridMechaMineRangeMatchesBotThreshold(t *testing.T) {
 	}
 	ws.Units["u-1"] = unit
 	model.SyncMechaCapabilities(unit, ws.Players["p1"])
+	record := registerMecha(ws, "p1", unit)
+	mecha := mechaContext{Record: record, Unit: unit, Player: ws.Players["p1"], World: ws}
 	core := &GameCore{}
 
 	// 3 格（旧阈值 2 之外的"邻格"）必须被接受——这正是细分网格后 bot 的位置。
@@ -335,14 +337,14 @@ func TestFineGridMechaMineRangeMatchesBotThreshold(t *testing.T) {
 		Target:  model.CommandTarget{Layer: "planet", EntityID: "u-1"},
 		Payload: map[string]any{"resource_id": "r1", "quantity": 2},
 	}
-	if res, _ := core.execMineResource(ws, "p1", cmd, mineResourcePayload{ResourceID: "r1", Quantity: 2}); res.Status != model.StatusExecuted {
+	if res, _ := core.execMineResource(ws, "p1", cmd, mineResourcePayload{ResourceID: "r1", Quantity: 2}, mecha); res.Status != model.StatusExecuted {
 		t.Fatalf("mine at distance 3 rejected: %s %s", res.Code, res.Message)
 	}
 	unit.Mecha.Job = nil
 
 	// 7 格超出 ×3 后的判定半径，必须拒绝。
 	unit.Position = model.Position{X: 4, Y: 11}
-	if res, _ := core.execMineResource(ws, "p1", cmd, mineResourcePayload{ResourceID: "r1", Quantity: 2}); res.Code != model.CodeOutOfRange {
+	if res, _ := core.execMineResource(ws, "p1", cmd, mineResourcePayload{ResourceID: "r1", Quantity: 2}, mecha); res.Code != model.CodeOutOfRange {
 		t.Fatalf("mine at distance 7 not rejected: %s %s", res.Code, res.Message)
 	}
 }

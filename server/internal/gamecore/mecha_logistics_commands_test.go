@@ -20,9 +20,9 @@ func transferWithdrawWorld(t *testing.T, used int) (*GameCore, *model.WorldState
 	player := ws.Players["p1"]
 	model.SyncMechaCapabilities(unit, player)
 	slots := unit.Mecha.InventorySlots
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 	if used > 0 {
-		player.Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
+		starterMecha(ws, player.PlayerID).Inventory[model.ItemCoal] = used * model.ItemStackSize(model.ItemCoal)
 	}
 	return gc, ws, depot, player, slots
 }
@@ -49,20 +49,20 @@ func TestTransferItemToPlayerNeverExceedsInventoryCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 背包离满还差 3 格：请求 10 个（铁块 100 件/格，不到 1 格）只能取出 10 个。
-	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 3) * perSlot}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: (slots - 3) * perSlot}
 	res, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", withdrawCommand(depot.ID, model.ItemIronIngot, 10))
 	if res.Code != model.CodeOK {
 		t.Fatalf("partial withdraw: %s (%s)", res.Code, res.Message)
 	}
-	if player.Inventory[model.ItemIronIngot] != 10 || player.InventorySlotsUsed() != slots-2 {
-		t.Fatalf("withdraw must fill exactly the free slots: %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory[model.ItemIronIngot] != 10 || starterMecha(ws, player.PlayerID).Inventory.SlotsUsed() != slots-2 {
+		t.Fatalf("withdraw must fill exactly the free slots: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	if !strings.Contains(res.Message, "已取出 10 个") {
 		t.Fatalf("receipt must report the accepted amount: %q", res.Message)
 	}
 
 	// 背包已满格：拒绝并报占用，绝不超上限。
-	player.Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: slots * perSlot}
 	res, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", withdrawCommand(depot.ID, model.ItemIronIngot, 5))
 	if res.Code != model.CodeInsufficientResource || !strings.Contains(res.Message, "背包已满（已用") {
 		t.Fatalf("full bag must be reported separately: %s (%s)", res.Code, res.Message)
@@ -70,7 +70,7 @@ func TestTransferItemToPlayerNeverExceedsInventoryCapacity(t *testing.T) {
 	if !strings.Contains(res.Message, fmt.Sprintf("%d/%d 格", slots, slots)) {
 		t.Fatalf("full-bag message must show slot occupancy, got %q", res.Message)
 	}
-	if got := player.InventorySlotsUsed(); got > slots {
+	if got := starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(); got > slots {
 		t.Fatalf("withdraw pushed the bag over capacity: %d/%d", got, slots)
 	}
 	if got := depot.Storage.OutputQuantity(model.ItemIronIngot); got != 40 {
@@ -87,14 +87,14 @@ func TestTransferItemToPlayerClampsAfterCraftFilledTheBag(t *testing.T) {
 	perSlot := model.ItemStackSize(model.ItemCoal)
 	// 背包满格启动 1 批 gear 手搓：预留 1 个铁块占 1 格，腾出的是铁块那格；
 	// 产出齿轮（200 件/格，1 个也占 1 格）后正好回到满格。
-	player.Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 1}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCoal: (slots - 1) * perSlot, model.ItemIronIngot: 1}
 	craft := model.Command{Target: model.CommandTarget{EntityID: unit.ID}, Payload: map[string]any{"recipe_id": "gear", "quantity": 1}}
 	if res, _ := execCommand(gc, model.CmdCraftItem, ws, "p1", craft); res.Code != model.CodeOK {
 		t.Fatalf("craft start: %+v", res)
 	}
 	advancePersonalTicks(ws, 20)
-	if player.InventorySlotsUsed() != slots || player.Inventory[model.ItemGear] != 1 {
-		t.Fatalf("craft should fill the bag exactly: %v", player.Inventory)
+	if starterMecha(ws, player.PlayerID).Inventory.SlotsUsed() != slots || starterMecha(ws, player.PlayerID).Inventory[model.ItemGear] != 1 {
+		t.Fatalf("craft should fill the bag exactly: %v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 	if unit.Mecha.Job != nil {
 		t.Fatalf("single batch job should be done: %+v", unit.Mecha.Job)
@@ -106,7 +106,7 @@ func TestTransferItemToPlayerClampsAfterCraftFilledTheBag(t *testing.T) {
 	if res.Code != model.CodeInsufficientResource {
 		t.Fatalf("full bag withdraw: %s (%s)", res.Code, res.Message)
 	}
-	if player.InventorySlotsUsed() != slots {
-		t.Fatalf("bag must stay exactly at capacity, got %d/%d", player.InventorySlotsUsed(), slots)
+	if starterMecha(ws, player.PlayerID).Inventory.SlotsUsed() != slots {
+		t.Fatalf("bag must stay exactly at capacity, got %d/%d", starterMecha(ws, player.PlayerID).Inventory.SlotsUsed(), slots)
 	}
 }

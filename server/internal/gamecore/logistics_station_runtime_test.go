@@ -10,7 +10,7 @@ import (
 
 func stationRuntimeFixture() (*model.WorldState, *model.Building, *model.Building, *model.Building) {
 	ws := model.NewWorldState("station-runtime", 8)
-	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Resources: model.Resources{Energy: 100}, Inventory: model.ItemInventory{}}
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Resources: model.Resources{Energy: 100}}
 	// 细分网格：物流运输站 5×5（x3..7,y3..7），IO 是占地外圈。输入带贴西侧
 	// 外圈、方向朝东（指向占地）；输出带贴东侧外圈、方向朝东（背离占地）。
 	b := newLogisticsStationBuilding("station", model.Position{X: 3, Y: 3})
@@ -64,17 +64,17 @@ func TestStationBeltIOFiltersUsesSingleInventoryAndBackpressures(t *testing.T) {
 func TestStationTransferItemCannotBypassConfigurationAndCapacity(t *testing.T) {
 	ws, b, _, _ := stationRuntimeFixture()
 	gc := &GameCore{}
-	ws.Players["p1"].Inventory[model.ItemIronOre] = 250
-	ws.Players["p1"].Inventory[model.ItemCopperOre] = 5
+	starterMecha(ws, "p1").Inventory[model.ItemIronOre] = 250
+	starterMecha(ws, "p1").Inventory[model.ItemCopperOre] = 5
 	command := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemCopperOre, "quantity": 5}}
 	result, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", command)
-	if result.Status != model.StatusFailed || ws.Players["p1"].Inventory[model.ItemCopperOre] != 5 {
+	if result.Status != model.StatusFailed || starterMecha(ws, "p1").Inventory[model.ItemCopperOre] != 5 {
 		t.Fatal("unconfigured station item accepted")
 	}
 	command.Payload["item_id"] = model.ItemIronOre
 	command.Payload["quantity"] = 250
 	result, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", command)
-	if result.Status != model.StatusExecuted || b.LogisticsStation.Inventory[model.ItemIronOre] != 200 || ws.Players["p1"].Inventory[model.ItemIronOre] != 50 || b.Storage != nil {
+	if result.Status != model.StatusExecuted || b.LogisticsStation.Inventory[model.ItemIronOre] != 200 || starterMecha(ws, "p1").Inventory[model.ItemIronOre] != 50 || b.Storage != nil {
 		t.Fatalf("station transfer wrong: %+v", result)
 	}
 }
@@ -247,7 +247,7 @@ func TestStationBeltIOAcrossCubeSeam(t *testing.T) {
 func TestLogisticsStationConstructionInitializesEmptyFiniteInventoryAndEnergy(t *testing.T) {
 	for _, kind := range []model.BuildingType{model.BuildingTypePlanetaryLogisticsStation, model.BuildingTypeInterstellarLogisticsStation} {
 		t.Run(string(kind), func(t *testing.T) {
-			core := newConstructionTestCore(t, 2, 2)
+			core := newConstructionTestCore(t, 2)
 			ws := core.world
 			ws.Players["p1"].Resources = model.Resources{Energy: 1000}
 			pos, _ := findTwoOpenTiles(ws)

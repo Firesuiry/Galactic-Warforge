@@ -71,7 +71,7 @@ func TestA1BotAmmoChain(t *testing.T) {
 	barracks.Storage.EnsureInventory()[model.ItemCircuitBoard] = 40
 	station := place("bot-supply", "supply_station")
 	powerNextTo(station)
-	player.EnsureInventory()[model.ItemAmmoBullet] = 60
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemAmmoBullet] = 60
 	delivered := false
 	for i := 0; i < 600 && !delivered; i++ {
 		core.runBotBrain(ws, "p2", tuning)
@@ -83,6 +83,6 @@ func TestA1BotAmmoChain(t *testing.T) {
 	}
 	if !delivered {
 		t.Fatalf("bot never fed ammo_bullet into the supply station, station=%d inventory=%v",
-			station.Storage.ItemQuantity(model.ItemAmmoBullet), player.Inventory)
+			station.Storage.ItemQuantity(model.ItemAmmoBullet), starterMecha(ws, player.PlayerID).Inventory)
 	}
 }

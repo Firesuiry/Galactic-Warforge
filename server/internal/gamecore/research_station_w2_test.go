@@ -355,7 +355,7 @@ func TestCombatTechEffectsReachCombatSettlement(t *testing.T) {
 // --- mass_construction 区域并发 ---------------------------------------------
 
 func TestMassConstructionRaisesRegionConcurrentLimit(t *testing.T) {
-	core := newConstructionTestCore(t, 10, 1)
+	core := newConstructionTestCore(t, 1)
 	ws := core.world
 	player := ws.Players["p1"]
 	// grantAllTechs 给了 1 级；先移除以便对比基线。

@@ -8,7 +8,7 @@ import (
 )
 
 func TestFoundationBuildsOnWaterAndDemolitionRestoresTerrain(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
@@ -36,14 +36,14 @@ func TestFoundationBuildsOnWaterAndDemolitionRestoresTerrain(t *testing.T) {
 	if foundation == nil || len(foundation.FoundationTerrain) != 1 {
 		t.Fatalf("foundation terrain provenance was not persisted: %+v", foundation)
 	}
-	demolishBuilding(ws, nil, foundation, 0)
+	demolishBuilding(ws, nil, foundation, 0, "")
 	if ws.Grid[pos.Y][pos.X].Terrain != terrain.TileWater {
 		t.Fatalf("demolishing foundation should restore water terrain, got %s", ws.Grid[pos.Y][pos.X].Terrain)
 	}
 }
 
 func TestFoundationDoesNotOccupyFilledTile(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileWater
@@ -67,12 +67,12 @@ func TestFoundationDoesNotOccupyFilledTile(t *testing.T) {
 }
 
 func TestFoundationInsufficientMaterialsDoesNotReserveWater(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos := model.Position{X: 5, Y: 5}
 	ws.Grid[pos.Y][pos.X].Terrain = terrain.TileLava
 	// 第 16 轮起建造门槛是背包物品：清空背包制造「材料不足」。
-	ws.Players["p1"].Inventory = model.ItemInventory{}
+	starterMecha(ws, "p1").Inventory = model.ItemInventory{}
 	res, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild,
 		Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": string(model.BuildingTypeFoundation)}})
 	if res.Code != model.CodeInsufficientResource {
@@ -84,7 +84,7 @@ func TestFoundationInsufficientMaterialsDoesNotReserveWater(t *testing.T) {
 }
 
 func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	ws.Grid[4][4].Terrain = terrain.TileWater
@@ -130,18 +130,18 @@ func TestFoundationRejectsDuplicateAndPreservesProvenance(t *testing.T) {
 	if res.Status != model.StatusFailed {
 		t.Fatal("occupied foundation can be demolished")
 	}
-	demolishBuilding(ws, nil, factory, 0)
+	demolishBuilding(ws, nil, factory, 0, "")
 	if ws.Grid[4][4].Terrain != terrain.TileBuildable {
 		t.Fatal("factory demolition removed filled ground")
 	}
-	demolishBuilding(ws, nil, foundation, 0)
+	demolishBuilding(ws, nil, foundation, 0, "")
 	if ws.Grid[4][4].Terrain != terrain.TileWater {
 		t.Fatal("original terrain not restored")
 	}
 }
 
 func TestFoundationDemolitionBlocksNewConstruction(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos := model.Position{X: 4, Y: 4}
 	foundation := &model.Building{ID: "foundation", OwnerID: "p1", Type: model.BuildingTypeFoundation, Position: pos, Runtime: model.BuildingProfileFor(model.BuildingTypeFoundation, 1).Runtime, FoundationTerrain: []string{"water"}, Job: &model.BuildingJob{Type: model.BuildingJobDemolish}}
@@ -158,7 +158,7 @@ func TestFoundationDemolitionBlocksNewConstruction(t *testing.T) {
 func TestFoundationCancelledTasksCannotBypassLayerConstraints(t *testing.T) {
 	for _, kind := range []model.BuildingType{model.BuildingTypeFoundation, model.BuildingTypeWindTurbine} {
 		t.Run(string(kind), func(t *testing.T) {
-			core := newConstructionTestCore(t, 2, 2)
+			core := newConstructionTestCore(t, 2)
 			ws := core.world
 			pos := model.Position{X: 4, Y: 4}
 			foundation := &model.Building{ID: "foundation", OwnerID: "p1", Type: model.BuildingTypeFoundation, Position: pos, Runtime: model.BuildingProfileFor(model.BuildingTypeFoundation, 1).Runtime, FoundationTerrain: []string{"water"}}
@@ -168,9 +168,9 @@ func TestFoundationCancelledTasksCannotBypassLayerConstraints(t *testing.T) {
 			ws.Buildings[foundation.ID] = foundation
 			task := &model.ConstructionTask{ID: "cancelled", PlayerID: "p1", BuildingType: kind, Position: pos, State: model.ConstructionCancelled, Cost: model.BuildCost{Items: []model.ItemAmount{{ItemID: model.ItemSteel, Quantity: 10}}}}
 			ws.Construction.Tasks[task.ID] = task
-			before := ws.Players["p1"].Inventory.Clone()
+			before := starterMecha(ws, "p1").Inventory.Clone()
 			res, _ := execCommand(core, model.CmdRestoreConstruction, ws, "p1", model.Command{Type: model.CmdRestoreConstruction, Payload: map[string]any{"task_id": task.ID}})
-			if res.Code != model.CodePositionOccupied || task.State != model.ConstructionCancelled || ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" || len(ws.Players["p1"].Inventory) != len(before) {
+			if res.Code != model.CodePositionOccupied || task.State != model.ConstructionCancelled || ws.Construction.ReservedTiles[model.TileKey(pos.X, pos.Y)] != "" || len(starterMecha(ws, "p1").Inventory) != len(before) {
 				t.Fatalf("restore bypassed foundation constraints: %+v", res)
 			}
 		})

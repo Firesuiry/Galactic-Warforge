@@ -10,7 +10,7 @@ import (
 	"siliconworld/internal/queue"
 )
 
-func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCore {
+func newConstructionTestCore(t *testing.T, regionLimit int) *GameCore {
 	t.Helper()
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
@@ -22,10 +22,9 @@ func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCo
 			{
 				PlayerID: "p1",
 				Key:      "key1",
-				Executor: config.ExecutorConfig{ConcurrentTasks: playerLimit, OperateRange: 100},
 			},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -42,7 +41,7 @@ func newConstructionTestCore(t *testing.T, playerLimit, regionLimit int) *GameCo
 }
 
 func TestConstructionQueueReservesTiles(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 
 	pos1, _ := findTwoOpenTiles(ws)
@@ -65,7 +64,7 @@ func TestConstructionQueueReservesTiles(t *testing.T) {
 }
 
 func TestConstructionQueueRespectsRegionLimit(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 1)
+	core := newConstructionTestCore(t, 1)
 	ws := core.world
 	// mass_construction tech levels raise the region limit; pin it to the
 	// configured baseline so this test isolates the config behavior.
@@ -150,7 +149,7 @@ func findTwoOpenTiles(ws *model.WorldState) (model.Position, model.Position) {
 }
 
 func TestConstructionMaterialReservation(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 
 	// Give player some resources
@@ -181,8 +180,8 @@ func TestConstructionMaterialReservation(t *testing.T) {
 	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
 	// They are only deducted when construction completes (via settleConstructionQueue).
 	// The reservation is created to lock the materials, but player keeps them until completion.
-	if !player.HasItems(wantItems) {
-		t.Fatalf("expected items untouched after build (no deduction yet), got %+v", player.Inventory)
+	if !starterMecha(ws, player.PlayerID).HasItems(wantItems) {
+		t.Fatalf("expected items untouched after build (no deduction yet), got %+v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	// Verify material reservation was created (locks the materials but doesn't deduct)
@@ -203,7 +202,7 @@ func TestConstructionMaterialReservation(t *testing.T) {
 }
 
 func TestConstructionMaterialRefundOnCancel(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 
 	// Give player some resources
@@ -225,7 +224,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 	}
 
 	taskID := ws.Construction.Order[0]
-	invBeforeCancel := player.Inventory.Clone()
+	invBeforeCancel := starterMecha(ws, player.PlayerID).Inventory.Clone()
 
 	// Cancel the construction
 	cancelCmd := model.Command{
@@ -242,8 +241,8 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 	// T078: With deduct-at-completion, resources are NOT deducted at enqueue time.
 	// When a pending task is cancelled, there are no resources to refund because
 	// they were never deducted - they were just locked.
-	if len(player.Inventory) != len(invBeforeCancel) {
-		t.Fatalf("expected inventory %+v after cancel (no deduction happened), got %+v", invBeforeCancel, player.Inventory)
+	if len(starterMecha(ws, player.PlayerID).Inventory) != len(invBeforeCancel) {
+		t.Fatalf("expected inventory %+v after cancel (no deduction happened), got %+v", invBeforeCancel, starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	// Verify reservation was removed
@@ -253,7 +252,7 @@ func TestConstructionMaterialRefundOnCancel(t *testing.T) {
 }
 
 func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 
 	// Give player some resources
@@ -290,9 +289,9 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 
 	// T078: With deduct-at-completion, after cancel the items are still there
 	// (no deduction happened, so no refund)
-	invAfterCancel := player.Inventory.Clone()
-	if !player.HasItems(ws.Construction.Tasks[taskID].Cost.Items) {
-		t.Fatalf("expected items untouched after cancel, got %+v", player.Inventory)
+	invAfterCancel := starterMecha(ws, player.PlayerID).Inventory.Clone()
+	if !starterMecha(ws, player.PlayerID).HasItems(ws.Construction.Tasks[taskID].Cost.Items) {
+		t.Fatalf("expected items untouched after cancel, got %+v", starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	// Restore the construction
@@ -309,8 +308,8 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 
 	// T078: With deduct-at-completion, restore only re-creates the reservation.
 	// Resources are still not deducted (deduction happens at completion).
-	if len(player.Inventory) != len(invAfterCancel) {
-		t.Fatalf("expected inventory %+v after restore (no deduction), got %+v", invAfterCancel, player.Inventory)
+	if len(starterMecha(ws, player.PlayerID).Inventory) != len(invAfterCancel) {
+		t.Fatalf("expected inventory %+v after restore (no deduction), got %+v", invAfterCancel, starterMecha(ws, player.PlayerID).Inventory)
 	}
 
 	// Verify reservation was re-created
@@ -322,7 +321,7 @@ func TestConstructionMaterialReReservationOnRestore(t *testing.T) {
 
 // T079: Test that pending task doesn't start when materials are insufficient
 func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 
 	// 给足建造物品，好让 enqueue 时的预留检查通过。
@@ -352,7 +351,7 @@ func TestConstructionPendingSkipsWhenMaterialsUnavailable(t *testing.T) {
 	}
 
 	// 现在把背包清空，让材料在 tick 之前变得不足。
-	player.Inventory = model.ItemInventory{}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
 
 	// Process a tick - task should NOT start because materials are insufficient
 	core.processTick()

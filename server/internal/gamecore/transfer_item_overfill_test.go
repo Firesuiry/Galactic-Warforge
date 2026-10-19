@@ -83,7 +83,7 @@ func TestTransferItemCannotOverfillProductionBuilding(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronOre: 60}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronOre: 60}
 
 	smelter := newProductionTestBuilding("b-smelter", model.BuildingTypeArcSmelter, model.Position{X: 9, Y: 9}, "smelt_iron")
 	attachBuilding(ws, smelter)
@@ -119,7 +119,7 @@ func TestTransferItemCannotOverfillProductionBuilding(t *testing.T) {
 	if got := storage.ItemQuantity(model.ItemIronOre); got != wantLoaded {
 		t.Fatalf("expected %d ore loaded, got %d", wantLoaded, got)
 	}
-	if got := player.Inventory[model.ItemIronOre]; got != 60-wantLoaded {
+	if got := starterMecha(ws, player.PlayerID).Inventory[model.ItemIronOre]; got != 60-wantLoaded {
 		t.Fatalf("expected %d ore left in backpack, got %d", 60-wantLoaded, got)
 	}
 	if !strings.Contains(res.Message, "留在背包") || !strings.Contains(res.Message, "产出预留") {
@@ -137,7 +137,7 @@ func TestLoadedSmelterStillProduces(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronOre: 60}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronOre: 60}
 
 	smelter := newProductionTestBuilding("b-smelter", model.BuildingTypeArcSmelter, model.Position{X: 9, Y: 9}, "smelt_iron")
 	attachBuilding(ws, smelter)
@@ -174,7 +174,7 @@ func TestFullOutputReportsBlockedReason(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronOre: 60}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronOre: 60}
 
 	smelter := newProductionTestBuilding("b-smelter", model.BuildingTypeArcSmelter, model.Position{X: 9, Y: 9}, "smelt_iron")
 	attachBuilding(ws, smelter)
@@ -229,7 +229,7 @@ func TestTransferItemReceiptReportsShortfall(t *testing.T) {
 	ws := core.World()
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 40}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 40}
 
 	depot := newBuilding("b-depot", model.BuildingTypeDepotMk1, "p1", model.Position{X: 5, Y: 5})
 	attachBuilding(ws, depot)

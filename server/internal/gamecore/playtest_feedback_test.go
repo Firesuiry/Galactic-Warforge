@@ -63,7 +63,7 @@ func TestDeadMechaCommandsReportRespawn(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	exec := player.ExecutorForPlanet(ws.PlanetID)
+	exec := starterMecha(ws, player.PlayerID)
 	unit := ws.Units[exec.UnitID]
 	killUnit(ws, unit, "enemy", "p2", "unit")
 
@@ -238,7 +238,7 @@ func TestCommandReceiptsUseChineseNames(t *testing.T) {
 	depot := newBuilding("b-92", model.BuildingTypeDepotMk1, "p1", model.Position{X: 3, Y: 1})
 	depot.Runtime.State = model.BuildingWorkRunning
 	placeBuilding(ws, depot)
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 20}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 20}
 	res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type:    model.CmdTransferItem,
 		Target:  model.CommandTarget{EntityID: unit.ID},
@@ -290,9 +290,9 @@ func TestBuildConcurrencyLimitIsReportedAsWaitNotFailure(t *testing.T) {
 	core := newE2ETestCore(t)
 	ws := core.World()
 	player := ws.Players["p1"]
-	exec := player.ExecutorForPlanet(ws.PlanetID)
-	exec.OperateRange = 64
-	exec.ConcurrentTasks = 1
+	exec := starterMecha(ws, player.PlayerID)
+	// 并发额度现在按机甲算（units.yaml executor.mecha.concurrent_tasks，2）：
+	// 放三个任务，第三个才会带并发等待原因。
 	grantAllItems(ws, "p1", 200)
 	player.Resources.Energy = 5000
 	execUnit := ws.Units[exec.UnitID]

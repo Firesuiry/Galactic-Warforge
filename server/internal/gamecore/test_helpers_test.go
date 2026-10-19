@@ -44,11 +44,11 @@ func grantAllItems(ws *model.WorldState, playerID string, qty int) {
 	if player == nil {
 		return
 	}
-	if player.Inventory == nil {
-		player.Inventory = map[string]int{}
+	if starterMecha(ws, player.PlayerID).Inventory == nil {
+		starterMecha(ws, player.PlayerID).Inventory = map[string]int{}
 	}
 	for _, def := range model.AllItems() {
-		player.Inventory[def.ID] += qty
+		starterMecha(ws, player.PlayerID).Inventory[def.ID] += qty
 	}
 }
 
@@ -63,7 +63,7 @@ func grantItems(ws *model.WorldState, playerID string, items ...model.ItemAmount
 		return
 	}
 	for _, item := range items {
-		player.EnsureInventory()[item.ItemID] += item.Quantity
+		starterMecha(ws, player.PlayerID).EnsureInventory()[item.ItemID] += item.Quantity
 	}
 }
 

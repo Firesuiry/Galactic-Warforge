@@ -10,12 +10,12 @@ import (
 func TestPhase1ExecutorRespawnsOnlyAtLivingHQ(t *testing.T) {
 	ws := newRTTWorld(true)
 	u := spawnWorldTestUnit(ws, model.UnitTypeExecutor, "p1", model.Position{X: 2, Y: 2})
-	ws.Players["p1"].SetPlanetExecutor(ws.PlanetID, model.NewExecutorState(u.ID, 1, 8, 1, 1))
+	registerMecha(ws, "p1", u)
 	hq := surfaceTestBuilding(ws, "hq", model.BuildingTypeBattlefieldAnalysisBase, model.Position{X: 4, Y: 4})
 	hq.OwnerID = "p1"
 	ws.Tick = 20
 	killUnit(ws, u, "enemy", "p2", "unit")
-	deadline := ws.Players["p1"].ExecutorForPlanet(ws.PlanetID).RespawnAtTick
+	deadline := starterMecha(ws, "p1").RespawnAtTick
 	if deadline != 20+model.ExecutorRespawnTicks() {
 		t.Fatalf("wrong respawn deadline %d", deadline)
 	}

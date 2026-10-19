@@ -24,7 +24,7 @@ func newTwoPlanetTestCore(t *testing.T) (*GameCore, *config.Config, *mapconfig.C
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},

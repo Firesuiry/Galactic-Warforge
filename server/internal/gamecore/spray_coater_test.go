@@ -13,7 +13,7 @@ import (
 // TestSprayCoaterFeedsRealSprayedFractionation）。
 func sprayCoaterFixture() (*model.WorldState, *model.Building, map[model.ConveyorDirection]*model.Building) {
 	ws := model.NewWorldState("sprayer", 12)
-	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true, Inventory: model.ItemInventory{}}
+	ws.Players["p1"] = &model.PlayerState{PlayerID: "p1", IsAlive: true}
 	b := surfaceTestBuilding(ws, "sprayer", model.BuildingTypeSprayCoater, model.Position{X: 3, Y: 3})
 	model.InitBuildingStorage(b)
 	model.InitBuildingSprayCoater(b)
@@ -129,17 +129,17 @@ func TestSprayCoaterBlockedDoesNotConsumeAndPersistsCharges(t *testing.T) {
 
 func TestSprayCoaterRealTransferAndStorageIOIsolation(t *testing.T) {
 	ws, b, belts := sprayCoaterFixture()
-	ws.Players["p1"].Inventory[model.ItemProliferatorMk3] = 1
-	ws.Players["p1"].Inventory[model.ItemHydrogen] = 1
+	starterMecha(ws, "p1").Inventory[model.ItemProliferatorMk3] = 1
+	starterMecha(ws, "p1").Inventory[model.ItemHydrogen] = 1
 	gc := &GameCore{}
 	command := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": model.ItemHydrogen, "quantity": 1}}
 	result, _ := execCommand(gc, model.CmdTransferItem, ws, "p1", command)
-	if result.Status != model.StatusFailed || ws.Players["p1"].Inventory[model.ItemHydrogen] != 1 {
+	if result.Status != model.StatusFailed || starterMecha(ws, "p1").Inventory[model.ItemHydrogen] != 1 {
 		t.Fatal("count-only storage accepted cargo")
 	}
 	command.Payload["item_id"] = model.ItemProliferatorMk3
 	result, _ = execCommand(gc, model.CmdTransferItem, ws, "p1", command)
-	if result.Status != model.StatusExecuted || totalStorageItems(b.Storage) != 1 || ws.Players["p1"].Inventory[model.ItemProliferatorMk3] != 0 {
+	if result.Status != model.StatusExecuted || totalStorageItems(b.Storage) != 1 || starterMecha(ws, "p1").Inventory[model.ItemProliferatorMk3] != 0 {
 		t.Fatalf("real reagent loading failed: %+v", result)
 	}
 	belts[model.ConveyorWest].Conveyor.Buffer = []model.ItemStack{{ItemID: model.ItemHydrogen, Quantity: 1, Spray: &model.SprayState{Level: 1, RemainingUses: 2}}}

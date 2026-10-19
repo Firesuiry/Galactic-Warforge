@@ -139,7 +139,7 @@ func findAdjacentBuildPair(t *testing.T, ws *model.WorldState, playerID string) 
 	if player == nil {
 		t.Fatal("missing player")
 	}
-	execState := player.ExecutorForPlanet(ws.PlanetID)
+	execState := starterMecha(ws, player.PlayerID)
 	if execState == nil {
 		t.Fatal("missing executor")
 	}
@@ -154,12 +154,12 @@ func findAdjacentBuildPair(t *testing.T, ws *model.WorldState, playerID string) 
 			return pos, powerPos
 		}
 	}
-	for _, candidate := range ws.SurfaceDisc(executor.Position, execState.OperateRange) {
+	for _, candidate := range ws.SurfaceDisc(executor.Position, model.ExecutorOperateRange()) {
 		if !t103IsOpenBuildTile(ws, candidate) {
 			continue
 		}
 		neighbor, _ := findAdjacentOpenTile(ws, candidate)
-		if neighbor != nil && ws.SurfaceWithin(executor.Position, *neighbor, execState.OperateRange) {
+		if neighbor != nil && ws.SurfaceWithin(executor.Position, *neighbor, model.ExecutorOperateRange()) {
 			p := candidate
 			return &p, neighbor
 		}

@@ -180,7 +180,7 @@ func TestSurfaceMultiTileConstructionReservationAndDemolition(t *testing.T) {
 	for _, b := range ws.Buildings {
 		building = b
 	}
-	demolishBuilding(ws, nil, building, 0)
+	demolishBuilding(ws, nil, building, 0, "")
 	if len(ws.TileBuilding) != 0 || len(ws.Buildings) != 0 {
 		t.Fatal("demolition did not release full footprint")
 	}

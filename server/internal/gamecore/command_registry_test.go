@@ -15,7 +15,7 @@ func execCommand(gc *GameCore, cmdType model.CommandType, ws *model.WorldState, 
 	if err != nil {
 		return model.CommandResult{Status: model.StatusFailed, Code: model.CodeValidationFailed, Message: err.Error()}, nil
 	}
-	return bound.exec(gc, ws, playerID)
+	return bound.exec(gc, ws, playerID, playerID)
 }
 
 func TestCommandRegistryMatchesCatalog(t *testing.T) {

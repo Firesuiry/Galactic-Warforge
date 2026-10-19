@@ -99,7 +99,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 
 	// Fresh players start with no matrices; the first research must come
 	// from the industry chain.
-	if got := player.Inventory[model.ItemElectromagneticMatrix]; got != 0 {
+	if got := starterMecha(ws, player.PlayerID).Inventory[model.ItemElectromagneticMatrix]; got != 0 {
 		t.Fatalf("expected fresh inventory without matrices, got %d", got)
 	}
 
@@ -251,7 +251,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 	if err != nil || provided != 10 {
 		t.Fatalf("collect produced matrices: provided=%d err=%v", provided, err)
 	}
-	player.EnsureInventory()[model.ItemElectromagneticMatrix] += provided
+	starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemElectromagneticMatrix] += provided
 
 	researchTech := func(techID string) {
 		t.Helper()
@@ -303,7 +303,7 @@ func TestT092FreshNewGameCanReachEarlyResearchClosure(t *testing.T) {
 		if err != nil || provided != 10 {
 			t.Fatalf("collect matrices for %s: provided=%d err=%v", techID, provided, err)
 		}
-		player.EnsureInventory()[model.ItemElectromagneticMatrix] += provided
+		starterMecha(ws, player.PlayerID).EnsureInventory()[model.ItemElectromagneticMatrix] += provided
 		researchTech(techID)
 	}
 

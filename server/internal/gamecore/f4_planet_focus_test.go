@@ -29,7 +29,7 @@ func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *mode
 			{PlayerID: "p1", Key: "key1"},
 			{PlayerID: "p2", Key: "key2"},
 		},
-		Server: config.ServerConfig{Port: 9999, RateLimit: 100},
+		Server: config.ServerConfig{Port: 9999},
 	}
 	mapCfg := &mapconfig.Config{
 		Galaxy: mapconfig.GalaxyConfig{SystemCount: 1},
@@ -289,8 +289,8 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	// 跨行星同 ID：手动把两颗行星的执行体改成同号，复现实体 ID 撞号。
 	// 细分网格后各行星的 ID 分配序列不再天然对齐（出生点/建筑占地都会消耗 ID），
 	// 所以这里显式构造撞号，测试的仍是「撞号时按焦点行星路由 + planet_id 消歧」。
-	execA := planetB.Players["p1"].ExecutorForPlanet("planet-1-1")
-	execB := planetB.Players["p1"].ExecutorForPlanet("planet-1-2")
+	execA := mechaOnPlanet(planetB, "p1", "planet-1-1")
+	execB := mechaOnPlanet(planetB, "p1", "planet-1-2")
 	if execA == nil || execB == nil {
 		t.Fatal("expected p1 executors on both planets")
 	}
@@ -305,7 +305,13 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	const collidingID = "u-dup-exec"
 	delete(planetA.Units, execA.UnitID)
 	delete(planetB.Units, execB.UnitID)
+	mechasA := planetA.Players["p1"].EnsureMechas()
+	mechasB := planetB.Players["p1"].EnsureMechas()
+	delete(mechasA, execA.UnitID)
+	delete(mechasB, execB.UnitID)
 	execA.UnitID, execB.UnitID = collidingID, collidingID
+	mechasA[collidingID] = execA
+	mechasB[collidingID] = execB
 	unitA.ID, unitB.ID = collidingID, collidingID
 	planetA.Units[collidingID] = unitA
 	planetB.Units[collidingID] = unitB

@@ -36,7 +36,7 @@ func TestPhase1BotIndustrialCycle(t *testing.T) {
 	}
 	t.Logf("mecha=%+v", ctx.executor.Mecha)
 	t.Logf("player=%+v executor=%+v units=%+v", ws.Players["p2"], ctx.executor, ws.Units)
-	t.Fatalf("industrial loop incomplete: produced=%v supplied=%v inventory=%v next=%+v", produced, supplied, ws.Players["p2"].Inventory, core.planBotCommands(ws, "p2", botTuningFor("hard")))
+	t.Fatalf("industrial loop incomplete: produced=%v supplied=%v inventory=%v next=%+v", produced, supplied, starterMecha(ws, "p2").Inventory, core.planBotCommands(ws, "p2", botTuningFor("hard")))
 }
 
 func TestPhase1ExecutorManualFireHonorsCooldown(t *testing.T) {
@@ -70,20 +70,20 @@ func TestPhase1CollectStorageOutputConservesInventory(t *testing.T) {
 	placeBuilding(ws, b)
 	b.Storage.Inventory = model.ItemInventory{"ammo_bullet": 7}
 	player := ws.Players[unit.OwnerID]
-	player.Inventory = model.ItemInventory{}
-	player.SetPlanetExecutor(ws.PlanetID, &model.ExecutorState{UnitID: unit.ID})
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{}
+	registerMecha(ws, unit.OwnerID, unit)
 	cmd := model.Command{Payload: map[string]any{"building_id": b.ID, "item_id": "ammo_bullet", "quantity": 5, "direction": "to_player"}}
 	if r, _ := execCommand(gc, model.CmdTransferItem, ws, unit.OwnerID, cmd); r.Code != model.CodeOK {
 		t.Fatal(r)
 	}
-	if player.Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {
+	if starterMecha(ws, player.PlayerID).Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {
 		t.Fatal("collection failed conservation")
 	}
 	cmd.Payload["direction"] = "invalid"
 	if r, _ := execCommand(gc, model.CmdTransferItem, ws, unit.OwnerID, cmd); r.Code != model.CodeValidationFailed {
 		t.Fatal(r)
 	}
-	if player.Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {
+	if starterMecha(ws, player.PlayerID).Inventory["ammo_bullet"] != 5 || b.Storage.ItemQuantity("ammo_bullet") != 2 {
 		t.Fatal("invalid direction mutated inventory")
 	}
 }

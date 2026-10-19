@@ -19,7 +19,9 @@ func TestOpeningBuildChainKitCoversOpeningBuilds(t *testing.T) {
 		{ItemID: model.ItemStoneBrick, Quantity: 3},
 	}
 	player := &model.PlayerState{PlayerID: "p1", IsAlive: true}
-	player.AddItems(kit, 0)
+	record := &model.MechaRecord{UnitID: "u-1", PlanetID: "planet-1", Operator: "p1"}
+	player.EnsureMechas()[record.UnitID] = record
+	record.AddItems(kit, 0)
 
 	// 推荐开局链：风机 → 电塔 → 矿机 → 熔炉 → 传送带 → 分拣器。
 	chain := []model.BuildingType{
@@ -45,10 +47,10 @@ func TestOpeningBuildChainKitCoversOpeningBuilds(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing building definition %s", btype)
 		}
-		if !player.HasItems(def.BuildCost.Items) {
-			t.Fatalf("kit cannot afford %s: need %+v, have %+v", btype, def.BuildCost.Items, player.Inventory)
+		if !record.HasItems(def.BuildCost.Items) {
+			t.Fatalf("kit cannot afford %s: need %+v, have %+v", btype, def.BuildCost.Items, record.Inventory)
 		}
-		if !player.DeductItems(def.BuildCost.Items) {
+		if !record.DeductItems(def.BuildCost.Items) {
 			t.Fatalf("deduct %s failed", btype)
 		}
 	}

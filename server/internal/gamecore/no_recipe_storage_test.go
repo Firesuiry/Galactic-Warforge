@@ -30,7 +30,7 @@ func TestLoadIntoBarracksKeepsStockInInventoryAndStillProduces(t *testing.T) {
 	barracks.Storage.OutputBuffer = nil
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemIronIngot: 20, model.ItemCircuitBoard: 20}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemIronIngot: 20, model.ItemCircuitBoard: 20}
 	for _, item := range []string{model.ItemIronIngot, model.ItemCircuitBoard} {
 		res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 			Type: model.CmdTransferItem,
@@ -83,7 +83,7 @@ func TestLoadedSupplyStationStillResuppliesFromInventory(t *testing.T) {
 	station.Storage.OutputBuffer = nil
 
 	player := ws.Players["p1"]
-	player.Inventory = model.ItemInventory{model.ItemAmmoBullet: 200}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemAmmoBullet: 200}
 	res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{
@@ -127,7 +127,7 @@ func TestLoadedResearchLabStillAdvancesResearch(t *testing.T) {
 	lab.Runtime.Functions.Research = &model.ResearchModule{ResearchPerTick: 10}
 	placeBuilding(ws, lab)
 
-	player.Inventory = model.ItemInventory{model.ItemElectromagneticMatrix: 10}
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemElectromagneticMatrix: 10}
 	res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", model.Command{
 		Type: model.CmdTransferItem,
 		Payload: map[string]any{

@@ -241,7 +241,7 @@ func TestFractionationIgnoresNonHydrogenAndPipelines(t *testing.T) {
 }
 
 func TestFractionatorRealConstruction(t *testing.T) {
-	core := newConstructionTestCore(t, 2, 2)
+	core := newConstructionTestCore(t, 2)
 	ws := core.world
 	pos, _ := findTwoOpenTiles(ws)
 	result, _ := execCommand(core, model.CmdBuild, ws, "p1", model.Command{Type: model.CmdBuild, Target: model.CommandTarget{Position: &pos}, Payload: map[string]any{"building_type": "fractionator"}})

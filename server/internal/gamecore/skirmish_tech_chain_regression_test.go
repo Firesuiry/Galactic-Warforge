@@ -93,9 +93,9 @@ func botTechChainReport(ws *model.WorldState) string {
 		"tick=%d labs=%d(cap=%d matrices=%d) matrixMachines=%d(recipe=%q out=%d inv=%d in=%d) execMatrix=%d magCoil=%d circuit=%d completed=%v current=%v queue=%d",
 		ws.Tick, labs, labCapacity, labMatrices, machines, machineRecipe,
 		machineOut, machineInv, machineIn,
-		player.Inventory[model.ItemElectromagneticMatrix],
-		player.Inventory[model.ItemMagneticCoil],
-		player.Inventory[model.ItemCircuitBoard],
+		starterMecha(ws, player.PlayerID).Inventory[model.ItemElectromagneticMatrix],
+		starterMecha(ws, player.PlayerID).Inventory[model.ItemMagneticCoil],
+		starterMecha(ws, player.PlayerID).Inventory[model.ItemCircuitBoard],
 		tech.CompletedTechs, tech.CurrentResearch, len(tech.ResearchQueue),
 	)
 }
