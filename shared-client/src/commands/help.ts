@@ -9,7 +9,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   install_logistics_bot: { usage: '<id> <quantity> [--source player|storage]', desc: '消耗背包或绑定仓库的机器人安装至配送器' },
   uninstall_logistics_bot: { usage: '<id> <quantity>', desc: '回收空载停靠的配送机器人至背包' },
   configure_mecha_logistics: { usage: '<item:min:max,...|none>', desc: '替换本发令者机甲（我的机甲）的配送请求，最多 8 项，none 清空' },
-  mecha: { usage: '<list|assign <mecha_id> [operator]|assign <mecha_id> --release>', desc: '列出本方机甲 / 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑）' },
+  mecha: { usage: '<list|assign <mecha_id> [operator]|assign <mecha_id> --release>', desc: '列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑）' },
   health: { desc: 'Server status and current tick' },
   metrics: { desc: 'Runtime metrics' },
   summary: { desc: 'Game summary (resources, players, map)' },

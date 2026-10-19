@@ -130,3 +130,27 @@ describe('mecha list（审查 #1 / #4）', () => {
     assert.doesNotMatch(out, /铁块16|铁块 16/);
   });
 });
+
+describe('mecha list 作业与施工列', () => {
+  it('作业列显示 craft/min 目标与批次，Construction 说明 pending 才有意义', async () => {
+    const busy = {
+      ...mechaView, unit_id: 'u-8', operator: 'builder-a', construction_active: 0, construction_pending: 4,
+      job: { kind: 'craft', recipe_id: 'craft_circuit_board', remaining_batches: 3, state: 'running' },
+    };
+    const mining = {
+      ...mechaView, unit_id: 'u-9', operator: 'builder-b',
+      job: { kind: 'mine', resource_id: 'iron_ore_node', remaining_batches: 5, state: 'running', paused: true },
+    };
+    const api = fakeApi({
+      fetchSummary: async () => ({
+        ...summary,
+        players: { p1: { ...summary.players.p1, mechas: [busy, mining, mechaView] } },
+      }),
+    });
+    const out = await cmdMecha(['list'], { api, issuerId: 'builder-a' });
+    assert.match(out, /craft craft_circuit_board ×3/);
+    assert.match(out, /mine iron_ore_node ×5（paused）/);
+    assert.match(out, /pending 才是排队\/缺料/);
+    assert.match(out, /0\/4/);
+  });
+});
