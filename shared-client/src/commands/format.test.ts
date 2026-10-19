@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
-import { fmtPlanetRuntime, fmtSystemRuntime, fmtWarIndustry } from './format.js';
+import { fmtAgentBriefing, fmtPlanetRuntime, fmtSystemRuntime, fmtWarIndustry } from './format.js';
 
 describe('warfare formatting', () => {
   it('renders contacts, blockades and battle reports in system runtime output', () => {
@@ -146,5 +146,48 @@ describe('planet_runtime 施工与物流', () => {
     assert.match(out, /drones idle:1 in_flight:1/);
     assert.match(out, /b-9/);
     assert.match(out, /iron_ingot:40/);
+  });
+});
+
+describe('briefing 输出补全', () => {
+  const mecha = {
+    unit_id: 'u-40', planet_id: 'planet-1-1', operator: 'builder-a', alive: true,
+    respawn_at_tick: 0, position: { x: 49, y: 134, z: 0 },
+    inventory: Object.fromEntries([
+      ['iron_ingot', 2], ['gear', 26], ['copper_ingot', 3], ['circuit_board', 4],
+      ['steel', 5], ['coal', 6], ['silicon_ingot', 7], ['stone', 8], ['titanium_ingot', 9],
+      ['hydrogen', 10], ['graphite', 11],
+    ]),
+    inventory_slots_used: 11, inventory_slots_total: 40,
+    operate_range: 18, concurrent_tasks: 2, construction_active: 0, construction_pending: 4,
+    job: { kind: 'craft', recipe_id: 'craft_circuit_board', remaining_batches: 3, state: 'running' },
+  };
+  const briefing = {
+    tick: 100, active_planet_id: 'planet-1-1', map_width: 96, map_height: 96,
+    self: {
+      player_id: 'p1', team_id: 'p1', role: 'commander', is_alive: true,
+      resources: { energy: 12 }, mechas: [mecha],
+      tech: {
+        completed_count: 2, completed_techs: ['basic_tech', 'dyson_sphere_program'],
+        research_queue_len: 0, total_researched: 0,
+      },
+    },
+    energy_stats: {}, combat_stats: {}, fleets: [], task_forces: [], theaters: [], enemy_forces: [],
+    recent_alerts: [{
+      alert_id: 'a-1', tick: 90, player_id: 'p1', building_id: 'b-79', building_type: 'arc_smelter',
+      alert_type: 'input_shortage', severity: 'warning', message: '建筑 b-79：原料短缺',
+      metrics: {}, details: {}, active: true,
+    }],
+    available_commands: [],
+  } as never;
+
+  it('背包完整列出、作业、科技 id 与当前研究、告警枚举与建筑', () => {
+    const out = fmtAgentBriefing(briefing, 'builder-a');
+    assert.match(out, /Inventory u-40 \[11\/40 slots\]: .*graphite:11/);
+    assert.doesNotMatch(out, /\.\.\./);
+    assert.match(out, /job craft craft_circuit_board ×3/);
+    assert.match(out, /completed techs: basic_tech, dyson_sphere_program/);
+    assert.match(out, /research: \(none\)/);
+    assert.match(out, /input_shortage b-79/);
   });
 });

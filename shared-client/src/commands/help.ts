@@ -14,7 +14,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   metrics: { desc: 'Runtime metrics' },
   summary: { desc: 'Game summary (resources, players, map)' },
   stats: { desc: 'Current player statistics' },
-  briefing: { usage: '[alert_limit]', desc: 'One-shot agent briefing (self/war/fleets/alerts/commands)' },
+  briefing: { usage: '[alert_limit]', desc: 'One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands' },
   catalog_commands: { desc: 'Public command structure catalog (GET /catalog/commands)' },
   galaxy: { desc: 'Galaxy list' },
   system: { usage: '[system_id]', desc: 'System details (default: sys-1)' },
