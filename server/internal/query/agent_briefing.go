@@ -112,6 +112,10 @@ func (ql *Layer) AgentBriefing(
 		briefing.Fleets = append(briefing.Fleets, compactBriefingFleet(fleet))
 	}
 
+	// 机甲视图包含其它已加载行星的状态：在锁外逐行星取快照（每个世界各自
+	// 的读锁内），避免与 withLockedWorlds 的写锁顺序交叉，也不递归持读锁。
+	mechaViews := MechaViews(ws.Players[playerID], worlds)
+
 	ws.RLock()
 	defer ws.RUnlock()
 
@@ -125,7 +129,7 @@ func (ql *Layer) AgentBriefing(
 	briefing.VictoryRule = victory.VictoryRule
 
 	player := ws.Players[playerID]
-	briefing.Self = buildBriefingSelf(player, playerID, worlds)
+	briefing.Self = buildBriefingSelf(player, playerID, mechaViews)
 	if player != nil && player.Stats != nil {
 		briefing.EnergyStats = player.Stats.EnergyStats
 		briefing.CombatStats = player.Stats.CombatStats
@@ -139,7 +143,7 @@ func (ql *Layer) AgentBriefing(
 	return briefing
 }
 
-func buildBriefingSelf(player *model.PlayerState, playerID string, worlds map[string]*model.WorldState) AgentBriefingSelf {
+func buildBriefingSelf(player *model.PlayerState, playerID string, mechaViews []MechaView) AgentBriefingSelf {
 	self := AgentBriefingSelf{PlayerID: playerID}
 	if player == nil {
 		return self
@@ -150,7 +154,7 @@ func buildBriefingSelf(player *model.PlayerState, playerID string, worlds map[st
 	self.IsAlive = player.IsAlive
 	self.Resources = player.Resources
 	self.FocusPlanetID = player.FocusPlanetID
-	self.Mechas = MechaViews(player, worlds)
+	self.Mechas = mechaViews
 	if player.Tech != nil {
 		self.Tech = compactBriefingTech(player.Tech)
 	}

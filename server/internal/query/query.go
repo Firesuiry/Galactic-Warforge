@@ -61,26 +61,88 @@ type MechaView struct {
 }
 
 // MechaViews 汇总玩家所有机甲的视图：存活状态、位置、背包与施工占用。
+//
+// 调用方可能已经持有 ws 的读锁（Summary / AgentBriefing）：Go 的 RWMutex
+// 读锁不可重入（有写者排队时递归 RLock 会死锁），所以这里不自己加锁，而是
+// 由调用方在每个世界自己的读锁内构造快照（见 lockedMechaViews）。
 func MechaViews(player *model.PlayerState, worlds map[string]*model.WorldState) []MechaView {
 	if player == nil {
 		return nil
 	}
+	return mechaViewsFrom(player, mechaWorldSnapshots(worlds, player.PlayerID))
+}
+
+// mechaWorldSnapshot 是一颗行星上与机甲视图相关的只读快照。
+type mechaWorldSnapshot struct {
+	construction []constructionTaskSnapshot
+	units        map[string]unitSnapshot
+}
+
+type constructionTaskSnapshot struct {
+	mechaID string
+	state   model.ConstructionState
+}
+
+type unitSnapshot struct {
+	position model.Position
+	alive    bool
+}
+
+// mechaWorldSnapshots 依次对每个世界单独加读锁取快照。各世界的锁不嵌套：
+// 一次只持有一个世界的读锁（与 withLockedWorlds 的写锁顺序无关，不会死锁）。
+func mechaWorldSnapshots(worlds map[string]*model.WorldState, playerID string) map[string]mechaWorldSnapshot {
+	if len(worlds) == 0 {
+		return nil
+	}
+	planetIDs := make([]string, 0, len(worlds))
+	for planetID := range worlds {
+		planetIDs = append(planetIDs, planetID)
+	}
+	sort.Strings(planetIDs)
+	out := make(map[string]mechaWorldSnapshot, len(planetIDs))
+	for _, planetID := range planetIDs {
+		ws := worlds[planetID]
+		if ws == nil {
+			continue
+		}
+		out[planetID] = snapshotMechaWorld(ws, playerID)
+	}
+	return out
+}
+
+func snapshotMechaWorld(ws *model.WorldState, playerID string) mechaWorldSnapshot {
+	ws.RLock()
+	defer ws.RUnlock()
+	snap := mechaWorldSnapshot{units: make(map[string]unitSnapshot)}
+	if ws.Construction != nil {
+		snap.construction = make([]constructionTaskSnapshot, 0, len(ws.Construction.Tasks))
+		for _, task := range ws.Construction.Tasks {
+			if task == nil || task.PlayerID != playerID || task.MechaID == "" {
+				continue
+			}
+			snap.construction = append(snap.construction, constructionTaskSnapshot{mechaID: task.MechaID, state: task.State})
+		}
+	}
+	for id, unit := range ws.Units {
+		if unit == nil {
+			continue
+		}
+		snap.units[id] = unitSnapshot{position: unit.Position, alive: unit.HP > 0}
+	}
+	return snap
+}
+
+func mechaViewsFrom(player *model.PlayerState, snapshots map[string]mechaWorldSnapshot) []MechaView {
 	slots := model.MechaInventorySlots(player)
 	active := make(map[string]int)
 	pending := make(map[string]int)
-	for _, ws := range worlds {
-		if ws == nil || ws.Construction == nil {
-			continue
-		}
-		for _, task := range ws.Construction.Tasks {
-			if task == nil || task.PlayerID != player.PlayerID || task.MechaID == "" {
-				continue
-			}
-			switch task.State {
+	for _, snap := range snapshots {
+		for _, task := range snap.construction {
+			switch task.state {
 			case model.ConstructionInProgress:
-				active[task.MechaID]++
+				active[task.mechaID]++
 			case model.ConstructionPending:
-				pending[task.MechaID]++
+				pending[task.mechaID]++
 			}
 		}
 	}
@@ -99,11 +161,10 @@ func MechaViews(player *model.PlayerState, worlds map[string]*model.WorldState) 
 			ConstructionActive:  active[record.UnitID],
 			ConstructionPending: pending[record.UnitID],
 		}
-		ws := worlds[record.PlanetID]
-		if ws != nil {
-			if unit := ws.Units[record.UnitID]; unit != nil && unit.HP > 0 {
+		if snap, ok := snapshots[record.PlanetID]; ok {
+			if unit, ok := snap.units[record.UnitID]; ok && unit.alive {
 				view.Alive = true
-				pos := unit.Position
+				pos := unit.position
 				view.Position = &pos
 			}
 		}
@@ -114,6 +175,10 @@ func MechaViews(player *model.PlayerState, worlds map[string]*model.WorldState) 
 
 // Summary returns a high-level view of the world (no fog clipping for own resources).
 func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.VictoryState, worlds map[string]*model.WorldState) *StateSummary {
+	// 机甲视图包含其它已加载行星的状态：在锁外逐行星取快照（每个世界各自
+	// 的读锁内），避免与 withLockedWorlds 的写锁顺序交叉，也不递归持读锁。
+	mechaViews := MechaViews(ws.Players[playerID], worlds)
+
 	ws.RLock()
 	defer ws.RUnlock()
 
@@ -126,7 +191,7 @@ func (ql *Layer) Summary(ws *model.WorldState, playerID string, victory model.Vi
 			cp.Mechas = nil
 			players[pid] = &SummaryPlayer{
 				PlayerState: &cp,
-				Mechas:      MechaViews(ps, worlds),
+				Mechas:      mechaViews,
 			}
 		} else {
 			// Expose non-sensitive identity fields
