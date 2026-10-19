@@ -23,18 +23,26 @@ func missingItem(inv model.ItemInventory, cost []model.ItemAmount) (model.ItemAm
 	return model.ItemAmount{}, false
 }
 
-// missingItemMessage 统一的「缺料」回执文案：缺哪种物品、缺几个、背包现有几个。
-// 建造/升级/施工预留共用，玩家与 bot 都靠它判断该去手搓还是去取货。
+// missingItemMessage 统一的「缺料」回执文案：一次列出全部缺口（物品名 + 缺几个）。
+// 建造/升级/手搓/施工预留共用，玩家与 bot 都靠它判断该去手搓还是去取货。
 func missingItemMessage(inv model.ItemInventory, cost []model.ItemAmount) (string, bool) {
-	missing, short := missingItem(inv, cost)
-	if !short {
+	var gaps []string
+	for _, item := range cost {
+		if item.Quantity <= 0 {
+			continue
+		}
+		have := 0
+		if inv != nil {
+			have = inv[item.ItemID]
+		}
+		if have < item.Quantity {
+			gaps = append(gaps, fmt.Sprintf("%s %d", itemDisplayName(item.ItemID), item.Quantity-have))
+		}
+	}
+	if len(gaps) == 0 {
 		return "", false
 	}
-	have := 0
-	if inv != nil {
-		have = inv[missing.ItemID]
-	}
-	return fmt.Sprintf("缺少 %d 个「%s」（背包现有 %d）", missing.Quantity-have, itemDisplayName(missing.ItemID), have), true
+	return "背包缺：" + strings.Join(gaps, "、"), true
 }
 
 type buildPayload struct {
@@ -1326,11 +1334,12 @@ func (gc *GameCore) execUpgrade(ws *model.WorldState, playerID string, cmd model
 		return res, nil
 	}
 
-	if !mecha.Record.DeductItems(cost.Items) {
+	if msg, short := missingItemMessage(mecha.Record.Inventory, cost.Items); short {
 		res.Code = model.CodeInsufficientResource
-		res.Message = "升级所需物品不足"
+		res.Message = msg
 		return res, nil
 	}
+	mecha.Record.DeductItems(cost.Items)
 
 	nextLevel := building.Level + 1
 	if rule.DurationTicks > 0 {

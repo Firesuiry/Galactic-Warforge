@@ -197,7 +197,7 @@ func TestSkirmishFromZeroChainIsWalkable(t *testing.T) {
 	}
 	// 死锁判据：某个建筑长期（≥200 次）建不起来。第 16 轮起建造门槛是背包物品
 	// （脚本在下发前自查背包，缺料时先去备料，见 buildNext），所以回执只剩两类：
-	//   - 缺料类（「缺少 N 个「X」（背包现有 M）」）：缺的物品必须能手搓或是原矿，
+	//   - 缺料类（「背包缺：X N、Y M」）：缺的物品必须能手搓或是原矿，
 	//     否则开局链就断在这一环上；缺齿轮/电路板/磁线圈这类「能手搓但产能不够」
 	//     只记日志——无物资包下机甲 20 tick 搓 1 个齿轮，脚本排的制造台越多、
 	//     缺口越大，这是节奏问题不是死锁；
@@ -207,11 +207,11 @@ func TestSkirmishFromZeroChainIsWalkable(t *testing.T) {
 			continue
 		}
 		t.Logf("建造长期失败（%d 次）：%s", n, msg)
-		if !strings.Contains(msg, "缺少") {
+		if !strings.Contains(msg, "背包缺：") {
 			t.Fatalf("建造长期失败且原因不是缺料（%d 次）：%s", n, msg)
 		}
-		for _, item := range strings.Split(msg, "「")[1:] {
-			name := strings.SplitN(item, "」", 2)[0]
+		for _, item := range strings.Split(strings.TrimPrefix(msg, "背包缺："), "、") {
+			name := strings.Fields(item)[0]
 			id := itemIDByName(name)
 			if _, ok := op.handcraftRecipeFor(id); !ok && !isManuallyMinableOre(id) {
 				t.Fatalf("死锁：长期缺「%s」且它既不能手搓也不是原矿（%d 次）：%s", name, n, msg)

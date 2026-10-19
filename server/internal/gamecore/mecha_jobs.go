@@ -101,9 +101,10 @@ func (gc *GameCore) execCraftItem(ws *model.WorldState, playerID string, cmd mod
 	for _, item := range recipe.Inputs {
 		reserved = append(reserved, model.ItemAmount{ItemID: item.ItemID, Quantity: item.Quantity * quantity})
 	}
-	if !record.DeductItems(reserved) {
-		return mechaJobFailed(model.CodeInsufficientResource, "机甲背包中缺少手工制造原料")
+	if msg, short := missingItemMessage(record.Inventory, reserved); short {
+		return mechaJobFailed(model.CodeInsufficientResource, msg)
 	}
+	record.DeductItems(reserved)
 	// 手搓是机甲个人作业，不受工厂产出节奏 pace_output 影响。
 	duration := recipe.Duration
 	unit.Mecha.Job = &model.MechaJob{Kind: "craft", RecipeID: recipeID, RemainingTicks: duration, TicksPerBatch: duration, RemainingBatches: quantity, EnergyPerBatch: mechaCraftEnergy(recipe), State: "running", ReservedInputs: reserved}
