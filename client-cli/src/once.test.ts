@@ -64,6 +64,9 @@ function mockApi(executions: Array<{ index: number; status: string; code: string
       if (url.pathname === '/state/summary') {
         return new Response(JSON.stringify({ tick: 10 }), { status: 200 });
       }
+      if (url.pathname === '/health') {
+        return new Response(JSON.stringify({ status: 'ok', tick: 10 }), { status: 200 });
+      }
       throw new Error(`unexpected ${url.pathname}`);
     }) as typeof fetch,
   });
@@ -149,6 +152,17 @@ describe('scripts/sw non-interactive runner', () => {
     assert.equal(onceConfigFromEnv({ SW_ISSUER: 'builder' }).issuerId, 'builder');
     assert.throws(() => onceConfigFromEnv({ SW_ISSUER: 'bad name' }), /SW_ISSUER 非法/);
     assert.throws(() => onceConfigFromEnv({ SW_WAIT_TIMEOUT: 'abc' }), /SW_WAIT_TIMEOUT 非法/);
+  });
+
+  it('treats wait success as ok and wait timeout as failure', async () => {
+    const { api } = mockApi([]);
+    const { once, text } = runner(api);
+    // wait job：summary 里没有 players.mechas → 未绑定机甲（本地错误）。
+    assert.equal(await once.run('wait job'), false);
+    assert.match(text(), /未绑定机甲/);
+    // wait ticks 在 tick 不前进、--timeout 0 时立即超时。
+    assert.equal(await once.run('wait ticks 5 --timeout 0'), false);
+    assert.match(text(), /✗ 超时（0s，tick 前进 0）/);
   });
 
   it('counts each index independently when several commands share a request', async () => {

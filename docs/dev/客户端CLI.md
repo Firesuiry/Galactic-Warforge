@@ -294,7 +294,7 @@ as                                     # 临时恢复为玩家本人发令
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（23 条，agent 可用）
+### 查询命令（24 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -303,6 +303,7 @@ as                                     # 临时恢复为玩家本人发令
 | `summary` | — | Game summary (resources, players, map) |
 | `stats` | — | Current player statistics |
 | `briefing` | `briefing [alert_limit]` | One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands |
+| `wait` | `wait <ticks <n>\|job\|build\|item <物品ID> <数量> [--in <建筑ID>]\|running <建筑ID>> [--timeout <秒>]` | 等到条件成立（轮询，默认 120s）：ticks=tick 前进 n；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running |
 | `catalog` | `catalog <buildings [关键词]\|building <id>\|recipes [--handcraft] [--building <type>] [关键词]\|items [关键词]\|techs [--available\|--done]\|units>` | 紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog） |
 | `galaxy` | — | Galaxy list |
 | `system` | `system [system_id]` | System details (default: sys-1) |

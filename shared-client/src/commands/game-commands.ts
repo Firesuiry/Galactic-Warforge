@@ -76,6 +76,7 @@ import {
 } from './debug.js';
 import { cmdCatalog } from './catalog.js';
 import { cmdCheckpoint } from './checkpoint.js';
+import { cmdWait, type WaitOptions } from './wait.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
 import { cmdMecha } from './mecha.js';
@@ -107,6 +108,8 @@ export interface CommandContext {
   api: ApiClient;
   /** 当前发令者 ID（玩家本人或代理名）；查询「我的机甲」与提示用，缺省取 api.getAuth().issuerId。 */
   issuerId?: string;
+  /** `wait` 的轮询参数；缺省 1s 间隔 + Date.now/setTimeout，测试注入假时钟。 */
+  waitOptions?: WaitOptions;
 }
 
 export type CommandHandler<Ctx extends CommandContext = CommandContext> =
@@ -134,6 +137,7 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   summary: { handler: cmdSummary },
   stats: { handler: cmdStats },
   briefing: { handler: cmdBriefing },
+  wait: { handler: cmdWait, completions: ['ticks', 'job', 'build', 'item', 'running'] },
   catalog: { handler: cmdCatalog, completions: ['buildings', 'building', 'recipes', 'items', 'techs', 'units'] },
   catalog_commands: { handler: cmdCatalogCommands },
   galaxy: { handler: cmdGalaxy },
