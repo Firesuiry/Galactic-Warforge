@@ -709,8 +709,10 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `dark_fog_hostile` | `bool` | 黑雾对该玩家是否敌对 |
 | `dark_fog_calmed` | `tick` | 自 `tick` 起该玩家出现过 `dark_fog_calmed` 事件（冷静期到期恢复中立）。与 `dark_fog_hostile=false` 配合可证明「是冷静期结算出来的中立」，而不是读档前就没敌对；`actual` 是事件条数 |
 | `enemy_attack_seen` | `bool` | 该玩家是否已被**敌方玩家**造成过伤害/损失（黑雾偷袭不算） |
+| `mecha_count_gte` | `n` | 该玩家名下的机甲档案数 >= n（按档案计数，阵亡待复活的机甲也算；第 21 轮） |
+| `mecha_operator_count` | `operator`, `n` | 绑定到该操作者（`issuer_id`）的机甲数**恰好** = n；`operator` 为空串表示空闲机甲。用相等而不是 >=，多绑一台同样是坏层 |
 
-「玩家可用物资」口径：`PlayerState.Inventory`（就是机甲背包，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）。第 16 轮去掉资金维度后建造/升级只扣背包物品，玩家级资源池只剩 `resources.energy`（电网结余的只读展示）。
+「玩家可用物资」口径：玩家所有机甲背包之和（`PlayerState.Mechas[*].Inventory`，采矿 / 手搓 / 战利品都落这里，也是 transfer / build 的扣料来源）。第 21 轮背包从玩家挪到机甲档案上，`item_gte` 仍按全部机甲求和；玩家级资源池只剩 `resources.energy`（电网结余的只读展示）。
 
 **`POST /checkpoints/{name}/load`**（仅 admin）：热加载存档点。
 - 按存档内的 `battlefield` / `players` 与固化的地图拓扑重建对局，写入 `data_dir` 作为当前局存档，原子替换当前对局（与 `POST /games/new` 同样的互斥与 autosave 处理）。

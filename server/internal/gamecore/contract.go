@@ -30,6 +30,8 @@ import (
 //	unit_count_gte      {type, n}
 //	unit_near           {position, radius, type?, n}  该玩家在 position 半径内的存活单位数 >= n
 //	item_gte            {item_id, n}
+//	mecha_count_gte     {n}             机甲档案数 >= n（含阵亡待复活）
+//	mecha_operator_count {operator, n}  绑定到该操作者的机甲数 == n（operator 空串 = 空闲）
 //	no_alert_since      {alert_type, tick, type?}  自 tick 起没有该类生产告警（type 非空时只看该建筑类型）
 //	dark_fog_hostile    {bool}
 //	dark_fog_calmed     {tick}   自 tick 起该玩家出现过 dark_fog_calmed 事件
@@ -320,6 +322,32 @@ func (gc *GameCore) evaluatePlayerCheck(check checkpoint.ContractCheck, player *
 			return pass(fmt.Sprintf("%d", count))
 		}
 		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求背包中 %s >= %d", check.ItemID, check.N))
+	case "mecha_count_gte":
+		// 机甲档案数（不是存活单位数）：阵亡待复活的机甲仍有档案，背包也还在，
+		// 下游层读档后照样能改绑 / 查看，所以按档案计数。
+		count := len(player.Mechas)
+		if count >= check.N {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求机甲档案 >= %d", check.N))
+	case "mecha_operator_count":
+		// 绑定到某个操作者（issuer_id）的机甲数必须恰好等于 n：operator 空串数空闲机甲。
+		// 用相等而不是 >=，因为「一台空闲、一台绑给 builder-a」这种局面要能断言
+		// 「没有多出来的空闲机甲」——多绑一台同样是坏层。
+		count := 0
+		for _, mecha := range player.Mechas {
+			if mecha != nil && mecha.Operator == check.Operator {
+				count++
+			}
+		}
+		if count == check.N {
+			return pass(fmt.Sprintf("%d", count))
+		}
+		label := check.Operator
+		if label == "" {
+			label = "(空闲)"
+		}
+		return fail(fmt.Sprintf("%d", count), fmt.Sprintf("要求绑定到 %s 的机甲数 = %d", label, check.N))
 	case "dark_fog_hostile":
 		hostile := player.DarkFog.Hostile
 		if hostile == check.Boolean {
