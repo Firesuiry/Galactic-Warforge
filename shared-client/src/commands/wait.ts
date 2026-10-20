@@ -33,11 +33,6 @@ interface ProbeOutcome {
   stuckReason?: string;
   /** 超时时报告的当前状况。 */
   pending: string;
-  /**
-   * 只看「有进展」的探针：true 表示这一轮有可见进展（wait build 的施工签名变了）。
-   * 配合 runWait 的 `progress` 计数，用来按 tick 前进量（而不是墙钟）判卡死。
-   */
-  progressed?: boolean;
 }
 
 type Probe = (tick: number) => Promise<ProbeOutcome>;
@@ -72,9 +67,6 @@ async function runWait(
   const startTick = startTickIn ?? (await api.fetchHealth()).tick;
   const startMs = now();
   let tick = startTick;
-  // 最近一次看到「tick 前进或探针有进展」时的 tick / 墙钟。stall 判定基于两者。
-  let lastMoveTick = startTick;
-  let lastMoveMs = startMs;
 
   for (;;) {
     const outcome = await probe(tick);
@@ -93,12 +85,7 @@ async function runWait(
       return fmtFailure(`超时（${timeoutSeconds}s，tick 前进 ${tickDelta}${why}）：${outcome.pending}`);
     }
     await sleep(interval);
-    const nextTick = (await api.fetchHealth()).tick;
-    if (nextTick !== tick || outcome.progressed) {
-      lastMoveTick = nextTick;
-      lastMoveMs = now();
-    }
-    tick = nextTick;
+    tick = (await api.fetchHealth()).tick;
   }
 }
 
@@ -209,7 +196,7 @@ async function waitBuild(api: ApiClient, issuerId: string, options: WaitOptions 
       lastSignature = signature;
       lastChangeTick = tick;
       lastChangeMs = now();
-      return { pending: `还有 ${tasks.length} 个施工任务：${taskListText(tasks)}`, progressed: true };
+      return { pending: `还有 ${tasks.length} 个施工任务：${taskListText(tasks)}` };
     }
     // tick 从签名变化之后已经前进了多少：tick 没动 = 服务端暂停 / 没人推进，
     // 不算施工卡死；tick 在走而签名 10 秒不变，才是真的卡住。
