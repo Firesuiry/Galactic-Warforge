@@ -118,7 +118,7 @@ build 58 157 sorter_mk1 --rotation 180   # 背面（北）跳过 1 个空格取�
 | `assembling_machine_mk1` | 1 批 / 配方时长 | 24 | 8 | 8 | |
 | `matrix_lab` | 1 批 / 配方时长 | 36 | 12 | 12 | 研究模式另算 |
 | `supply_station` | — | 1000 | 200 | 200 | 开局可建的产线终点 |
-| `conveyor_belt_mk1` | 1/tick，每格堆 2 | — | — | — | Mk.II 2/tick，Mk.III 5/tick |
+| `conveyor_belt_mk1` | 1/tick，每格堆 2 | — | — | — | Mk.II 2/tick、每格堆 3；Mk.III 5/tick、每格堆 6 |
 
 - 缓冲按「输入/输出优先级」分配，默认 2:1，上表是默认值。实际值以 `inspect` 的 `storage.capacity / buffer_capacity / output_buffer` 为准。
 - **估算等待时间**：N 个成品 ≈ N × 配方时长 ÷ 制造台数量（tick）。tick 速率看 `health` 或 `/games/current`，例如 10 tick/s 时 600 tick = 60 秒。

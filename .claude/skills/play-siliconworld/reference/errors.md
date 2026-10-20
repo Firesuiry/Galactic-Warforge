@@ -70,7 +70,7 @@
 | `EXECUTOR_UNAVAILABLE` | `<你> 还没有绑定机甲：先用 assign_mecha 接管一台` | `mecha list` 找空闲机甲，`mecha assign <id>`。没有空闲的，就到基站造：见 [multi-agent.md](multi-agent.md) |
 | `EXECUTOR_UNAVAILABLE` | `你的机甲 u-x 在 planet-y，不在本星球` | 命令加 `--planet <机甲所在星球>`，或者不写星球（默认落在机甲所在星球） |
 | `EXECUTOR_UNAVAILABLE` | `机甲 u-x 已阵亡，tick N 复活` | 等它复活（背包会保留），或者先接管另一台空闲机甲 |
-| `NOT_OPERATOR` | `N 台机甲由其他发令者操作，已跳过` | 只指挥自己的机甲。别人的机甲不要动；确实要用，就和对方协调后用 `mecha assign` |
+| `NOT_OPERATOR` | `N 台机甲由其他发令者操作，已跳过`（前缀随命令类型变化，如 `move`/`attack`/`order`） | 只指挥自己的机甲。别人的机甲不要动；确实要用，就和对方协调后用 `mecha assign` |
 | `OUT_OF_RANGE` | `超出机甲作业范围：85 > 18` | 目标在基站覆盖（72）外，而机甲离它超过 18 格：先 `move <我的机甲> x y` 开过去 |
 | `OUT_OF_RANGE` | `资源须在 6 格地表范围内` | mine_resource 前，先把机甲开到矿点 6 格内 |
 | `EXECUTOR_BUSY` | `机甲正忙` | upgrade、demolish 并发已满（每台机甲 2 个），等一下再发 |
