@@ -83,7 +83,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 
 | 条件 | 等到什么 |
 | --- | --- |
-| `wait ticks <n>` | 游戏 tick 前进 n（`/health` 的 tick，按服务端时钟算） |
+| `wait ticks <n>` | 游戏 tick 前进 n（`/health` 的 tick，按服务端时钟算）。**n 是 tick 数，不是秒**：秒 = n ÷ tick 速率（`/games/current` 的 `max_tick_rate`，本服通常 10 tick/s，即 500 tick = 50 秒）；`help wait` 会按当前速率换算并给例子 |
 | `wait job` | 我的机甲（`mechas.find(m => m.operator === issuer_id)`）的作业结束；当前没有作业立即返回 |
 | `wait build` | 我的机甲施工队列清空（`planet_runtime.construction_tasks` 按 `mecha_id` 过滤）；**剩下的任务全是 `pending` + `wait_reason=insufficient_materials`，或 10 秒内签名毫无变化时提前返回**，逐条列出任务、位置和原因 |
 | `wait item <物品ID> <数量>` | 我的机甲背包里该物品 ≥ 数量 |
@@ -135,29 +135,37 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 - **scene**：`scene [planet] [x y w h] [--near_x X --near_y Y --radius R] [--json] [--limit N|all]`。
   - 省略 planet = 我的机甲（summary `mechas` 里 `operator` = 发令者）所在星球，未绑定时用焦点星球 `focus_planet_id`，再退回 `active_planet_id`；首行会打印选中原因。省略窗口 = 以我的机甲为中心 48×48（按星球图集尺寸裁剪；无机甲时从 0,0 起）。
   - 位置参数不再「第一个数字当 planet」：`scene 40 130 16 12` 就是窗口；给 planet 必须形如 `planet-1-1`。
-  - 默认输出紧凑文本：建筑表（id / 类型 / 锚点 / 占地 / `runtime.state[:state_reason]`）、资源按 `kind` 汇总（格数、包围盒、代表矿点 id）、单位表（机甲标 `operator`，空闲显示 `(idle)`）；每节默认最多 20 条，超出提示 `--json` 或缩小窗口，`--limit all` 全列。
+  - 默认输出紧凑文本：建筑表（id / 类型 / 锚点 / 占地 / `runtime.state[:state_reason]`）、资源按 `kind` 汇总（格数、包围盒、代表矿点 id）、单位表（机甲标 `operator`，空闲显示 `(idle)`）；每节默认最多 20 条，超出提示 `--json` 或缩小窗口，`--limit all` 全列。`--limit` 只接受正整数或 `all`；`--limit 0`、负数、非数字或缺值都直接报错 `--limit 必须是正整数或 all`（不会静默输出 `showing 0 of N`）。
   - `--json` 输出服务端原始 JSON（`buildings`/`units` 是对象、空节是 `null`，脚本用 `(.buildings // {})`）。`--near_x/--near_y/--radius`（R ≤ 128）仍返回球面邻域补片 `surface_patches`。服务端窗口默认 160、最大 257。球面寻路没有 CLI 命令，用 `GET /world/planets/{id}/path`。
-- **find_space**：`find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]`。
-  - 在当前星球找一个 w×h 的**全空矩形**，按与锚点（缺省 = 我的机甲，`--near` 覆盖）的距离升序输出前 N 条（默认 5）：
+- **find_space**：`find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]`。
+  - 在当前星球找一个 w×h 的**全空矩形**，按与锚点（缺省 = 我的机甲，`--near` 覆盖）的距离升序输出前 N 条（默认 5）。每行同时给「距锚点」（搜索锚点）和「距机甲」两列；机甲不在该星球时两者相同：
     ```
-    空地 3x3 @ (62,146)  距机甲 4  地形 buildable
+    空地 3x3 @ (62,146)  距锚点 0  距机甲 4  地形 buildable
     ```
+  - `--spacing <n>`：任意两个候选的锚点曼哈顿距离 ≥ n，贪心取分散候选（建议取 `max(w,h)`）。**缺省 0 = 不过滤**，行为与旧版一致。结果里候选互相重叠时（且未给 `--spacing`）额外提示「用 --spacing 取分散候选」。
   - 占用判定：地形必须是 `buildable`；建筑按**实际占地**（`runtime.params.footprint`，锚点 + 宽高）排除，不是只排锚点；地面单位占 1 格（`domain=air/orbital/space` 不占）；未落成的施工任务按 `building_type` 的占地排除（高架传送带只占 1 格，`completed`/`cancelled` 不占）。服务端 `construction_tasks` 只下发**自己的**任务。
   - 数据来源：`GET /world/planets/<id>/scene`（窗口 = 锚点周围 `2R+1` 见方，R 默认 48、最大 128；另外扩 4 格取回锚点在外、占地压进窗口的建筑）+ `GET /world/planets/<id>/runtime` 的 `construction_tasks`。二维前缀和判定，128×128 窗口也在毫秒级。
   - 只返回完整落在窗口内、且不跨立方体球面缝的矩形；跳过的跨缝候选数会单独说明。无解时输出 `✗ 没找到 …`（`scripts/sw` 退出码非 0）。
-  - `--json` 输出 `{planet_id, anchor, window, size, skipped_seam, results[]}`。
-- **plan**：`plan <build x y type | upgrade <building_id>>... [--planet <id>] [--json]`，或用 `;`/换行分隔，或 `plan -` 从 stdin 每行一条。
-  - 输出累计用料表：`物品 / 需要 / 背包 / 已下未落成任务占用 / 缺口`。
+  - `--json` 输出 `{planet_id, anchor, window, size, spacing, skipped_seam, results[]}`；每个结果带 `distance`（距锚点）与 `mechaDistance`（距机甲）。
+- **plan**：`plan <build x y type | upgrade <building_id> | craft_item <配方> <批数>>... [--planet <id>] [--json]`，或用 `;`/换行分隔，或 `plan -` 从 stdin 每行一条。
+  - `craft_item <配方> <批数>`：把配方 `inputs × 批数` 计入「需要」（可和 build / upgrade 混排，同种原料合并）。产物本身不进表；配方必须存在且 `handcraft_allowed=true`，否则报错。
+  - 输出累计用料表：`物品 / 需要 / 背包 / 占用 / 缺口`。
     ```
     计划 2 项（matrix_lab, wind_turbine）
-    物品    需要  背包  已下未落成任务占用  缺口
+    物品    需要  背包  占用  缺口
     ---  --  --  ---------  --
     ...
     结论：料齐了
     ```
-  - 「已下未落成任务占用」= `planet_runtime.construction_tasks` 里**本机甲**（`mecha_id`）`pending/in_progress/paused` 且 `materials_deducted=false` 的 `cost` 之和；缺口 = 需要 + 占用 − 背包。
+  - 「占用」= `planet_runtime.construction_tasks` 里**本机甲**（`mecha_id`）`pending/in_progress/paused` 且 `materials_deducted=false` 的 `cost` 之和；缺口 = 需要 + 占用 − 背包。占用**只算施工任务**：进行中的手搓作业已预留的原料不算占用（缺口提示里注明）。
   - 造价来自 `/catalog` 的 `buildings[].build_cost`；未知建筑类型、不可建造类型、找不到的 upgrade 目标直接报错。`upgrade` 按服务端 `BuildingUpgradeCost` 口径 = `ceil(基础造价 × 当前等级)`（数据里 `cost_multiplier` 缺省 1）。
-  - 缺口物品若有 `handcraft_allowed` 配方，结论下逐条给配方 id、输入→输出和「需 N 批 = 原料×数量」；不可手搓则写「没有可手搓配方，需要生产建筑」。
+  - 缺口物品若有 `handcraft_allowed` 配方，结论下逐条给配方 id、输入→输出和「需 N 批 = 原料×数量」，并**递归展开**中间产物（最多 3 层，配方环停止展开）：背包或本方建筑里已有足够库存的直接写来源，否则继续沿手搓链展开，不可手搓的写「不可手搓，从 <建筑> 取」或「需要生产建筑」。
+    ```
+    - 电路板 11（可手搓：circuit_board，铁块×1+铜块×1 → 电路板×1；需 11 批 = 铁块×11+铜块×11）
+        ↳ 铁块 11：不可手搓，从 b-105 补给站(53) 取
+        ↳ 铜块 11：从 b-97 补给站(56) 取
+    ```
+    取料来源 = 机甲周围 48×48 场景里本方建筑 `storage.inventory`（含 `output_buffer`）存有该物品的前 2 个，按库存降序。
   - 有缺口时结论行以 `✗ ` 开头，`scripts/sw` 退出码非 0。
 - **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
   - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
@@ -344,7 +352,7 @@ as                                     # 临时恢复为玩家本人发令
 | `summary` | — | Game summary (resources, players, map) |
 | `stats` | — | Current player statistics |
 | `briefing` | `briefing [alert_limit]` | One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands |
-| `wait` | `wait <ticks <n>\|job\|build\|item <物品ID> <数量> [--in <建筑ID>]\|running <建筑ID>> [--timeout <秒>]` | 等到条件成立（轮询，默认 120s）：ticks=tick 前进 n；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running |
+| `wait` | `wait <ticks <n>\|job\|build\|item <物品ID> <数量> [--in <建筑ID>]\|running <建筑ID>> [--timeout <秒>]` | 等到条件成立（轮询，默认 120s）：ticks=tick 前进 n（n 是 tick 数不是秒，秒 = n ÷ tick 速率；10 tick/s 时 wait ticks 500 = 50 秒）；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running |
 | `catalog` | `catalog <buildings [关键词]\|building <id>\|recipes [--handcraft] [--building <type>] [关键词]\|items [关键词]\|techs [--available\|--done]\|units>` | 紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog） |
 | `galaxy` | — | Galaxy list |
 | `system` | `system [system_id]` | System details (default: sys-1) |
@@ -356,8 +364,8 @@ as                                     # 临时恢复为玩家本人发令
 | `task_forces` | — | Player-owned task force list with supply and command capacity |
 | `theaters` | — | Player-owned theater zones and objectives |
 | `scene` | `scene [planet] [x y width height] [--near_x X --near_y Y --radius R] [--json] [--limit N\|all]` | 局部场景紧凑文本（建筑/资源汇总/单位）；省略 planet = 我的机甲所在星球，省略窗口 = 机甲居中 48×48；--json 输出原始 JSON |
-| `find_space` | `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]` | 找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距机甲升序；省略 --near = 我的机甲，半径默认 48 最大 128；只返回不跨球面缝的矩形 |
-| `plan` | `plan <build x y type \| upgrade building_id>... [--planet <id>] [--json]  \|  plan -` | 累计用料表：需要 / 背包 / 已下未落成任务占用 / 缺口；plan - 从 stdin 每行一条，; 也分隔；缺口可手搓时给配方；有缺口时退出码非 0 |
+| `find_space` | `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]` | 找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距锚点升序，每行同时给「距锚点」「距机甲」；省略 --near = 我的机甲，半径默认 48 最大 128；--spacing N 让任意两个候选的锚点曼哈顿距离 ≥ N（缺省不过滤，建议 max(w,h)）；只返回不跨球面缝的矩形 |
+| `plan` | `plan <build x y type \| upgrade building_id \| craft_item recipe batches>... [--planet <id>] [--json]  \|  plan -` | 累计用料表：需要 / 背包 / 占用 / 缺口；craft_item <配方> <批数> 把 inputs×批数 计入需要（不算占用）；plan - 从 stdin 每行一条，; 也分隔；缺口沿可手搓配方递归展开到不可手搓/已有库存（最多 3 层），并给本方建筑取料来源；有缺口时退出码非 0 |
 | `inspect` | `inspect [planet] [building\|unit\|resource\|sector] <entity_id> [--json]` | 单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON |
 | `networks` | `networks [planet] [--json]` | 电网：每个网络的发电/用电/建筑数/缺电，以及未接网与欠电建筑；有管网时列出节点数（GET /world/planets/<id>/networks） |
 | `fleet_status` | `fleet_status [fleet_id]` | Fleet list or one fleet detail |
