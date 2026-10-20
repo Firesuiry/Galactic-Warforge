@@ -182,9 +182,9 @@ func TestPlanetOverviewAggregatesWholePlanet(t *testing.T) {
 func TestStateSummaryExposesVictoryMetadata(t *testing.T) {
 	ql, ws, planetID := newPlanetQueryFixture(t, 20, 20)
 	ws.Players["p1"] = &model.PlayerState{
-		PlayerID:  "p1",
-		TeamID:    "p1",
-		IsAlive:   true,
+		PlayerID: "p1",
+		TeamID:   "p1",
+		IsAlive:  true,
 		Mechas: map[string]*model.MechaRecord{
 			"u-1": {UnitID: "u-1", PlanetID: planetID, Operator: "p1", Inventory: model.ItemInventory{"iron_ore": 8}},
 		},

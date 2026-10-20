@@ -7,7 +7,6 @@ import (
 	"siliconworld/internal/model"
 )
 
-
 // 试玩反馈：缺料回执一次列出全部缺口，而不是只报第一项。
 func TestMissingItemMessageListsEveryGap(t *testing.T) {
 	inv := model.ItemInventory{model.ItemIronIngot: 7, model.ItemGear: 1}
