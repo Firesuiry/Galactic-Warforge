@@ -218,6 +218,20 @@ describe('plan 参数解析', () => {
     assert.match(items[1].label, /craft gear×5/);
   });
 
+  it('同一行里相邻计划动词自动切开', () => {
+    const items = parsePlanItems('build 98 146 matrix_lab craft_item circuit_board 4 upgrade b-5');
+    assert.deepEqual(items.map((item) => item.kind), ['build', 'craft', 'upgrade']);
+    assert.equal(items[1].recipeId, 'circuit_board');
+    assert.equal(items[1].batches, 4);
+  });
+
+  it('build 的带值选项不会被当成下一个计划动词', () => {
+    const items = parsePlanItems('build 1 2 wind_turbine --rotation 90 craft_item gear 2');
+    assert.equal(items.length, 2);
+    assert.equal(items[0].buildingType, 'wind_turbine');
+    assert.equal(items[1].batches, 2);
+  });
+
   it('craft_item 缺批数或批数非正数报错', () => {
     assert.throws(() => parsePlanItems('craft_item gear'), /需要 <配方> <批数>/);
     assert.throws(() => parsePlanItems('craft_item gear 0'), /正整数/);

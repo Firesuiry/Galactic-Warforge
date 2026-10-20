@@ -103,11 +103,52 @@ export function upgradeCost(base: PlanCostLine[], level: number): PlanCostLine[]
   return base.map((item) => ({ item_id: item.item_id, quantity: Math.ceil(item.quantity * factor) }));
 }
 
-/** 把命令行拆成计划项；`;`、换行都算分隔符。 */
+/**
+ * 把命令行拆成计划项；`;`、换行都算分隔符。
+ *
+ * 另外，同一条里出现下一个计划动词（build / upgrade / craft_item）时也切开，
+ * 这样 `plan build 98 146 matrix_lab craft_item circuit_board 4` 能直接写。
+ * build 的 `--rotation 90` 这类选项会跳过它的值，不会被当成下一个动词。
+ */
+const PLAN_VERBS = new Set(['build', 'upgrade', 'craft_item']);
+const PLAN_OPTIONS_WITH_VALUE = new Set([
+  '--rotation', '--direction', '--recipe', '--z', '--elevation', '--planet',
+]);
+
+function splitPlanSegments(text: string): string[] {
+  const segments: string[] = [];
+  for (const raw of text.split(/[;\n]+/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const tokens = line.split(/\s+/);
+    let current: string[] = [];
+    let skipNext = false;
+    for (const token of tokens) {
+      if (skipNext) {
+        current.push(token);
+        skipNext = false;
+        continue;
+      }
+      if (PLAN_VERBS.has(token) && current.length > 0) {
+        segments.push(current.join(' '));
+        current = [token];
+        continue;
+      }
+      current.push(token);
+      skipNext = PLAN_OPTIONS_WITH_VALUE.has(token);
+    }
+    if (current.length > 0) {
+      segments.push(current.join(' '));
+    }
+  }
+  return segments;
+}
+
+/** 把命令行拆成计划项。 */
 export function parsePlanItems(text: string): PlanItem[] {
-  const segments = text.split(/[;\n]+/)
-    .map((segment) => segment.trim())
-    .filter((segment) => segment && !segment.startsWith('#'));
+  const segments = splitPlanSegments(text);
   const items: PlanItem[] = [];
   for (const segment of segments) {
     const tokens = segment.split(/\s+/);
