@@ -14,7 +14,9 @@
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
 | 告警 | `alerts --active-only` | 还在发生的产线问题 |
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
-| 等一件事 | `wait job` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询 |
+| 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300` |
+| 找空地 | `find_space <宽> <高> [--count N] [--near x y]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务 |
+| 算料 | `plan build <x> <y> <类型>; build …` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺料时可手搓的会给出配方 |
 
 ## 2. 目录（造价、配方、科技）
 
@@ -59,8 +61,8 @@
 
 ### build
 1. `catalog building <type>`：已解锁、造价、占地。
-2. 背包够**全部**造价。连续下几个建造单时，造价要累加计算。
-3. `scene` 确认占地 `[x,x+w)×[y,y+h)` 内没有建筑、施工任务和单位。
+2. **先用 `plan` 算料**：`scripts/sw plan build <x> <y> <type>; build …`。它会把背包、已下未落成任务的占用、本批造价一起算，直接给出缺口。有缺口时退出码非 0。
+3. **用 `find_space <w> <h>` 找位置**，不要凭 `scene` 文本目测：`scene` 默认只列前 20 栋建筑，大基地会看不全。
 4. 在基站覆盖 72 格内；否则机甲要在 18 格内。
 5. 采矿机要压到矿；生产建筑带上 `--recipe`。
 6. 建好后附近有电（`networks`）。

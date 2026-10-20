@@ -43,6 +43,7 @@ SW_ISSUER=builder-a scripts/sw mecha list   # 以代理身份发令（多代理�
 - 有失败时退出码非 0，批量模式最后打印汇总。
 - 环境变量：`SW_SERVER`、`SW_PLAYER`、`SW_KEY`、`SW_ISSUER`、`SW_WAIT=0`（不等结果）。
 - 不知道参数时：`scripts/sw help <命令>`。完整命令表见 `docs/dev/客户端CLI.md`。
+- 最常用的两条「先查再做」：`find_space <宽> <高>`（找空地）、`plan build …; build …`（算料 + 查缺口）。
 
 ## 3. 决策循环
 
@@ -51,7 +52,7 @@ SW_ISSUER=builder-a scripts/sw mecha list   # 以代理身份发令（多代理�
 2. 查    catalog building <type>（解锁？造价？占地？） · 背包够不够 · 占地空不空
 3. 做    一小批命令（3–8 条），用 scripts/sw - 批量发
 4. 验    每条看 ✓/✗；然后 planet_runtime --mine（施工有没有卡住）、inspect <建筑>（running？库存在涨吗？）
-5. 等    wait job / wait build / wait item … / wait ticks N（不要空转轮询）
+5. 等    wait job [--timeout 秒] / wait build / wait item … / wait ticks N（不要空转轮询；默认 120 秒，大批量手搓加 --timeout 300）
 ```
 
 - 每一步要看的字段和下令前的自检清单：[reference/queries.md](reference/queries.md)。
@@ -59,8 +60,8 @@ SW_ISSUER=builder-a scripts/sw mecha list   # 以代理身份发令（多代理�
 
 ## 4. 十条铁律
 
-1. **造价在自己的机甲背包里**。连续下几个建造单时，造价要累加；回执里出现「本任务将等料」就要补料。
-2. **`build x y` 的 x、y 是占地左上角**，占地向东、向南展开。下单前用 `catalog building <type>` 查占地大小。
+1. **造价在自己的机甲背包里**。下建造单前先 `plan build …; build …` 算料，它会累计背包、已下未落成任务的占用和本次造价，直接给出缺口；回执里出现「本任务将等料」就要补料。
+2. **`build x y` 的 x、y 是占地左上角**，占地向东、向南展开。下单前用 `catalog building <type>` 查占地大小，用 `find_space <宽> <高>` 找全空位置；`scene` 文本默认只列前 20 栋建筑，不要靠它目测空地。
 3. **传送带不给建筑喂料**。熔炉、制造台、研究站、补给站的进料和出料都靠**分拣器**。
 4. **分拣器的 `--rotation` 就是放货方向**（0 北、90 东、180 南、270 西），背面取货，沿轴扫描 3 格内的第一个建筑。建完用 `inspect <分拣器>` 确认两端都连上了。
 5. **采矿机必须有出口**：在它的边上放一段出货方向背离矿机的传送带。否则几 tick 就会堵死。
