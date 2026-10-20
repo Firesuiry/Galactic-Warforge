@@ -185,6 +185,31 @@ describe('inspect', () => {
     assert.match(out, /sorter\s+取←西 b-55 电弧熔炉\(1格\) \| 放→东 未连上：被分拣器 b-181 挡住\s+last=t1234 iron_ore b-55→b-105/);
   });
 
+  it('shows sorter_stalled in the alerts line of a sorter', () => {
+    const view: PlanetInspectView = {
+      planet_id: 'planet-1-1',
+      discovered: true,
+      entity_kind: 'building',
+      entity_id: 'b-105',
+      title: 'sorter_mk1',
+      building: {
+        id: 'b-105',
+        type: 'sorter_mk1',
+        owner_id: 'p1',
+        position: { x: 63, y: 143, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 2,
+        runtime: { state: 'no_power' },
+        sorter: { cycle_ticks: 6, range: 3 },
+        production_monitor: { active_alerts: { sorter_stalled: true } },
+      } as PlanetInspectView['building'],
+    };
+    const out = fmtInspect(view);
+    assert.match(out, /alerts\s+sorter_stalled/);
+  });
+
   it('renders an unconnected sorter endpoint with the empty-axis reason', () => {
     const view: PlanetInspectView = {
       planet_id: 'planet-1-1',
