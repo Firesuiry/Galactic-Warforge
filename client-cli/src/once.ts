@@ -2,8 +2,7 @@ import chalk from 'chalk';
 import { createApiClient, type AwaitExecutionOptions, type ApiClient } from '@gw/shared/api';
 import { DEFAULT_GALAXY_ID, DEFAULT_PLANET_ID, DEFAULT_SYSTEM_ID } from '@gw/shared/config';
 import { splitCommandLine } from '@gw/shared/commands/game-commands';
-import { fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
-import { WAIT_FAILURE_MARKER } from '@gw/shared/commands/wait';
+import { FAILURE_MARKER, fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
 import type { CommandResponse } from '@gw/shared/types';
 
 import { COMMANDS, dispatch } from './commands/index.js';import type { ReplContext } from './repl.js';
@@ -112,12 +111,14 @@ export function createOnceRunner(options: OnceOptions) {
   }
 
   /**
-   * 本地校验失败（fmtError）在 `Error: ` 前缀里；`wait` 超时/提前返回用 `✗ ` 前缀。
+   * 本地校验失败（fmtError）在 `Error: ` 前缀里；`wait` 超时/提前返回、`plan` 有缺口
+   * 用行首 `✗ ` 标记（plan 的表在前，标记在结论行）。
    * chalk 在 TTY 下会给前缀套 ANSI，先剥掉再比。
    */
   function isLocalError(text: string): boolean {
     const plain = text.replace(/\u001b\[[0-9;]*m/g, '');
-    return plain.startsWith(fmtError('').replace(/\s+$/, '')) || plain.startsWith(WAIT_FAILURE_MARKER);
+    return plain.startsWith(fmtError('').replace(/\s+$/, ''))
+      || plain.split('\n').some((line) => line.startsWith(FAILURE_MARKER));
   }
 
   async function runLine(line: string): Promise<OnceResult> {

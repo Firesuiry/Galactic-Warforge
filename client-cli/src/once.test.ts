@@ -165,6 +165,56 @@ describe('scripts/sw non-interactive runner', () => {
     assert.match(text(), /✗ 超时（0s，tick 前进 0）/);
   });
 
+  it('treats a query whose later line starts with ✗ as failure (plan 有缺口)', async () => {
+    const { api } = mockApi([]);
+    const { once, text } = runner(api);
+    assert.equal(await once.run('wait ticks 5 --timeout 0'), false);
+    assert.match(text(), /✗ 超时/);
+  });
+
+  it('plan with a gap exits non-zero and plan with full materials exits zero', async () => {
+    const summary = {
+      tick: 10,
+      active_planet_id: 'planet-1-1',
+      map_width: 864,
+      map_height: 576,
+      surface: { topology: 'cube_sphere', face_size: 144 },
+      players: {
+        p1: {
+          player_id: 'p1',
+          is_alive: true,
+          mechas: [{
+            unit_id: 'u-7', planet_id: 'planet-1-1', operator: 'p1', alive: true, respawn_at_tick: 0,
+            position: { x: 10, y: 10, z: 0 }, inventory: { iron_ingot: 1 },
+            inventory_slots_used: 1, inventory_slots_total: 40, operate_range: 18,
+            concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
+          }],
+        },
+      },
+    };
+    const catalog = {
+      items: [{ id: 'iron_ingot', name: '铁块' }],
+      buildings: [{ id: 'tesla_tower', buildable: true, footprint: { width: 1, height: 1 }, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 2 }] } }],
+      recipes: [],
+    };
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: (async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        if (url.pathname === '/state/summary') return new Response(JSON.stringify(summary), { status: 200 });
+        if (url.pathname === '/catalog') return new Response(JSON.stringify(catalog), { status: 200 });
+        if (url.pathname.endsWith('/runtime')) {
+          return new Response(JSON.stringify({ planet_id: 'planet-1-1', discovered: true, available: true, tick: 10, threat_level: 0, construction_tasks: [] }), { status: 200 });
+        }
+        throw new Error(`unexpected ${url.pathname}`);
+      }) as typeof fetch,
+    });
+    const { once, text } = runner(api);
+    assert.equal(await once.run('plan build 10 10 tesla_tower'), false);
+    assert.match(text(), /✗ 结论：缺 铁块 1/);
+  });
+
   it('counts each index independently when several commands share a request', async () => {
     const outcomes: ExecutionOutcome[] = [
       { command_index: 0, status: 'executed', code: 'OK', message: 'ok' },

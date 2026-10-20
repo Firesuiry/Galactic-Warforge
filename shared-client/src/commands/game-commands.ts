@@ -75,6 +75,8 @@ import {
   cmdSave,
 } from './debug.js';
 import { cmdCatalog } from './catalog.js';
+import { cmdFindSpace } from './find-space.js';
+import { cmdPlan } from './plan.js';
 import { cmdCheckpoint } from './checkpoint.js';
 import { cmdWait, type WaitOptions } from './wait.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
@@ -150,6 +152,8 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   task_forces: { handler: cmdTaskForces },
   theaters: { handler: cmdTheaters },
   scene: { handler: cmdScene },
+  find_space: { handler: cmdFindSpace },
+  plan: { handler: cmdPlan },
   inspect: { handler: cmdInspect },
   networks: { handler: cmdNetworks },
   fleet_status: { handler: cmdFleetStatus },
