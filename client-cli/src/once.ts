@@ -5,7 +5,8 @@ import { splitCommandLine } from '@gw/shared/commands/game-commands';
 import { FAILURE_MARKER, fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
 import type { CommandResponse } from '@gw/shared/types';
 
-import { COMMANDS, dispatch } from './commands/index.js';import type { ReplContext } from './repl.js';
+import { COMMANDS, dispatch } from './commands/index.js';
+import type { ReplContext } from './repl.js';
 import { issuerFromEnv } from './issuer.js';
 
 /** 非交互模式的连接与等待配置；全部来自环境变量，见 docs/dev/客户端CLI.md「非交互模式」。 */
@@ -89,12 +90,17 @@ export function createOnceRunner(options: OnceOptions) {
   };
 
   async function waitForExecution(response: CommandResponse): Promise<OnceResult> {
+    // 整批被拒：服务端只有全部 accepted 才入队（gateway handleCommands），
+    // 一条都不等——否则 accepted 的 index 会白等满 SW_WAIT_TIMEOUT。
+    if (!response.accepted) {
+      return { output: '', ok: false };
+    }
     // 结构校验失败（未入队）没有 execute 记录可等；入队的那部分逐条等。
     const expected = response.results
       .filter((result) => result.status !== 'rejected')
       .map((result) => result.command_index);
     if (expected.length === 0) {
-      return { output: '', ok: response.accepted };
+      return { output: '', ok: true };
     }
     const timeoutMs = options.awaitOptions?.timeoutMs ?? config.waitTimeoutMs;
     const { outcomes } = await api.awaitExecution(response.request_id, expected.length, {

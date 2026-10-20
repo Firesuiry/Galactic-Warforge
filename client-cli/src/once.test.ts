@@ -31,8 +31,11 @@ function auditEntry(index: number, status: string, code: string, message: string
   };
 }
 
-/** 假服务端：/commands 回 ACCEPTED，/audit 回给定的 execute 记录。 */
-function mockApi(executions: Array<{ index: number; status: string; code: string; message: string }>) {
+/** 假服务端：/commands 回 ACCEPTED（或 `response` 覆盖），/audit 回给定的 execute 记录。 */
+function mockApi(
+  executions: Array<{ index: number; status: string; code: string; message: string }>,
+  responseOverride?: (body: { request_id: string; commands: unknown[] }) => CommandResponse,
+) {
   const calls: string[] = [];
   const api = createApiClient({
     serverUrl: 'http://test.local',
@@ -42,7 +45,7 @@ function mockApi(executions: Array<{ index: number; status: string; code: string
       calls.push(`${init?.method ?? 'GET'} ${url.pathname}`);
       if (url.pathname === '/commands') {
         const body = JSON.parse(String(init?.body)) as { request_id: string; commands: unknown[] };
-        const response: CommandResponse = {
+        const response: CommandResponse = responseOverride ? responseOverride(body) : {
           request_id: body.request_id,
           accepted: true,
           enqueue_tick: 9,
@@ -105,6 +108,26 @@ describe('scripts/sw non-interactive runner', () => {
     const { once, text } = runner(api, { waitTimeoutMs: 500 });
     assert.equal(await once.run('build 60 140 wind_turbine'), false);
     assert.match(text(), /\[0\] … 未在 0\.5s 内执行（tick 是否在走？）/);
+  });
+
+  it('整批被拒（accepted=false）时立即失败，不轮询审计', async () => {
+    const { api, calls } = mockApi([], (body) => ({
+      request_id: body.request_id,
+      accepted: false,
+      enqueue_tick: 9,
+      results: body.commands.map((_, index) => (index === 0
+        ? { command_index: 0, status: 'rejected', code: 'VALIDATION_FAILED', message: '缺少 target.position' }
+        : { command_index: 1, status: 'accepted', code: 'OK', message: '已受理，下一 tick 执行' })),
+    }));
+    const { once, text } = runner(api, { waitTimeoutMs: 60_000 });
+    const started = Date.now();
+    assert.equal(await once.run('build 60 140 wind_turbine; build 61 140 wind_turbine'), false);
+    // 整批未入队：不等执行结果，也不出现「未在 … 内执行」。
+    assert.deepEqual(calls, ['POST /commands']);
+    assert.match(text(), /REJECTED/);
+    assert.match(text(), /VALIDATION_FAILED: 缺少 target\.position/);
+    assert.doesNotMatch(text(), /未在 .* 内执行/);
+    assert.ok(Date.now() - started < 5_000, '不应白等 SW_WAIT_TIMEOUT');
   });
 
   it('does not poll audit with SW_WAIT=0', async () => {
