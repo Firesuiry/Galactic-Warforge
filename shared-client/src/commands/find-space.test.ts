@@ -383,7 +383,7 @@ describe('cmdFindSpace 命令', () => {
     assert.match(out, /空地 3x3 @ \(1,1\)\s+距锚点 0\s+距机甲 0/);
     assert.match(out, /空地 3x3 @ \(2,1\)\s+距锚点 0\s+距机甲 0/);
     // 相邻候选重叠时提示 --spacing。
-    assert.match(out, /--spacing <n>，建议 3/);
+    assert.match(out, /--spacing <n>，互不重叠至少 4/);
     assert.match(calls.find((call) => call.startsWith('scene')) ?? '', /^scene 0,0 8x8$/);
   });
 

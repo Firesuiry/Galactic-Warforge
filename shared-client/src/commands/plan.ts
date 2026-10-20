@@ -9,6 +9,7 @@ import type {
   ConstructionTaskView,
   ItemAmount,
   RecipeCatalogEntry,
+  TechCatalogEntry,
 } from '../types.js';
 import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
 import { FAILURE_MARKER, fmtError, table } from './format.js';
@@ -263,21 +264,444 @@ function batchesFor(recipe: RecipeCatalogEntry, itemId: string, quantity: number
   return Math.ceil(quantity / (output?.quantity ?? 1));
 }
 
-/** 本方建筑里存有该物品的前 `limit` 个（按库存量降序）。 */
-export function findBuildingSources(
-  buildings: Building[],
-  itemId: string,
-  limit = 2,
-): Array<{ id: string; type: string; quantity: number }> {
-  return buildings
+export interface BuildingSourceSummary {
+  /** 列出来的前 `limit` 个（按库存量降序）。 */
+  listed: Array<{ id: string; type: string; quantity: number }>;
+  /** 所有本方建筑里该物品的当前总量（inventory + output_buffer）。 */
+  total: number;
+  /** 有该物品的本方建筑数（可能大于 listed.length）。 */
+  count: number;
+}
+
+/**
+ * 本方建筑里该物品的**当前可取出数量**：`storage.inventory + storage.output_buffer`，
+ * 按数量降序，只算数量 > 0 的建筑。`total` 是全部建筑之和（「够 / 不够」标记按它算），
+ * `listed` 只取前 `limit` 个（展示用）。
+ */
+export function summarizeSources(buildings: Building[], itemId: string, limit = 2): BuildingSourceSummary {
+  const all = buildings
     .map((building) => ({
       id: building.id,
       type: building.type,
       quantity: (building.storage?.inventory?.[itemId] ?? 0) + (building.storage?.output_buffer?.[itemId] ?? 0),
     }))
     .filter((entry) => entry.quantity > 0)
-    .sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id))
-    .slice(0, limit);
+    .sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id));
+  return {
+    listed: all.slice(0, limit),
+    total: all.reduce((sum, entry) => sum + entry.quantity, 0),
+    count: all.length,
+  };
+}
+
+/** 本方建筑里存有该物品的前 `limit` 个（按库存量降序）。 */
+export function findBuildingSources(
+  buildings: Building[],
+  itemId: string,
+  limit = 2,
+): Array<{ id: string; type: string; quantity: number }> {
+  return summarizeSources(buildings, itemId, limit).listed;
+}
+
+/** 本方建筑里该物品的合计库存（inventory + output_buffer）。 */
+export function buildingStockTotal(buildings: Building[], itemId: string): number {
+  return summarizeSources(buildings, itemId, 0).total;
+}
+
+/** 来源列表文案：`b-97 补给站(42)、b-55 电弧熔炉(2)`；超过 limit 处时补 `等 N 处`。 */
+export function fmtSourceList(catalog: CatalogView, summary: BuildingSourceSummary): string {
+  const list = summary.listed
+    .map((source) => `${source.id} ${buildingName(catalog, source.type)}(${source.quantity})`)
+    .join('、');
+  return summary.count > summary.listed.length ? `${list} 等 ${summary.count} 处` : list;
+}
+
+/** 「够 / 不够」标记：`[够]` 或 `[不够，还差 N]`。 */
+export function fmtStockMarker(available: number, need: number): string {
+  return available >= need ? '[够]' : `[不够，还差 ${need - available}]`;
+}
+
+/** `plan need` 的最大展开层数（防止深链把输出撑爆；配方环另有检测）。 */
+export const MAX_NEED_DEPTH = 6;
+
+/** `plan need` 展开后的一层节点。 */
+export interface NeedNode {
+  itemId: string;
+  /** 这一层需要多少（从父配方反推）。 */
+  quantity: number;
+  /** 选中该物品的配方；叶子（基础原料 / 库存已够 / 达到层数上限 / 配方环）没有。 */
+  recipe?: RecipeCatalogEntry;
+  /** 现有量（背包 + 本方建筑库存，与 plan 的取料来源同口径）。 */
+  stock: number;
+  /** 缺口 = 需要 − 已分到的现有量（同一物品在多分支出现时按遍历顺序分配库存）。 */
+  gap: number;
+  /** 叶子节点的原因。 */
+  leafReason?: 'base' | 'stock' | 'depth' | 'cycle';
+  children: NeedNode[];
+}
+
+/** 配方是否可用：`tech_unlock` 为空 = 无门槛；否则要求其中任一科技已完成。 */
+export function recipeUnlocked(
+  recipe: RecipeCatalogEntry,
+  completedTechs: ReadonlySet<string>,
+  techUnlocks?: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  const gates = new Set(recipe.tech_unlock ?? []);
+  for (const techId of techUnlocks?.get(recipe.id) ?? []) {
+    gates.add(techId);
+  }
+  if (gates.size === 0) {
+    return true;
+  }
+  return [...gates].some((techId) => completedTechs.has(techId));
+}
+
+/**
+ * 物品 → 可用的生产配方：`outputs` 含该物品、科技已满足，取**单批产出该物品最多**
+ * 的一条（同产量按 id 排序，保证输出稳定）。`--from` 显式指定时直接用它（不校验科技）。
+ */
+export function pickRecipe(
+  catalog: CatalogView,
+  itemId: string,
+  options: {
+    recipeId?: string;
+    completedTechs: ReadonlySet<string>;
+    techUnlocks?: ReadonlyMap<string, ReadonlySet<string>>;
+  },
+): RecipeCatalogEntry | undefined {
+  if (options.recipeId !== undefined) {
+    return recipeFor(catalog, options.recipeId);
+  }
+  const candidates = (catalog.recipes ?? [])
+    .filter((recipe) => (recipe.outputs ?? []).some((output) => output.item_id === itemId))
+    .filter((recipe) => recipeUnlocked(recipe, options.completedTechs, options.techUnlocks));
+  candidates.sort((a, b) => {
+    const qa = (a.outputs ?? []).find((output) => output.item_id === itemId)?.quantity ?? 0;
+    const qb = (b.outputs ?? []).find((output) => output.item_id === itemId)?.quantity ?? 0;
+    return qb - qa || a.id.localeCompare(b.id);
+  });
+  return candidates[0];
+}
+
+/** 配方 ID → 解锁它的科技集合（`techs[].unlocks` 里 type=recipe 的条目）。 */
+export function techRecipeUnlocks(techs: TechCatalogEntry[] | undefined): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  for (const tech of techs ?? []) {
+    for (const unlock of tech.unlocks ?? []) {
+      if (unlock.type !== 'recipe') {
+        continue;
+      }
+      const set = index.get(unlock.id) ?? new Set<string>();
+      set.add(tech.id);
+      index.set(unlock.id, set);
+    }
+  }
+  return index;
+}
+
+/**
+ * `plan need` 的递归展开：给定物品与数量，按配方反推到基础原料。
+ *
+ * - 选中配方后，每批产出 `output.quantity` 个，批数 = ceil(缺口 / 每批产量)，
+ *   原料 = ceil(批数 × inputs.quantity)（与服务端批处理口径一致）。
+ * - 现有量先抵扣：每个节点的缺口 = 需要 − 分到的库存；库存够就不展开。
+ *   同一物品在多个分支出现时按遍历顺序分配库存，不重复计算。
+ * - 科技未满足的配方不会入选（`--from` 除外）；找不到配方就是叶子（基础矿石/原料）。
+ * - 最多展开 `MAX_NEED_DEPTH` 层；链上重复出现同一物品判配方环，停止展开。
+ */
+export function expandNeed(
+  catalog: CatalogView,
+  itemId: string,
+  quantity: number,
+  options: {
+    recipeId?: string;
+    completedTechs: ReadonlySet<string>;
+    techUnlocks?: ReadonlyMap<string, ReadonlySet<string>>;
+    stockOf: (itemId: string) => number;
+    depth?: number;
+    seen?: ReadonlySet<string>;
+    /** 库存分配表（同一物品在多分支间共享）；根调用不传。 */
+    remaining?: Map<string, number>;
+  },
+): NeedNode {
+  const stock = options.stockOf(itemId);
+  const remaining = options.remaining ?? new Map<string, number>();
+  const available = remaining.get(itemId) ?? stock;
+  const used = Math.min(available, quantity);
+  remaining.set(itemId, available - used);
+  const gap = quantity - used;
+  const node: NeedNode = { itemId, quantity, stock, gap, children: [] };
+  if (gap <= 0) {
+    node.leafReason = 'stock';
+    return node;
+  }
+  const recipe = pickRecipe(catalog, itemId, {
+    recipeId: options.recipeId,
+    completedTechs: options.completedTechs,
+    techUnlocks: options.techUnlocks,
+  });
+  if (!recipe) {
+    node.leafReason = 'base';
+    return node;
+  }
+  node.recipe = recipe;
+  const depth = options.depth ?? 0;
+  const seen = options.seen ?? new Set<string>();
+  if (depth >= MAX_NEED_DEPTH) {
+    node.leafReason = 'depth';
+    return node;
+  }
+  if (seen.has(itemId)) {
+    node.leafReason = 'cycle';
+    return node;
+  }
+  const batches = batchesFor(recipe, itemId, gap);
+  const nextSeen = new Set([...seen, itemId]);
+  for (const input of recipe.inputs ?? []) {
+    const needed = Math.ceil(input.quantity * batches);
+    node.children.push(expandNeed(catalog, input.item_id, needed, {
+      completedTechs: options.completedTechs,
+      techUnlocks: options.techUnlocks,
+      stockOf: options.stockOf,
+      depth: depth + 1,
+      seen: nextSeen,
+      remaining,
+    }));
+  }
+  return node;
+}
+
+/** 树里所有「叶子」按物品合计（基础原料汇总）。 */
+export function leafTotals(root: NeedNode): Map<string, number> {
+  const totals = new Map<string, number>();
+  const walk = (node: NeedNode): void => {
+    if (node.children.length === 0) {
+      totals.set(node.itemId, (totals.get(node.itemId) ?? 0) + node.quantity);
+      return;
+    }
+    for (const child of node.children) {
+      walk(child);
+    }
+  };
+  walk(root);
+  return totals;
+}
+
+/** 树里每个物品的总需要量（同一物品在不同分支出现时累加）。 */
+export function needTotals(root: NeedNode): Map<string, number> {
+  const totals = new Map<string, number>();
+  const walk = (node: NeedNode): void => {
+    totals.set(node.itemId, (totals.get(node.itemId) ?? 0) + node.quantity);
+    for (const child of node.children) {
+      walk(child);
+    }
+  };
+  walk(root);
+  return totals;
+}
+
+/** 配方的生产建筑名（`building_types` 的中文名，缺省写「制造台」）。 */
+function recipeBuildingLabel(catalog: CatalogView, recipe: RecipeCatalogEntry): string {
+  const types = recipe.building_types ?? [];
+  if (types.length === 0) {
+    return '制造台';
+  }
+  const names = types
+    .map((type) => buildingName(catalog, type))
+    .filter((name) => name !== '');
+  return names[0] ?? '制造台';
+}
+
+/** 把展开树渲染成缩进文本（首行不带缩进）。 */
+export function fmtNeedTree(catalog: CatalogView, node: NeedNode, depth = 0): string[] {
+  const name = itemName(catalog, node.itemId);
+  // 叶子原因优先于配方：环 / 层数上限的节点虽然选到了配方，但没继续展开。
+  let head: string;
+  if (node.leafReason === 'cycle') {
+    head = `${name} ${node.quantity}（配方环，停止展开）`;
+  } else if (node.leafReason === 'stock') {
+    head = `${name} ${node.quantity}（现有 ${node.stock}，够）`;
+  } else if (node.leafReason === 'depth') {
+    head = `${name} ${node.quantity}（展开到 ${MAX_NEED_DEPTH} 层上限，不再展开）`;
+  } else if (node.recipe) {
+    head = `${name} ${node.quantity} ← ${node.recipe.id}（${recipeBuildingLabel(catalog, node.recipe)}）`;
+    if (node.stock > 0) {
+      head += `（现有 ${node.stock}）`;
+    }
+  } else {
+    head = `${name} ${node.quantity}（基础）`;
+  }
+  const lines = [`${'  '.repeat(depth)}${head}`];
+  for (const child of node.children) {
+    lines.push(...fmtNeedTree(catalog, child, depth + 1));
+  }
+  return lines;
+}
+
+export interface NeedSummaryLine {
+  itemId: string;
+  /** 基础原料总需要量（同一原料在不同分支出现时累加）。 */
+  need: number;
+  /** 现有量（背包 + 本方建筑库存，与 plan 取料来源同口径）。 */
+  stock: number;
+  /** 缺口 = max(0, 需要 − 现有)。 */
+  gap: number;
+}
+
+/**
+ * 叶子汇总（基础原料）：按物品累加需要量，现有量按物品去重。
+ * 中间产物都要现做，不列进「要备多少料」的汇总；它们的现有量写在树的对应行上。
+ * 按物品中文名排序，输出稳定。
+ */
+export function summarizeNeed(catalog: CatalogView, root: NeedNode): NeedSummaryLine[] {
+  const need = leafTotals(root);
+  const stock = new Map<string, number>();
+  const collect = (node: NeedNode): void => {
+    if (node.children.length === 0 && !stock.has(node.itemId)) {
+      stock.set(node.itemId, node.stock);
+    }
+    for (const child of node.children) {
+      collect(child);
+    }
+  };
+  collect(root);
+  return [...need.entries()]
+    .map(([itemId, quantity]) => {
+      const available = stock.get(itemId) ?? 0;
+      return { itemId, need: quantity, stock: available, gap: Math.max(0, quantity - available) };
+    })
+    .sort((a, b) => itemName(catalog, a.itemId).localeCompare(itemName(catalog, b.itemId)));
+}
+
+/**
+ * `plan need <物品ID> <数量> [--from <配方ID>] [--planet <id>] [--json]`。
+ *
+ * 递归展开到基础原料，回答「造 N 个 X 要备多少料」：按配方反推中间产物，
+ * 每样物品同时给现有量（背包 + 本方建筑库存，与 plan 取料来源同口径）与缺口。
+ * 最多展开 6 层，配方环停止展开；有缺口时结论行以 `✗ ` 开头（`scripts/sw` 非 0）。
+ */
+export async function cmdPlanNeed(args: string[], ctx: CommandContext): Promise<string> {
+  const { api } = ctx;
+  const parsed = parseArgs(args);
+  const positionals = parsed.positionals.slice(1);
+  if (hasFlag(parsed, 'help') || positionals.length < 2) {
+    return 'Usage: plan need <物品ID> <数量> [--from <配方ID>] [--planet <id>] [--json]';
+  }
+  const itemId = positionals[0];
+  const quantity = parseIntegerArg(positionals[1]);
+  if (quantity === undefined || quantity <= 0) {
+    return fmtError(`数量必须是正整数（收到 ${positionals[1]}）`);
+  }
+  const fromRecipe = getStringOption(parsed, 'from');
+  const planetArg = getStringOption(parsed, 'planet');
+  if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
+    return fmtError(`planet 参数看起来不是星球 id：${planetArg}`);
+  }
+  const wantsJson = hasFlag(parsed, 'json');
+
+  try {
+    const summary = await api.fetchSummary();
+    const mecha = selectMyMecha(summary.players?.[api.getAuth().playerId], resolveIssuerId(ctx));
+    const context = planetArg === undefined ? await fetchPlanetContext(api, resolveIssuerId(ctx)) : undefined;
+    const planetId = planetArg ?? context!.planetId;
+    if (!mecha) {
+      return fmtError(`没有绑定的机甲：${NO_MECHA_HINT}`);
+    }
+    if (mecha.planet_id !== planetId) {
+      return fmtError(`我的机甲 ${mecha.unit_id} 在 ${mecha.planet_id}，不在 ${planetId}（背包按机甲所在行星取）`);
+    }
+    const catalog = await api.fetchCatalog();
+    if (!(catalog.items ?? []).some((item) => item.id === itemId)) {
+      return fmtError(`未知物品：${itemId}（用 catalog items <关键词> 查 id）`);
+    }
+    if (fromRecipe !== undefined) {
+      const recipe = recipeFor(catalog, fromRecipe);
+      if (!recipe) {
+        return fmtError(`未知配方：${fromRecipe}（用 catalog recipes <关键词> 查 id）`);
+      }
+      if (!(recipe.outputs ?? []).some((output) => output.item_id === itemId)) {
+        return fmtError(`配方 ${fromRecipe} 不产出「${itemName(catalog, itemId)}」（${itemId}）`);
+      }
+    }
+    // 现有量：背包 + 机甲周围场景里本方建筑（inventory + output_buffer），与 plan 取料来源同口径。
+    const scene = await api.fetchPlanetScene(
+      planetId,
+      centeredWindow(mecha, PLAN_SCENE_SIZE, summary.map_width, summary.map_height),
+    );
+    const ownBuildings = Object.values(scene.buildings ?? {})
+      .filter((building) => building.owner_id === api.getAuth().playerId);
+    const inventory = mecha.inventory ?? {};
+    const stockOf = (id: string): number =>
+      (inventory[id] ?? 0) + buildingStockTotal(ownBuildings, id);
+    const completedTechs = new Set(Object.keys(
+      summary.players?.[api.getAuth().playerId]?.tech?.completed_techs ?? {},
+    ));
+    const root = expandNeed(catalog, itemId, quantity, {
+      recipeId: fromRecipe,
+      completedTechs,
+      techUnlocks: techRecipeUnlocks(catalog.techs),
+      stockOf,
+    });
+    const rows = summarizeNeed(catalog, root);
+    const totalGap = rows.reduce((sum, row) => sum + row.gap, 0);
+
+    if (wantsJson) {
+      const tree = (node: NeedNode): Record<string, unknown> => ({
+        item_id: node.itemId,
+        quantity: node.quantity,
+        stock: node.stock,
+        gap: node.gap,
+        ...(node.recipe ? { recipe_id: node.recipe.id } : {}),
+        ...(node.leafReason ? { leaf_reason: node.leafReason } : {}),
+        children: node.children.map(tree),
+      });
+      return JSON.stringify({
+        planet_id: planetId,
+        mecha_id: mecha.unit_id,
+        item_id: itemId,
+        quantity,
+        tree: tree(root),
+        summary: rows.map((row) => ({
+          item_id: row.itemId,
+          name: itemName(catalog, row.itemId),
+          need: row.need,
+          stock: row.stock,
+          gap: row.gap,
+        })),
+        gap_total: totalGap,
+      }, null, 2);
+    }
+
+    const lines: string[] = [`需要 ${itemName(catalog, itemId)} ${quantity}`];
+    lines.push(...fmtNeedTree(catalog, root).map((line) => `  ${line}`));
+    lines.push('');
+    lines.push('汇总（基础原料）：');
+    lines.push(table(
+      ['物品', '需要', '现有', '缺口'],
+      rows.map((row) => [
+        itemName(catalog, row.itemId),
+        String(row.need),
+        String(row.stock),
+        row.gap > 0 ? String(row.gap) : '-',
+      ]),
+      (col, value) => (col === 3 && value.trim() !== '-' ? chalk.red(value) : value),
+    ));
+    const shortItems = rows.filter((row) => row.gap > 0);
+    if (shortItems.length === 0) {
+      lines.push(chalk.green('结论：现有量够'));
+    } else {
+      lines.push(chalk.red(
+        `${FAILURE_MARKER}结论：还缺 ${shortItems.map((row) => `${itemName(catalog, row.itemId)} ${row.gap}`).join('、')}`,
+      ));
+    }
+    lines.push(chalk.dim(
+      '现有 = 背包 + 机甲周围 48×48 场景里本方建筑的 inventory + output_buffer；'
+      + `配方按「产出该物品数量最大且科技已解锁」选，--from 可指定；最多展开 ${MAX_NEED_DEPTH} 层，配方环停止`,
+    ));
+    return lines.join('\n');
+  } catch (e) {
+    return fmtError(e instanceof Error ? e.message : String(e));
+  }
 }
 
 export interface HandcraftHintContext {
@@ -295,6 +719,8 @@ function stockOf(ctx: HandcraftHintContext, itemId: string): number {
 /**
  * 缺口物品的提示：可手搓的沿 `handcraft_allowed` 配方递归展开到
  * 「不可手搓 / 背包或建筑里已有 / 达到层数上限」为止，最多 3 层。
+ * 取料来源列写建筑里该物品的**当前可取出数量**（inventory + output_buffer），
+ * 并在行尾标 `[够]` / `[不够，还差 N]`（够不够按全部来源合计判断）。
  * 返回多行（首行无缩进，子行以 `↳ ` 开头）。
  */
 export function fmtHandcraftHint(
@@ -308,12 +734,14 @@ export function fmtHandcraftHint(
   const options: HandcraftHintContext = ctx instanceof Set ? { completedTechs: ctx } : ctx as HandcraftHintContext;
   const completedTechs = options.completedTechs;
   const name = itemName(catalog, itemId);
-  const sources = findBuildingSources(options.buildings ?? [], itemId);
+  const sources = summarizeSources(options.buildings ?? [], itemId);
 
   const recipe = handcraftRecipe(catalog, itemId);
   if (!recipe) {
-    const from = sources.length > 0
-      ? `从 ${sources.map((source) => `${source.id} ${buildingName(catalog, source.type)}(${source.quantity})`).join(' / ')} 取`
+    // 来源列写**当前可取出数量**（inventory + output_buffer），并标出够不够，
+    // 避免看起来像「去这里拿就有」。
+    const from = sources.count > 0
+      ? `从 ${fmtSourceList(catalog, sources)} 取   ${fmtStockMarker(sources.total, gap)}`
       : '需要生产建筑';
     return [`${name} ${gap}：不可手搓，${from}`];
   }
@@ -339,17 +767,14 @@ export function fmtHandcraftHint(
       continue;
     }
     // 背包或本方建筑里已经有足够库存的就不再往下追。
-    const sourceQty = findBuildingSources(options.buildings ?? [], input.item_id, Number.MAX_SAFE_INTEGER)
-      .reduce((sum, source) => sum + source.quantity, 0);
-    if (stockOf(options, input.item_id) + sourceQty >= needed) {
-      const where = stockOf(options, input.item_id) >= needed
-        ? '背包已有'
-        : findBuildingSources(options.buildings ?? [], input.item_id)
-          .map((source) => `${source.id} ${buildingName(catalog, source.type)}(${source.quantity})`).join(' / ');
-      lines.push(`  ↳ ${itemName(catalog, input.item_id)} ${needed}：${where}`);
+    const childSources = summarizeSources(options.buildings ?? [], input.item_id);
+    const stock = stockOf(options, input.item_id);
+    if (stock + childSources.total >= needed) {
+      const where = stock >= needed ? '背包已有' : fmtSourceList(catalog, childSources);
+      lines.push(`  ↳ ${itemName(catalog, input.item_id)} ${needed}：${where}   ${fmtStockMarker(stock + childSources.total, needed)}`);
       continue;
     }
-    const childGap = needed - stockOf(options, input.item_id) - sourceQty;
+    const childGap = needed - stock - childSources.total;
     const child = fmtHandcraftHint(catalog, input.item_id, childGap, options, depth + 1, nextSeen);
     lines.push(`  ↳ ${child[0]}`);
     for (const extra of child.slice(1)) {
@@ -415,8 +840,11 @@ function fmtCount(map: Map<string, number>, itemId: string): string {
   return value === undefined ? '-' : String(value);
 }
 
+export const PLAN_USAGE = 'Usage: plan <build x y type | upgrade building_id | craft_item recipe batches>... [--planet <id>] [--json]  |  plan -（stdin 每行一条）  |  plan need <物品ID> <数量> [--from <配方ID>] [--planet <id>] [--json]';
+
 /**
- * `plan <build x y type | upgrade building_id>... [--planet <id>]` / `plan -`。
+ * `plan <build x y type | upgrade building_id>... [--planet <id>]` / `plan -` /
+ * `plan need <物品ID> <数量> [--from <配方ID>]`。
  *
  * 输出累计用料表：需要 / 背包 / 已下未落成任务占用 / 缺口；有缺口时结论行以
  * `✗ ` 开头，`scripts/sw` 据此返回非 0。
@@ -425,11 +853,14 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
   const { api } = ctx;
   const parsed = parseArgs(args);
   if (hasFlag(parsed, 'help') || args.length === 0) {
-    return 'Usage: plan <build x y type | upgrade building_id | craft_item recipe batches>... [--planet <id>] [--json]  |  plan -（stdin 每行一条）';
+    return PLAN_USAGE;
   }
   const planetArg = getStringOption(parsed, 'planet');
   if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
     return fmtError(`planet 参数看起来不是星球 id：${planetArg}`);
+  }
+  if (parsed.positionals[0] === 'need') {
+    return cmdPlanNeed(args, ctx);
   }
   // 位置参数里去掉 --planet 的值（parseArgs 已把它收进 options），其余按原文重拼。
   const rawParts: string[] = [];
@@ -502,7 +933,17 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
         inventory: mecha.inventory ?? {},
         occupied: Object.fromEntries(occupied),
         gaps: Object.fromEntries(gaps),
-        sources: Object.fromEntries([...gaps.keys()].map((itemId) => [itemId, findBuildingSources(ownBuildings, itemId)])),
+        // 来源带当前可取出数量：building 是 inventory + output_buffer 的合计，
+        // 只列数量 > 0 的建筑（按数量降序）；available/total 用来判断够不够。
+        sources: Object.fromEntries([...gaps.keys()].map((itemId) => {
+          const summary = summarizeSources(ownBuildings, itemId);
+          return [itemId, {
+            buildings: summary.listed,
+            available: summary.total,
+            gap: gaps.get(itemId) ?? 0,
+            enough: summary.total >= (gaps.get(itemId) ?? 0),
+          }];
+        })),
       }, null, 2);
     }
 

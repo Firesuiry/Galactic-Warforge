@@ -87,7 +87,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 | `wait job` | 我的机甲（`mechas.find(m => m.operator === issuer_id)`）的作业结束；当前没有作业立即返回 |
 | `wait build` | 我的机甲施工队列清空（`planet_runtime.construction_tasks` 按 `mecha_id` 过滤）；**剩下的任务全是 `pending` + `wait_reason=insufficient_materials`，或「tick 在前进、但施工签名 10 秒没变」时提前返回**，逐条列出任务、位置和原因。tick 不前进（服务端暂停 / 没人 `advance`）时**不判卡死**，只在超时时注明「tick 未前进（服务端暂停或没有推进）」 |
 | `wait item <物品ID> <数量>` | 我的机甲背包里该物品 ≥ 数量 |
-| `wait item <物品ID> <数量> --in <建筑ID>` | 建筑库存（`inventory` + `output_buffer`）≥ 数量；建筑不存在立即提前返回 |
+| `wait item <物品ID> <数量> --in <建筑ID>` | 建筑库存（`inventory` + `output_buffer`）≥ 数量；建筑不存在立即提前返回。**计数含输出缓冲**：`inspect` 显示 `inventory 17 / output 3` 时 `wait item X 20` 已成立 |
 | `wait running <建筑ID>` | 建筑 `runtime.state == running`；超时消息带当前 `state`、`state_reason`、配方与仍成立的产线告警 |
 
 - 成功：`✓ 等到了：<描述>（用了 N tick / M 秒）`，退出码 0。
@@ -143,7 +143,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
     空地 3x3 @ (62,146)  距锚点 0  距机甲 4  地形 buildable
     ```
   - `--planet <id>`：锚点取**该星球上我的机甲**；机甲不在该星球（或没绑机甲）时回退到该星球场景中心 `(map_width/2, map_height/2)`，并在首行注明原因（`锚点回退到 …：我的机甲 u-x 在 …，不在 …` / `未绑定机甲`）。`--near` 优先于两者。
-  - `--spacing <n>`：任意两个候选的锚点曼哈顿距离 ≥ n，贪心取分散候选（建议取 `max(w,h)`）。**缺省 0 = 不过滤**，行为与旧版一致。结果里候选互相重叠时（且未给 `--spacing`）额外提示「用 --spacing 取分散候选」。
+  - `--spacing <n>`：任意两个候选的锚点曼哈顿距离 ≥ n，贪心取分散候选。**想互不重叠至少取 `max(w,h)+1`**（`max(w,h)` 时锚点曼哈顿距离 3 的两个 3×3 矩形仍会相交）。**缺省 0 = 不过滤**，行为与旧版一致。结果里候选互相重叠时（且未给 `--spacing`）额外提示「用 --spacing 取分散候选，互不重叠至少 max(w,h)+1」。
   - 占用判定：地形必须是 `buildable`；建筑按**实际占地**（`runtime.params.footprint`，锚点 + 宽高）排除，不是只排锚点；地面单位占 1 格（`domain=air/orbital/space` 不占）；未落成的施工任务按 `building_type` 的占地排除（高架传送带只占 1 格，`completed`/`cancelled` 不占）。服务端 `construction_tasks` 只下发**自己的**任务。
   - 数据来源：`GET /world/planets/<id>/scene`（窗口 = 锚点周围 `2R+1` 见方，R 默认 48、最大 128；另外扩 4 格取回锚点在外、占地压进窗口的建筑）+ `GET /world/planets/<id>/runtime` 的 `construction_tasks`。二维前缀和判定，128×128 窗口也在毫秒级。
   - 只返回完整落在窗口内、且不跨立方体球面缝的矩形；跳过的跨缝候选数会单独说明。无解时输出 `✗ 没找到 …`（`scripts/sw` 退出码非 0）。
@@ -163,15 +163,42 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
   - 缺口物品若有 `handcraft_allowed` 配方，结论下逐条给配方 id、输入→输出和「需 N 批 = 原料×数量」，并**递归展开**中间产物（最多 3 层，配方环停止展开）：背包或本方建筑里已有足够库存的直接写来源，否则继续沿手搓链展开，不可手搓的写「不可手搓，从 <建筑> 取」或「需要生产建筑」。
     ```
     - 电路板 11（可手搓：circuit_board，铁块×1+铜块×1 → 电路板×1；需 11 批 = 铁块×11+铜块×11）
-        ↳ 铁块 11：不可手搓，从 b-105 补给站(53) 取
-        ↳ 铜块 11：从 b-97 补给站(56) 取
+        ↳ 铁块 11：不可手搓，从 b-105 补给站(53) 取   [够]
+        ↳ 铜块 11：b-97 补给站(56)、b-55 电弧熔炉(2) 等 3 处   [够]
     ```
-    取料来源 = 机甲周围 48×48 场景里本方建筑 `storage.inventory`（含 `output_buffer`）存有该物品的前 2 个，按库存降序。
+    取料来源 = 机甲周围 48×48 场景里本方建筑 `storage.inventory + storage.output_buffer` 里该物品的**当前数量**，只列数量 > 0 的建筑（按数量降序取前 2 个，更多时补「等 N 处」）。行尾标 `[够]` 或 `[不够，还差 N]`：**够不够按全部来源合计**与缺口比较，所以来源列只是「现在能取到多少」，不是保证有货。
+  - `--json` 的 `sources` 每项为 `{buildings: [{id,type,quantity}], available, gap, enough}`（`available` 是全部来源合计）。
   - 有缺口时结论行以 `✗ ` 开头，`scripts/sw` 退出码非 0。
   - `--json` 输出 `{planet_id, mecha_id, items[], need, inventory, occupied, gaps, sources}`；每项带 `kind` / `label` 与各自的明细：build 有 `building_type`、`position`；upgrade 有 `building_id`、`building_type`；craft_item 有 `recipe_id`、`batches`。
+  - `plan need <物品ID> <数量> [--from <配方ID>]`：按配方递归反推到基础原料，回答「造 N 个要备多少料」（分轮喂料的总量核算）。
+    ```
+    需要 电磁矩阵 20
+      电磁矩阵 20 ← electromagnetic_matrix（制造台 Mk.I）
+        磁线圈 20 ← magnetic_coil（制造台）
+          磁铁 20 ← smelt_magnet（制造台）
+            铁矿 20（基础）
+          铜块 10 ← smelt_copper（制造台）
+            铜矿 10（基础）
+        电路板 20 ← circuit_board（制造台）
+          铁块 20 ← smelt_iron（制造台）
+            铁矿 20（基础）
+          铜块 20 ← smelt_copper（制造台）
+            铜矿 20（基础）
+    汇总（基础原料）：
+    物品  需要  现有  缺口
+    ...
+    结论：还缺 铁矿 10
+    ```
+    - 配方选择：`--from` 显式指定；否则取 `outputs` 含该物品、**科技已满足**的配方里单批产出该物品数量最大的一条（同产量按 id 排序）。科技门槛 = 配方自己的 `tech_unlock` ∪ `/catalog` 里 `techs[].unlocks` 中 `type=recipe` 指向它的科技，完成任一即可；没有配方（基础矿石/原料）就是叶子。
+    - 批数 = `ceil(数量 / 每批产量)`，原料 = `ceil(批数 × inputs)`（与服务端批处理同口径）。
+    - 最多展开 6 层，链上重复出现同一物品判配方环停止；层数上限 / 环 / 基础原料都会在行里注明。
+    - 「现有」= 机甲背包 + 机甲周围 48×48 场景里本方建筑的 `inventory + output_buffer`（与 plan 取料来源同口径）；缺口 = `max(0, 需要 − 现有)`。汇总只列基础原料（中间产物都要现做）。
+    - `--json` 输出 `{planet_id, mecha_id, item_id, quantity, tree, summary, gap_total}`；`tree` 每节点带 `item_id` / `quantity` / `stock` / `gap` / `recipe_id?` / `leaf_reason?` / `children`。
+    - 有缺口时结论行以 `✗ ` 开头（退出码非 0）。
 - **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
   - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
   - 默认输出人话摘要：`state[:state_reason]`、坐标/占地、HP、配方与剩余 tick、主库存/输出缓冲、`production_monitor.active_alerts`（如 `input_shortage,throughput_drop`）；单位给操作者、能量/护盾、`mecha.job`（空闲为 `idle`）、弹药；资源给矿种/剩余量/产率。
+  - **不显示库存容量 / 占用格数**：判断「快满」要用 `catalog building <建筑类型>` 的容量（`storage.capacity` / `slots` / `buffer_capacity`）对照 `inspect` 的数量。
   - 分拣器另加一行 `sorter`：两端连到了谁 + 最近一次搬运，例 `取←西 b-55 电弧熔炉(1格) | 放→东 未连上：被分拣器 b-181 挡住   last=t1234 iron_ore b-55→b-105`。没连上的原因：`3格内没有建筑` / `不是你的` / `被分拣器 … 挡住` / `被分流器 … 挡住` / `传送带 … 未运行` / `传送带 … 不接受这一侧插入` / `没有输出口|输入口` / `没有存储`。
   - `--json` 输出原始响应。
 - **catalog**：`catalog <buildings [关键词]|building <id>|recipes [--handcraft] [--building <type>] [关键词]|items [关键词]|techs [--available|--done]|units>`，一次读 `GET /catalog`。
@@ -182,6 +209,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
   - `items`：堆叠上限与机甲燃料值；`units`：可生产单位、生产建筑、成本、时长。
 - **networks**：`networks [planet] [--json]` 读 `GET /world/planets/<id>/networks`：每个电网的发电/用电/净额/建筑数/是否缺电，另列未接网与欠电建筑（`connected`/`ratio`/`reason`）；有管网时给节点/管段/流体种类计数。省略 planet 同 `scene`。
 - **alerts**：`alert_snapshot` 的别名，参数相同；每行额外打印 `alert_type=<枚举>` 与 `building_id`，便于脚本定位。
+  - `--active-only` **只过滤已恢复的告警，不按时间过滤**：一直没解决的产线问题（如某台机器从早期就 `output_blocked`）会一直挂着，标题里的条数不代表「刚发生」。要看最近新出的告警用 `--since-tick <n>` 或看行内 tick。
 
 ## 调试与管理选项
 
@@ -354,7 +382,7 @@ as                                     # 临时恢复为玩家本人发令
 | `summary` | — | Game summary (resources, players, map) |
 | `stats` | — | Current player statistics |
 | `briefing` | `briefing [alert_limit]` | One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands |
-| `wait` | `wait <ticks <n>\|job\|build\|item <物品ID> <数量> [--in <建筑ID>]\|running <建筑ID>> [--timeout <秒>]` | 等到条件成立（轮询，默认 120s）：ticks=tick 前进 n（n 是 tick 数不是秒，秒 = n ÷ tick 速率；10 tick/s 时 wait ticks 500 = 50 秒）；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running |
+| `wait` | `wait <ticks <n>\|job\|build\|item <物品ID> <数量> [--in <建筑ID>]\|running <建筑ID>> [--timeout <秒>]` | 等到条件成立（轮询，默认 120s）：ticks=tick 前进 n（n 是 tick 数不是秒，秒 = n ÷ tick 速率；10 tick/s 时 wait ticks 500 = 50 秒）；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包，或 --in 建筑的主库存 + 输出缓冲（inventory + output_buffer）合计达到数量（所以 inspect 里 inventory 17 + output 3 时 wait 20 已成立）；running=建筑进入 running |
 | `catalog` | `catalog <buildings [关键词]\|building <id>\|recipes [--handcraft] [--building <type>] [关键词]\|items [关键词]\|techs [--available\|--done]\|units>` | 紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog） |
 | `galaxy` | — | Galaxy list |
 | `system` | `system [system_id]` | System details (default: sys-1) |
@@ -366,13 +394,13 @@ as                                     # 临时恢复为玩家本人发令
 | `task_forces` | — | Player-owned task force list with supply and command capacity |
 | `theaters` | — | Player-owned theater zones and objectives |
 | `scene` | `scene [planet] [x y width height] [--near_x X --near_y Y --radius R] [--json] [--limit N\|all]` | 局部场景紧凑文本（建筑/资源汇总/单位）；省略 planet = 我的机甲所在星球，省略窗口 = 机甲居中 48×48；--json 输出原始 JSON |
-| `find_space` | `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]` | 找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距锚点升序，每行同时给「距锚点」「距机甲」；省略 --near = 我的机甲，半径默认 48 最大 128；--spacing N 让任意两个候选的锚点曼哈顿距离 ≥ N（缺省不过滤，建议 max(w,h)）；只返回不跨球面缝的矩形 |
-| `plan` | `plan <build x y type \| upgrade building_id \| craft_item recipe batches>... [--planet <id>] [--json]  \|  plan -` | 累计用料表：需要 / 背包 / 占用 / 缺口；craft_item <配方> <批数> 把 inputs×批数 计入需要（不算占用）；plan - 从 stdin 每行一条，; 也分隔；缺口沿可手搓配方递归展开到不可手搓/已有库存（最多 3 层），并给本方建筑取料来源；有缺口时退出码非 0 |
-| `inspect` | `inspect [planet] [building\|unit\|resource\|sector] <entity_id> [--json]` | 单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON |
+| `find_space` | `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]` | 找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距锚点升序，每行同时给「距锚点」「距机甲」；省略 --near = 我的机甲，半径默认 48 最大 128；--spacing N 让任意两个候选的锚点曼哈顿距离 ≥ N（缺省不过滤，互不重叠至少 max(w,h)+1）；只返回不跨球面缝的矩形 |
+| `plan` | `plan <build x y type \| upgrade building_id \| craft_item recipe batches>... [--planet <id>] [--json]  \|  plan -  \|  plan need <物品ID> <数量> [--from <配方ID>]` | 累计用料表：需要 / 背包 / 占用 / 缺口；craft_item <配方> <批数> 把 inputs×批数 计入需要（不算占用）；plan - 从 stdin 每行一条，; 也分隔；缺口沿可手搓配方递归展开到不可手搓/已有库存（最多 3 层），并给本方建筑取料来源（当前数量 + [够]/[不够，还差 N]）；plan need 按配方递归反推到基础原料（最多 6 层、配方环停止），给现有量与缺口，回答「造 N 个要备多少料」；有缺口时退出码非 0 |
+| `inspect` | `inspect [planet] [building\|unit\|resource\|sector] <entity_id> [--json]` | 单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON。不显示库存容量/占用格数，容量查 catalog building <type> |
 | `networks` | `networks [planet] [--json]` | 电网：每个网络的发电/用电/建筑数/缺电，以及未接网与欠电建筑；有管网时列出节点数（GET /world/planets/<id>/networks） |
 | `fleet_status` | `fleet_status [fleet_id]` | Fleet list or one fleet detail |
 | `fog` | `fog [planet_id] [x y width height]` | ASCII fog slice via /scene (default: 0 0 32 16) |
-| `alerts` | `alerts [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | alert_snapshot 的别名：产线告警快照，每行带 alert_type 与 building_id |
+| `alerts` | `alerts [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | alert_snapshot 的别名：产线告警快照，每行带 alert_type 与 building_id；--active-only 只过滤已恢复的，老告警会一直挂着 |
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
@@ -386,7 +414,7 @@ as                                     # 临时恢复为玩家本人发令
 | `raw` | `raw <json>` | Send raw /commands request JSON |
 | `audit` | `audit [options]` | Query audit log |
 | `event_snapshot` | `event_snapshot [options]` | Query event snapshot |
-| `alert_snapshot` | `alert_snapshot [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | Query production alert snapshot（仍成立在前、最新在前；--active-only 只看仍成立的） |
+| `alert_snapshot` | `alert_snapshot [--after-id <id>] [--since-tick <n>] [--active-only] [--limit <n>]` | Query production alert snapshot（仍成立在前、最新在前；--active-only 只过滤已恢复的告警，不按时间过滤——一直没解决的产线问题会一直挂着，看发生时间用 --since-tick 或行内 tick） |
 | `replay` | `replay [options]` | Replay tick range |
 | `rollback` | `rollback [options]` | Rollback to tick |
 | `advance` | `advance <ticks> [--to <tick>] [--no-stop-attack] [--no-stop-alert] [--no-stop-gameover] [--json]` | 狂飙模式：快进到目标 tick（admin）；默认在我方受袭/新出现的关键警报（缺电、缺料停工）/对局结束时提前停下 |
