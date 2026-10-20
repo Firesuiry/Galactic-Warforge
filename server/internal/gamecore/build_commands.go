@@ -93,6 +93,10 @@ func addQueuedMaterialHint(gc *GameCore, mechaID, skipTaskID string, inventory m
 // queuedConstructionShortageNote 报告「当前背包已经不够支付已排队的施工任务」。
 // 升级会立即扣料，升级本身不会等料，但它可能把前面排队的 build 所需材料花掉；
 // 这时在升级成功回执后追加提示，代理就知道后面的施工会停在缺料。
+//
+// 调用时序：**必须在升级扣料之后**、拿扣料后的 inventory 调（见 upgrade 分支的
+// applyUpgrade 调用点）；与 addQueuedMaterialHint 的区别是它不排除本任务——本任务
+// 的料已经扣走了，剩下的背包只对后面的排队任务负责。
 func queuedConstructionShortageNote(gc *GameCore, mechaID string, inventory model.ItemInventory) string {
 	committed := queuedConstructionCommitment(gc, mechaID, "")
 	if len(committed) == 0 {
