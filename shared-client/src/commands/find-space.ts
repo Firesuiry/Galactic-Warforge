@@ -277,7 +277,8 @@ function fmtRect(rect: Rect): string {
  * 数据来源：`/world/planets/<id>/scene`（窗口 = 机甲周围，默认半径 48，最大 128）
  * 与 `/world/planets/<id>/runtime` 的 construction_tasks。
  * 只考虑完全落在窗口内、且不跨立方体球面缝的矩形。
- * `--spacing` 只影响已选候选之间的最小锚点曼哈顿距离，缺省不过滤。
+ * `--spacing` 只影响已选候选之间的最小锚点曼哈顿距离，缺省不过滤；
+ * 想互不重叠至少取 `max(w,h)+1`（`max(w,h)` 时锚点曼哈顿距离 3 的 3×3 仍会相交）。
  */
 export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise<string> {
   const { api } = ctx;
@@ -414,7 +415,7 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
       }
       if (spacing <= 0 && hasOverlap(found.results, { width, height })) {
         lines.push(chalk.dim(
-          `（候选互相重叠；要分散候选用 --spacing <n>，建议 ${Math.max(width, height)}，`
+          `（候选互相重叠；要分散候选用 --spacing <n>，互不重叠至少 ${Math.max(width, height) + 1}，`
           + '任意两个候选的锚点曼哈顿距离 ≥ n）',
         ));
       }
