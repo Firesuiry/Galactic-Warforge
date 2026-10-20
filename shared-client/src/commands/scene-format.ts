@@ -7,6 +7,7 @@ import type {
   PlanetNetworksView,
   PlanetSceneView,
   PlanetResource,
+  SorterEndpointView,
   Unit,
 } from '../types.js';
 import { fmtAmounts } from './catalog-format.js';
@@ -187,6 +188,9 @@ export function fmtInspect(view: PlanetInspectView, options: { operator?: string
     if (building.conveyor) {
       lines.push(`  conveyor    in=${building.conveyor.input} out=${building.conveyor.output}  blocked_ticks=${building.conveyor.blocked_ticks ?? 0}`);
     }
+    if (view.sorter_endpoints) {
+      lines.push(`  sorter      ${fmtSorterEndpoints(view.sorter_endpoints, building.sorter?.last_transfer)}`);
+    }
     const monitor = building.production_monitor;
     const alerts = activeAlertNames(monitor?.active_alerts);
     if (alerts.length > 0) {
@@ -230,6 +234,72 @@ export function fmtInspect(view: PlanetInspectView, options: { operator?: string
   }
   lines.push(chalk.dim('raw JSON: inspect ... --json'));
   return lines.join('\n');
+}
+
+const SORTER_DIRECTION_LABEL: Record<string, string> = {
+  north: '北',
+  east: '东',
+  south: '南',
+  west: '西',
+};
+
+function sorterEndpointRef(endpoint: SorterEndpointView): string {
+  const name = endpoint.building_name ?? endpoint.building_type ?? '';
+  const id = endpoint.building_id ?? endpoint.blocker_id ?? '';
+  const ref = [id, name].filter(Boolean).join(' ');
+  return endpoint.pending ? `${ref}(施工中)` : ref;
+}
+
+/** 挡住扫描的建筑：分拣器/分流器只写 ID（前面已经有「分拣器」「分流器」），其余写 ID+名字。 */
+function sorterBlockerRef(endpoint: SorterEndpointView, withName = true): string {
+  const id = endpoint.blocker_id ?? '';
+  const name = withName ? endpoint.blocker_name ?? endpoint.blocker_type ?? '' : '';
+  const ref = [id, name].filter(Boolean).join(' ');
+  return endpoint.pending ? `${ref}(施工中)` : ref;
+}
+
+/** 分拣器一端的摘要：连上时「b-55 电弧熔炉(1格)」，没连上时「未连上：被分拣器 b-181 挡住」。 */
+function fmtSorterEndpoint(side: 'pick' | 'drop', endpoint: SorterEndpointView): string {
+  const dir = endpoint.direction ? SORTER_DIRECTION_LABEL[endpoint.direction] ?? endpoint.direction : '?';
+  const arrow = side === 'pick' ? '取←' : '放→';
+  const prefix = `${arrow}${dir}`;
+  if (!endpoint.reason) {
+    const steps = endpoint.steps ? `(${endpoint.steps}格)` : '';
+    return `${prefix} ${sorterEndpointRef(endpoint)}${steps}`;
+  }
+  const blocker = sorterBlockerRef(endpoint);
+  switch (endpoint.reason) {
+    case 'no_building':
+      return `${prefix} 未连上：3格内没有建筑`;
+    case 'not_owned':
+      return `${prefix} 未连上：${blocker} 不是你的`;
+    case 'blocked_by_sorter':
+      return `${prefix} 未连上：被分拣器 ${sorterBlockerRef(endpoint, false)} 挡住`;
+    case 'splitter':
+      return `${prefix} 未连上：被分流器 ${sorterBlockerRef(endpoint, false)} 挡住`;
+    case 'conveyor_inactive':
+      return `${prefix} 未连上：传送带 ${blocker} 未运行`;
+    case 'conveyor_rejects_side':
+      return `${prefix} 未连上：传送带 ${blocker} 不接受这一侧插入`;
+    case 'no_port':
+      return `${prefix} 未连上：${blocker} 没有${side === 'pick' ? '输出' : '输入'}口`;
+    case 'no_storage':
+      return `${prefix} 未连上：${blocker} 没有存储`;
+    default:
+      return `${prefix} 未连上：${endpoint.reason}`;
+  }
+}
+
+/** 分拣器整行：两端 + 最近一次搬运（`last=t1234 iron_ore b-55→b-105`）。 */
+export function fmtSorterEndpoints(
+  endpoints: { pick: SorterEndpointView; drop: SorterEndpointView },
+  lastTransfer?: { tick: number; item_id: string; source_id: string; target_id: string },
+): string {
+  const parts = [fmtSorterEndpoint('pick', endpoints.pick), fmtSorterEndpoint('drop', endpoints.drop)];
+  const last = lastTransfer
+    ? `last=t${lastTransfer.tick} ${lastTransfer.item_id} ${lastTransfer.source_id}→${lastTransfer.target_id}`
+    : 'last=-';
+  return `${parts.join(' | ')}   ${last}`;
 }
 
 export function fmtNetworks(view: PlanetNetworksView, context?: PlanetContext): string {

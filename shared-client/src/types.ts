@@ -1242,6 +1242,45 @@ export interface PlanetOverviewView {
 
 export type PlanetInspectEntityKind = 'building' | 'unit' | 'resource' | 'sector';
 
+/** 分拣器端点失败原因（服务端 model.SorterEndpointReason*）。 */
+export type SorterEndpointReason =
+  | 'no_building'
+  | 'not_owned'
+  | 'blocked_by_sorter'
+  | 'splitter'
+  | 'conveyor_inactive'
+  | 'conveyor_rejects_side'
+  | 'no_port'
+  | 'no_storage';
+
+/**
+ * 分拣器单个端点诊断（第 22 轮，对齐服务端 `model.SorterEndpointView`）。
+ *
+ * 连上时给 `building_*` / `position` / `steps`；没连上时给 `reason`，
+ * 若扫描轴上有建筑（挡住的那个）再给 `blocker_*`。
+ */
+export interface SorterEndpointView {
+  building_id?: string;
+  building_type?: string;
+  building_name?: string;
+  position?: Position;
+  direction?: CardinalDirection;
+  steps?: number;
+  /** 端点来自尚未落成的施工任务（只出现在建造回执预判里）。 */
+  pending?: boolean;
+  reason?: SorterEndpointReason;
+  blocker_id?: string;
+  blocker_type?: string;
+  blocker_name?: string;
+  blocker_position?: Position;
+}
+
+/** 分拣器两端诊断：pick = 背面取货端，drop = 正面放货端。 */
+export interface SorterEndpointsView {
+  pick: SorterEndpointView;
+  drop: SorterEndpointView;
+}
+
 export interface PlanetInspectView {
   planet_id: string;
   discovered: boolean;
@@ -1251,6 +1290,8 @@ export interface PlanetInspectView {
   building?: Building;
   /** 采集建筑唯一开采的矿种（目录物品 ID，见 §5.1 的 mining_item）；非采集建筑为空。 */
   mining_item?: string;
+  /** 分拣器两端诊断；非分拣器为空。 */
+  sorter_endpoints?: SorterEndpointsView;
   unit?: Unit;
   resource?: PlanetResource;
 }

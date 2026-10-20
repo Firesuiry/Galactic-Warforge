@@ -1,6 +1,8 @@
 package query
 
-import "siliconworld/internal/model"
+import (
+	"siliconworld/internal/model"
+)
 
 type PlanetInspectRequest struct {
 	TargetType string `json:"target_type"`
@@ -15,10 +17,10 @@ type PlanetInspectView struct {
 	Title      string          `json:"title,omitempty"`
 	Building   *model.Building `json:"building,omitempty"`
 	// MiningItem：目标采集建筑唯一开采的矿种（目录物品 ID）。非采集建筑为空。
-	MiningItem string                    `json:"mining_item,omitempty"`
-	Power      *BuildingPowerInspectView `json:"power,omitempty"`
-	Unit       *model.Unit               `json:"unit,omitempty"`
-	Resource   *model.ResourceNodeState  `json:"resource,omitempty"`
+	MiningItem string `json:"mining_item,omitempty"`
+	Power           *BuildingPowerInspectView  `json:"power,omitempty"`
+	Unit            *model.Unit                `json:"unit,omitempty"`
+	Resource        *model.ResourceNodeState   `json:"resource,omitempty"`
 }
 
 type BuildingPowerInspectView struct {

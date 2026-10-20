@@ -144,6 +144,75 @@ describe('inspect', () => {
     assert.match(out, /alerts\s+input_shortage,throughput_drop/);
   });
 
+  it('summarizes sorter endpoints (pick / drop / last transfer)', () => {
+    const view: PlanetInspectView = {
+      planet_id: 'planet-1-1',
+      discovered: true,
+      entity_kind: 'building',
+      entity_id: 'b-105',
+      title: 'sorter_mk1',
+      building: {
+        id: 'b-105',
+        type: 'sorter_mk1',
+        owner_id: 'p1',
+        position: { x: 63, y: 143, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 2,
+        runtime: { state: 'running' },
+        sorter: {
+          cycle_ticks: 6,
+          range: 3,
+          last_transfer: {
+            tick: 1234,
+            sequence: 7,
+            source_id: 'b-55',
+            target_id: 'b-105',
+            source_position: { x: 62, y: 140, z: 0 },
+            target_position: { x: 65, y: 143, z: 0 },
+            item_id: 'iron_ore',
+            quantity: 1,
+          },
+        },
+      } as PlanetInspectView['building'],
+      sorter_endpoints: {
+        pick: { building_id: 'b-55', building_type: 'arc_smelter', building_name: '电弧熔炉', direction: 'west', steps: 1 },
+        drop: { reason: 'blocked_by_sorter', blocker_id: 'b-181', blocker_type: 'sorter_mk1', blocker_name: '分拣器 Mk.I', direction: 'east', steps: 1 },
+      },
+    };
+    const out = fmtInspect(view);
+    assert.match(out, /sorter\s+取←西 b-55 电弧熔炉\(1格\) \| 放→东 未连上：被分拣器 b-181 挡住\s+last=t1234 iron_ore b-55→b-105/);
+  });
+
+  it('renders an unconnected sorter endpoint with the empty-axis reason', () => {
+    const view: PlanetInspectView = {
+      planet_id: 'planet-1-1',
+      discovered: true,
+      entity_kind: 'building',
+      entity_id: 'b-200',
+      title: 'sorter_mk1',
+      building: {
+        id: 'b-200',
+        type: 'sorter_mk1',
+        owner_id: 'p1',
+        position: { x: 3, y: 4, z: 0 },
+        hp: 100,
+        max_hp: 100,
+        level: 1,
+        vision_range: 2,
+        runtime: { state: 'running' },
+        sorter: { cycle_ticks: 6, range: 3 },
+      } as PlanetInspectView['building'],
+      sorter_endpoints: {
+        pick: { reason: 'no_building', direction: 'west' },
+        drop: { building_id: 'b-out', building_type: 'conveyor_belt_mk1', building_name: '传送带 Mk.I', direction: 'east', steps: 2 },
+      },
+    };
+    const out = fmtInspect(view);
+    assert.match(out, /取←西 未连上：3格内没有建筑 \| 放→东 b-out 传送带 Mk\.I\(2格\)\s+last=-/);
+  });
+
   it('parses compact and legacy argument forms without a planet', async () => {
     const calls: Array<{ planetId: string; entityKind: string; entityId?: string }> = [];
     const api = fakeApi({
