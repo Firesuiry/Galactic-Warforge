@@ -53,7 +53,7 @@
 - **施工**：落成只要 1–2 tick，所以 `construction_active` 几乎总是 0。要看的是 `pending`，它代表在排队或缺料。
 - **能量**：`briefing` 里的 `energy` 只是电网结余的展示，不是建造用的货币。这个游戏是**纯实物经济**，没有 minerals。
 - **科技门槛**：建筑或配方满足**任意一个**解锁科技即可；研究科技要求前置**全部**完成。
-- **矿点**：`scene` 里的矿点 ID（例如 `planet-1-1-res-1693`）就是 `mine_resource` 用的 ID，不是物品 ID。
+- **矿点**：`scene` 里的矿点 ID（例如 `planet-1-1-res-1693`）就是 `mine_resource` 用的 ID，不是物品 ID。`scene --json` 的 `resources[]` 每项是一个矿点（不是格子），带 `kind`、`position{x,y}`（这一格的坐标）、`remaining`；按矿格数统计覆盖范围时直接数 `resources[]` 里落在范围内的项。
 
 ## 4. 下令前自检
 
