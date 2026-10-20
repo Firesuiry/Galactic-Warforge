@@ -137,6 +137,28 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
   - 位置参数不再「第一个数字当 planet」：`scene 40 130 16 12` 就是窗口；给 planet 必须形如 `planet-1-1`。
   - 默认输出紧凑文本：建筑表（id / 类型 / 锚点 / 占地 / `runtime.state[:state_reason]`）、资源按 `kind` 汇总（格数、包围盒、代表矿点 id）、单位表（机甲标 `operator`，空闲显示 `(idle)`）；每节默认最多 20 条，超出提示 `--json` 或缩小窗口，`--limit all` 全列。
   - `--json` 输出服务端原始 JSON（`buildings`/`units` 是对象、空节是 `null`，脚本用 `(.buildings // {})`）。`--near_x/--near_y/--radius`（R ≤ 128）仍返回球面邻域补片 `surface_patches`。服务端窗口默认 160、最大 257。球面寻路没有 CLI 命令，用 `GET /world/planets/{id}/path`。
+- **find_space**：`find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]`。
+  - 在当前星球找一个 w×h 的**全空矩形**，按与锚点（缺省 = 我的机甲，`--near` 覆盖）的距离升序输出前 N 条（默认 5）：
+    ```
+    空地 3x3 @ (62,146)  距机甲 4  地形 buildable
+    ```
+  - 占用判定：地形必须是 `buildable`；建筑按**实际占地**（`runtime.params.footprint`，锚点 + 宽高）排除，不是只排锚点；地面单位占 1 格（`domain=air/orbital/space` 不占）；未落成的施工任务按 `building_type` 的占地排除（高架传送带只占 1 格，`completed`/`cancelled` 不占）。服务端 `construction_tasks` 只下发**自己的**任务。
+  - 数据来源：`GET /world/planets/<id>/scene`（窗口 = 锚点周围 `2R+1` 见方，R 默认 48、最大 128；另外扩 4 格取回锚点在外、占地压进窗口的建筑）+ `GET /world/planets/<id>/runtime` 的 `construction_tasks`。二维前缀和判定，128×128 窗口也在毫秒级。
+  - 只返回完整落在窗口内、且不跨立方体球面缝的矩形；跳过的跨缝候选数会单独说明。无解时输出 `✗ 没找到 …`（`scripts/sw` 退出码非 0）。
+  - `--json` 输出 `{planet_id, anchor, window, size, skipped_seam, results[]}`。
+- **plan**：`plan <build x y type | upgrade <building_id>>... [--planet <id>] [--json]`，或用 `;`/换行分隔，或 `plan -` 从 stdin 每行一条。
+  - 输出累计用料表：`物品 / 需要 / 背包 / 已下未落成任务占用 / 缺口`。
+    ```
+    计划 2 项（matrix_lab, wind_turbine）
+    物品    需要  背包  已下未落成任务占用  缺口
+    ---  --  --  ---------  --
+    ...
+    结论：料齐了
+    ```
+  - 「已下未落成任务占用」= `planet_runtime.construction_tasks` 里**本机甲**（`mecha_id`）`pending/in_progress/paused` 且 `materials_deducted=false` 的 `cost` 之和；缺口 = 需要 + 占用 − 背包。
+  - 造价来自 `/catalog` 的 `buildings[].build_cost`；未知建筑类型、不可建造类型、找不到的 upgrade 目标直接报错。`upgrade` 按服务端 `BuildingUpgradeCost` 口径 = `ceil(基础造价 × 当前等级)`（数据里 `cost_multiplier` 缺省 1）。
+  - 缺口物品若有 `handcraft_allowed` 配方，结论下逐条给配方 id、输入→输出和「需 N 批 = 原料×数量」；不可手搓则写「没有可手搓配方，需要生产建筑」。
+  - 有缺口时结论行以 `✗ ` 开头，`scripts/sw` 退出码非 0。
 - **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
   - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
   - 默认输出人话摘要：`state[:state_reason]`、坐标/占地、HP、配方与剩余 tick、主库存/输出缓冲、`production_monitor.active_alerts`（如 `input_shortage,throughput_drop`）；单位给操作者、能量/护盾、`mecha.job`（空闲为 `idle`）、弹药；资源给矿种/剩余量/产率。
@@ -313,7 +335,7 @@ as                                     # 临时恢复为玩家本人发令
 | `uninstall_logistics_bot` | `uninstall_logistics_bot <id> <quantity>` | `uninstall_logistics_bot` | management | 回收空载停靠的配送机器人至背包 |
 | `upgrade` | `upgrade <entity_id> [--planet <planet_id>]` | `upgrade` | build | Upgrade building（按建筑所在行星结算） |
 
-### 查询命令（24 条，agent 可用）
+### 查询命令（26 条，agent 可用）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
@@ -334,6 +356,8 @@ as                                     # 临时恢复为玩家本人发令
 | `task_forces` | — | Player-owned task force list with supply and command capacity |
 | `theaters` | — | Player-owned theater zones and objectives |
 | `scene` | `scene [planet] [x y width height] [--near_x X --near_y Y --radius R] [--json] [--limit N\|all]` | 局部场景紧凑文本（建筑/资源汇总/单位）；省略 planet = 我的机甲所在星球，省略窗口 = 机甲居中 48×48；--json 输出原始 JSON |
+| `find_space` | `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]` | 找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距机甲升序；省略 --near = 我的机甲，半径默认 48 最大 128；只返回不跨球面缝的矩形 |
+| `plan` | `plan <build x y type \| upgrade building_id>... [--planet <id>] [--json]  \|  plan -` | 累计用料表：需要 / 背包 / 已下未落成任务占用 / 缺口；plan - 从 stdin 每行一条，; 也分隔；缺口可手搓时给配方；有缺口时退出码非 0 |
 | `inspect` | `inspect [planet] [building\|unit\|resource\|sector] <entity_id> [--json]` | 单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON |
 | `networks` | `networks [planet] [--json]` | 电网：每个网络的发电/用电/建筑数/缺电，以及未接网与欠电建筑；有管网时列出节点数（GET /world/planets/<id>/networks） |
 | `fleet_status` | `fleet_status [fleet_id]` | Fleet list or one fleet detail |
