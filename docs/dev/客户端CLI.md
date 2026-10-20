@@ -142,6 +142,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
     ```
     空地 3x3 @ (62,146)  距锚点 0  距机甲 4  地形 buildable
     ```
+  - `--planet <id>`：锚点取**该星球上我的机甲**；机甲不在该星球（或没绑机甲）时回退到该星球场景中心 `(map_width/2, map_height/2)`，并在首行注明原因（`锚点回退到 …：我的机甲 u-x 在 …，不在 …` / `未绑定机甲`）。`--near` 优先于两者。
   - `--spacing <n>`：任意两个候选的锚点曼哈顿距离 ≥ n，贪心取分散候选（建议取 `max(w,h)`）。**缺省 0 = 不过滤**，行为与旧版一致。结果里候选互相重叠时（且未给 `--spacing`）额外提示「用 --spacing 取分散候选」。
   - 占用判定：地形必须是 `buildable`；建筑按**实际占地**（`runtime.params.footprint`，锚点 + 宽高）排除，不是只排锚点；地面单位占 1 格（`domain=air/orbital/space` 不占）；未落成的施工任务按 `building_type` 的占地排除（高架传送带只占 1 格，`completed`/`cancelled` 不占）。服务端 `construction_tasks` 只下发**自己的**任务。
   - 数据来源：`GET /world/planets/<id>/scene`（窗口 = 锚点周围 `2R+1` 见方，R 默认 48、最大 128；另外扩 4 格取回锚点在外、占地压进窗口的建筑）+ `GET /world/planets/<id>/runtime` 的 `construction_tasks`。二维前缀和判定，128×128 窗口也在毫秒级。

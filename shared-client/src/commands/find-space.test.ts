@@ -98,7 +98,7 @@ const mechaView = {
   concurrent_tasks: 2, construction_active: 0, construction_pending: 0,
 } as MechaView;
 
-function summary(mecha: MechaView | undefined = mechaView): StateSummary {
+function summary(mechas: MechaView[] = [mechaView]): StateSummary {
   return {
     tick: 1,
     active_planet_id: 'planet-1-1',
@@ -106,7 +106,7 @@ function summary(mecha: MechaView | undefined = mechaView): StateSummary {
     map_width: 8,
     map_height: 8,
     players: {
-      p1: { player_id: 'p1', is_alive: true, resources: { energy: 0 }, mechas: mecha ? [mecha] : [] },
+      p1: { player_id: 'p1', is_alive: true, resources: { energy: 0 }, mechas, },
     },
   } as unknown as StateSummary;
 }
@@ -136,7 +136,10 @@ function fakeApi(options: {
   const calls: string[] = [];
   const api = {
     getAuth: () => ({ playerId: 'p1', issuerId: 'builder-a', issuerType: 'agent' }),
-    fetchSummary: async () => { calls.push('summary'); return summary(options.mecha); },
+    fetchSummary: async () => {
+      calls.push('summary');
+      return 'mecha' in options ? summary(options.mecha ? [options.mecha] : []) : summary();
+    },
     fetchPlanet: async (planetId: string) => { calls.push('planet'); return { planet_id: planetId, map_width: 8, map_height: 8 }; },
     fetchPlanetScene: async (_planetId: string, params: { x: number; y: number; width: number; height: number }) => {
       calls.push(`scene ${params.x},${params.y} ${params.width}x${params.height}`);
@@ -445,6 +448,38 @@ describe('cmdFindSpace 命令', () => {
     const { api } = fakeApi();
     const out = stripAnsi(await cmdFindSpace(['2', '2', '--radius', '200'], { api }));
     assert.match(out, /--radius 必须在 1\.\.128/);
+  });
+
+  it('--planet：机甲在该星球时用机甲位置做锚点', async () => {
+    const { api } = fakeApi();
+    const out = stripAnsi(await cmdFindSpace(['1', '1', '--planet', 'planet-1-1', '--count', '1', '--radius', '2'], { api }));
+    // 机甲在 (3,3)：窗口 1..5，候选 (3,3) 距锚点 0。
+    assert.match(out, /锚点 \(3,3\)/);
+    assert.match(out, /空地 1x1 @ \(3,3\)\s+距锚点 0\s+距机甲 0/);
+    assert.doesNotMatch(out, /锚点回退到/);
+  });
+
+  it('--planet：机甲不在该星球时回退到场景中心并注明', async () => {
+    const { api } = fakeApi();
+    const out = stripAnsi(await cmdFindSpace(['1', '1', '--planet', 'planet-1-2', '--count', '1', '--radius', '1'], { api }));
+    // 8x8 图集的中心是 (4,4)。
+    assert.match(out, /锚点回退到 planet-1-2 场景中心 \(4,4\)：我的机甲 u-7 在 planet-1-1，不在 planet-1-2/);
+    assert.match(out, /锚点 \(4,4\)/);
+    assert.match(out, /空地 1x1 @ \(4,4\)/);
+  });
+
+  it('--planet：没绑机甲时回退到场景中心并给出绑定提示', async () => {
+    const { api } = fakeApi({ mecha: undefined });
+    const out = stripAnsi(await cmdFindSpace(['1', '1', '--planet', 'planet-1-1', '--radius', '1'], { api, issuerId: 'builder-a' }));
+    assert.match(out, /锚点回退到 planet-1-1 场景中心 \(4,4\)：未绑定机甲/);
+    assert.match(out, /空地 1x1 @ \(4,4\)/);
+  });
+
+  it('--planet 配 --near 时以 --near 为准，不提示回退', async () => {
+    const { api } = fakeApi();
+    const out = stripAnsi(await cmdFindSpace(['1', '1', '--planet', 'planet-1-2', '--near', '1', '1', '--count', '1'], { api }));
+    assert.doesNotMatch(out, /锚点回退到/);
+    assert.match(out, /空地 1x1 @ \(1,1\)/);
   });
 
   it('radiusWindow 按图集尺寸裁剪', () => {

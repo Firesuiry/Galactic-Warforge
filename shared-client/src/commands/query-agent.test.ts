@@ -201,10 +201,10 @@ describe('inspect', () => {
         max_hp: 100,
         level: 1,
         vision_range: 2,
-        runtime: { state: 'no_power' },
+        runtime: { state: 'running' },
         sorter: { cycle_ticks: 6, range: 3 },
         production_monitor: { active_alerts: { sorter_stalled: true } },
-      } as PlanetInspectView['building'],
+      } as unknown as PlanetInspectView['building'],
     };
     const out = fmtInspect(view);
     assert.match(out, /alerts\s+sorter_stalled/);

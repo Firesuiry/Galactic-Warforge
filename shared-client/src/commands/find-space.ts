@@ -330,15 +330,18 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
   try {
     const summary = await api.fetchSummary();
     const mecha = selectMyMecha(summary.players?.[api.getAuth().playerId], resolveIssuerId(ctx));
+    // --planet 给了就不再取默认星球上下文（锚点只认该星球上的机甲）。
     const context = planetArg === undefined ? await fetchPlanetContext(api, resolveIssuerId(ctx)) : undefined;
     const planetId = planetArg ?? context!.planetId;
-    const anchor = near
-      ?? (context?.planetId === planetId || planetArg === undefined ? mecha?.position : undefined);
-    if (!anchor) {
-      return fmtError(`找不到锚点：${NO_MECHA_HINT}，或用 --near <x> <y> 指定中心`);
-    }
-
+    const mechaHere = mecha && mecha.planet_id === planetId ? mecha : undefined;
     const planet = await api.fetchPlanet(planetId);
+    // 机甲不在该星球（或没绑机甲）时回退到该星球场景中心；输出里注明。
+    const fallbackAnchor = {
+      x: Math.floor(planet.map_width / 2),
+      y: Math.floor(planet.map_height / 2),
+    };
+    const anchor = near ?? mechaHere?.position ?? fallbackAnchor;
+
     const search = radiusWindow(anchor, radius, planet.map_width, planet.map_height);
     const fetch = expandRect(search, FETCH_MARGIN, planet.map_width, planet.map_height);
     const [scene, runtime, catalog] = await Promise.all([
@@ -360,8 +363,8 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
       tasks: runtime.construction_tasks ?? [],
       footprints,
     });
-    // 「距机甲」列：机甲在本星球才有意义；--planet 指向别处或没绑机甲时退回锚点距离。
-    const mechaAnchor = mecha && mecha.planet_id === planetId ? mecha.position : anchor;
+    // 「距机甲」列：机甲在本星球才有意义；机甲不在该星球或没绑机甲时退回锚点距离。
+    const mechaAnchor = mechaHere?.position ?? anchor;
     const found = findSpaceRects({
       bounds: scene.bounds,
       search,
@@ -389,6 +392,12 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
     const lines: string[] = [];
     if (context && planetArg === undefined) {
       lines.push(fmtPlanetContext(context));
+    }
+    if (near === undefined && !mechaHere) {
+      const why = mecha
+        ? `我的机甲 ${mecha.unit_id} 在 ${mecha.planet_id}，不在 ${planetId}`
+        : `未绑定机甲（${NO_MECHA_HINT}）`;
+      lines.push(chalk.dim(`锚点回退到 ${planetId} 场景中心 (${anchor.x},${anchor.y})：${why}；要用机甲附近就用 --near <x> <y>`));
     }
     lines.push(chalk.dim(
       `搜索 ${width}x${height}：窗口 ${fmtRect(search)}  锚点 (${anchor.x},${anchor.y})  `
