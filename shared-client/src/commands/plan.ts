@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 
 import { NO_MECHA_HINT, selectMyMecha } from '../mecha.js';
 import type {
+  Building,
   BuildingCatalogEntry,
   CatalogView,
   ConstructionTaskView,
@@ -12,18 +13,26 @@ import type {
 import { getStringOption, hasFlag, parseArgs, parseIntegerArg } from './args.js';
 import { FAILURE_MARKER, fmtError, table } from './format.js';
 import { resolveIssuerId, type CommandContext } from './game-commands.js';
-import { fetchPlanetContext } from './scene-context.js';
+import { centeredWindow, fetchPlanetContext } from './scene-context.js';
 
-/** 计划里的一条（build / upgrade）。 */
+/** 计划里的一条（build / upgrade / craft_item）。 */
 export interface PlanItem {
-  kind: 'build' | 'upgrade';
+  kind: 'build' | 'upgrade' | 'craft';
   label: string;
   buildingType: string;
   /** build 的占地左上角；upgrade 不用。 */
   position?: { x: number; y: number };
   /** upgrade 的目标建筑 id。 */
   buildingId?: string;
+  /** craft_item 的配方 id 与批数。 */
+  recipeId?: string;
+  batches?: number;
 }
+
+/** 找建筑库存时扫描的窗口边长（以机甲为中心）。 */
+const PLAN_SCENE_SIZE = 48;
+/** 缺口递归展开的最大层数（防止配方环）。 */
+const MAX_HANDCRAFT_DEPTH = 3;
 
 export type PlanCostLine = ItemAmount;
 
@@ -125,8 +134,23 @@ export function parsePlanItems(text: string): PlanItem[] {
         throw new Error(`plan 里的 upgrade 需要 <building_id>：${segment}`);
       }
       items.push({ kind: 'upgrade', label: positionals[0], buildingType: '', buildingId: positionals[0] });
+    } else if (name === 'craft_item') {
+      if (positionals.length < 2) {
+        throw new Error(`plan 里的 craft_item 需要 <配方> <批数>：${segment}`);
+      }
+      const batches = parseIntegerArg(positionals[1]);
+      if (batches === undefined || batches <= 0) {
+        throw new Error(`plan 里的 craft_item 批数必须是正整数：${segment}`);
+      }
+      items.push({
+        kind: 'craft',
+        label: `craft ${positionals[0]}×${batches}`,
+        buildingType: '',
+        recipeId: positionals[0],
+        batches,
+      });
     } else {
-      throw new Error(`plan 只支持 build / upgrade：${segment}`);
+      throw new Error(`plan 只支持 build / upgrade / craft_item：${segment}`);
     }
   }
   return items;
@@ -146,6 +170,22 @@ function itemName(catalog: CatalogView, itemId: string): string {
   return catalog.items?.find((item) => item.id === itemId)?.name ?? itemId;
 }
 
+function buildingName(catalog: CatalogView, buildingType: string): string {
+  return catalog.buildings?.find((entry) => entry.id === buildingType)?.name ?? buildingType;
+}
+
+/** 配方每批的输入总量（批数 × inputs）。 */
+export function recipeInputs(recipe: RecipeCatalogEntry, batches: number): PlanCostLine[] {
+  return (recipe.inputs ?? []).map((input) => ({
+    item_id: input.item_id,
+    quantity: input.quantity * batches,
+  }));
+}
+
+function recipeFor(catalog: CatalogView, recipeId: string): RecipeCatalogEntry | undefined {
+  return (catalog.recipes ?? []).find((recipe) => recipe.id === recipeId);
+}
+
 function fmtRecipe(recipe: RecipeCatalogEntry, catalog: CatalogView): string {
   const inputs = (recipe.inputs ?? [])
     .map((input) => `${itemName(catalog, input.item_id)}×${input.quantity}`)
@@ -162,27 +202,106 @@ function handcraftRecipe(catalog: CatalogView, itemId: string): RecipeCatalogEnt
   );
 }
 
-/** 缺口物品的手搓提示；不可手搓时给出「无法手搓」。 */
+/** 手搓配方里每个输出的每批产量；缺省 1。 */
+function batchesFor(recipe: RecipeCatalogEntry, itemId: string, quantity: number): number {
+  const output = (recipe.outputs ?? []).find((entry) => entry.item_id === itemId);
+  return Math.ceil(quantity / (output?.quantity ?? 1));
+}
+
+/** 本方建筑里存有该物品的前 `limit` 个（按库存量降序）。 */
+export function findBuildingSources(
+  buildings: Building[],
+  itemId: string,
+  limit = 2,
+): Array<{ id: string; type: string; quantity: number }> {
+  return buildings
+    .map((building) => ({
+      id: building.id,
+      type: building.type,
+      quantity: (building.storage?.inventory?.[itemId] ?? 0) + (building.storage?.output_buffer?.[itemId] ?? 0),
+    }))
+    .filter((entry) => entry.quantity > 0)
+    .sort((a, b) => b.quantity - a.quantity || a.id.localeCompare(b.id))
+    .slice(0, limit);
+}
+
+export interface HandcraftHintContext {
+  completedTechs: ReadonlySet<string>;
+  /** 背包（机甲）库存，用来判断「已经有」；缺省空。 */
+  inventory?: Record<string, number>;
+  /** 当前场景里的本方建筑（取料来源）；缺省空。 */
+  buildings?: Building[];
+}
+
+function stockOf(ctx: HandcraftHintContext, itemId: string): number {
+  return ctx.inventory?.[itemId] ?? 0;
+}
+
+/**
+ * 缺口物品的提示：可手搓的沿 `handcraft_allowed` 配方递归展开到
+ * 「不可手搓 / 背包或建筑里已有 / 达到层数上限」为止，最多 3 层。
+ * 返回多行（首行无缩进，子行以 `↳ ` 开头）。
+ */
 export function fmtHandcraftHint(
   catalog: CatalogView,
   itemId: string,
   gap: number,
-  completedTechs: ReadonlySet<string>,
-): string {
+  ctx: HandcraftHintContext | ReadonlySet<string>,
+  depth = 0,
+  seen: ReadonlySet<string> = new Set(),
+): string[] {
+  const options: HandcraftHintContext = ctx instanceof Set ? { completedTechs: ctx } : ctx as HandcraftHintContext;
+  const completedTechs = options.completedTechs;
+  const name = itemName(catalog, itemId);
+  const sources = findBuildingSources(options.buildings ?? [], itemId);
+
   const recipe = handcraftRecipe(catalog, itemId);
   if (!recipe) {
-    return `${itemName(catalog, itemId)} ${gap}：没有可手搓配方，需要生产建筑`;
+    const from = sources.length > 0
+      ? `从 ${sources.map((source) => `${source.id} ${buildingName(catalog, source.type)}(${source.quantity})`).join(' / ')} 取`
+      : '需要生产建筑';
+    return [`${name} ${gap}：不可手搓，${from}`];
   }
-  const output = (recipe.outputs ?? []).find((entry) => entry.item_id === itemId);
-  const perBatch = output?.quantity ?? 1;
-  const batches = Math.ceil(gap / perBatch);
+  const batches = batchesFor(recipe, itemId, gap);
   const locked = (recipe.tech_unlock ?? []).filter((tech) => !completedTechs.has(tech));
   const lockNote = locked.length > 0 ? `；未解锁科技 ${locked.join(',')}` : '';
   const inputTotal = (recipe.inputs ?? [])
     .map((input) => `${itemName(catalog, input.item_id)}×${input.quantity * batches}`)
     .join('+');
-  return `${itemName(catalog, itemId)} ${gap}（可手搓：${recipe.id}，${fmtRecipe(recipe, catalog)}；`
-    + `需 ${batches} 批${inputTotal ? ` = ${inputTotal}` : ''}${lockNote}）`;
+  const lines = [
+    `${name} ${gap}（可手搓：${recipe.id}，${fmtRecipe(recipe, catalog)}；`
+    + `需 ${batches} 批${inputTotal ? ` = ${inputTotal}` : ''}${lockNote}）`,
+  ];
+
+  const nextSeen = new Set([...seen, itemId]);
+  if (depth + 1 >= MAX_HANDCRAFT_DEPTH) {
+    return lines;
+  }
+  for (const input of recipe.inputs ?? []) {
+    const needed = input.quantity * batches;
+    if (nextSeen.has(input.item_id)) {
+      lines.push(`  ↳ ${itemName(catalog, input.item_id)} ${needed}：（配方环，停止展开）`);
+      continue;
+    }
+    // 背包或本方建筑里已经有足够库存的就不再往下追。
+    const sourceQty = findBuildingSources(options.buildings ?? [], input.item_id, Number.MAX_SAFE_INTEGER)
+      .reduce((sum, source) => sum + source.quantity, 0);
+    if (stockOf(options, input.item_id) + sourceQty >= needed) {
+      const where = stockOf(options, input.item_id) >= needed
+        ? '背包已有'
+        : findBuildingSources(options.buildings ?? [], input.item_id)
+          .map((source) => `${source.id} ${buildingName(catalog, source.type)}(${source.quantity})`).join(' / ');
+      lines.push(`  ↳ ${itemName(catalog, input.item_id)} ${needed}：${where}`);
+      continue;
+    }
+    const childGap = needed - stockOf(options, input.item_id) - sourceQty;
+    const child = fmtHandcraftHint(catalog, input.item_id, childGap, options, depth + 1, nextSeen);
+    lines.push(`  ↳ ${child[0]}`);
+    for (const extra of child.slice(1)) {
+      lines.push(`  ${extra}`);
+    }
+  }
+  return lines;
 }
 
 /** 把计划项解析成造价；未知建筑/找不到建筑直接抛错。 */
@@ -204,6 +323,17 @@ async function resolveCosts(
         throw new Error(`该建筑类型不可建造：${item.buildingType}`);
       }
       costs.push(entry.build_cost?.items ?? []);
+      continue;
+    }
+    if (item.kind === 'craft') {
+      const recipe = recipeFor(catalog, item.recipeId as string);
+      if (!recipe) {
+        throw new Error(`未知配方：${item.recipeId}（用 catalog recipes <关键词> 查 id）`);
+      }
+      if (!recipe.handcraft_allowed) {
+        throw new Error(`该配方不可手搓：${item.recipeId}（只能由生产建筑制造）`);
+      }
+      costs.push(recipeInputs(recipe, item.batches as number));
       continue;
     }
     const view = await ctx.api.fetchPlanetInspect(planetId, {
@@ -240,7 +370,7 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
   const { api } = ctx;
   const parsed = parseArgs(args);
   if (hasFlag(parsed, 'help') || args.length === 0) {
-    return 'Usage: plan <build x y type | upgrade building_id>... [--planet <id>] [--json]  |  plan -（stdin 每行一条）';
+    return 'Usage: plan <build x y type | upgrade building_id | craft_item recipe batches>... [--planet <id>] [--json]  |  plan -（stdin 每行一条）';
   }
   const planetArg = getStringOption(parsed, 'planet');
   if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
@@ -264,7 +394,7 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
       : rawParts.join(' ');
     const items = parsePlanItems(text);
     if (items.length === 0) {
-      return fmtError('计划是空的：plan <build x y type | upgrade building_id>...');
+      return fmtError('计划是空的：plan <build x y type | upgrade building_id | craft_item recipe batches>...');
     }
 
     const summary = await api.fetchSummary();
@@ -285,6 +415,12 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
     const costs = await resolveCosts(items, catalog, ctx, planetId, buildings);
     const occupied = occupiedByTasks(runtime.construction_tasks ?? [], mecha.unit_id);
     const { need, gaps } = computePlanCost(costs, mecha.inventory ?? {}, occupied);
+    // 缺口递归提示要「从哪个建筑取」：读机甲周围场景里本方建筑的 storage。
+    const scene = gaps.size > 0
+      ? await api.fetchPlanetScene(planetId, centeredWindow(mecha, PLAN_SCENE_SIZE, summary.map_width, summary.map_height))
+      : undefined;
+    const ownBuildings = Object.values(scene?.buildings ?? {})
+      .filter((building) => building.owner_id === api.getAuth().playerId);
 
     const itemIds = [...new Set([...need.keys(), ...occupied.keys()])].sort((a, b) => {
       const gapA = gaps.has(a) ? 1 : 0;
@@ -304,6 +440,7 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
         inventory: mecha.inventory ?? {},
         occupied: Object.fromEntries(occupied),
         gaps: Object.fromEntries(gaps),
+        sources: Object.fromEntries([...gaps.keys()].map((itemId) => [itemId, findBuildingSources(ownBuildings, itemId)])),
       }, null, 2);
     }
 
@@ -314,7 +451,7 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
       lines.push(chalk.dim('  这些建筑没有物品造价'));
     } else {
       lines.push(table(
-        ['物品', '需要', '背包', '已下未落成任务占用', '缺口'],
+        ['物品', '需要', '背包', '占用', '缺口'],
         itemIds.map((itemId) => [
           itemName(catalog, itemId),
           String(need.get(itemId) ?? 0),
@@ -331,11 +468,23 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
     } else {
       const gapList = [...gaps.entries()].map(([itemId, gap]) => `${itemName(catalog, itemId)} ${gap}`).join('、');
       lines.push(chalk.red(`${FAILURE_MARKER}结论：缺 ${gapList}`));
+      const hintContext: HandcraftHintContext = {
+        completedTechs,
+        inventory: mecha.inventory ?? {},
+        buildings: ownBuildings,
+      };
       for (const [itemId, gap] of gaps) {
-        lines.push(`  - ${fmtHandcraftHint(catalog, itemId, gap, completedTechs)}`);
+        const hint = fmtHandcraftHint(catalog, itemId, gap, hintContext);
+        lines.push(`  - ${hint[0]}`);
+        for (const extra of hint.slice(1)) {
+          lines.push(`    ${extra}`);
+        }
       }
     }
-    lines.push(chalk.dim('缺口 = 需要 + 已下未落成任务占用 − 背包；占用只算本机甲 pending/in_progress/paused 且未扣料的任务'));
+    lines.push(chalk.dim(
+      '缺口 = 需要 + 已下未落成任务占用 − 背包；占用只算本机甲 pending/in_progress/paused 且未扣料的任务'
+      + '（不含进行中手搓作业已预留的原料）；craft_item 的原料计入「需要」，但不算占用',
+    ));
     return lines.join('\n');
   } catch (e) {
     return fmtError(e instanceof Error ? e.message : String(e));
