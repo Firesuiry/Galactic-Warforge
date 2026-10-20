@@ -16,9 +16,18 @@ import {
   computePlanCost,
   findBuildingSources,
   fmtHandcraftHint,
+  cmdPlanNeed,
+  expandNeed,
+  fmtNeedTree,
+  fmtSourceList,
+  fmtStockMarker,
+  leafTotals,
+  pickRecipe,
+  summarizeNeed,
   occupiedByTasks,
   parsePlanItems,
   recipeInputs,
+  summarizeSources,
   upgradeCost,
 } from './plan.js';
 
@@ -34,6 +43,7 @@ const catalog = {
     { id: 'copper_ore', name: '铜矿' },
     { id: 'magnet', name: '磁铁' },
     { id: 'iron_ore', name: '铁矿' },
+    { id: 'electromagnetic_matrix', name: '电磁矩阵' },
   ],
   buildings: [
     { id: 'supply_station', name: '补给站', buildable: true, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 6 }] } },
@@ -42,12 +52,22 @@ const catalog = {
     { id: 'wind_turbine', buildable: true, build_cost: { items: [{ item_id: 'iron_ingot', quantity: 2 }, { item_id: 'magnetic_coil', quantity: 1 }] } },
     { id: 'arc_smelter', buildable: true, build_cost: { items: [{ item_id: 'circuit_board', quantity: 4 }, { item_id: 'iron_ingot', quantity: 3 }] } },
     { id: 'foundation', buildable: false, build_cost: { items: [] } },
+    { id: 'assembling_machine_mk1', name: '制造台 Mk.I', buildable: true, build_cost: { items: [] } },
+  ],
+  techs: [
+    { id: 'glass', name: '玻璃', unlocks: [{ type: 'recipe', id: 'glass' }] },
+    { id: 'electromagnetism', name: '电磁学', unlocks: [{ type: 'recipe', id: 'electromagnetic_matrix' }] },
   ],
   recipes: [
     {
       id: 'glass', name: '玻璃', handcraft_allowed: true, duration: 2, tech_unlock: ['glass'],
       inputs: [{ item_id: 'stone_ore', quantity: 2 }],
       outputs: [{ item_id: 'glass', quantity: 1 }],
+    },
+    {
+      id: 'magnetic_coil', name: '磁线圈', handcraft_allowed: true, duration: 30,
+      inputs: [{ item_id: 'magnet', quantity: 2 }, { item_id: 'copper_ingot', quantity: 1 }],
+      outputs: [{ item_id: 'magnetic_coil', quantity: 2 }],
     },
     {
       id: 'smelt_iron', name: '铁块', handcraft_allowed: false, duration: 2,
@@ -68,6 +88,12 @@ const catalog = {
       id: 'smelt_magnet', name: '磁铁', handcraft_allowed: true, duration: 60,
       inputs: [{ item_id: 'iron_ore', quantity: 1 }],
       outputs: [{ item_id: 'magnet', quantity: 1 }],
+    },
+    {
+      id: 'electromagnetic_matrix', name: '电磁矩阵', handcraft_allowed: false, duration: 60,
+      building_types: ['assembling_machine_mk1'], tech_unlock: ['electromagnetism'],
+      inputs: [{ item_id: 'magnetic_coil', quantity: 1 }, { item_id: 'circuit_board', quantity: 1 }],
+      outputs: [{ item_id: 'electromagnetic_matrix', quantity: 1 }],
     },
     {
       id: 'loop_a', name: '环A', handcraft_allowed: true, duration: 1,
@@ -91,7 +117,7 @@ function mecha(inventory: Record<string, number>): MechaView {
   } as MechaView;
 }
 
-function summary(view: MechaView | undefined): StateSummary {
+function summary(view: MechaView | undefined, completedTechs: Record<string, number> = { glass: 1 }): StateSummary {
   return {
     tick: 1,
     active_planet_id: 'planet-1-1',
@@ -104,7 +130,7 @@ function summary(view: MechaView | undefined): StateSummary {
         is_alive: true,
         resources: { energy: 0 },
         mechas: view ? [view] : [],
-        tech: { player_id: 'p1', completed_techs: { glass: 1 } },
+        tech: { player_id: 'p1', completed_techs: completedTechs },
       },
     },
   } as unknown as StateSummary;
@@ -146,6 +172,8 @@ function fakeApi(options: {
   buildings?: Record<string, Building>;
   /** 场景里的本方建筑（缺口提示的取料来源）。 */
   sceneBuildings?: Record<string, Building>;
+  /** 已完成的科技（plan need 选配方用）；缺省只有 glass。 */
+  completedTechs?: Record<string, number>;
   mecha?: MechaView;
 } = {}) {
   const view = 'mecha' in options ? options.mecha : mecha(options.inventory ?? {});
@@ -159,7 +187,7 @@ function fakeApi(options: {
   } as PlanetRuntimeView;
   const api = {
     getAuth: () => ({ playerId: 'p1', issuerId: 'builder-a', issuerType: 'agent' }),
-    fetchSummary: async () => summary(view),
+    fetchSummary: async () => summary(view, options.completedTechs),
     fetchCatalog: async () => catalog,
     fetchPlanetRuntime: async () => runtime,
     fetchPlanetScene: async () => ({
@@ -403,7 +431,7 @@ describe('plan 可手搓提示', () => {
     assert.match(hint[0], /电路板 11（可手搓：circuit_board，铁块×1\+铜块×1 → 电路板×1；需 11 批 = 铁块×11\+铜块×11）/);
     // 铜块可手搓（smelt_copper），但背包/建筑里已有 → 直接给来源，不再展开。
     assert.match(text, /↳ 铜块 11：.*b-97 补给站\(56\)/);
-    assert.match(text, /b-97 补给站\(56\) \/ b-55 电弧熔炉\(12\)/);
+    assert.match(text, /b-97 补给站\(56\)、b-55 电弧熔炉\(12\) 等 3 处   \[够\]/);
     // 铁块不可手搓（测试目录里 smelt_iron 的 handcraft_allowed=false），给出「不可手搓」。
     assert.match(text, /↳ 铁块 11：不可手搓/);
     assert.doesNotMatch(text, /b-67/);
@@ -429,7 +457,7 @@ describe('plan 可手搓提示', () => {
     assert.equal(hint[0], '电路板 11（可手搓：circuit_board，铁块×1+铜块×1 → 电路板×1；需 11 批 = 铁块×11+铜块×11）');
     // 子行按配方输入顺序：铁块在前、铜块在后。
     assert.match(hint[1], /^  ↳ 铁块 11：不可手搓/);
-    assert.equal(hint[2], '  ↳ 铜块 11：b-97 补给站(56)');
+    assert.equal(hint[2], '  ↳ 铜块 11：b-97 补给站(56)   [够]');
   });
 
   it('递归最多 3 层且配方环不会死循环', () => {
@@ -536,5 +564,258 @@ describe('cmdPlan 命令', () => {
     const api = fakeApi({ mecha: undefined });
     const out = stripAnsi(await cmdPlan(['build', '1', '1', 'wind_turbine'], { api }));
     assert.match(out, /没有绑定的机甲/);
+  });
+});
+
+describe('plan need', () => {
+  const completed = new Set(['glass', 'electromagnetism']);
+
+  it('pickRecipe 取单批产出最多的可用配方，科技未满足的跳过', () => {
+    const catalogWithAlt = {
+      ...catalog,
+      recipes: [
+        ...(catalog.recipes ?? []),
+        {
+          id: 'matrix_alt', name: '电磁矩阵（慢）', handcraft_allowed: false, duration: 120,
+          inputs: [{ item_id: 'magnetic_coil', quantity: 2 }],
+          outputs: [{ item_id: 'electromagnetic_matrix', quantity: 1 }],
+        },
+        {
+          id: 'matrix_bulk', name: '电磁矩阵（双）', handcraft_allowed: false, duration: 120,
+          tech_unlock: ['electromagnetism'],
+          inputs: [{ item_id: 'magnetic_coil', quantity: 2 }],
+          outputs: [{ item_id: 'electromagnetic_matrix', quantity: 2 }],
+        },
+      ],
+    } as unknown as CatalogView;
+    // 单批产出 2 的优先。
+    assert.equal(pickRecipe(catalogWithAlt, 'electromagnetic_matrix', { completedTechs: completed })?.id, 'matrix_bulk');
+    // 科技没完成时 matrix_bulk（门槛 electromagnetism）被过滤，同物品的 matrix_alt 无门槛 → 选它。
+    assert.equal(pickRecipe(catalogWithAlt, 'electromagnetic_matrix', { completedTechs: new Set() })?.id, 'matrix_alt');
+    // 只剩有科技门槛的配方、科技又没完成时 → 没有可用配方。
+    assert.equal(
+      pickRecipe(catalog, 'electromagnetic_matrix', { completedTechs: new Set() }),
+      undefined,
+    );
+    // 显式 --from 不看科技门槛。
+    assert.equal(
+      pickRecipe(catalogWithAlt, 'electromagnetic_matrix', { recipeId: 'electromagnetic_matrix', completedTechs: new Set() })?.id,
+      'electromagnetic_matrix',
+    );
+    // 基础原料没有配方。
+    assert.equal(pickRecipe(catalog, 'iron_ore', { completedTechs: completed }), undefined);
+  });
+
+  it('expandNeed 递归展开到基础原料，原料按每批产量取整', () => {
+    const root = expandNeed(catalog, 'electromagnetic_matrix', 20, {
+      completedTechs: completed,
+      stockOf: () => 0,
+    });
+    // 电磁矩阵 20 → 磁线圈 20 + 电路板 20。
+    assert.equal(root.children.length, 2);
+    assert.equal(root.children[0].itemId, 'magnetic_coil');
+    assert.equal(root.children[0].quantity, 20);
+    // 磁线圈配方每批产 2：20 个 = 10 批 → 磁铁 20、铜块 10。
+    assert.equal(root.children[0].children[0].itemId, 'magnet');
+    assert.equal(root.children[0].children[0].quantity, 20);
+    assert.equal(root.children[0].children[1].itemId, 'copper_ingot');
+    assert.equal(root.children[0].children[1].quantity, 10);
+    assert.equal(root.children[0].children[0].children[0].itemId, 'iron_ore');
+    assert.equal(root.children[0].children[0].children[0].leafReason, 'base');
+    // 电路板 → 铁块 + 铜块 → 铁矿 / 铜矿。
+    const board = root.children[1];
+    assert.equal(board.itemId, 'circuit_board');
+    assert.deepEqual(board.children.map((child) => child.itemId), ['iron_ingot', 'copper_ingot']);
+    // 铁矿 20（磁铁）+ 20（电路板铁块）= 40；铜矿 10（磁线圈铜块）+ 20（电路板铜块）= 30。
+    assert.deepEqual(leafTotals(root), new Map([['iron_ore', 40], ['copper_ore', 30]]));
+  });
+
+  it('多级展开：每批产量 > 1 时按批数向上取整', () => {
+    // 磁线圈 3 个：每批 2 个 → 2 批 → 磁铁 4、铜块 2。
+    const root = expandNeed(catalog, 'magnetic_coil', 3, { completedTechs: completed, stockOf: () => 0 });
+    assert.equal(root.children[0].quantity, 4);
+    assert.equal(root.children[1].quantity, 2);
+  });
+
+  it('检测配方环：环上的物品停止展开', () => {
+    const root = expandNeed(catalog, 'loop_a', 1, { completedTechs: completed, stockOf: () => 0 });
+    const text = fmtNeedTree(catalog, root).join('\n');
+    assert.match(text, /^loop_a 1 ← loop_a/m);
+    assert.match(text, /loop_b 1 ← loop_b/);
+    assert.match(text, /loop_a 1（配方环，停止展开）/);
+    // 环上不再往下展开。
+    assert.equal(text.split('\n').length, 3);
+  });
+
+  it('最多展开 6 层', () => {
+    // 构造一条 8 层深的链：item_0 → item_1 → … → item_8。
+    const recipes = Array.from({ length: 8 }, (_, i) => ({
+      id: `chain_${i}`, name: `链${i}`, handcraft_allowed: false, duration: 1,
+      inputs: [{ item_id: `item_${i + 1}`, quantity: 1 }],
+      outputs: [{ item_id: `item_${i}`, quantity: 1 }],
+    }));
+    const chainCatalog = {
+      items: Array.from({ length: 9 }, (_, i) => ({ id: `item_${i}`, name: `物品${i}` })),
+      buildings: [],
+      recipes,
+    } as unknown as CatalogView;
+    const root = expandNeed(chainCatalog, 'item_0', 1, { completedTechs: completed, stockOf: () => 0 });
+    const text = fmtNeedTree(chainCatalog, root).join('\n');
+    assert.match(text, /物品6 1（展开到 6 层上限，不再展开）/);
+    assert.doesNotMatch(text, /物品7/);
+  });
+
+  it('缺口 = 需要 − 现有量；现有量来自背包 + 建筑库存', () => {
+    const rows = summarizeNeed(catalog, expandNeed(catalog, 'electromagnetic_matrix', 20, {
+      completedTechs: completed,
+      stockOf: (id) => (id === 'iron_ore' ? 60 : 0),
+    }));
+    const iron = rows.find((row) => row.itemId === 'iron_ore');
+    assert.deepEqual(iron, { itemId: 'iron_ore', need: 40, stock: 60, gap: 0 });
+    const copper = rows.find((row) => row.itemId === 'copper_ore');
+    assert.deepEqual(copper, { itemId: 'copper_ore', need: 30, stock: 0, gap: 30 });
+  });
+
+  it('--from 显式指定配方', async () => {
+    const api = fakeApi({ inventory: {}, completedTechs: { glass: 1, electromagnetism: 1 } });
+    const out = stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', '2', '--from', 'electromagnetic_matrix'], { api, issuerId: 'builder-a' }));
+    assert.match(out, /电磁矩阵 2 ← electromagnetic_matrix（制造台 Mk.I）/);
+    assert.match(out, /磁线圈 2 ← magnetic_coil/);
+  });
+
+  it('未知物品 / 未知配方 / 配方不产该物品都报错', async () => {
+    const api = fakeApi();
+    assert.match(stripAnsi(await cmdPlanNeed(['need', 'no_such_item', '1'], { api, issuerId: 'builder-a' })), /未知物品：no_such_item/);
+    assert.match(stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', '1', '--from', 'nope'], { api, issuerId: 'builder-a' })), /未知配方：nope/);
+    assert.match(stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', '1', '--from', 'glass'], { api, issuerId: 'builder-a' })), /配方 glass 不产出「电磁矩阵」/);
+    assert.match(stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', 'x'], { api, issuerId: 'builder-a' })), /数量必须是正整数/);
+  });
+
+  it('cmdPlan 把 need 子命令转给 cmdPlanNeed', async () => {
+    const api = fakeApi({ inventory: {}, completedTechs: { glass: 1, electromagnetism: 1 } });
+    const out = stripAnsi(await cmdPlan(['need', 'electromagnetic_matrix', '2'], { api, issuerId: 'builder-a' }));
+    assert.match(out, /^需要 电磁矩阵 2/);
+    assert.match(out, /汇总/);
+  });
+
+  it('现有量够时结论「现有量够」，不够时 ✗ 结论', async () => {
+    // 基础原料够 = 中间产物也都能现做，全部缺口归零。
+    const enough = fakeApi({
+      inventory: { iron_ore: 100, copper_ore: 100 },
+      completedTechs: { glass: 1, electromagnetism: 1 },
+    });
+    const out = stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', '20'], { api: enough, issuerId: 'builder-a' }));
+    assert.match(out, /结论：现有量够/);
+    assert.doesNotMatch(out, /✗/);
+    // 中间产物行也按现有原料折算：磁线圈 20 ← magnetic_coil 仍在树里（要现做）。
+
+    const short = fakeApi({ inventory: { iron_ore: 30, copper_ore: 100 }, completedTechs: { glass: 1, electromagnetism: 1 } });
+    const out2 = stripAnsi(await cmdPlanNeed(['need', 'electromagnetic_matrix', '20'], { api: short, issuerId: 'builder-a' }));
+    assert.match(out2, /✗ 结论：还缺 铁矿 10/);
+  });
+
+  it('--json 给树与汇总', async () => {
+    const api = fakeApi({ inventory: {}, completedTechs: { glass: 1, electromagnetism: 1 } });
+    const out = await cmdPlanNeed(['need', 'electromagnetic_matrix', '2', '--json'], { api, issuerId: 'builder-a' });
+    const parsed = JSON.parse(out) as {
+      tree: { item_id: string; recipe_id?: string; children: unknown[] };
+      summary: Array<{ item_id: string; need: number; stock: number; gap: number }>;
+      gap_total: number;
+    };
+    assert.equal(parsed.tree.item_id, 'electromagnetic_matrix');
+    assert.equal(parsed.tree.recipe_id, 'electromagnetic_matrix');
+    assert.equal(parsed.tree.children.length, 2);
+    const iron = parsed.summary.find((row) => row.item_id === 'iron_ore');
+    // 电磁矩阵 2 → 磁线圈 2（1 批，磁铁 2 + 铜块 1）+ 电路板 2（铁块 2 + 铜块 2）。
+    assert.deepEqual(iron, { item_id: 'iron_ore', name: '铁矿', need: 4, stock: 0, gap: 4 });
+    // 铜矿 1（磁线圈 1 批的铜块 1）+ 2（电路板 2 批的铜块 2）= 3；铁矿 4 → 合计 7。
+    assert.equal(parsed.gap_total, 7);
+  });
+});
+
+describe('plan 来源可取出数量与够不够标记', () => {
+  it('summarizeSources 按 inventory + output_buffer 合计、只列 > 0、按数量降序', () => {
+    const buildings = [
+      { ...arcSmelter('b-55', { copper_ingot: 2 }), storage: { inventory: { copper_ingot: 1 }, output_buffer: { copper_ingot: 1 } } },
+      arcSmelter('b-1', { copper_ingot: 9 }),
+      arcSmelter('b-2', { copper_ingot: 0 }),
+      arcSmelter('b-4', { iron_ingot: 100 }),
+    ];
+    const summary = summarizeSources(buildings, 'copper_ingot');
+    assert.deepEqual(summary.listed, [
+      { id: 'b-1', type: 'arc_smelter', quantity: 9 },
+      { id: 'b-55', type: 'arc_smelter', quantity: 2 },
+    ]);
+    assert.equal(summary.total, 11);
+    assert.equal(summary.count, 2);
+    assert.deepEqual(summarizeSources(buildings, 'gold'), { listed: [], total: 0, count: 0 });
+  });
+
+  it('fmtStockMarker：够标 [够]，不够标还差多少', () => {
+    assert.equal(fmtStockMarker(4, 4), '[够]');
+    assert.equal(fmtStockMarker(10, 4), '[够]');
+    assert.equal(fmtStockMarker(48, 60), '[不够，还差 12]');
+    assert.equal(fmtStockMarker(0, 5), '[不够，还差 5]');
+  });
+
+  it('fmtSourceList 超过 limit 处时补「等 N 处」', () => {
+    const summary = summarizeSources([
+      supplyStation('b-97', { copper_ingot: 42 }),
+      arcSmelter('b-55', { copper_ingot: 2 }),
+      arcSmelter('b-67', { copper_ingot: 1 }),
+    ], 'copper_ingot');
+    assert.equal(fmtSourceList(catalog, summary), 'b-97 补给站(42)、b-55 电弧熔炉(2) 等 3 处');
+    assert.equal(fmtSourceList(catalog, summarizeSources([supplyStation('b-97', { copper_ingot: 42 })], 'copper_ingot')), 'b-97 补给站(42)');
+  });
+
+  it('缺口提示的来源列带数量与 [够]', () => {
+    const hint = fmtHandcraftHint(catalog, 'circuit_board', 2, {
+      completedTechs: new Set(),
+      inventory: {},
+      buildings: [supplyStation('b-97', { copper_ingot: 42 }), arcSmelter('b-55', { copper_ingot: 2 })],
+    }).join('\n');
+    assert.match(hint, /↳ 铜块 2：b-97 补给站\(42\)、b-55 电弧熔炉\(2\)   \[够\]/);
+  });
+
+  it('来源合计不够时不再写来源，改为按缺口继续沿手搓链展开', () => {
+    const hint = fmtHandcraftHint(catalog, 'circuit_board', 60, {
+      completedTechs: new Set(),
+      inventory: {},
+      buildings: [supplyStation('b-97', { copper_ingot: 40 }), arcSmelter('b-55', { copper_ingot: 2 })],
+    }).join('\n');
+    // 铜块合计 42 < 60 → 缺口 18，铜块本身可手搓（smelt_copper），继续展开到铜矿。
+    assert.match(hint, /↳ 铜块 18（可手搓：smelt_copper/);
+    assert.match(hint, /↳ 铜矿 18：不可手搓，需要生产建筑/);
+  });
+
+  it('不可手搓物品的来源也带数量与标记', () => {
+    const hint = fmtHandcraftHint(catalog, 'iron_ingot', 12, {
+      completedTechs: new Set(),
+      inventory: {},
+      buildings: [arcSmelter('b-49', { iron_ingot: 48 })],
+    }).join('\n');
+    assert.match(hint, /铁块 12：不可手搓，从 b-49 电弧熔炉\(48\) 取   \[够\]/);
+    const short = fmtHandcraftHint(catalog, 'iron_ingot', 60, {
+      completedTechs: new Set(),
+      inventory: {},
+      buildings: [arcSmelter('b-49', { iron_ingot: 48 })],
+    }).join('\n');
+    assert.match(short, /铁块 60：不可手搓，从 b-49 电弧熔炉\(48\) 取   \[不够，还差 12\]/);
+  });
+
+  it('--json 的 sources 带 available / gap / enough', async () => {
+    const api = fakeApi({
+      inventory: {},
+      sceneBuildings: { 'b-49': arcSmelter('b-49', { iron_ingot: 48 }) },
+    });
+    const out = await cmdPlan(['build', '62', '146', 'matrix_lab', '--json'], { api, issuerId: 'builder-a' });
+    const parsed = JSON.parse(out) as {
+      gaps: Record<string, number>;
+      sources: Record<string, { buildings: unknown[]; available: number; gap: number; enough: boolean }>;
+    };
+    assert.equal(parsed.gaps.circuit_board, 8);
+    assert.equal(parsed.sources.circuit_board.available, 0);
+    assert.equal(parsed.sources.circuit_board.enough, false);
+    assert.equal(parsed.sources.circuit_board.gap, 8);
   });
 });
