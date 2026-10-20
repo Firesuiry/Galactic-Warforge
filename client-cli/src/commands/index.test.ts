@@ -309,6 +309,33 @@ describe('help 补全（SK-CLI-B）', () => {
     assert.match(out, /不是物品 id/);
   });
 
+  it('help wait 说明 N 是 tick 数，并按 max_tick_rate 换算成秒 + 给例子', async () => {
+    const fakeTickApi = {
+      fetchCurrentGame: async () => ({ max_tick_rate: 10 }),
+    } as never;
+    const out = await cmdHelp(['wait'], { api: fakeTickApi });
+    assert.match(out, /N 是 tick 数/);
+    assert.match(out, /本服 10 tick\/秒/);
+    assert.match(out, /wait ticks 500 ≈ 50 秒/);
+    assert.match(out, /wait ticks 500 --timeout 90/);
+  });
+
+  it('help wait 取不到 tick 速率时仍给换算公式', async () => {
+    const failingApi = { fetchCurrentGame: async () => { throw new Error('offline'); } } as never;
+    const out = await cmdHelp(['wait'], { api: failingApi });
+    assert.match(out, /秒 = N ÷ 速率/);
+    assert.match(out, /max_tick_rate/);
+  });
+
+  it('help find_space / plan 带新选项', async () => {
+    const findSpace = await cmdHelp(['find_space'], { api });
+    assert.match(findSpace, /--spacing N/);
+    assert.match(findSpace, /距锚点/);
+    const plan = await cmdHelp(['plan'], { api });
+    assert.match(plan, /craft_item recipe batches/);
+    assert.match(plan, /递归/);
+  });
+
   it('help build 说明 x,y 是占地左上角', async () => {
     const out = await cmdHelp(['build'], { api });
     assert.match(out, /占地左上角/);

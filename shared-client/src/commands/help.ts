@@ -14,7 +14,7 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   metrics: { desc: 'Runtime metrics' },
   summary: { desc: 'Game summary (resources, players, map)' },
   stats: { desc: 'Current player statistics' },
-  wait: { usage: '<ticks <n>|job|build|item <物品ID> <数量> [--in <建筑ID>]|running <建筑ID>> [--timeout <秒>]', desc: '等到条件成立（轮询，默认 120s）：ticks=tick 前进 n；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running' },
+  wait: { usage: '<ticks <n>|job|build|item <物品ID> <数量> [--in <建筑ID>]|running <建筑ID>> [--timeout <秒>]', desc: '等到条件成立（轮询，默认 120s）：ticks=tick 前进 n（n 是 tick 数不是秒，秒 = n ÷ tick 速率；10 tick/s 时 wait ticks 500 = 50 秒）；job=我的机甲作业结束；build=我的机甲施工队列清空（缺料/无进展提前返回）；item=背包或 --in 建筑库存（inventory+output_buffer）达到数量；running=建筑进入 running' },
   briefing: { usage: '[alert_limit]', desc: 'One-shot agent briefing：我的机甲背包（完整）/ 作业、已完成科技与当前研究、告警（带 alert_type 与 building_id）、fleet/war/commands' },
   catalog: { usage: '<buildings [关键词]|building <id>|recipes [--handcraft] [--building <type>] [关键词]|items [关键词]|techs [--available|--done]|units>', desc: '紧凑目录表：建筑造价/占地/解锁科技、配方、物品堆叠、科技成本、可生产单位（GET /catalog）' },
   catalog_commands: { desc: 'Public command structure catalog (GET /catalog/commands)' },
@@ -28,8 +28,8 @@ const HELP_ENTRIES: Record<string, { usage?: string; desc: string }> = {
   task_forces: { desc: 'Player-owned task force list with supply and command capacity' },
   theaters: { desc: 'Player-owned theater zones and objectives' },
   scene: { usage: '[planet] [x y width height] [--near_x X --near_y Y --radius R] [--json] [--limit N|all]', desc: '局部场景紧凑文本（建筑/资源汇总/单位）；省略 planet = 我的机甲所在星球，省略窗口 = 机甲居中 48×48；--json 输出原始 JSON' },
-  find_space: { usage: '<w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]', desc: '找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距机甲升序；省略 --near = 我的机甲，半径默认 48 最大 128；只返回不跨球面缝的矩形' },
-  plan: { usage: '<build x y type | upgrade building_id>... [--planet <id>] [--json]  |  plan -', desc: '累计用料表：需要 / 背包 / 已下未落成任务占用 / 缺口；plan - 从 stdin 每行一条，; 也分隔；缺口可手搓时给配方；有缺口时退出码非 0' },
+  find_space: { usage: '<w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]', desc: '找 w×h 全空矩形（按实际占地排除建筑、地面单位、未落成施工任务，地形须 buildable），按距锚点升序，每行同时给「距锚点」「距机甲」；省略 --near = 我的机甲，半径默认 48 最大 128；--spacing N 让任意两个候选的锚点曼哈顿距离 ≥ N（缺省不过滤，建议 max(w,h)）；只返回不跨球面缝的矩形' },
+  plan: { usage: '<build x y type | upgrade building_id | craft_item recipe batches>... [--planet <id>] [--json]  |  plan -', desc: '累计用料表：需要 / 背包 / 占用 / 缺口；craft_item <配方> <批数> 把 inputs×批数 计入需要（不算占用）；plan - 从 stdin 每行一条，; 也分隔；缺口沿可手搓配方递归展开到不可手搓/已有库存（最多 3 层），并给本方建筑取料来源；有缺口时退出码非 0' },
   inspect: { usage: '[planet] [building|unit|resource|sector] <entity_id> [--json]', desc: '单个实体人话摘要（状态+原因、库存/缓冲、活跃告警）；省略 planet 同 scene，省略 kind 按 id 前缀推断；--json 输出原始 JSON' },
   networks: { usage: '[planet] [--json]', desc: '电网：每个网络的发电/用电/建筑数/缺电，以及未接网与欠电建筑；有管网时列出节点数（GET /world/planets/<id>/networks）' },
   fleet_status: { usage: '[fleet_id]', desc: 'Fleet list or one fleet detail' },
@@ -129,7 +129,7 @@ const HELP_TEXT = [
   '    summary         Game summary',
   '    stats           Current player statistics',
   '    briefing [n]    Agent briefing snapshot',
-  '    wait <ticks <n>|job|build|item <id> <n> [--in <building_id>]|running <building_id>> [--timeout <s>]  等到条件成立（默认 120s）',
+  '    wait <ticks <n>|job|build|item <id> <n> [--in <building_id>]|running <building_id>> [--timeout <s>]  等到条件成立（默认 120s；ticks 的 n 是 tick 数，秒 = n ÷ tick 速率）',
   '    catalog <buildings|building|recipes|items|techs|units>  Compact catalog tables',
   '    catalog_commands  Public command structure catalog',
   '    galaxy          Galaxy list',
@@ -142,8 +142,8 @@ const HELP_TEXT = [
   '    task_forces     Task force status, members and supply',
   '    theaters        Theater zones and objectives',
   '    scene [planet] [x y w h]     Compact local scene (default: around my mecha, 48x48)',
-  '    find_space <w> <h> [--count N] [--near X Y] [--radius R]   找全空矩形（避开建筑占地/单位/施工任务）',
-  '    plan <build x y type|upgrade id>...   累计用料表（需要/背包/占用/缺口）',
+  '    find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N]   找全空矩形（避开建筑占地/单位/施工任务）',
+  '    plan <build x y type|upgrade id|craft_item recipe batches>...   累计用料表（需要/背包/占用/缺口）',
   '    inspect [planet] [kind] <id>  Human-readable entity summary (kind inferred from id)',
   '    networks [planet]             Power/logistics networks',
   '    fleet_status [id]    Fleet list or one fleet detail',
@@ -287,6 +287,35 @@ async function getCraftItemHelp(api: ApiClient): Promise<string> {
   }
 }
 
+/** tick 速率（tick/秒）：优先 /games/current 的 max_tick_rate，取不到就说明换算方式。 */
+async function getTickRate(api: ApiClient): Promise<number | undefined> {
+  try {
+    const game = await api.fetchCurrentGame();
+    return game.max_tick_rate > 0 ? game.max_tick_rate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** `help wait`：N 是 tick 数，按服务端 tick 速率换算成秒，并给例子。 */
+async function getWaitHelp(api: ApiClient): Promise<string> {
+  const entry = HELP_ENTRIES.wait;
+  const rate = await getTickRate(api);
+  const rateText = rate
+    ? `本服 ${rate} tick/秒（/games/current 的 max_tick_rate）：wait ticks 500 ≈ ${Math.round(500 / rate)} 秒`
+    : 'tick 速率取 /games/current 的 max_tick_rate（或 /health 推进速度），秒 = N ÷ 速率';
+  return [
+    `${chalk.bold('wait')} ${chalk.dim(entry.usage)}`,
+    `  ${entry.desc}`,
+    '',
+    `  ${chalk.bold('ticks')}：N 是 ${chalk.bold('tick 数')}，不是秒。${rateText}。`,
+    '  例：',
+    '    wait ticks 500 --timeout 90     # 等 500 tick（10 tick/s 时约 50 秒；默认超时 120s 够用）',
+    '    wait job                        # 等我的机甲手搓/采矿作业结束',
+    '    wait item circuit_board 4 --in b-79   # 等研究站攒够 4 块电路板',
+  ].join('\n');
+}
+
 function getCommandHelp(cmd: string, api: ApiClient): string | Promise<string> {
   const entry = HELP_ENTRIES[cmd];
   if (!entry) {
@@ -297,6 +326,9 @@ function getCommandHelp(cmd: string, api: ApiClient): string | Promise<string> {
   }
   if (cmd === 'craft_item') {
     return getCraftItemHelp(api);
+  }
+  if (cmd === 'wait') {
+    return getWaitHelp(api);
   }
   return `${chalk.bold(cmd)} ${chalk.dim(entry.usage ?? '')}\n  ${entry.desc}`;
 }
