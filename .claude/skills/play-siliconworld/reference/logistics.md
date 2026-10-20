@@ -34,6 +34,7 @@
   - `inspect <分拣器ID>` 有一行 `sorter`，例如 `取←西 b-101 传送带 Mk.I(1格) | 放→东 b-105 补给站(1格)   last=t7427 iron_ingot b-101→b-105`。
   - `last=-` 表示还没有搬运过；如果两端都显示连上了、货也有，等 20 tick 再看一次。
   - 预判会把**还在施工队列里的建筑**也算进去（标成「施工中，任务 c-7」），但不模拟它们落成后是否通电。
+  - **同一条批量里，先发的分拣器看不到后发的建筑**：回执写「未连上」，等整批落成后就会连上。这是预判顺序造成的，不是错误；落成后用 `inspect` 再确认一次。
 - 分拣器只能建在地面层（`--elevation` 给分拣器会报 `INVALID_ELEVATION 只有传送带可以架高`）。
 - 物品过滤：`configure_sorter <id> --mode allow --items iron_ore`。
 
@@ -105,6 +106,21 @@ build 58 157 sorter_mk1 --rotation 180   # 背面（北）跳过 1 个空格取�
 ### 6.4 两种原料进一个制造台
 
 每种原料各用一个分拣器，背面对着原料来源（放着铁块的补给站，或者传送带），正面对着制造台。这些分拣器不能在同一条轴上互相挡住。从补给站取料时，补给站里有多种货，用 `configure_sorter --mode allow --items <物品>` 限定只搬需要的那一种。
+
+## 6.5 吞吐与缓冲参考
+
+| 建筑 | 产出速度 | 主库存 | 输入缓冲 | 输出缓冲 | 备注 |
+| --- | --- | --- | --- | --- | --- |
+| `mining_machine` | 8/tick | 48 | 12 | 12 | 没出口几 tick 就满 |
+| `arc_smelter` | 1 批 / 配方时长（铁铜 60 tick） | 24 | 8 | 8 | 成品攒在输出缓冲 |
+| `assembling_machine_mk1` | 1 批 / 配方时长 | 24 | 8 | 8 | |
+| `matrix_lab` | 1 批 / 配方时长 | 36 | 12 | 12 | 研究模式另算 |
+| `supply_station` | — | 1000 | 200 | 200 | 开局可建的产线终点 |
+| `conveyor_belt_mk1` | 1/tick，每格堆 2 | — | — | — | Mk.II 2/tick，Mk.III 5/tick |
+
+- 缓冲按「输入/输出优先级」分配，默认 2:1，上表是默认值。实际值以 `inspect` 的 `storage.capacity / buffer_capacity / output_buffer` 为准。
+- **估算等待时间**：N 个成品 ≈ N × 配方时长 ÷ 制造台数量（tick）。tick 速率看 `health` 或 `/games/current`，例如 10 tick/s 时 600 tick = 60 秒。
+- 手搓一批的时长 = 配方 `duration`（`catalog recipes` 能查）。例如齿轮 20 tick/批。
 
 ## 7. 供电
 
