@@ -97,10 +97,13 @@
 
 ## 4. 隐蔽失败（回执是 OK，但事没办成）
 
-1. **连发建造等料**：回执带「本任务将等料」时，任务停在 `pending / insufficient_materials`。用 `planet_runtime --mine` 看自己的施工队列和 `wait_reason`。
+1. **连发建造等料**：回执带「本任务将等料」时，任务停在 `pending / insufficient_materials`。用 `planet_runtime --mine` 看自己的施工队列和 `wait_reason`。施工任务 ID（`c-…`）**不能** `inspect`，要知道具体缺什么就看 build 回执。
+   - 任务显示 `paused` 但 `wait_reason` 为空：说明只交了一部分料，按回执里列的缺口逐项补齐，再 `wait build`。
 2. **分拣器没连上**：建成了，但两端没有都连上，就一件货都不搬，也**不报警**（端点缺失不计数）。建完等 20 tick，`inspect <分拣器>` 确认有搬运记录。
    - 反过来，两端都连上了却连续 300 tick 没搬成，会发 `sorter_stalled`（见下一条）。
-3. **采矿机没出口**：几 tick 就被自己的产出堵死，告警是 `output_blocked`。
+3. **矿机 `output_blocked`**：两种原因。
+   - 真的没出口：几 tick 就被自己的产出堵死；
+   - 有出口，但带子吞吐低于矿机（矿机 8/tick，Mk.I 带子 1/tick）：也会常驻 `output_blocked`。只要下游库存在涨就不用管。
 4. **带子对着熔炉**：传送带不给建筑喂料，货会堵在带上。
 5. **建筑没电**：`inspect` 显示 `no_power`，原因写在后面。
 6. **分拣器告警 `sorter_stalled`**：两端都已连上，但连续 300 tick 没搬成。**先查断电 / 堵塞 / 下游满，不要先怀疑摆位**：`inspect <分拣器>` 看 `state`（`no_power` 就是断电）与 `alerts` 行，`alerts --active-only` 看 `reason`——`no_power` 接电网，`drop_blocked` 清下游库存，`pick_empty` 查上游带子是否断料或过滤把货全挡了。摆位问题不会报这条（端点缺失时压根不计数）。
