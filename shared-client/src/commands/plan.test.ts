@@ -481,6 +481,33 @@ describe('cmdPlan 命令', () => {
     assert.match(out, /✗ 结论：缺 铁块 2/);
   });
 
+  it('--json 每项带 building_type / position / building_id / recipe_id / batches', async () => {
+    const api = fakeApi({
+      inventory: { circuit_board: 15, glass: 9, iron_ingot: 2, magnetic_coil: 1 },
+      buildings: {
+        'b-5': {
+          id: 'b-5', type: 'wind_turbine', owner_id: 'p1', position: { x: 1, y: 1, z: 0 },
+          hp: 10, max_hp: 10, level: 1, vision_range: 1,
+          runtime: { params: { energy_consume: 0, energy_generate: 0, capacity: 0, footprint: { width: 2, height: 2 } }, state: 'running' },
+        } as Building,
+      },
+    });
+    const out = await cmdPlan(
+      ['build', '62', '146', 'matrix_lab', 'craft_item', 'glass', '3', 'upgrade', 'b-5', '--json'],
+      { api, issuerId: 'builder-a' },
+    );
+    const parsed = JSON.parse(out) as { items: Array<Record<string, unknown>> };
+    assert.deepEqual(parsed.items[0], {
+      kind: 'build', label: 'matrix_lab', building_type: 'matrix_lab', position: { x: 62, y: 146 },
+    });
+    assert.deepEqual(parsed.items[1], {
+      kind: 'craft', label: 'craft glass×3', recipe_id: 'glass', batches: 3,
+    });
+    assert.deepEqual(parsed.items[2], {
+      kind: 'upgrade', label: 'b-5 wind_turbine→L2', building_id: 'b-5', building_type: 'wind_turbine',
+    });
+  });
+
   it('未知建筑类型直接报错，不发请求', async () => {
     const api = fakeApi();
     const out = stripAnsi(await cmdPlan(['build', '1', '1', 'no_such_building'], { api }));

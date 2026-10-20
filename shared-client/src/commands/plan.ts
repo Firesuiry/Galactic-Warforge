@@ -490,7 +490,14 @@ export async function cmdPlan(args: string[], ctx: CommandContext): Promise<stri
       return JSON.stringify({
         planet_id: planetId,
         mecha_id: mecha.unit_id,
-        items: items.map((item) => ({ kind: item.kind, label: item.label, position: item.position })),
+        // 每项都带上自己的 id / 坐标 / 配方与批数，脚本不用再从 label 里抠。
+        items: items.map((item) => ({
+          kind: item.kind,
+          label: item.label,
+          ...(item.kind === 'build' ? { building_type: item.buildingType, position: item.position } : {}),
+          ...(item.kind === 'upgrade' ? { building_id: item.buildingId, building_type: item.buildingType } : {}),
+          ...(item.kind === 'craft' ? { recipe_id: item.recipeId, batches: item.batches } : {}),
+        })),
         need: Object.fromEntries(need),
         inventory: mecha.inventory ?? {},
         occupied: Object.fromEntries(occupied),

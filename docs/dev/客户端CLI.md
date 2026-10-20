@@ -168,6 +168,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
     ```
     取料来源 = 机甲周围 48×48 场景里本方建筑 `storage.inventory`（含 `output_buffer`）存有该物品的前 2 个，按库存降序。
   - 有缺口时结论行以 `✗ ` 开头，`scripts/sw` 退出码非 0。
+  - `--json` 输出 `{planet_id, mecha_id, items[], need, inventory, occupied, gaps, sources}`；每项带 `kind` / `label` 与各自的明细：build 有 `building_type`、`position`；upgrade 有 `building_id`、`building_type`；craft_item 有 `recipe_id`、`batches`。
 - **inspect**：`inspect [planet] [building|unit|resource|sector] <entity_id> [--json]`。
   - 省略 planet 同 `scene`；省略 kind 按 id 前缀推断：`b-` 建筑、`u-` 单位、`res-` 或含 `-res-` 的资源点、`x:y` 扇区。旧写法 `inspect <planet> <kind> <id>` 仍可用。
   - 默认输出人话摘要：`state[:state_reason]`、坐标/占地、HP、配方与剩余 tick、主库存/输出缓冲、`production_monitor.active_alerts`（如 `input_shortage,throughput_drop`）；单位给操作者、能量/护盾、`mecha.job`（空闲为 `idle`）、弹药；资源给矿种/剩余量/产率。
