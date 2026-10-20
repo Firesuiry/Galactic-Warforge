@@ -140,6 +140,11 @@ describe('plan 参数解析', () => {
     assert.equal(items[1].buildingId, 'b-5');
   });
 
+  it('跳过空行与 # 注释', () => {
+    const items = parsePlanItems('# 计划\nbuild 1 2 wind_turbine\n\n# 后面这条也算\nupgrade b-5\n');
+    assert.equal(items.length, 2);
+  });
+
   it('未知命令与缺参数报错', () => {
     assert.throws(() => parsePlanItems('move u-1 3 4'), /只支持 build \/ upgrade/);
     assert.throws(() => parsePlanItems('build 1 wind_turbine'), /需要 <x> <y> <type>/);

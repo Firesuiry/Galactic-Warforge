@@ -96,7 +96,9 @@ export function upgradeCost(base: PlanCostLine[], level: number): PlanCostLine[]
 
 /** 把命令行拆成计划项；`;`、换行都算分隔符。 */
 export function parsePlanItems(text: string): PlanItem[] {
-  const segments = text.split(/[;\n]+/).map((segment) => segment.trim()).filter(Boolean);
+  const segments = text.split(/[;\n]+/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment && !segment.startsWith('#'));
   const items: PlanItem[] = [];
   for (const segment of segments) {
     const tokens = segment.split(/\s+/);
