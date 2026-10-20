@@ -183,6 +183,18 @@ describe('wait build', () => {
     assert.match(out, /ct-1/);
   });
 
+  it('tick 前进但施工签名一直不变：10 秒后按「tick 前进了 N」报卡死', async () => {
+    const clock = fakeClock();
+    const { api } = fakeApi({
+      ticks: [100, 120, 140, 160, 180, 200],
+      runtimes: [{ construction_tasks: [task({ remaining_ticks: 5 })] }],
+    });
+    const out = stripAnsi(await cmdWait(['build', '--timeout', '60'], ctx(api, clock)));
+    const match = /tick 前进了 (\d+)，但 10s 内施工签名没变/.exec(out);
+    assert.ok(match, out);
+    assert.ok(Number(match[1]) >= 100, `应报告实际前进的 tick 数，got ${match[1]}`);
+  });
+
   it('tick 不前进（服务端暂停 / 没人推进）时不误报施工无进展', async () => {
     const clock = fakeClock();
     const { api } = fakeApi({ ticks: [100], runtimes: [{ construction_tasks: [task({ remaining_ticks: 5 })] }] });
