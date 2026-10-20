@@ -108,12 +108,18 @@ export function upgradeCost(base: PlanCostLine[], level: number): PlanCostLine[]
  *
  * 另外，同一条里出现下一个计划动词（build / upgrade / craft_item）时也切开，
  * 这样 `plan build 98 146 matrix_lab craft_item circuit_board 4` 能直接写。
- * build 的 `--rotation 90` 这类选项会跳过它的值，不会被当成下一个动词。
+ *
+ * 按**语法位置**切：只有当前项的位置参数已经吃满（build 3 个、upgrade 1 个、
+ * craft_item 2 个）之后，遇到的动词才当新计划项的开头。这样建筑/配方 id 恰好
+ * 叫 `upgrade`、`build` 时（`plan build 1 1 upgrade`、`plan craft_item build 2`）
+ * 不会被切错。`--rotation 90` 这类选项会跳过它的值，不会被当成动词。
  */
 const PLAN_VERBS = new Set(['build', 'upgrade', 'craft_item']);
 const PLAN_OPTIONS_WITH_VALUE = new Set([
   '--rotation', '--direction', '--recipe', '--z', '--elevation', '--planet',
 ]);
+/** 每个计划动词的位置参数个数（其余 token 视为选项或选项值）。 */
+const PLAN_VERB_ARITY: Record<string, number> = { build: 3, upgrade: 1, craft_item: 2 };
 
 function splitPlanSegments(text: string): string[] {
   const segments: string[] = [];
@@ -124,6 +130,8 @@ function splitPlanSegments(text: string): string[] {
     }
     const tokens = line.split(/\s+/);
     let current: string[] = [];
+    // 当前项的位置参数个数（= 位置参数还差几个到 arity）。
+    let positionals = 0;
     let skipNext = false;
     for (const token of tokens) {
       if (skipNext) {
@@ -131,10 +139,16 @@ function splitPlanSegments(text: string): string[] {
         skipNext = false;
         continue;
       }
-      if (PLAN_VERBS.has(token) && current.length > 0) {
+      const arity = PLAN_VERB_ARITY[current[0] ?? ''];
+      if (PLAN_VERBS.has(token) && current.length > 0 && arity !== undefined && positionals >= arity) {
         segments.push(current.join(' '));
         current = [token];
+        positionals = 0;
         continue;
+      }
+      // 段的第一个 token 是动词本身，不算位置参数。
+      if (current.length > 0 && !token.startsWith('--')) {
+        positionals += 1;
       }
       current.push(token);
       skipNext = PLAN_OPTIONS_WITH_VALUE.has(token);

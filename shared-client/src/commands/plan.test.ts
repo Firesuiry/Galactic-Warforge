@@ -232,6 +232,43 @@ describe('plan 参数解析', () => {
     assert.equal(items[1].batches, 2);
   });
 
+  it('建筑 / 配方 id 恰好叫计划动词时按位置解析，不切错', () => {
+    // 数据表里将来出现 id 为 upgrade 的建筑 / id 为 build 的配方时也不误切。
+    const upgradeBuilding = parsePlanItems('build 1 1 upgrade');
+    assert.equal(upgradeBuilding.length, 1);
+    assert.equal(upgradeBuilding[0].kind, 'build');
+    assert.equal(upgradeBuilding[0].buildingType, 'upgrade');
+
+    const buildRecipe = parsePlanItems('craft_item build 2');
+    assert.equal(buildRecipe.length, 1);
+    assert.equal(buildRecipe[0].kind, 'craft');
+    assert.equal(buildRecipe[0].recipeId, 'build');
+    assert.equal(buildRecipe[0].batches, 2);
+
+    const craftBuilding = parsePlanItems('build 1 1 craft_item');
+    assert.equal(craftBuilding.length, 1);
+    assert.equal(craftBuilding[0].buildingType, 'craft_item');
+  });
+
+  it('位置参数吃满后，同名的下一个 token 才当新计划项', () => {
+    // build 吃满 3 个后，第二个 upgrade 才是下一项；建筑的 id 恰好叫 upgrade。
+    const items = parsePlanItems('build 1 1 upgrade upgrade b-5');
+    assert.deepEqual(items.map((item) => item.kind), ['build', 'upgrade']);
+    assert.equal(items[0].buildingType, 'upgrade');
+    assert.equal(items[1].buildingId, 'b-5');
+
+    const two = parsePlanItems('build 1 1 wind_turbine upgrade b-5');
+    assert.deepEqual(two.map((item) => item.kind), ['build', 'upgrade']);
+    assert.equal(two[1].buildingId, 'b-5');
+  });
+
+  it('位置参数没吃满时，动词 token 当参数（缺参数由 parsePlanItems 报错）', () => {
+    // build 只给了 1 个位置参数就遇到 upgrade：不当新项，留给 build 的 <type>，
+    // 再由「需要 <x> <y> <type>」报出可读错误。
+    assert.throws(() => parsePlanItems('build 1 upgrade'), /需要 <x> <y> <type>/);
+    assert.throws(() => parsePlanItems('craft_item gear build'), /正整数/);
+  });
+
   it('craft_item 缺批数或批数非正数报错', () => {
     assert.throws(() => parsePlanItems('craft_item gear'), /需要 <配方> <批数>/);
     assert.throws(() => parsePlanItems('craft_item gear 0'), /正整数/);

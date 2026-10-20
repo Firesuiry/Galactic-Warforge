@@ -148,7 +148,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
   - 数据来源：`GET /world/planets/<id>/scene`（窗口 = 锚点周围 `2R+1` 见方，R 默认 48、最大 128；另外扩 4 格取回锚点在外、占地压进窗口的建筑）+ `GET /world/planets/<id>/runtime` 的 `construction_tasks`。二维前缀和判定，128×128 窗口也在毫秒级。
   - 只返回完整落在窗口内、且不跨立方体球面缝的矩形；跳过的跨缝候选数会单独说明。无解时输出 `✗ 没找到 …`（`scripts/sw` 退出码非 0）。
   - `--json` 输出 `{planet_id, anchor, window, size, spacing, skipped_seam, results[]}`；每个结果带 `distance`（距锚点）与 `mechaDistance`（距机甲）。
-- **plan**：`plan <build x y type | upgrade <building_id> | craft_item <配方> <批数>>... [--planet <id>] [--json]`，或用 `;`/换行分隔，或 `plan -` 从 stdin 每行一条。同一条里也可以直接连写多个计划项（`plan build 98 146 matrix_lab craft_item circuit_board 4`），遇到下一个 `build`/`upgrade`/`craft_item` 自动切开。
+- **plan**：`plan <build x y type | upgrade <building_id> | craft_item <配方> <批数>>... [--planet <id>] [--json]`，或用 `;`/换行分隔，或 `plan -` 从 stdin 每行一条。同一条里也可以直接连写多个计划项（`plan build 98 146 matrix_lab craft_item circuit_board 4`），遇到下一个 `build`/`upgrade`/`craft_item` 自动切开。切分按**语法位置**：当前项的位置参数吃满（build 3 个、upgrade 1 个、craft_item 2 个）后才认下一个动词，所以建筑/配方 id 恰好叫 `upgrade`、`build` 也不会切错（`plan build 1 1 upgrade` 就是一个 build）。
   - `craft_item <配方> <批数>`：把配方 `inputs × 批数` 计入「需要」（可和 build / upgrade 混排，同种原料合并）。产物本身不进表；配方必须存在且 `handcraft_allowed=true`，否则报错。
   - 输出累计用料表：`物品 / 需要 / 背包 / 占用 / 缺口`。
     ```
