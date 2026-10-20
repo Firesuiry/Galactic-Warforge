@@ -16,7 +16,7 @@
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
 | 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300`。**`wait item --in <建筑>` 的计数是 `inventory + output_buffer` 合计**，不是只数主库存：`inspect` 里看到 `inventory electromagnetic_matrix 17`、`output electromagnetic_matrix 3` 时已经算 20，`wait item … 20 --in` 会直接返回。不带 `--in` 时只数我的机甲背包。`wait build` 只在 **tick 前进而施工签名 10 秒没变** 时判卡死；tick 停了（服务端暂停 / 没人在快进）只会在超时时注明「tick 未前进」，不是施工卡住 |
 | 找空地 | `find_space <宽> <高> [--count N] [--near x y] [--spacing n] [--planet <id>]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务。`--spacing` 要求候选之间至少隔 n 格，避免拿到一片相邻格。`--planet` 时锚点用该星球上我的机甲；机甲不在那儿就回退到场景中心并注明 |
-| 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有 |
+| 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` / `plan need <物品> <数量>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有。`plan need` 按产物反推整条手搓链的总原料（喂制造台前算总量用它）。**来源列是当时的主库存 + 输出缓冲，取之前先用 `inspect` 核实**（见 [errors.md](errors.md) 「取料前先核实」） |
 
 ## 2. 目录（造价、配方、科技）
 
