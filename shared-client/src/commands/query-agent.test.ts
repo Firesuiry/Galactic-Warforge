@@ -262,6 +262,32 @@ describe('scene argument parsing', () => {
     assert.deepEqual(calls[0].request, { x: 25, y: 110, width: 48, height: 48 });
   });
 
+  it('--limit 0 / 负数 / 非数字报错，不发请求', async () => {
+    const calls: string[] = [];
+    const api = fakeApi({
+      fetchPlanetScene: async () => { calls.push('scene'); return FIXTURE.scene; },
+    });
+    for (const bad of ['0', '-3', 'abc']) {
+      const out = await cmdScene(['40', '130', '16', '12', '--limit', bad], { api, issuerId: 'p1' });
+      assert.match(out.replace(/\u001b\[[0-9;]*m/g, ''), /--limit 必须是正整数或 all/, `--limit ${bad}`);
+    }
+    assert.deepEqual(calls, []);
+  });
+
+  it('--limit 缺值报错', async () => {
+    const api = fakeApi();
+    const out = await cmdScene(['40', '130', '16', '12', '--limit'], { api, issuerId: 'p1' });
+    assert.match(out.replace(/\u001b\[[0-9;]*m/g, ''), /--limit 必须是正整数或 all/);
+  });
+
+  it('--limit all / 正整数仍可用', async () => {
+    const api = fakeApi();
+    const all = await cmdScene(['40', '130', '16', '12', '--limit', 'all'], { api, issuerId: 'p1' });
+    assert.doesNotMatch(all, /--limit 必须/);
+    const one = await cmdScene(['40', '130', '16', '12', '--limit', '1'], { api, issuerId: 'p1' });
+    assert.doesNotMatch(one, /--limit 必须/);
+  });
+
   it('does not center an explicitly named planet on my mecha from another planet', async () => {
     const calls: Array<{ planetId: string; request: unknown }> = [];
     const api = fakeApi({
