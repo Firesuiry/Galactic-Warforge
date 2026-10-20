@@ -14,6 +14,7 @@
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
 | 告警 | `alerts --active-only` | 还在发生的产线问题 |
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
+| 等一件事 | `wait job` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询 |
 
 ## 2. 目录（造价、配方、科技）
 
