@@ -185,7 +185,7 @@ describe('scripts/sw non-interactive runner', () => {
     assert.match(text(), /未绑定机甲/);
     // wait ticks 在 tick 不前进、--timeout 0 时立即超时。
     assert.equal(await once.run('wait ticks 5 --timeout 0'), false);
-    assert.match(text(), /✗ 超时（0s，tick 前进 0）/);
+    assert.match(text(), /✗ 超时（0s，tick 前进 0；tick 未前进（服务端暂停或没有推进））/);
   });
 
   it('treats a query whose later line starts with ✗ as failure (plan 有缺口)', async () => {
