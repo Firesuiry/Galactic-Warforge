@@ -15,8 +15,8 @@
 | 告警 | `alerts --active-only` | 还在发生的产线问题 |
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
 | 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300` |
-| 找空地 | `find_space <宽> <高> [--count N] [--near x y]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务 |
-| 算料 | `plan build <x> <y> <类型>; build …` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺料时可手搓的会给出配方 |
+| 找空地 | `find_space <宽> <高> [--count N] [--near x y] [--spacing n]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务。`--spacing` 要求候选之间至少隔 n 格，避免拿到一片相邻格 |
+| 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有 |
 
 ## 2. 目录（造价、配方、科技）
 
