@@ -85,7 +85,7 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 | --- | --- |
 | `wait ticks <n>` | 游戏 tick 前进 n（`/health` 的 tick，按服务端时钟算）。**n 是 tick 数，不是秒**：秒 = n ÷ tick 速率（`/games/current` 的 `max_tick_rate`，本服通常 10 tick/s，即 500 tick = 50 秒）；`help wait` 会按当前速率换算并给例子 |
 | `wait job` | 我的机甲（`mechas.find(m => m.operator === issuer_id)`）的作业结束；当前没有作业立即返回 |
-| `wait build` | 我的机甲施工队列清空（`planet_runtime.construction_tasks` 按 `mecha_id` 过滤）；**剩下的任务全是 `pending` + `wait_reason=insufficient_materials`，或 10 秒内签名毫无变化时提前返回**，逐条列出任务、位置和原因 |
+| `wait build` | 我的机甲施工队列清空（`planet_runtime.construction_tasks` 按 `mecha_id` 过滤）；**剩下的任务全是 `pending` + `wait_reason=insufficient_materials`，或「tick 在前进、但施工签名 10 秒没变」时提前返回**，逐条列出任务、位置和原因。tick 不前进（服务端暂停 / 没人 `advance`）时**不判卡死**，只在超时时注明「tick 未前进（服务端暂停或没有推进）」 |
 | `wait item <物品ID> <数量>` | 我的机甲背包里该物品 ≥ 数量 |
 | `wait item <物品ID> <数量> --in <建筑ID>` | 建筑库存（`inventory` + `output_buffer`）≥ 数量；建筑不存在立即提前返回 |
 | `wait running <建筑ID>` | 建筑 `runtime.state == running`；超时消息带当前 `state`、`state_reason`、配方与仍成立的产线告警 |

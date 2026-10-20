@@ -14,7 +14,7 @@
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
 | 告警 | `alerts --active-only` | 还在发生的产线问题 |
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
-| 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300` |
+| 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300`。`wait build` 只在 **tick 前进而施工签名 10 秒没变** 时判卡死；tick 停了（服务端暂停 / 没人在快进）只会在超时时注明「tick 未前进」，不是施工卡住 |
 | 找空地 | `find_space <宽> <高> [--count N] [--near x y] [--spacing n] [--planet <id>]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务。`--spacing` 要求候选之间至少隔 n 格，避免拿到一片相邻格。`--planet` 时锚点用该星球上我的机甲；机甲不在那儿就回退到场景中心并注明 |
 | 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有 |
 

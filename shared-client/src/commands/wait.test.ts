@@ -89,7 +89,7 @@ describe('wait ticks', () => {
     const clock = fakeClock();
     const { api } = fakeApi({ ticks: [100] });
     const out = stripAnsi(await cmdWait(['ticks', '5', '--timeout', '3'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（3s，tick 前进 0）：tick 只前进 0\/5/);
+    assert.match(out, /^✗ 超时（3s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：tick 只前进 0\/5/);
   });
 
   it('拒绝非整数 tick 数，不发请求', async () => {
@@ -124,7 +124,7 @@ describe('wait job', () => {
     const working = summary({ ...mechaView, job: { kind: 'craft', recipe_id: 'gear', remaining_batches: 3, state: 'running' } });
     const { api } = fakeApi({ summaries: [working] });
     const out = stripAnsi(await cmdWait(['job', '--timeout', '2'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（2s，tick 前进 0）：我的机甲 u-7 作业仍在：craft gear ×3/);
+    assert.match(out, /^✗ 超时（2s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：我的机甲 u-7 作业仍在：craft gear ×3/);
   });
 
   it('没有机甲时给出绑定提示', async () => {
@@ -172,12 +172,23 @@ describe('wait build', () => {
     assert.match(out, /✓ 等到了：我的机甲 u-7 施工队列已清空/);
   });
 
-  it('10 秒毫无进展时提前返回并列出任务', async () => {
+  it('tick 在走、施工签名 10 秒没变时提前返回并列出任务', async () => {
     const clock = fakeClock();
-    const { api } = fakeApi({ runtimes: [{ construction_tasks: [task({ remaining_ticks: 5 })] }] });
+    const { api } = fakeApi({
+      ticks: [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
+      runtimes: [{ construction_tasks: [task({ remaining_ticks: 5 })] }],
+    });
     const out = stripAnsi(await cmdWait(['build', '--timeout', '60'], ctx(api, clock)));
-    assert.match(out, /^✗ 提前返回（施工无进展，tick 前进 0）：10s 内无进展；/);
+    assert.match(out, /^✗ 提前返回（施工无进展，tick 前进 \d+）：tick 前进了 \d+，但 10s 内施工签名没变；/);
     assert.match(out, /ct-1/);
+  });
+
+  it('tick 不前进（服务端暂停 / 没人推进）时不误报施工无进展', async () => {
+    const clock = fakeClock();
+    const { api } = fakeApi({ ticks: [100], runtimes: [{ construction_tasks: [task({ remaining_ticks: 5 })] }] });
+    const out = stripAnsi(await cmdWait(['build', '--timeout', '30'], ctx(api, clock)));
+    assert.doesNotMatch(out, /施工无进展/);
+    assert.match(out, /^✗ 超时（30s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：/);
   });
 
   it('一直有进展但没做完时超时', async () => {
@@ -189,7 +200,7 @@ describe('wait build', () => {
       { construction_tasks: [task({ remaining_ticks: 2 })] },
     ] });
     const out = stripAnsi(await cmdWait(['build', '--timeout', '2'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（2s，tick 前进 0）：还有 1 个施工任务/);
+    assert.match(out, /^✗ 超时（2s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：还有 1 个施工任务/);
   });
 });
 
@@ -208,7 +219,7 @@ describe('wait item', () => {
     const clock = fakeClock();
     const { api } = fakeApi({ summaries: [summary({ ...mechaView, inventory: { gear: 1 } })] });
     const out = stripAnsi(await cmdWait(['item', 'gear', '3', '--timeout', '2'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（2s，tick 前进 0）：背包 gear 1\/3/);
+    assert.match(out, /^✗ 超时（2s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：背包 gear 1\/3/);
   });
 
   it('--in 把 inventory 与 output_buffer 相加', async () => {
@@ -264,7 +275,7 @@ describe('wait running', () => {
       production_monitor: { active_alerts: { input_shortage: true, throughput_drop: false } },
     } }] });
     const out = stripAnsi(await cmdWait(['running', 'b-1', '--timeout', '2'], ctx(api, clock)));
-    assert.match(out, /^✗ 超时（2s，tick 前进 0）：建筑 b-1 state=no_power，reason=out_of_range，recipe=gear，alerts=input_shortage/);
+    assert.match(out, /^✗ 超时（2s，tick 前进 0；tick 未前进（服务端暂停或没有推进））：建筑 b-1 state=no_power，reason=out_of_range，recipe=gear，alerts=input_shortage/);
   });
 });
 

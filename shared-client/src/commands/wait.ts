@@ -10,7 +10,11 @@ import { fetchPlanetContext } from './scene-context.js';
 const DEFAULT_TIMEOUT_SECONDS = 120;
 /** 轮询间隔：1 秒一次，足够跟上 tick_rate 5–20，又不会把服务端打满。 */
 const DEFAULT_POLL_INTERVAL_MS = 1000;
-/** 施工任务在这段时间内签名毫无变化就提前返回（tick 停了、缺料卡死都表现为这样）。 */
+/**
+ * 施工任务在**tick 持续前进**的这段时间内签名毫无变化，才判「施工无进展」提前返回。
+ * tick 不前进（服务端暂停 / 没人在推进）时不计时：别人 `advance` 或管理员暂停时
+ * 墙钟照样走，按墙钟判会误报卡死。
+ */
 const BUILD_STALL_MS = 10_000;
 
 /** 测试注入的轮询参数；生产环境用默认的 Date.now / setTimeout。 */
@@ -29,6 +33,11 @@ interface ProbeOutcome {
   stuckReason?: string;
   /** 超时时报告的当前状况。 */
   pending: string;
+  /**
+   * 只看「有进展」的探针：true 表示这一轮有可见进展（wait build 的施工签名变了）。
+   * 配合 runWait 的 `progress` 计数，用来按 tick 前进量（而不是墙钟）判卡死。
+   */
+  progressed?: boolean;
 }
 
 type Probe = (tick: number) => Promise<ProbeOutcome>;
@@ -63,6 +72,9 @@ async function runWait(
   const startTick = startTickIn ?? (await api.fetchHealth()).tick;
   const startMs = now();
   let tick = startTick;
+  // 最近一次看到「tick 前进或探针有进展」时的 tick / 墙钟。stall 判定基于两者。
+  let lastMoveTick = startTick;
+  let lastMoveMs = startMs;
 
   for (;;) {
     const outcome = await probe(tick);
@@ -76,10 +88,17 @@ async function runWait(
       return fmtFailure(`提前返回（${reason}，tick 前进 ${tickDelta}）：${outcome.stuck}`);
     }
     if (elapsedMs >= timeoutMs) {
-      return fmtFailure(`超时（${timeoutSeconds}s，tick 前进 ${tickDelta}）：${outcome.pending}`);
+      // tick 不动时说明是服务端暂停 / 没人推进，不是等待条件本身卡住。
+      const why = tickDelta === 0 ? `；tick 未前进（服务端暂停或没有推进）` : '';
+      return fmtFailure(`超时（${timeoutSeconds}s，tick 前进 ${tickDelta}${why}）：${outcome.pending}`);
     }
     await sleep(interval);
-    tick = (await api.fetchHealth()).tick;
+    const nextTick = (await api.fetchHealth()).tick;
+    if (nextTick !== tick || outcome.progressed) {
+      lastMoveTick = nextTick;
+      lastMoveMs = now();
+    }
+    tick = nextTick;
   }
 }
 
@@ -169,9 +188,11 @@ async function waitBuild(api: ApiClient, issuerId: string, options: WaitOptions 
   const planetId = mecha.planet_id;
   const now = options?.now ?? Date.now;
   let lastSignature = '';
-  let lastProgressAt = now();
+  // 施工签名最近一次变化的 tick 与墙钟。只有 tick 前进时才用墙钟判卡死。
+  let lastChangeTick = -1;
+  let lastChangeMs = now();
 
-  return runWait(api, options, timeout, async () => {
+  return runWait(api, options, timeout, async (tick) => {
     const runtime = await api.fetchPlanetRuntime(planetId);
     const tasks = activeTasks(runtime.construction_tasks, mechaId);
     if (tasks.length === 0) {
@@ -183,12 +204,19 @@ async function waitBuild(api: ApiClient, issuerId: string, options: WaitOptions 
       return { stuck: taskListText(tasks), stuckReason: '缺料', pending: '' };
     }
     const signature = taskSignature(tasks);
-    if (signature !== lastSignature) {
+    const changed = signature !== lastSignature;
+    if (changed) {
       lastSignature = signature;
-      lastProgressAt = now();
-    } else if (now() - lastProgressAt >= BUILD_STALL_MS) {
+      lastChangeTick = tick;
+      lastChangeMs = now();
+      return { pending: `还有 ${tasks.length} 个施工任务：${taskListText(tasks)}`, progressed: true };
+    }
+    // tick 从签名变化之后已经前进了多少：tick 没动 = 服务端暂停 / 没人推进，
+    // 不算施工卡死；tick 在走而签名 10 秒不变，才是真的卡住。
+    const advancedTicks = tick - lastChangeTick;
+    if (advancedTicks > 0 && now() - lastChangeMs >= BUILD_STALL_MS) {
       return {
-        stuck: `${fmtSeconds(BUILD_STALL_MS)}s 内无进展；${taskListText(tasks)}`,
+        stuck: `tick 前进了 ${advancedTicks}，但 ${fmtSeconds(BUILD_STALL_MS)}s 内施工签名没变；${taskListText(tasks)}`,
         stuckReason: '施工无进展',
         pending: '',
       };
