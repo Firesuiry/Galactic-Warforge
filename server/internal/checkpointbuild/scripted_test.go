@@ -179,7 +179,8 @@ func knownContractKind(kind string) bool {
 		"building_item_at_gte", "building_item_at_lt",
 		"building_no_alert_since", "building_alert_since",
 		"unit_count_gte", "unit_near", "item_gte", "no_alert_since",
-		"dark_fog_hostile", "dark_fog_calmed", "enemy_attack_seen":
+		"dark_fog_hostile", "dark_fog_calmed", "enemy_attack_seen",
+		"mecha_count_gte", "mecha_operator_count":
 		return true
 	}
 	return false
