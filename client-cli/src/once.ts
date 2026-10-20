@@ -2,8 +2,7 @@ import chalk from 'chalk';
 import { createApiClient, type AwaitExecutionOptions, type ApiClient } from '@gw/shared/api';
 import { DEFAULT_GALAXY_ID, DEFAULT_PLANET_ID, DEFAULT_SYSTEM_ID } from '@gw/shared/config';
 import { splitCommandLine } from '@gw/shared/commands/game-commands';
-import { fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
-import { WAIT_FAILURE_MARKER } from '@gw/shared/commands/wait';
+import { FAILURE_MARKER, fmtError, fmtExecutionOutcomes } from '@gw/shared/commands/format';
 import type { CommandResponse } from '@gw/shared/types';
 
 import { COMMANDS, dispatch } from './commands/index.js';import type { ReplContext } from './repl.js';
@@ -117,7 +116,7 @@ export function createOnceRunner(options: OnceOptions) {
    */
   function isLocalError(text: string): boolean {
     const plain = text.replace(/\u001b\[[0-9;]*m/g, '');
-    return plain.startsWith(fmtError('').replace(/\s+$/, '')) || plain.startsWith(WAIT_FAILURE_MARKER);
+    return plain.startsWith(fmtError('').replace(/\s+$/, '')) || plain.startsWith(FAILURE_MARKER);
   }
 
   async function runLine(line: string): Promise<OnceResult> {

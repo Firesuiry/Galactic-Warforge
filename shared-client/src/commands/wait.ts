@@ -1,10 +1,8 @@
-import chalk from 'chalk';
-
 import type { ApiClient } from '../api.js';
 import { NO_MECHA_HINT, selectMyMecha } from '../mecha.js';
 import type { Building, ConstructionTaskView, MechaJobView, MechaView } from '../types.js';
 import { getStringOption, parseArgs } from './args.js';
-import { fmtError, fmtOk } from './format.js';
+import { fmtError, fmtFailure, fmtOk } from './format.js';
 import { resolveIssuerId, type CommandContext } from './game-commands.js';
 import { fetchPlanetContext } from './scene-context.js';
 
@@ -14,9 +12,6 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 /** 施工任务在这段时间内签名毫无变化就提前返回（tick 停了、缺料卡死都表现为这样）。 */
 const BUILD_STALL_MS = 10_000;
-
-/** 失败行前缀：`scripts/sw` 的退出码靠它判定（见 client-cli/src/once.ts）。 */
-export const WAIT_FAILURE_MARKER = '✗ ';
 
 /** 测试注入的轮询参数；生产环境用默认的 Date.now / setTimeout。 */
 export interface WaitOptions {
@@ -44,10 +39,6 @@ const REASON_TEXT: Record<string, string> = {
   region_concurrent_limit: '区域施工额度已满',
   footprint_occupied: '占地被占',
 };
-
-function fmtFailure(text: string): string {
-  return chalk.red(WAIT_FAILURE_MARKER) + text;
-}
 
 function fmtSeconds(ms: number): number {
   return Math.round(ms / 1000);

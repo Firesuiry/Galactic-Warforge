@@ -895,6 +895,13 @@ export function fmtError(msg: string): string {
   return chalk.red('Error: ') + msg;
 }
 
+/** 失败行前缀：`scripts/sw` 的退出码靠它判定（见 client-cli/src/once.ts）。 */
+export const FAILURE_MARKER = '✗ ';
+
+export function fmtFailure(msg: string): string {
+  return chalk.red(FAILURE_MARKER) + msg;
+}
+
 export function fmtOk(msg: string): string {
   return chalk.green('✓ ') + msg;
 }

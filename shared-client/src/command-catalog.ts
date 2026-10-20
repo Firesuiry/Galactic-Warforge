@@ -666,6 +666,8 @@ export const EXTRA_AGENT_COMMAND_CATALOG: Record<string, { category: CommandPerm
   task_forces: { category: "observe" },
   theaters: { category: "observe" },
   scene: { category: "observe" },
+  find_space: { category: "observe" },
+  plan: { category: "observe" },
   inspect: { category: "observe" },
   networks: { category: "observe" },
   alerts: { category: "observe" },
