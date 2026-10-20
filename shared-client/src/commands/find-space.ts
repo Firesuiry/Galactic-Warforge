@@ -38,7 +38,10 @@ export interface Rect {
 export interface SpaceResult {
   x: number;
   y: number;
+  /** 到搜索锚点的距离（--near 未给时锚点就是机甲）。 */
   distance: number;
+  /** 到我的机甲的距离；机甲不在本星球时等于 distance。 */
+  mechaDistance: number;
   terrain: string;
 }
 
@@ -173,11 +176,18 @@ export interface FindSpaceInput {
   count: number;
   /** 立方体球面每面边长；缺省/0 时不做跨面检查。 */
   faceSize?: number;
+  /** 候选之间的最小锚点曼哈顿距离；缺省/0 不去重。 */
+  spacing?: number;
+  /** 机甲位置（输出「距机甲」用）；缺省等于 anchor。 */
+  mechaAnchor?: { x: number; y: number };
 }
 
-/** 在 search 窗口内枚举所有 size 的全空矩形，按距锚点升序取前 count 条。 */
+/**
+ * 在 search 窗口内枚举所有 size 的全空矩形，按距锚点升序取前 count 条。
+ * `spacing > 0` 时贪心取分散候选：已选候选的锚点曼哈顿距离必须 ≥ spacing。
+ */
 export function findSpaceRects(input: FindSpaceInput): SpaceSearchResult {
-  const { bounds, search, blocked, size, anchor, count, faceSize } = input;
+  const { bounds, search, blocked, size, anchor, count, faceSize, spacing = 0, mechaAnchor } = input;
   const sum = prefixSum(blocked);
   const results: SpaceResult[] = [];
   let skippedSeam = 0;
@@ -201,11 +211,43 @@ export function findSpaceRects(input: FindSpaceInput): SpaceSearchResult {
       if (rectSum(sum, x - bounds.x, y - bounds.y, size.width, size.height) !== 0) {
         continue;
       }
-      results.push({ x, y, distance: distanceToRect(anchor, { x, y, ...size }), terrain: 'buildable' });
+      results.push({
+        x,
+        y,
+        distance: distanceToRect(anchor, { x, y, ...size }),
+        mechaDistance: distanceToRect(mechaAnchor ?? anchor, { x, y, ...size }),
+        terrain: 'buildable',
+      });
     }
   }
   results.sort((a, b) => a.distance - b.distance || a.y - b.y || a.x - b.x);
-  return { results: results.slice(0, count), skippedSeam, candidates };
+  if (spacing <= 0) {
+    return { results: results.slice(0, count), skippedSeam, candidates };
+  }
+  const picked: SpaceResult[] = [];
+  for (const spot of results) {
+    if (picked.length >= count) {
+      break;
+    }
+    if (picked.every((chosen) => Math.abs(chosen.x - spot.x) + Math.abs(chosen.y - spot.y) >= spacing)) {
+      picked.push(spot);
+    }
+  }
+  return { results: picked, skippedSeam, candidates };
+}
+
+/** 候选之间是否互相重叠（占地矩形相交）。 */
+export function hasOverlap(results: SpaceResult[], size: { width: number; height: number }): boolean {
+  for (let i = 0; i < results.length; i += 1) {
+    for (let j = i + 1; j < results.length; j += 1) {
+      const a = results[i];
+      const b = results[j];
+      if (a.x < b.x + size.width && b.x < a.x + size.width && a.y < b.y + size.height && b.y < a.y + size.height) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function expandRect(rect: Rect, margin: number, mapWidth: number, mapHeight: number): Rect {
@@ -230,23 +272,24 @@ function fmtRect(rect: Rect): string {
 }
 
 /**
- * `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]`
+ * `find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]`
  *
  * 数据来源：`/world/planets/<id>/scene`（窗口 = 机甲周围，默认半径 48，最大 128）
  * 与 `/world/planets/<id>/runtime` 的 construction_tasks。
  * 只考虑完全落在窗口内、且不跨立方体球面缝的矩形。
+ * `--spacing` 只影响已选候选之间的最小锚点曼哈顿距离，缺省不过滤。
  */
 export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise<string> {
   const { api } = ctx;
   const parsed = parseArgs(args);
   if (hasFlag(parsed, 'help')) {
-    return 'Usage: find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]';
+    return 'Usage: find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]';
   }
   const positionals = [...parsed.positionals];
   const width = parseIntegerArg(positionals[0]);
   const height = parseIntegerArg(positionals[1]);
   if (!width || !height || width <= 0 || height <= 0) {
-    return fmtError('Usage: find_space <w> <h> [--count N] [--near X Y] [--radius R] [--planet <id>] [--json]');
+    return fmtError('Usage: find_space <w> <h> [--count N] [--near X Y] [--radius R] [--spacing N] [--planet <id>] [--json]');
   }
 
   // --near x y：parseArgs 只吃紧邻的一个值，第二个坐标留在 positionals 里。
@@ -270,6 +313,14 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
   const count = parseIntegerArg(getStringOption(parsed, 'count')) ?? DEFAULT_COUNT;
   if (count <= 0) {
     return fmtError('--count 必须是正整数');
+  }
+  const spacingRaw = getStringOption(parsed, 'spacing');
+  if (parsed.options.spacing !== undefined && spacingRaw === undefined) {
+    return fmtError('--spacing 需要 <n>（任意两个候选锚点的最小曼哈顿距离）');
+  }
+  const spacing = spacingRaw === undefined ? 0 : parseIntegerArg(spacingRaw);
+  if (spacing === undefined || !Number.isInteger(spacing) || spacing < 0) {
+    return fmtError('--spacing 必须是非负整数');
   }
   const planetArg = getStringOption(parsed, 'planet');
   if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
@@ -309,6 +360,8 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
       tasks: runtime.construction_tasks ?? [],
       footprints,
     });
+    // 「距机甲」列：机甲在本星球才有意义；--planet 指向别处或没绑机甲时退回锚点距离。
+    const mechaAnchor = mecha && mecha.planet_id === planetId ? mecha.position : anchor;
     const found = findSpaceRects({
       bounds: scene.bounds,
       search,
@@ -317,6 +370,8 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
       anchor,
       count,
       faceSize: scene.surface?.face_size,
+      spacing,
+      mechaAnchor,
     });
 
     if (hasFlag(parsed, 'json')) {
@@ -325,6 +380,7 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
         anchor,
         window: search,
         size: { width, height },
+        spacing,
         skipped_seam: found.skippedSeam,
         results: found.results,
       }, null, 2);
@@ -343,7 +399,15 @@ export async function cmdFindSpace(args: string[], ctx: CommandContext): Promise
       lines.push(`${chalk.red('✗ ')}没找到 ${width}x${height} 的空地（候选 ${found.candidates} 个，窗口 ${fmtRect(search)}）`);
     } else {
       for (const spot of found.results) {
-        lines.push(`空地 ${width}x${height} @ (${spot.x},${spot.y})  距机甲 ${spot.distance}  地形 ${spot.terrain}`);
+        lines.push(
+          `空地 ${width}x${height} @ (${spot.x},${spot.y})  距锚点 ${spot.distance}  距机甲 ${spot.mechaDistance}  地形 ${spot.terrain}`,
+        );
+      }
+      if (spacing <= 0 && hasOverlap(found.results, { width, height })) {
+        lines.push(chalk.dim(
+          `（候选互相重叠；要分散候选用 --spacing <n>，建议 ${Math.max(width, height)}，`
+          + '任意两个候选的锚点曼哈顿距离 ≥ n）',
+        ));
       }
     }
     if (found.skippedSeam > 0) {
