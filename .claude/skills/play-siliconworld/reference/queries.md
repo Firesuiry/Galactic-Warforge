@@ -9,14 +9,14 @@
 | 总览 | `briefing` | 我的机甲：背包（完整）、作业、位置；已完成科技、当前研究；告警（带 alert_type 和 building_id） |
 | 机甲 | `mecha list` | 每台机甲的操作者、存活、背包格数、施工 pending/active、作业；底部一行是「我的机甲」 |
 | 周边 | `scene [--limit all] [--json]` | 以我的机甲为中心的 48×48：建筑（ID、类型、锚点、占地、状态）、按种类汇总的矿点（格数、范围、代表矿点 ID）、单位。指定窗口：`scene 40 130 24 16`；要原始数据加 `--json`；**文本默认只列前 20 栋建筑**，超出用 `--limit all` |
-| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型 |
+| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型。**文本输出不显示库存容量**：只列 `inventory` / `output` 的件数，看「快满」不能只看它。容量用 `inspect <ID> --json` 看 `storage.capacity`（主库存）/ `storage.buffer_capacity`（输入、输出缓冲）；`catalog building <id>` 只给占地、造价、耗电和 IO 口，不给库存容量。常用建筑的容量数值见 [logistics.md](logistics.md) 6.5 |
 | 我的施工队列 | `planet_runtime --mine` | 每个任务的状态、`wait_reason`（缺料、并发满、区域满、占地上站着单位） |
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
-| 告警 | `alerts --active-only` | 还在发生的产线问题 |
+| 告警 | `alerts --active-only` | 还在发生的产线问题。**`--active-only` 只滤掉已恢复的条目，不按时间过滤**：老告警只要问题一直没解决就会一直挂着（实测某矿机 `output_blocked` 从 t50 挂到 t40000+），所以看到一条告警**不代表它刚刚发生**。判断新旧看行首的 `[tN]`：t 离当前 tick 很远就是陈年问题。要只看最近发生的用 `--since-tick <n>` |
 | 命令结果 | `audit --limit 20` / `audit --request <id>` | 我最近的命令：stage、序号、结果码、消息 |
-| 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300`。`wait build` 只在 **tick 前进而施工签名 10 秒没变** 时判卡死；tick 停了（服务端暂停 / 没人在快进）只会在超时时注明「tick 未前进」，不是施工卡住 |
+| 等一件事 | `wait job [--timeout 秒]` / `wait build` / `wait item <物品> <数量> [--in <建筑>]` / `wait running <建筑>` / `wait ticks <n>` | 条件满足就返回；缺料或卡住会提前返回并说明原因，不用空转轮询。默认超时 120 秒，大批量手搓要加 `--timeout 300`。**`wait item --in <建筑>` 的计数是 `inventory + output_buffer` 合计**，不是只数主库存：`inspect` 里看到 `inventory electromagnetic_matrix 17`、`output electromagnetic_matrix 3` 时已经算 20，`wait item … 20 --in` 会直接返回。不带 `--in` 时只数我的机甲背包。`wait build` 只在 **tick 前进而施工签名 10 秒没变** 时判卡死；tick 停了（服务端暂停 / 没人在快进）只会在超时时注明「tick 未前进」，不是施工卡住 |
 | 找空地 | `find_space <宽> <高> [--count N] [--near x y] [--spacing n] [--planet <id>]` | 全空矩形，按离机甲由近到远排；已排除建筑占地、单位和施工任务。`--spacing` 要求候选之间至少隔 n 格，避免拿到一片相邻格。`--planet` 时锚点用该星球上我的机甲；机甲不在那儿就回退到场景中心并注明 |
-| 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有 |
+| 算料 | `plan build <x> <y> <类型>; craft_item <配方> <批数>` / `plan need <物品> <数量>` | 累计用料表：需要 / 背包 / 已下任务占用 / 缺口；缺口会递归展开到手搓链末端，并列出哪个本方建筑里有。`plan need` 按产物反推整条手搓链的总原料（喂制造台前算总量用它）。**来源列是当时的主库存 + 输出缓冲，取之前先用 `inspect` 核实**（见 [errors.md](errors.md) 「取料前先核实」） |
 
 ## 2. 目录（造价、配方、科技）
 
@@ -53,7 +53,7 @@
 - **施工**：落成只要 1–2 tick，所以 `construction_active` 几乎总是 0。要看的是 `pending`，它代表在排队或缺料。
 - **能量**：`briefing` 里的 `energy` 只是电网结余的展示，不是建造用的货币。这个游戏是**纯实物经济**，没有 minerals。
 - **科技门槛**：建筑或配方满足**任意一个**解锁科技即可；研究科技要求前置**全部**完成。
-- **矿点**：`scene` 里的矿点 ID（例如 `planet-1-1-res-1693`）就是 `mine_resource` 用的 ID，不是物品 ID。
+- **矿点**：`scene` 里的矿点 ID（例如 `planet-1-1-res-1693`）就是 `mine_resource` 用的 ID，不是物品 ID。`scene --json` 的 `resources[]` 每项是一个矿点（不是格子），带 `kind`、`position{x,y}`（这一格的坐标）、`remaining`；按矿格数统计覆盖范围时直接数 `resources[]` 里落在范围内的项。
 
 ## 4. 下令前自检
 
@@ -61,13 +61,14 @@
 
 ### build
 1. `catalog building <type>`：已解锁、造价、占地。
-2. **先用 `plan` 算料**：`scripts/sw plan build <x> <y> <type>; craft_item <配方> <批数>`。它会把背包、已下未落成任务的占用、本批造价和手搓原料一起算，直接给出缺口，并递归提示缺口的基础原料从哪来。有缺口时退出码非 0。**有缺口先补料，不要带着缺口下单。**
+2. **先用 `plan` 算料**：`scripts/sw plan "build <x> <y> <type>; craft_item <配方> <批数>"`。它会把背包、已下未落成任务的占用、本批造价和手搓原料一起算，直接给出缺口，并递归提示缺口的基础原料从哪来。有缺口时退出码非 0。**有缺口先补料，不要带着缺口下单。**
 3. **用 `find_space <w> <h> [--spacing n]` 找位置**，不要凭 `scene` 文本目测：`scene` 默认只列前 20 栋建筑，大基地会看不全。候选默认按离机甲由近到远排；加 `--spacing` 可要求候选之间至少相隔 n 格，避免拿到一片相邻格。
 4. 在基站覆盖 72 格内；否则机甲要在 18 格内。
 5. 采矿机要压到矿；生产建筑带上 `--recipe`。
 6. 建好后附近有电（`networks`）。
 
 ### craft_item
+0. **缺口里同时出现中间物和它的原料时，从下往上手搓**：先磁铁再磁线圈、先铁块再电路板。批数按「每批产出数」折算：磁线圈一批出 2 个，20 个只要 10 批。`plan need <物品> <数量>` 会直接给出整条链的总量。
 1. 配方在 `catalog recipes --handcraft` 里。
 2. 机甲没有在做别的作业（`mecha list` 的作业列为 `-`）。
 3. 背包有 原料 × 批数。
