@@ -238,6 +238,21 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
   if (planetArg !== undefined && !planetArg.startsWith('planet-')) {
     return fmtError(`planet 参数看起来不是星球 id：${planetArg}（用法: scene [planet] [x y w h]）`);
   }
+  // --limit：N（正整数）或 all；在发请求前校验，别等拉完场景才报错。
+  const limitRaw = getStringOption(parsed, 'limit');
+  if (parsed.options.limit !== undefined && limitRaw === undefined) {
+    return fmtError('--limit 必须是正整数或 all');
+  }
+  let limit = SCENE_SECTION_LIMIT;
+  if (limitRaw === 'all') {
+    limit = Number.POSITIVE_INFINITY;
+  } else if (limitRaw !== undefined) {
+    const parsedLimit = parseIntegerArg(limitRaw);
+    if (parsedLimit === undefined || parsedLimit <= 0) {
+      return fmtError('--limit 必须是正整数或 all');
+    }
+    limit = parsedLimit;
+  }
 
   try {
     const needContext = planetArg === undefined || windowArgs.length === 0;
@@ -268,8 +283,6 @@ export async function cmdScene(args: string[], ctx: CommandContext): Promise<str
     if (!scene.discovered) {
       return fmtError(`星球 ${planetId} 尚未发现`);
     }
-    const limitRaw = getStringOption(parsed, 'limit');
-    const limit = limitRaw === 'all' ? Number.POSITIVE_INFINITY : (parseIntegerArg(limitRaw) ?? SCENE_SECTION_LIMIT);
     const summary = context === undefined ? await api.fetchSummary() : undefined;
     const mechas = context?.mecha ? [context.mecha] : summary?.players?.[api.getAuth().playerId]?.mechas;
     return fmtScene(scene, {

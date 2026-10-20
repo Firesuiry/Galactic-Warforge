@@ -207,6 +207,13 @@ describe('scripts/sw non-interactive runner', () => {
         if (url.pathname.endsWith('/runtime')) {
           return new Response(JSON.stringify({ planet_id: 'planet-1-1', discovered: true, available: true, tick: 10, threat_level: 0, construction_tasks: [] }), { status: 200 });
         }
+        // plan 有缺口时会读机甲周围场景，找本方建筑里的取料来源。
+        if (url.pathname.endsWith('/scene')) {
+          return new Response(JSON.stringify({
+            planet_id: 'planet-1-1', discovered: true, map_width: 864, map_height: 576, tick: 10,
+            bounds: { x: 0, y: 0, width: 48, height: 48 }, buildings: {},
+          }), { status: 200 });
+        }
         throw new Error(`unexpected ${url.pathname}`);
       }) as typeof fetch,
     });

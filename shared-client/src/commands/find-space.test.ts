@@ -18,6 +18,7 @@ import {
   cmdFindSpace,
   distanceToRect,
   findSpaceRects,
+  hasOverlap,
   radiusWindow,
   rotatedFootprint,
 } from './find-space.js';
@@ -297,6 +298,68 @@ describe('find_space 矩形枚举', () => {
     assert.ok(found.candidates > 0);
   });
 
+  it('--spacing：已选候选的锚点曼哈顿距离 ≥ n', () => {
+    const blocked = Array.from({ length: 8 }, () => new Array<boolean>(8).fill(false));
+    const found = findSpaceRects({
+      bounds: { x: 0, y: 0, width: 8, height: 8 },
+      search: { x: 0, y: 0, width: 8, height: 8 },
+      blocked,
+      size: { width: 1, height: 1 },
+      anchor: { x: 0, y: 0 },
+      count: 3,
+      spacing: 3,
+    });
+    assert.equal(found.results.length, 3);
+    assert.deepEqual([found.results[0].x, found.results[0].y], [0, 0]);
+    for (let i = 0; i < found.results.length; i += 1) {
+      for (let j = i + 1; j < found.results.length; j += 1) {
+        const a = found.results[i];
+        const b = found.results[j];
+        assert.ok(Math.abs(a.x - b.x) + Math.abs(a.y - b.y) >= 3, `${a.x},${a.y} 与 ${b.x},${b.y} 太近`);
+      }
+    }
+  });
+
+  it('--spacing 缺省 0：行为不变（相邻候选全返回）', () => {
+    const blocked = Array.from({ length: 8 }, () => new Array<boolean>(8).fill(false));
+    const found = findSpaceRects({
+      bounds: { x: 0, y: 0, width: 8, height: 8 },
+      search: { x: 0, y: 0, width: 8, height: 8 },
+      blocked,
+      size: { width: 1, height: 1 },
+      anchor: { x: 0, y: 0 },
+      count: 3,
+    });
+    assert.deepEqual(found.results.map((spot) => [spot.x, spot.y]), [[0, 0], [1, 0], [0, 1]]);
+  });
+
+  it('距机甲与距锚点分开算', () => {
+    const blocked = Array.from({ length: 8 }, () => new Array<boolean>(8).fill(false));
+    const found = findSpaceRects({
+      bounds: { x: 0, y: 0, width: 8, height: 8 },
+      search: { x: 0, y: 0, width: 8, height: 8 },
+      blocked,
+      size: { width: 1, height: 1 },
+      anchor: { x: 0, y: 0 },
+      mechaAnchor: { x: 7, y: 7 },
+      count: 2,
+    });
+    // 按锚点距离排序；距机甲 = 7+7。
+    assert.deepEqual(found.results[0], { x: 0, y: 0, distance: 0, mechaDistance: 10, terrain: 'buildable' });
+  });
+
+  it('hasOverlap 识别互相重叠的候选', () => {
+    const size = { width: 3, height: 3 };
+    assert.equal(hasOverlap([
+      { x: 0, y: 0, distance: 0, mechaDistance: 0, terrain: 'buildable' },
+      { x: 2, y: 2, distance: 0, mechaDistance: 0, terrain: 'buildable' },
+    ], size), true);
+    assert.equal(hasOverlap([
+      { x: 0, y: 0, distance: 0, mechaDistance: 0, terrain: 'buildable' },
+      { x: 3, y: 0, distance: 0, mechaDistance: 0, terrain: 'buildable' },
+    ], size), false);
+  });
+
   it('rotation 90/270 交换宽高', () => {
     assert.deepEqual(rotatedFootprint({ width: 2, height: 3 }, '90'), { width: 3, height: 2 });
     assert.deepEqual(rotatedFootprint({ width: 2, height: 3 }, '270'), { width: 3, height: 2 });
@@ -314,8 +377,10 @@ describe('cmdFindSpace 命令', () => {
     const { api, calls } = fakeApi();
     const out = stripAnsi(await cmdFindSpace(['3', '3', '--count', '2'], { api, issuerId: 'builder-a' }));
     // 锚点 (3,3) 落在 (1..3, 1..3) 的 3×3 矩形内，距离 0；按 y、x 升序取前两条。
-    assert.match(out, /空地 3x3 @ \(1,1\)\s+距机甲 0/);
-    assert.match(out, /空地 3x3 @ \(2,1\)\s+距机甲 0/);
+    assert.match(out, /空地 3x3 @ \(1,1\)\s+距锚点 0\s+距机甲 0/);
+    assert.match(out, /空地 3x3 @ \(2,1\)\s+距锚点 0\s+距机甲 0/);
+    // 相邻候选重叠时提示 --spacing。
+    assert.match(out, /--spacing <n>，建议 3/);
     assert.match(calls.find((call) => call.startsWith('scene')) ?? '', /^scene 0,0 8x8$/);
   });
 
@@ -330,10 +395,43 @@ describe('cmdFindSpace 命令', () => {
   it('--json 输出结构化结果', async () => {
     const { api } = fakeApi();
     const out = await cmdFindSpace(['2', '2', '--count', '1', '--json'], { api });
-    const parsed = JSON.parse(out) as { results: Array<{ x: number; y: number; distance: number }>; window: { width: number } };
+    const parsed = JSON.parse(out) as {
+      results: Array<{ x: number; y: number; distance: number; mechaDistance: number }>;
+      window: { width: number };
+      spacing: number;
+    };
     assert.equal(parsed.results.length, 1);
     assert.equal(typeof parsed.results[0].distance, 'number');
+    assert.equal(typeof parsed.results[0].mechaDistance, 'number');
     assert.equal(parsed.window.width, 8);
+    assert.equal(parsed.spacing, 0);
+  });
+
+  it('--spacing 生效：3x3 在 8x8 里取分散候选，且不再提示重叠', async () => {
+    const { api } = fakeApi();
+    const out = stripAnsi(await cmdFindSpace(['3', '3', '--count', '3', '--spacing', '3'], { api }));
+    assert.doesNotMatch(out, /候选互相重叠/);
+    const spots = [...out.matchAll(/空地 3x3 @ \((\d+),(\d+)\)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    assert.ok(spots.length >= 2);
+    for (let i = 0; i < spots.length; i += 1) {
+      for (let j = i + 1; j < spots.length; j += 1) {
+        const dist = Math.abs(spots[i][0] - spots[j][0]) + Math.abs(spots[i][1] - spots[j][1]);
+        assert.ok(dist >= 3, `${spots[i]} 与 ${spots[j]} 距离 ${dist} < 3`);
+      }
+    }
+  });
+
+  it('--near 时同时输出距锚点与距机甲', async () => {
+    const { api } = fakeApi();
+    const out = stripAnsi(await cmdFindSpace(['1', '1', '--near', '6', '6', '--count', '1'], { api }));
+    // 机甲在 (3,3)，锚点 (6,6)：候选 (6,6) 距锚点 0、距机甲 round(√18)=4。
+    assert.match(out, /空地 1x1 @ \(6,6\)\s+距锚点 0\s+距机甲 4/);
+  });
+
+  it('--spacing 非整数报错', async () => {
+    const { api } = fakeApi();
+    assert.match(stripAnsi(await cmdFindSpace(['1', '1', '--spacing', 'x'], { api })), /--spacing 必须是非负整数/);
+    assert.match(stripAnsi(await cmdFindSpace(['1', '1', '--spacing', '-2'], { api })), /--spacing 必须是非负整数/);
   });
 
   it('无解时报 ✗ 并说明候选数', async () => {
