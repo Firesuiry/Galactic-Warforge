@@ -18,11 +18,11 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	ws.Grid[0][1].Terrain = terrain.TileWater
 
 	player := &model.PlayerState{
-		PlayerID:       "player-1",
-		TeamID:         "team-1",
-		Role:           "commander",
-		Resources:      model.Resources{Energy: 55},
-		IsAlive:        true,
+		PlayerID:  "player-1",
+		TeamID:    "team-1",
+		Role:      "commander",
+		Resources: model.Resources{Energy: 55},
+		IsAlive:   true,
 		Mechas: map[string]*model.MechaRecord{
 			"unit-1": {
 				UnitID:        "unit-1",
