@@ -18,7 +18,7 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 	if ctx.powerCount < tuning.powerTarget || ctx.minerCount < tuning.minerTarget {
 		return false
 	}
-	for _, typ := range []model.BuildingType{model.BuildingTypeTeslaTower, "barracks", "supply_station"} {
+	for _, typ := range []model.BuildingType{model.BuildingTypeTeslaTower, model.BuildingTypeBarracks, model.BuildingTypeSupplyStation} {
 		if botBuildingOfType(ctx, typ) != nil {
 			continue
 		}
@@ -69,7 +69,7 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 	// Keep the basic army fed before investing in advanced vehicles.
 	for _, producer := range ctx.producers {
 		for _, cost := range model.UnitCost(model.UnitTypeSoldier) {
-			if producer.Type != "barracks" || producer.Storage.ItemQuantity(cost.ItemID) >= cost.Quantity*3 {
+			if producer.Type != model.BuildingTypeBarracks || producer.Storage.ItemQuantity(cost.ItemID) >= cost.Quantity*3 {
 				continue
 			}
 			need := cost.Quantity*3 - producer.Storage.ItemQuantity(cost.ItemID)
@@ -105,7 +105,7 @@ func (gc *GameCore) botIndustry(ws *model.WorldState, owner string, tuning botTu
 		}
 	}
 	// 研究站缺矩阵时的补料已在上面的 labShort 分支处理（优先级高于弹药/兵力备料）。
-	for _, typ := range []model.BuildingType{model.BuildingTypeMatrixLab, "vehicle_factory", "airfield"} {
+	for _, typ := range []model.BuildingType{model.BuildingTypeMatrixLab, model.BuildingTypeVehicleFactory, model.BuildingTypeAirfield} {
 		if !CanBuildTech(ws.Players[owner], model.TechUnlockBuilding, string(typ)) || botBuildingOfType(ctx, typ) != nil {
 			continue
 		}

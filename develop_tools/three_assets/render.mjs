@@ -19,8 +19,8 @@ try {
   page.on('pageerror', error => console.error(error));
   await page.goto(process.argv[2] ?? 'http://127.0.0.1:4173');
   await page.evaluate(async () => {
-    const THREE = await import('/node_modules/.vite/deps/three.js');
-    const { RoomEnvironment } = await import('/node_modules/three/examples/jsm/environments/RoomEnvironment.js');
+    const THREE = await import('/@id/three');
+    const { RoomEnvironment } = await import('/@id/three/examples/jsm/environments/RoomEnvironment.js');
     const { IndustrialModels } = await import('/src/features/planet-map/three/industrial-models.ts');
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(256, 256); renderer.setPixelRatio(1);
@@ -28,6 +28,9 @@ try {
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const scene = new THREE.Scene(), models = new IndustrialModels();
+    // 缩略图必须画 GLB：先等现成模型加载完再清模板，否则拿到的是程序化回退模型。
+    await IndustrialModels.preload();
+    models.reloadTemplates();
     const pmrem = new THREE.PMREMGenerator(renderer);
     const room = new RoomEnvironment(); const environment = pmrem.fromScene(room, 0.05);
     scene.environment = environment.texture; scene.environmentIntensity = 0.6;

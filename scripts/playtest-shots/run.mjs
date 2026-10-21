@@ -14,7 +14,13 @@ if (!N || !sceneName || !outDirArg) {
   process.exit(2);
 }
 let compareDir = '';
+let procedural = false;
 for (let i = 0; i < rest.length; i++) {
+  if (rest[i] === '--procedural') {
+    // 只对带 `?procedural-models` 的场景有意义（模型素材对照：强制回退程序化模型）。
+    procedural = true;
+    continue;
+  }
   if (rest[i] === '--compare') {
     const arg = rest[++i];
     if (!arg) {
@@ -80,11 +86,13 @@ for (let i = 0; i < 60; i++) {
 // ---- 逐张拍 ----
 const results = [];
 const errors = [];
+const stats = [];
 for (const shot of scene.shots) {
   process.stdout.write(`[shots] ${shot.name} … `);
   try {
     if (shot.kind !== '3d') throw new Error(`不支持的机位类型 ${shot.kind}（2D 视图已删除，只支持 '3d'）`);
-    await shoot3d(driver, shot, outDir);
+    const outcome = await shoot3d(driver, procedural ? { ...shot, query: '&procedural-models=1' } : shot, outDir);
+    if (outcome?.stats) stats.push({ name: shot.name, ...outcome.stats });
     const file = path.join(outDir, `${shot.name}.png`);
     if (!fs.existsSync(file)) throw new Error('截图未生成');
     const size = fs.statSync(file).size;
@@ -94,6 +102,11 @@ for (const shot of scene.shots) {
     console.log('失败');
     errors.push(`${shot.name}: ${e.message}`);
   }
+}
+
+if (stats.length) {
+  console.log('[shots] 绘制统计：');
+  for (const entry of stats) console.log(`  ${entry.name}: ${JSON.stringify(entry.stats)}`);
 }
 
 // ---- 2x 特写（裁剪整屏图中心再放大）----

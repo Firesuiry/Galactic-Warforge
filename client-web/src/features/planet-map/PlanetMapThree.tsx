@@ -766,6 +766,8 @@ export function PlanetMapThree(props: Props) {
         const unit = current.planet.units?.[id];
         return unit ? pagePos(unit.position) : null;
       },
+      // 绘制调用统计（模型素材验收用）：getter 不会被 bindSceneMethods 绑上，这里显式取一次。
+      renderStats: () => target.renderStats,
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);

@@ -6,6 +6,9 @@ type BuildingType string
 const (
 	BuildingTypeBattlefieldAnalysisBase BuildingType = "battlefield_analysis_base"
 	BuildingTypeSupplyStation           BuildingType = "supply_station"
+	BuildingTypeBarracks                BuildingType = "barracks"
+	BuildingTypeVehicleFactory          BuildingType = "vehicle_factory"
+	BuildingTypeAirfield                BuildingType = "airfield"
 
 	BuildingTypeMiningMachine         BuildingType = "mining_machine"
 	BuildingTypeAdvancedMiningMachine BuildingType = "advanced_mining_machine"
@@ -71,6 +74,8 @@ const (
 	BuildingTypeJammerTower              BuildingType = "jammer_tower"
 	BuildingTypeSignalTower              BuildingType = "signal_tower"
 	BuildingTypePlanetaryShieldGenerator BuildingType = "planetary_shield_generator"
+	BuildingTypeAntiAirTurret            BuildingType = "anti_air_turret"
+	BuildingTypeArtilleryTurret          BuildingType = "artillery_turret"
 
 	BuildingTypeEMRailEjector         BuildingType = "em_rail_ejector"
 	BuildingTypeVerticalLaunchingSilo BuildingType = "vertical_launching_silo"
