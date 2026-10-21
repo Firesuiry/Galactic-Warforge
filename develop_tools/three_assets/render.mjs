@@ -19,8 +19,8 @@ try {
   page.on('pageerror', error => console.error(error));
   await page.goto(process.argv[2] ?? 'http://127.0.0.1:4173');
   await page.evaluate(async () => {
-    const THREE = await import('/node_modules/.vite/deps/three.js');
-    const { RoomEnvironment } = await import('/node_modules/three/examples/jsm/environments/RoomEnvironment.js');
+    const THREE = await import('/@id/three');
+    const { RoomEnvironment } = await import('/@id/three/examples/jsm/environments/RoomEnvironment.js');
     const { IndustrialModels } = await import('/src/features/planet-map/three/industrial-models.ts');
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(256, 256); renderer.setPixelRatio(1);
