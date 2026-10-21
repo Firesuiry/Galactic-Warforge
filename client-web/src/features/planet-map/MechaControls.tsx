@@ -92,12 +92,10 @@ export function craftBlockReason(input: {
  *
  * `player` 只用来读科技与研究状态；背包一律读 `mecha.inventory`（机甲档案）。
  */
-export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, player, tickRate }: {
+export function MechaControls({ unit, catalog, planetId, mecha, player, tickRate }: {
   unit: Unit; catalog?: CatalogView; planetId: string;
   /** 这台机甲的档案（summary.players[me].mechas 里按 unit_id 找到）；缺失时按空闲处理。 */
   mecha?: MechaView;
-  /** 当前发令者已绑定的机甲（用于「接管后 <旧ID> 变为空闲」提示）。 */
-  boundMecha?: MechaView;
   player?: PlayerState;
   /** 服务端实际 tick 速率（/games/current 的 max_tick_rate）；缺省按 10 换算。 */
   tickRate?: number;
@@ -200,9 +198,6 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
     } finally { setAssignPending(false); }
   }
   const canControl = isMine;
-  const takeoverHint = isOwnUnit && boundMecha && boundMecha.unit_id !== unit.id
-    ? `接管后 ${boundMecha.unit_id} 变为空闲`
-    : null;
   return (
     <section className="planet-side-section mecha-controls" aria-label="机甲核心">
       {/* 操作者行（契约 §7.3 第 2 条）：三态决定下面的控件是否出现。 */}
@@ -224,7 +219,6 @@ export function MechaControls({ unit, catalog, planetId, mecha, boundMecha, play
             </button>
           ) : null}
         </div>
-        {!isMine && takeoverHint ? <p className="muted mecha-operator__hint">{takeoverHint}</p> : null}
         {!isMine && assignError ? <p className="mecha-operator__error" role="alert">{assignError}</p> : null}
         {!isMine && mecha && slotUsage ? (
           <p className="muted mecha-operator__readonly">背包 {slotUsage.used}/{slotUsage.total} 格</p>

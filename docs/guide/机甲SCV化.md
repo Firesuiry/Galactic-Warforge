@@ -27,7 +27,7 @@
 | --- | --- |
 | 命令类型 | `dispatch_mecha` |
 | 路由 | `routePlanet`：`target.planet_id` = **目标**星球 |
-| 执行者 | 普通 `handle(routePlanet, …)`；执行器自己解析机甲（**不能**用 `handleMecha`，它是在目标行星里找机甲，而投送时机甲还在源行星） |
+| 执行者 | `handleIssuer(routePlanet, …)`；执行器自己解析机甲（**不能**用 `handleMecha`，它是在目标行星里找机甲，而投送时机甲还在源行星） |
 | 载荷 | 无（`payload` 可省略或 `{}`） |
 
 选哪台机甲：`target.mecha_id` 非空就用它（必须是本方机甲、必须属于该 issuer）；
@@ -59,7 +59,8 @@ dispatch_mecha 需要 target.mecha_id 点名」，一台都没有报 `EXECUTOR_U
 - 玩家 `FocusPlanetID` 不改（焦点由 `switch_active_planet` 单独控制）。
 - 背包跟着档案走（`MechaRecord.Inventory` 本来就与单位分离），不需要搬。
 
-事件：一条 `entity_updated`，`VisibilityScope = playerID`：
+事件：一条 `entity_updated`，`VisibilityScope = playerID`（与其它 `entity_updated` 一致，
+字段写在 payload 里而不是事件顶层）：
 
 ```json
 {"entity_type": "mecha", "mecha_id": "u-3", "planet_id": "planet-1-2", "from_planet_id": "planet-1-1"}
@@ -114,10 +115,14 @@ MechaID string `json:"mecha_id,omitempty"`
 
 - 3D 行星场景：机甲单位上方画 operator 名牌（`operator == ""` 不画）。文案规则
   与 GUI 一致：等于自己玩家 ID → 「我」，否则原样显示 operator（agent 名）。
-- GUI：`MechaControls` 的「操作者」保持；机甲列表（`MechaFleetCard`）每台显示
-  operator 与所在行星。
+- 服务端：`GET /world/planets/{planet_id}/scene` 增加 `mecha_operators`（机甲 unit ID →
+  operator，只含请求玩家自己档案里的非空绑定；别人的绑定不对外）。
+- GUI：`MechaControls` 的「操作者」保持，并去掉「接管后 <旧ID> 变为空闲」提示（§3 已取消
+  抢占）；机甲列表（`MechaFleetCard`）每台显示 operator 与所在行星。跨星球面板加
+  「机甲投送」表单（目标行星 + 可选点名机甲）。
 - CLI：`mecha list` 已有 operator 列，保持不变；`mecha assign` 帮助文案去掉
-  「会解绑旧机甲」的说法。
+  「会解绑旧机甲」的说法；新增 `mecha dispatch <planet_id> [mecha_id]` 与顶层
+  `dispatch_mecha`。
 
 ## 6. 实体 ID 跨行星唯一
 
@@ -126,7 +131,11 @@ MechaID string `json:"mecha_id,omitempty"`
 于是后加载的行星会覆盖前一颗的机甲档案（审计 P0）。
 
 本轮要求：**同一局内所有已加载行星的实体 ID 互不重复**，格式仍是 `prefix-N`。
-实现自定（共享计数器 / 行星偏移起步值 / 其它），约束：
+
+实现（已落地）：`WorldState.EntityIDs *EntityIDAllocator` 是一个 `atomic.Int64` 计数器，
+同一局的所有已加载行星共用同一个实例（`ShareEntityIDs`，开局与读档时挂接）。快照仍按行星
+各存一份 `entity_counter`，读档时取**最大值**设回共享计数器；回滚用 `RaiseEntityCounter`
+（只前进不回退，避免与没一起回滚的其它行星已分配的 ID 撞号）。约束：
 
 - 存档往返后仍唯一（快照要能恢复出正确的计数器状态）。
 - 现有「建筑 ID 只在行星内唯一」的代码注释与 `alert_history` 等按

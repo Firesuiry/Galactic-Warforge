@@ -234,7 +234,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
 
   // 背包读「我的机甲」档案（契约 §7.3）；未绑定时没有可扣料的背包——那是「未绑定机甲」，
   // 不是「所有造价都缺」（建造由机甲执行，服务端会回 EXECUTOR_UNAVAILABLE）。
-  const myMecha = selectMyMecha(summary, session.playerId);
+  const myMecha = selectMyMecha(summary, session.playerId, planet.planet_id);
   const inventory = myMecha?.inventory;
   const mechaUnbound = !myMecha;
   const activeShortage = useMemo(() => {

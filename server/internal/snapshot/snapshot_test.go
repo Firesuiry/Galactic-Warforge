@@ -14,7 +14,7 @@ import (
 func TestSnapshotRoundTrip(t *testing.T) {
 	ws := model.NewWorldState("planet-1", 4)
 	ws.Tick = 42
-	ws.EntityCounter = 7
+	ws.SetEntityCounter(7)
 	ws.Grid[0][1].Terrain = terrain.TileWater
 
 	player := &model.PlayerState{

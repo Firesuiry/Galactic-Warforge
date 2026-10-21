@@ -340,7 +340,7 @@ export function PlanetPage() {
     catalogQuery.data,
     sceneQuery.data,
     currentGameQuery.data?.max_tick_rate ?? 0,
-    selectMyMecha(summaryQuery.data, session.playerId),
+    selectMyMecha(summaryQuery.data, session.playerId, planetId),
   );
 
   const statsQuery = useQuery({
@@ -505,7 +505,7 @@ export function PlanetPage() {
   }, [guideEntities, sceneQuery.data, session.playerId]);
 
   // 背包读「我的机甲」（契约 §7.3）：建造扣料、放料提示都按这台机甲算。
-  const myMecha = selectMyMecha(summaryQuery.data, session.playerId);
+  const myMecha = selectMyMecha(summaryQuery.data, session.playerId, planetId);
   const myMechaInventory = myMecha?.inventory;
   // 契约 §3.1：别人绑定的本方机甲拒绝 move/attack（NOT_OPERATOR），批量选择器先剔除。
   const foreignMechaIds = useMemo(

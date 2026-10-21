@@ -26,8 +26,8 @@ func starterMecha(ws *model.WorldState, playerID string) *model.MechaRecord {
 	if player == nil {
 		return nil
 	}
-	if record := player.MechaByOperator(playerID); record != nil {
-		return record
+	if records := player.MechasByOperator(playerID); len(records) > 0 {
+		return records[0]
 	}
 	for _, record := range player.SortedMechas() {
 		return record
@@ -84,7 +84,7 @@ func mechaOnPlanet(ws *model.WorldState, playerID, planetID string) *model.Mecha
 }
 
 // bindMechaToIssuer 把玩家在该行星上的机甲档案改绑到 issuerID（测试用：让
-// 多条命令分别落在不同行星，绕开「一个发令者只绑一台机甲」）。
+// 多条命令分别落在不同行星、各自有明确的机甲归属）。
 func bindMechaToIssuer(t *testing.T, ws *model.WorldState, playerID, issuerID string) *model.MechaRecord {
 	t.Helper()
 	record := mechaOnPlanet(ws, playerID, ws.PlanetID)

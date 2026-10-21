@@ -39,6 +39,18 @@ describe('selectMyMecha', () => {
     assert.equal(mine?.unit_id, 'u-1');
   });
 
+  it('prefers the mecha on the requested planet (multi-bind)', () => {
+    const summary = {
+      mechas: [
+        { ...mecha('u-1', 'builder'), planet_id: 'planet-1-1' },
+        { ...mecha('u-2', 'builder'), planet_id: 'planet-1-2' },
+      ],
+    };
+    assert.equal(selectMyMecha(summary, 'builder', 'planet-1-2')?.unit_id, 'u-2');
+    assert.equal(selectMyMecha(summary, 'builder', 'planet-9-9')?.unit_id, 'u-1');
+    assert.equal(selectMyMecha(summary, 'builder')?.unit_id, 'u-1');
+  });
+
   it('never matches the empty operator (idle mecha)', () => {
     assert.equal(selectMyMecha({ mechas: [mecha('u-1', '')] }, ''), undefined);
   });

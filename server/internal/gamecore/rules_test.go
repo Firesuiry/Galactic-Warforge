@@ -79,12 +79,13 @@ func TestExecutorSpawnedForPlayer(t *testing.T) {
 	defer ws.RUnlock()
 
 	p1 := ws.Players["p1"]
-	if p1 == nil || p1.MechaByOperator(p1.PlayerID) == nil {
+	if p1 == nil || len(p1.MechasByOperator(p1.PlayerID)) == 0 {
 		t.Fatal("expected executor for player p1")
 	}
-	execUnit := ws.Units[p1.MechaByOperator(p1.PlayerID).UnitID]
+	record := p1.MechasByOperator(p1.PlayerID)[0]
+	execUnit := ws.Units[record.UnitID]
 	if execUnit == nil {
-		t.Fatalf("executor unit %s not found", p1.MechaByOperator(p1.PlayerID).UnitID)
+		t.Fatalf("executor unit %s not found", record.UnitID)
 	}
 	if execUnit.Type != model.UnitTypeExecutor {
 		t.Fatalf("expected executor unit type, got %s", execUnit.Type)

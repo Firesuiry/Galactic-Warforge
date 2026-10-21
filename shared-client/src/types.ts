@@ -814,7 +814,8 @@ export type CommandType =
   | 'build_dyson_frame'
   | 'build_dyson_shell'
   | 'demolish_dyson'
-  | 'assign_mecha';
+  | 'assign_mecha'
+  | 'dispatch_mecha';
 
 export interface CommandTarget {
   layer: string;
@@ -823,6 +824,8 @@ export interface CommandTarget {
   planet_id?: string;
   entity_id?: string;
   entity_ids?: string[];
+  /** 点名由哪台机甲执行本命令（一个发令者可以绑多台机甲）。 */
+  mecha_id?: string;
   position?: Position;
 }
 
@@ -1180,6 +1183,8 @@ export interface PlanetView {
   tick: number;
   buildings?: Record<string, Building>;
   units?: Record<string, Unit>;
+  /** 机甲单位 ID → 操作者（仅本方非空绑定）：3D 场景画 operator 名牌用。 */
+  mecha_operators?: Record<string, string>;
   resources?: PlanetResource[];
 }
 
@@ -1210,6 +1215,8 @@ export interface PlanetSceneView {
   explored?: boolean[][];
   buildings?: Record<string, Building>;
   units?: Record<string, Unit>;
+  /** 机甲单位 ID → 操作者（仅本方非空绑定）：3D 场景画 operator 名牌用。 */
+  mecha_operators?: Record<string, string>;
   resources?: PlanetResource[];
   building_count?: number;
   unit_count?: number;

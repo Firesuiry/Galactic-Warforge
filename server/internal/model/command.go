@@ -65,6 +65,7 @@ const (
 	CmdQueueMilitaryProduction   CommandType = "queue_military_production"
 	CmdRefitUnit                 CommandType = "refit_unit"
 	CmdAssignMecha               CommandType = "assign_mecha"
+	CmdDispatchMecha             CommandType = "dispatch_mecha"
 	CmdBuildDysonNode            CommandType = "build_dyson_node"
 	CmdBuildDysonFrame           CommandType = "build_dyson_frame"
 	CmdBuildDysonShell           CommandType = "build_dyson_shell"
@@ -80,8 +81,11 @@ type CommandTarget struct {
 	EntityID string `json:"entity_id,omitempty"`
 	// EntityIDs 批量指令（框选多单位）的目标实体集合；与 EntityID 二选一或并用，
 	// 执行器按稳定顺序逐个处理。
-	EntityIDs []string  `json:"entity_ids,omitempty"`
-	Position  *Position `json:"position,omitempty"`
+	EntityIDs []string `json:"entity_ids,omitempty"`
+	// MechaID 点名由哪台机甲执行本命令（契约 §4）：一个发令者可以绑多台机甲，
+	// 缺省时执行器取「本星球上 unit ID 最小的那台」。
+	MechaID  string    `json:"mecha_id,omitempty"`
+	Position *Position `json:"position,omitempty"`
 }
 
 // Command is a single game action

@@ -40,7 +40,7 @@ func TestT092ConfigDevBootstrapRequiresChainProducedMatrices(t *testing.T) {
 			t.Fatalf("expected player %s", playerID)
 		}
 		// 第 16 轮：开局物资是实物；第 21 轮起背包挂在开局机甲档案上。
-		mecha := player.MechaByOperator(playerID)
+		mecha := firstBoundMecha(player, playerID)
 		if mecha == nil {
 			t.Fatalf("expected starter mecha for %s", playerID)
 		}

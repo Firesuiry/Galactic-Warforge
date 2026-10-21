@@ -14,9 +14,29 @@ import (
 // switch_active_planet 只改玩家自己的焦点，不再拖拽他人。
 
 // newF4DualPlanetCore 构建双行星对局：planet-1-1 为主行星，planet-1-2 为全局
-// 活动行星（InitialActivePlanetID）；两颗行星都已加载，双方玩家在两者上都有
-// 基地与执行体。返回 (core, planetA, planetB)。
+// 活动行星（InitialActivePlanetID）；两颗行星都已加载。
+//
+// 第 22 轮起开局只在出生星球（planet-1-2）建基站、造机甲；这里用
+// f4SeedOutpost 在另一颗行星上给每个玩家补一套「基站 + 一台空闲机甲」，
+// 等价于玩家自己 dispatch_mecha 投送过去之后建起来的据点，供双行星用例使用。
+// 返回 (core, planetA, planetB)。
 func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *model.WorldState, *model.WorldState) {
+	t.Helper()
+	core, planetA, planetB := newF4RawDualPlanetCore(t, enemyDifficulty)
+	// 非出生星球：测试夹具补据点（生产路径靠 dispatch_mecha 投送机甲）。
+	anchors := []model.Position{
+		{X: planetA.MapWidth / 4, Y: planetA.MapHeight / 4},
+		{X: planetA.MapWidth * 3 / 4, Y: planetA.MapHeight * 3 / 4},
+	}
+	for i, pc := range core.cfg.Players {
+		f4SeedOutpost(t, planetA, pc.PlayerID, anchors[i%len(anchors)])
+	}
+	return core, planetA, planetB
+}
+
+// newF4RawDualPlanetCore 构建双行星对局但**不**补夹具据点：还原「开局只有出生
+// 星球有机甲」的真实状态（契约 §1 的断言用）。
+func newF4RawDualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *model.WorldState, *model.WorldState) {
 	t.Helper()
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
@@ -44,6 +64,37 @@ func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *mode
 		t.Fatalf("expected both planet runtimes loaded, got A=%v B=%v", planetA != nil, planetB != nil)
 	}
 	return core, planetA, planetB
+}
+
+// f4SeedOutpost 在指定行星上给玩家补一套基站 + 一台空闲机甲（测试夹具：
+// 第 22 轮起开局不再给每颗行星送基站与机甲）。返回机甲档案。
+func f4SeedOutpost(t *testing.T, ws *model.WorldState, playerID string, anchor model.Position) *model.MechaRecord {
+	t.Helper()
+	pos := findNearestBuildable(ws, anchor)
+	profile := model.BuildingProfileFor(model.BuildingTypeBattlefieldAnalysisBase, 1)
+	if fixed, ok := ws.FindFootprintOrigin(pos, profile.Runtime.Params.Footprint, model.BuildingTypeBattlefieldAnalysisBase, ""); ok {
+		pos = fixed
+	}
+	base := newBuilding(ws.NextEntityID("b"), model.BuildingTypeBattlefieldAnalysisBase, playerID, pos)
+	base.HP, base.MaxHP = profile.MaxHP, profile.MaxHP
+	base.Runtime = profile.Runtime
+	placeBuilding(ws, base)
+	spawn := findUnitSpawnTile(ws, pos, false, unitSpawnRadius)
+	if spawn == nil {
+		fallback := findNearestOpenTile(ws, pos)
+		spawn = &fallback
+	}
+	stats := model.UnitStats(model.UnitTypeExecutor)
+	unit := &stats
+	unit.ID = ws.NextEntityID("u")
+	unit.OwnerID = playerID
+	unit.Position = *spawn
+	ws.Units[unit.ID] = unit
+	key := model.TileKey(spawn.X, spawn.Y)
+	ws.TileUnits[key] = append(ws.TileUnits[key], unit.ID)
+	record := &model.MechaRecord{UnitID: unit.ID, PlanetID: ws.PlanetID}
+	ws.Players[playerID].EnsureMechas()[unit.ID] = record
+	return record
 }
 
 func f4BasePos(t *testing.T, ws *model.WorldState, playerID string) model.Position {
@@ -85,9 +136,10 @@ func f4ConstructionTaskCount(ws *model.WorldState, playerID string) int {
 // 三条命令各自命中目标行星。
 func TestF4DualPlanetIndependentBuild(t *testing.T) {
 	core, planetA, planetB := newF4DualPlanetCore(t, "off")
-	// 第 21 轮起一个发令者只绑一台机甲、命令落在机甲所在行星：玩家身份的
-	// 机甲在出生星球 planet-1-2；planet-1-1 的开局机甲空闲，改绑给独立
-	// 发令者才能验证「行星路由第 3 条」与「显式 planet_id」。
+	// 命令落在发令者机甲所在行星：玩家身份的机甲在出生星球 planet-1-2；
+	// planet-1-1 上夹具补的机甲空闲，改绑给独立发令者才能验证「行星路由第 3
+	// 条」与「显式 planet_id」（第 22 轮起一个发令者可以绑多台，但这里仍用
+	// 两个发令者，让两条命令各自有明确的机甲归属）。
 	grantAllItems(planetB, "p2", 100)
 	grantAllItemsToMecha(bindMechaToIssuer(t, planetA, "p1", "p1-agent-a"), 100)
 	grantAllItemsToMecha(bindMechaToIssuer(t, planetB, "p1", "p1-agent-b"), 100)
@@ -291,9 +343,10 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 		t.Fatalf("scout should move on planet-1-1 to %+v, got %+v", destA, scout.Position)
 	}
 
-	// 跨行星同 ID：手动把两颗行星的执行体改成同号，复现实体 ID 撞号。
-	// 细分网格后各行星的 ID 分配序列不再天然对齐（出生点/建筑占地都会消耗 ID），
-	// 所以这里显式构造撞号，测试的仍是「撞号时按焦点行星路由 + planet_id 消歧」。
+	// 跨行星同 ID：手动把两颗行星的执行体改成同号。第 22 轮起实体 ID 全局唯一
+	// （见 EntityIDAllocator），生产路径不会再撞号；但路由层仍必须对「历史存档/
+	// 手工夹具里的同 ID」保持确定性，所以这里显式构造撞号，测试「撞号时按焦点
+	// 行星路由 + planet_id 消歧」。
 	execA := mechaOnPlanet(planetB, "p1", "planet-1-1")
 	execB := mechaOnPlanet(planetB, "p1", "planet-1-2")
 	if execA == nil || execB == nil {
@@ -303,9 +356,6 @@ func TestF4MoveRoutingByEntityAndDisambiguation(t *testing.T) {
 	unitB := planetB.Units[execB.UnitID]
 	if unitA == nil || unitB == nil {
 		t.Fatalf("executor units missing: A=%v B=%v", unitA != nil, unitB != nil)
-	}
-	if unitA.Position != unitB.Position {
-		t.Fatalf("dual-planet fixture should mirror executors, got %+v vs %+v", unitA.Position, unitB.Position)
 	}
 	const collidingID = "u-dup-exec"
 	delete(planetA.Units, execA.UnitID)

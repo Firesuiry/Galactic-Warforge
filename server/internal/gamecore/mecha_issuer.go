@@ -2,6 +2,7 @@ package gamecore
 
 import (
 	"fmt"
+	"strings"
 
 	"siliconworld/internal/model"
 )
@@ -23,34 +24,68 @@ func issuerIDOf(playerID, issuerID string) string {
 	return issuerID
 }
 
-// issuerMecha 解析发令者绑定的机甲，失败统一 EXECUTOR_UNAVAILABLE，消息分三种
-// （未绑定 / 不在本星球 / 阵亡）。
-func issuerMecha(ws *model.WorldState, player *model.PlayerState, issuerID string) (mechaContext, *model.CommandResult) {
-	fail := func(message string) (mechaContext, *model.CommandResult) {
-		return mechaContext{}, &model.CommandResult{
-			Status:  model.StatusFailed,
-			Code:    model.CodeExecutorUnavailable,
-			Message: message,
-		}
+// issuerMecha 解析本命令该由哪台机甲执行（契约 §4）。解析顺序：
+//
+//  1. 显式点名 target.mecha_id：必须是本方机甲（ENTITY_NOT_FOUND）、必须绑定给
+//     本发令者（NOT_OPERATOR）、必须在本星球（EXECUTOR_UNAVAILABLE）；
+//  2. 缺省：本发令者绑定的、PlanetID == 本星球的机甲里 unit ID 最小的那台；
+//  3. 一台都没有：未绑定 / 都绑在别的星球，两种 EXECUTOR_UNAVAILABLE 文案。
+func issuerMecha(ws *model.WorldState, player *model.PlayerState, issuerID, mechaID string) (mechaContext, *model.CommandResult) {
+	fail := func(code model.ResultCode, message string) (mechaContext, *model.CommandResult) {
+		return mechaContext{}, &model.CommandResult{Status: model.StatusFailed, Code: code, Message: message}
 	}
 	if player == nil {
-		return fail("未找到玩家")
+		return fail(model.CodeExecutorUnavailable, "未找到玩家")
 	}
-	record := player.MechaByOperator(issuerID)
-	if record == nil {
-		return fail(fmt.Sprintf("%s 还没有绑定机甲：先用 assign_mecha 接管一台（mecha list 查看）", issuerID))
+	if mechaID != "" {
+		record := player.MechaByUnitID(mechaID)
+		if record == nil {
+			return fail(model.CodeEntityNotFound, fmt.Sprintf("未找到机甲 %s", mechaID))
+		}
+		if record.Operator != issuerID {
+			return fail(model.CodeNotOperator, fmt.Sprintf("机甲 %s 绑定给 %s，不是你", record.UnitID, record.Operator))
+		}
+		if ws == nil || record.PlanetID != ws.PlanetID {
+			return fail(model.CodeExecutorUnavailable, fmt.Sprintf("你的机甲 %s 在 %s，不在本星球", record.UnitID, record.PlanetID))
+		}
+		return mechaContextFor(ws, player, record)
 	}
-	if ws == nil || record.PlanetID != ws.PlanetID {
-		return fail(fmt.Sprintf("你的机甲 %s 在 %s，不在本星球", record.UnitID, record.PlanetID))
+
+	bound := player.MechasByOperator(issuerID)
+	if len(bound) == 0 {
+		return fail(model.CodeExecutorUnavailable, fmt.Sprintf("%s 还没有绑定机甲：先用 assign_mecha 接管一台（mecha list 查看）", issuerID))
 	}
+	if ws != nil {
+		if record := player.MechaByOperatorOnPlanet(issuerID, ws.PlanetID); record != nil {
+			return mechaContextFor(ws, player, record)
+		}
+	}
+	ids := make([]string, 0, len(bound))
+	for _, record := range bound {
+		ids = append(ids, record.UnitID)
+	}
+	return fail(model.CodeExecutorUnavailable, fmt.Sprintf(
+		"你的机甲都在别的星球：%s（用 dispatch_mecha 投送，或 switch_active_planet 切焦点）", strings.Join(ids, ",")))
+}
+
+// mechaContextFor 把一台已确定在本星球的机甲档案解析成可执行的上下文。
+func mechaContextFor(ws *model.WorldState, player *model.PlayerState, record *model.MechaRecord) (mechaContext, *model.CommandResult) {
 	unit := ws.Units[record.UnitID]
 	if unit == nil || unit.HP <= 0 || unit.OwnerID != player.PlayerID {
 		if record.RespawnAtTick > 0 {
-			return fail(fmt.Sprintf("机甲 %s 已阵亡，tick %d 复活", record.UnitID, record.RespawnAtTick))
+			return mechaContext{}, &model.CommandResult{
+				Status:  model.StatusFailed,
+				Code:    model.CodeExecutorUnavailable,
+				Message: fmt.Sprintf("机甲 %s 已阵亡，tick %d 复活", record.UnitID, record.RespawnAtTick),
+			}
 		}
 		// 正常阵亡路径必定写 RespawnAtTick；档案仍在但单位不在 ws.Units 且没有
 		// 复活时间只可能是数据异常，按「等待复活」提示，避免玩家以为能立刻用。
-		return fail(fmt.Sprintf("机甲 %s 已阵亡，等待复活", record.UnitID))
+		return mechaContext{}, &model.CommandResult{
+			Status:  model.StatusFailed,
+			Code:    model.CodeExecutorUnavailable,
+			Message: fmt.Sprintf("机甲 %s 已阵亡，等待复活", record.UnitID),
+		}
 	}
 	model.SyncMechaCapabilities(unit, player)
 	return mechaContext{Record: record, Unit: unit, Player: player, World: ws}, nil

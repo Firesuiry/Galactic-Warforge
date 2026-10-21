@@ -186,6 +186,8 @@ export interface BuildOptions {
   planetId?: string;
   /** 第 19 轮多层传送带：只对 conveyor_belt_* 有效，0–4，缺省 0（地面）。 */
   elevation?: number;
+  /** 第 22 轮：点名由哪台机甲执行（一个发令者可以绑多台机甲）。 */
+  mechaId?: string;
 }
 
 export interface LaunchSolarSailOptions {
@@ -718,7 +720,12 @@ export function createApiClient(options: ApiClientOptions) {
   function cmdBuild(position: Position, buildingType: string, buildOptions: BuildOptions = {}) {
     return sendSingleCommand({
       type: 'build',
-      target: { layer: 'planet', position, ...(buildOptions.planetId ? { planet_id: buildOptions.planetId } : {}) },
+      target: {
+        layer: 'planet',
+        position,
+        ...(buildOptions.planetId ? { planet_id: buildOptions.planetId } : {}),
+        ...(buildOptions.mechaId ? { mecha_id: buildOptions.mechaId } : {}),
+      },
       payload: {
         building_type: buildingType,
         ...(buildOptions.rotation !== undefined ? { rotation: buildOptions.rotation } : {}),
@@ -899,12 +906,27 @@ export function createApiClient(options: ApiClientOptions) {
     return sendSingleCommand({ type: 'configure_mecha_logistics', target: { layer: 'planet', ...(planetId ? { planet_id: planetId } : {}) }, payload: { requests } });
   }
 
-  /** assign_mecha：把本方机甲绑给某个发令者；operator 为空字符串 = 解绑。 */
+  /** assign_mecha：把本方机甲绑给某个发令者；operator 为空字符串 = 解绑。
+   *  第 22 轮起一个发令者可以绑多台，绑定不会解绑同一 operator 的其它机甲。 */
   function cmdAssignMecha(mechaId: string, operator: string, planetId?: string) {
     return sendSingleCommand({
       type: 'assign_mecha',
       target: { layer: 'planet', entity_id: mechaId, ...(planetId ? { planet_id: planetId } : {}) },
       payload: { operator },
+    });
+  }
+
+  /** dispatch_mecha：把发令者的一台机甲瞬移到目标行星；mechaId 缺省时服务端只在
+   *  发令者仅有一台机甲时才自动选。 */
+  function cmdDispatchMecha(planetId: string, mechaId?: string) {
+    return sendSingleCommand({
+      type: 'dispatch_mecha',
+      target: {
+        layer: 'planet',
+        planet_id: planetId,
+        ...(mechaId ? { mecha_id: mechaId } : {}),
+      },
+      payload: {},
     });
   }
 
@@ -1525,6 +1547,7 @@ export function createApiClient(options: ApiClientOptions) {
     setServerUrl,
     setCommandResponseHandler,
     cmdAssignMecha,
+    cmdDispatchMecha,
   };
 }
 

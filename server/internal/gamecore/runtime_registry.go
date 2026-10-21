@@ -59,12 +59,15 @@ func newPlanetWorld(maps *mapmodel.Universe, planetID string, players map[string
 	return ws
 }
 
-// seedPlayerOutposts 在每颗行星给每个玩家建基地与一台开局机甲。开局机甲是
-// 玩家级唯一的一台：只有出生星球（starterPlanetID）上的那台绑定
-// Operator = PlayerID 并领取 bootstrap，其它行星上的机甲保持空闲（契约 §2.2
-// 「一个 issuer 至多绑一台机甲」）。
+// seedPlayerOutposts 只在出生星球（starterPlanetID，即 battlefield
+// .initial_active_planet_id 指向的行星）给每个玩家建基站、造一台开局机甲并发放
+// bootstrap（契约 §1）。其它已加载行星什么都不建：新行星要靠 dispatch_mecha
+// 把机甲投送过去才站得住脚（投送过去的机甲本身就是据点）。
 func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players []config.PlayerConfig, starterPlanetID string) {
 	if ws == nil || len(players) == 0 {
+		return
+	}
+	if starterPlanetID == "" || ws.PlanetID != starterPlanetID {
 		return
 	}
 	basePositions := spawnPositionsFor(ws, planet, players)
@@ -129,14 +132,10 @@ func seedPlayerOutposts(ws *model.WorldState, planet *mapmodel.Planet, players [
 		ws.Units[execID] = executor
 		execKey := model.TileKey(execPos.X, execPos.Y)
 		ws.TileUnits[execKey] = append(ws.TileUnits[execKey], execID)
-		// 开局机甲：只有出生星球上的那台 Operator = PlayerID（人类 GUI / 未设
-		// 代理名的 CLI 直接用玩家身份发令），bootstrap 物资也只进它的背包；
-		// 其它行星的开局机甲保持空闲，由玩家用 assign_mecha 分配给代理。
-		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID}
-		if ws.PlanetID == starterPlanetID {
-			record.Operator = p.PlayerID
-			applyPlayerBootstrap(ps, record, p.Bootstrap)
-		}
+		// 开局机甲绑定给玩家本人（人类 GUI / 未设代理名的 CLI 直接用玩家身份
+		// 发令），bootstrap 物资进它的背包。一个玩家开局只有这一台机甲。
+		record := &model.MechaRecord{UnitID: execID, PlanetID: ws.PlanetID, Operator: p.PlayerID}
+		applyPlayerBootstrap(ps, record, p.Bootstrap)
 		ps.EnsureMechas()[execID] = record
 	}
 }
@@ -406,6 +405,8 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 	spaceRuntime := model.NewSpaceRuntimeState()
 
 	worlds := make(map[string]*model.WorldState)
+	// 同一局的所有行星共用一个实体 ID 分配器：ID 跨行星唯一（契约 §6）。
+	entityIDs := model.NewEntityIDAllocator()
 	planetIDs := []string{}
 	if primary := maps.PrimaryPlanet(); primary != nil {
 		planetIDs = append(planetIDs, primary.ID)
@@ -427,6 +428,7 @@ func bootstrapInitialRuntimeRegistry(cfg *config.Config, maps *mapmodel.Universe
 		if ws == nil {
 			continue
 		}
+		ws.ShareEntityIDs(entityIDs)
 		planet, _ := maps.Planet(planetID)
 		seedPlayerOutposts(ws, planet, cfg.Players, activePlanetID)
 		// bootstrap 还会注入开局矿簇并整地，基线必须在这之后重建一次，

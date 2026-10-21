@@ -417,7 +417,7 @@ func (gc *GameCore) botFeedBuilding(ws *model.WorldState, owner string, ctx *bot
 	if n <= 0 || b.Storage == nil {
 		return model.Command{}, false
 	}
-	record := ws.Players[owner].MechaByOperator(owner)
+	record := ws.Players[owner].MechaByOperatorOnPlanet(owner, ws.PlanetID)
 	if record == nil {
 		return model.Command{}, false
 	}
@@ -443,7 +443,7 @@ func botRecipeFor(player *model.PlayerState, item string) (model.RecipeDefinitio
 
 func (gc *GameCore) botEnsureItem(ws *model.WorldState, owner string, ctx *botSurvey, item string, quantity int, visiting map[string]bool) (model.Command, bool) {
 	player := ws.Players[owner]
-	record := player.MechaByOperator(owner)
+	record := player.MechaByOperatorOnPlanet(owner, ws.PlanetID)
 	if record == nil {
 		return model.Command{}, false
 	}
@@ -597,7 +597,7 @@ func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx 
 	if !ok {
 		return model.Command{}, false
 	}
-	record := player.MechaByOperator(owner)
+	record := player.MechaByOperatorOnPlanet(owner, ws.PlanetID)
 	if record == nil {
 		return model.Command{}, false
 	}
@@ -606,7 +606,7 @@ func (gc *GameCore) botEnsureBuildingAt(ws *model.WorldState, owner string, ctx 
 			return gc.botEnsureItem(ws, owner, ctx, cost.ItemID, cost.Quantity, visiting)
 		}
 	}
-	if !botCanAffordBuild(player, def) {
+	if !botCanAffordBuild(ws, player, def) {
 		return model.Command{}, false
 	}
 	pos := fixed
@@ -692,7 +692,7 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 			return model.Command{}, false
 		}
 		def, _ := model.BuildingDefinitionByID(model.BuildingTypeTeslaTower)
-		record := ws.Players[owner].MechaByOperator(owner)
+		record := ws.Players[owner].MechaByOperatorOnPlanet(owner, ws.PlanetID)
 		if record == nil {
 			return model.Command{}, false
 		}
@@ -701,12 +701,12 @@ func (gc *GameCore) botPowerLink(ws *model.WorldState, owner string, ctx *botSur
 				return gc.botEnsureItem(ws, owner, ctx, cost.ItemID, cost.Quantity, map[string]bool{})
 			}
 		}
-		if !botCanAffordBuild(ws.Players[owner], def) {
+		if !botCanAffordBuild(ws, ws.Players[owner], def) {
 			return model.Command{}, false
 		}
 		pos := botTowerStep(ws, anchor.Position, b.Position, reach)
 		// 只放能朝目标推进的塔：地形挡住时跳过这座建筑，避免原地堆塔。
-		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, mechaContext{Record: ws.Players[owner].MechaByOperator(owner), World: ws}, *pos) != nil {
+		if pos == nil || ws.SurfaceDistance(*pos, b.Position) >= ws.SurfaceDistance(anchor.Position, b.Position) || gc.requireBuildRange(ws, owner, mechaContext{Record: ws.Players[owner].MechaByOperatorOnPlanet(owner, ws.PlanetID), World: ws}, *pos) != nil {
 			continue
 		}
 		// 复用与 execBuild 相同的围死校验：拉线时的电塔同样不能把基地封死

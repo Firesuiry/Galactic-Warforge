@@ -161,4 +161,43 @@ describe('issuer serialization', () => {
       layer: 'planet', entity_id: 'u-3', planet_id: 'planet-1-1',
     });
   });
+
+  it('sends dispatch_mecha with the target planet and optional mecha id', async () => {
+    let body: Record<string, unknown> = {};
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    // target.planet_id 是**目标**星球；没有 mecha_id 时字段整体省略。
+    await api.cmdDispatchMecha('planet-1-2');
+    assert.deepEqual(body.commands, [{
+      type: 'dispatch_mecha',
+      target: { layer: 'planet', planet_id: 'planet-1-2' },
+      payload: {},
+    }]);
+    await api.cmdDispatchMecha('planet-1-2', 'u-3');
+    assert.deepEqual((body.commands as Array<{ target: unknown }>)[0].target, {
+      layer: 'planet', planet_id: 'planet-1-2', mecha_id: 'u-3',
+    });
+  });
+
+  it('sends build with an optional named mecha', async () => {
+    let body: Record<string, unknown> = {};
+    const api = createApiClient({
+      serverUrl: 'http://test.local',
+      auth: { playerId: 'p1', playerKey: 'key' },
+      fetchFn: async (_input, init) => {
+        body = JSON.parse(String(init?.body));
+        return { ok: true, json: async () => ({ accepted: true }) } as Response;
+      },
+    });
+    await api.cmdBuild({ x: 4, y: 5 }, 'wind_turbine', { mechaId: 'u-3' });
+    assert.deepEqual((body.commands as Array<{ target: unknown }>)[0].target, {
+      layer: 'planet', position: { x: 4, y: 5 }, mecha_id: 'u-3',
+    });
+  });
 });

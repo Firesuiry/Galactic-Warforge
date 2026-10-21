@@ -220,7 +220,7 @@ func digestRuntime(ws *model.WorldState, space *model.SpaceRuntimeState) model.R
 	d.Buildings = len(ws.Buildings)
 	d.Units = len(ws.Units)
 	d.Resources = len(ws.Resources)
-	d.EntityCounter = ws.EntityCounter
+	d.EntityCounter = ws.EntityCounter()
 
 	for _, p := range ws.Players {
 		if p == nil {

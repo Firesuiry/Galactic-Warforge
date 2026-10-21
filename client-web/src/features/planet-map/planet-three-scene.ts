@@ -152,7 +152,7 @@ export class PlanetThreeScene {
   private tacticalOverlaySignature = '';
   private groundView = false;
   private tilt = .65;
-  private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite } }>();
+  private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite }; operatorTag?: { sprite: THREE.Sprite; text: string } }>();
   private readonly staticEntities = new Map<string, { group: THREE.Group; signature: string }>();
   private readonly linkSignatures = new Map<string, string>();
   private frozen = new URLSearchParams(window.location.search).has('freeze');
@@ -561,6 +561,8 @@ export class PlanetThreeScene {
         move(`unit:${unit.id}`, unit.type, faction, unit.position, 'units', .72);
         // 血条（C2）：头顶 billboard，受击比例实时更新，按阵营着色；中立黑雾头顶挂「中立」标签
         this.syncUnitBar(this.moving.get(`unit:${unit.id}`), unit, faction);
+        // 机甲 operator 名牌（第 22 轮 §5）：让每个代理「宣传自己在操作」。
+        this.syncMechaOperatorTag(this.moving.get(`unit:${unit.id}`), unit);
         // 运输机器人车顶货物方块：载货期间（装货/运送/卸货）都显示，颜色取物品配色表。
         const robot = this.moving.get(`unit:${unit.id}`)?.group.getObjectByName('transport-robot-cargo');
         if (robot instanceof THREE.Mesh) {
@@ -752,6 +754,73 @@ export class PlanetThreeScene {
       entry.bar.tag = tag;
     }
     if (entry.bar.tag) entry.bar.tag.visible = faction === 'fog_neutral';
+  }
+
+  /**
+   * 机甲头顶的 operator 名牌（第 22 轮 §5）：让每个代理「宣传自己在操作」。
+   * `operator == ""`（空闲机甲）不画；等于自己玩家 ID 显示「我」，否则原样显示
+   * operator（agent 名）。名牌挂在血条上方，和「中立」标签同一种 billboard。
+   */
+  private syncMechaOperatorTag(entry: { group: THREE.Group; operatorTag?: { sprite: THREE.Sprite; text: string } } | undefined, unit: Unit) {
+    if (!entry) return;
+    const operators = this.data?.planet.mecha_operators;
+    const operator = operators?.[unit.id] ?? '';
+    if (!operator) {
+      if (entry.operatorTag) entry.operatorTag.sprite.visible = false;
+      return;
+    }
+    const playerId = this.data?.playerId ?? '';
+    const text = operator === playerId ? '我' : operator;
+    if (!entry.operatorTag) {
+      const sprite = new THREE.Sprite(this.operatorTagMaterial(text));
+      sprite.renderOrder = 23;
+      sprite.center.set(0.5, 0.5);
+      // 尺寸与「中立」标签（0.6×0.25）同量级，宽高比跟画布 128:44 一致。
+      sprite.scale.set(0.82, 0.28, 1);
+      sprite.position.set(0, 1.3, 0);
+      entry.group.add(sprite);
+      entry.operatorTag = { sprite, text };
+      return;
+    }
+    if (entry.operatorTag.text !== text) {
+      const material = this.operatorTagMaterial(text);
+      const previous = entry.operatorTag.sprite.material as THREE.SpriteMaterial;
+      entry.operatorTag.sprite.material = material;
+      // 名牌材质按文本缓存，切换文本时不释放旧材质（可能还有别的机甲在用）。
+      entry.operatorTag.text = text;
+      entry.operatorTag.sprite.visible = true;
+    }
+    entry.operatorTag.sprite.visible = true;
+  }
+
+  /** operator 名牌材质：按文本缓存（同一 agent 的多台机甲共用一张贴图）。 */
+  private operatorTagMaterial(text: string): THREE.SpriteMaterial {
+    const key = `mecha-operator:${text}`;
+    const cached = this.spriteMaterials.get(key);
+    if (cached) return cached;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 44;
+    const context = canvas.getContext('2d');
+    if (context && typeof context.fillText === 'function') {
+      context.fillStyle = 'rgba(16,30,26,0.82)';
+      context.strokeStyle = 'rgba(126,247,176,0.9)';
+      context.lineWidth = 2;
+      context.beginPath();
+      context.roundRect?.(3, 3, 122, 38, 9);
+      context.fill();
+      context.stroke();
+      context.font = '600 22px "PingFang SC", "Microsoft YaHei", sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillStyle = '#c8ffdd';
+      context.fillText(text, 64, 23);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+    this.spriteMaterials.set(key, material);
+    return material;
   }
 
   /**

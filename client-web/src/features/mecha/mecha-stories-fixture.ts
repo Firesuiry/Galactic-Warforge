@@ -8,7 +8,7 @@ import type { MechaView } from './model';
  *
  * 机甲：u-3（我的）、u-4（agent builder-a 的）、u-5（空闲）；另有 u-6（agent builder-b 的，
  * 阵亡，复活于 tick 512）只出现在总览卡片里，用来核对「复活于 tick N」。
- * 一个发令者只绑一台机甲，所以 u-6 不能也挂在 p1 名下。
+ * 第 22 轮起一个发令者可以绑多台机甲，夹具里仍按「一人一台」摆，方便对号入座。
  */
 
 const mechaBase = {

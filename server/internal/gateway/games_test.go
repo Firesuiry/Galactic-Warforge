@@ -104,7 +104,7 @@ func TestGameNewReplacesWorldAndRotatesKeys(t *testing.T) {
 	// 用背包物品证明旧局状态与新局互不串味）。
 	oldSess := rt.Current()
 	oldSess.Core.World().Lock()
-	oldSess.Core.World().Players["p1"].MechaByOperator("p1").AddItems([]model.ItemAmount{{ItemID: "quantum_chip", Quantity: 7}}, 0)
+	firstBoundMecha(oldSess.Core.World().Players["p1"], "p1").AddItems([]model.ItemAmount{{ItemID: "quantum_chip", Quantity: 7}}, 0)
 	oldSess.Core.World().Unlock()
 	oldSess.Bus.Subscribe("legacy-sub", nil)
 

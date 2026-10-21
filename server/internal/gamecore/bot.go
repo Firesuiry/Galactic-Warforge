@@ -491,7 +491,7 @@ func (gc *GameCore) botTurret(ws *model.WorldState, playerID string, tuning botT
 		return false
 	}
 	player := ws.Players[playerID]
-	btype, ok := botCheapestTurret(player, true)
+	btype, ok := botCheapestTurret(ws, player, true)
 	if !ok {
 		return false
 	}
@@ -507,7 +507,7 @@ func (gc *GameCore) botTurret(ws *model.WorldState, playerID string, tuning botT
 }
 
 // botCheapestTurret 目录里可建、已解锁的炮塔；requireAfford 时还要付得起。平局取 ID 较小者。
-func botCheapestTurret(player *model.PlayerState, requireAfford bool) (model.BuildingType, bool) {
+func botCheapestTurret(ws *model.WorldState, player *model.PlayerState, requireAfford bool) (model.BuildingType, bool) {
 	bestScore := -1
 	var best model.BuildingType
 	for _, def := range model.AllBuildingDefinitions() {
@@ -517,7 +517,7 @@ func botCheapestTurret(player *model.PlayerState, requireAfford bool) (model.Bui
 		if !CanBuildTech(player, model.TechUnlockBuilding, string(def.ID)) {
 			continue
 		}
-		if requireAfford && !botCanAffordBuild(player, def) {
+		if requireAfford && !botCanAffordBuild(ws, player, def) {
 			continue
 		}
 		// 第 16 轮起成本只有物品：按物品总件数排序（越便宜越优先）。
@@ -900,7 +900,7 @@ func botInventoryHasRoom(record *model.MechaRecord, exec *model.Unit) bool {
 // botMaterialNeeds 当前建设目标的物料缺口（按建设优先级：电力→矿机→制造台）。
 func (gc *GameCore) botMaterialNeeds(ws *model.WorldState, playerID string, tuning botTuning, ctx *botSurvey) []string {
 	player := ws.Players[playerID]
-	record := player.MechaByOperator(playerID)
+	record := player.MechaByOperatorOnPlanet(playerID, ws.PlanetID)
 	if record == nil {
 		return nil
 	}
@@ -938,7 +938,7 @@ func (gc *GameCore) botMaterialNeeds(ws *model.WorldState, playerID string, tuni
 		}
 	}
 	if botWantsTurret(ws, playerID, tuning, ctx) {
-		if btype, ok := botCheapestTurret(player, false); ok {
+		if btype, ok := botCheapestTurret(ws, player, false); ok {
 			if missing := need(btype); len(missing) > 0 {
 				return missing
 			}
@@ -961,7 +961,7 @@ func botWantsTurret(ws *model.WorldState, playerID string, tuning botTuning, ctx
 // botCraftFor 原料足够时手搓缺口物品（齿轮/电路板/锭的二级链）。
 func (gc *GameCore) botCraftFor(ws *model.WorldState, playerID string, missing []string, tuning botTuning) (model.Command, bool) {
 	player := ws.Players[playerID]
-	record := player.MechaByOperator(playerID)
+	record := player.MechaByOperatorOnPlanet(playerID, ws.PlanetID)
 	if record == nil || ws.Units[record.UnitID] == nil || ws.Units[record.UnitID].Mecha == nil {
 		return model.Command{}, false
 	}
@@ -1018,7 +1018,7 @@ func botCraftChain(itemID string) (recipeID string, ingredients []model.ItemAmou
 // botCraftIngredient 原料缺口时先搓原料（铁锭/铜锭）。
 func (gc *GameCore) botCraftIngredient(ws *model.WorldState, playerID string, ingredients []model.ItemAmount, tuning botTuning) (model.Command, bool) {
 	player := ws.Players[playerID]
-	record := player.MechaByOperator(playerID)
+	record := player.MechaByOperatorOnPlanet(playerID, ws.PlanetID)
 	if record == nil || ws.Units[record.UnitID] == nil || ws.Units[record.UnitID].Mecha == nil {
 		return model.Command{}, false
 	}
@@ -1060,7 +1060,7 @@ func botHasIngredients(inv model.ItemInventory, ingredients []model.ItemAmount, 
 // 复合物品（如电路板 = 铁锭 + 铜锭）要沿手搓链找到背包里真正不足的那种原矿，
 // 否则会一直采同一种矿（遭遇战 bot 曾因此把铜矿采到 2770 却没有铁）。
 func (gc *GameCore) botMineFor(ws *model.WorldState, playerID string, exec *model.Unit, missingItem string, ctx *botSurvey) (model.Command, bool) {
-	record := ws.Players[playerID].MechaByOperator(playerID)
+	record := ws.Players[playerID].MechaByOperatorOnPlanet(playerID, ws.PlanetID)
 	if record == nil {
 		return model.Command{}, false
 	}
@@ -1112,7 +1112,7 @@ func (gc *GameCore) botMineKind(ws *model.WorldState, playerID string, exec *mod
 			return model.Command{}, false
 		}
 	}
-	record := ws.Players[playerID].MechaByOperator(playerID)
+	record := ws.Players[playerID].MechaByOperatorOnPlanet(playerID, ws.PlanetID)
 	if record == nil || record.UnitID != exec.ID {
 		return model.Command{}, false
 	}
@@ -1335,7 +1335,7 @@ func (gc *GameCore) botMiners(ws *model.WorldState, playerID string, tuning botT
 	if !ok {
 		return false
 	}
-	if !botCanAffordBuild(player, def) {
+	if !botCanAffordBuild(ws, player, def) {
 		return false
 	}
 	// 找一台附近没有己方矿机的矿点（必须在建造可达范围内：基地半径或执行体操作范围）。
@@ -1500,7 +1500,7 @@ func (gc *GameCore) botAssembler(ws *model.WorldState, playerID string, tuning b
 	if !ok {
 		return false
 	}
-	if !botCanAffordBuild(player, def) {
+	if !botCanAffordBuild(ws, player, def) {
 		return false
 	}
 	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeAssemblingMachineMk1, playerID)
@@ -1541,7 +1541,7 @@ func (gc *GameCore) botBuildLab(ws *model.WorldState, playerID string, ctx *botS
 	if !ok || !def.Buildable || !CanBuildTech(player, model.TechUnlockBuilding, string(def.ID)) {
 		return false
 	}
-	if !botCanAffordBuild(player, def) {
+	if !botCanAffordBuild(ws, player, def) {
 		return false
 	}
 	pos := botBuildSpotNear(ws, *ctx.home, botConstructRadius(ws, playerID, ctx), model.BuildingTypeMatrixLab, playerID)
@@ -1697,7 +1697,7 @@ func (gc *GameCore) botProduce(ws *model.WorldState, playerID string, tuning bot
 					continue
 				}
 				ready = false
-				if record := ws.Players[playerID].MechaByOperator(playerID); record != nil && record.Inventory[cost.ItemID] >= missing {
+				if record := ws.Players[playerID].MechaByOperatorOnPlanet(playerID, ws.PlanetID); record != nil && record.Inventory[cost.ItemID] >= missing {
 					return issue(model.Command{Type: model.CmdTransferItem, Payload: map[string]any{"building_id": producer.ID, "item_id": cost.ItemID, "quantity": missing}})
 				}
 			}
@@ -1725,11 +1725,13 @@ func botPreferMecha(soldiers, mechas int, tuning botTuning) bool {
 // botCanAffordBuild 报告 bot 背包里的物品是否够建这栋建筑（第 16 轮起唯一的门槛：
 // 没有矿物/能量货币可查）。不够时调用方应当先去手搓或从自己建筑的输出缓冲取货
 // ——bot 的取货重做属于后续任务，这里只保证门槛语义正确。
-func botCanAffordBuild(player *model.PlayerState, def model.BuildingDefinition) bool {
+func botCanAffordBuild(ws *model.WorldState, player *model.PlayerState, def model.BuildingDefinition) bool {
 	if player == nil {
 		return false
 	}
-	record := player.MechaByOperator(player.PlayerID)
+	// 只认本星球上的机甲背包：一个发令者可以绑多台机甲，别的行星上的那台
+	// 送不了料（与 build 的 EXECUTOR_UNAVAILABLE 口径一致）。
+	record := player.MechaByOperatorOnPlanet(player.PlayerID, ws.PlanetID)
 	if record == nil {
 		return false
 	}

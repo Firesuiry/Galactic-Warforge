@@ -32,6 +32,7 @@ function fakeApi(overrides: Partial<Record<keyof ApiClient, unknown>> = {}) {
     fetchSummary: async () => summary,
     fetchCatalog: async () => catalog,
     cmdAssignMecha: async () => ({ accepted: true, request_id: 'r', enqueue_tick: 1, results: [{ command_index: 0, status: 'executed', code: 'OK', message: 'ok' }] }),
+    cmdDispatchMecha: async () => ({ accepted: true, request_id: 'r', enqueue_tick: 1, results: [{ command_index: 0, status: 'executed', code: 'OK', message: 'ok' }] }),
     ...overrides,
   } as unknown as ApiClient;
 }
@@ -152,5 +153,38 @@ describe('mecha list 作业与施工列', () => {
     assert.match(out, /mine iron_ore_node ×5（paused）/);
     assert.match(out, /pending 才是排队\/缺料/);
     assert.match(out, /0\/4/);
+  });
+});
+
+describe('mecha dispatch（第 22 轮 §2）', () => {
+  it('把目标行星和点名机甲一起下发', async () => {
+    let args: unknown[] = [];
+    const api = fakeApi({ cmdDispatchMecha: async (...rest: unknown[]) => { args = rest; return response(true, 'executed', 'ok'); } });
+    const out = await cmdMecha(['dispatch', 'planet-1-2', 'u-7'], { api });
+    assert.deepEqual(args, ['planet-1-2', 'u-7']);
+    assert.match(out, /ok/);
+  });
+
+  it('只给行星时 mecha_id 传 undefined（服务端自动选一台）', async () => {
+    let args: unknown[] = [];
+    const api = fakeApi({ cmdDispatchMecha: async (...rest: unknown[]) => { args = rest; return response(true, 'executed', 'ok'); } });
+    await cmdMecha(['dispatch', 'planet-1-2'], { api });
+    assert.deepEqual(args, ['planet-1-2', undefined]);
+  });
+
+  it('缺少行星参数时不下发', async () => {
+    let called = false;
+    const api = fakeApi({ cmdDispatchMecha: async () => { called = true; return response(true, 'executed', 'ok'); } });
+    const out = await cmdMecha(['dispatch'], { api });
+    assert.match(out, /Usage: dispatch_mecha <planet_id> \[mecha_id\]/);
+    assert.equal(called, false);
+  });
+
+  it('多余参数直接报错', async () => {
+    let called = false;
+    const api = fakeApi({ cmdDispatchMecha: async () => { called = true; return response(true, 'executed', 'ok'); } });
+    const out = await cmdMecha(['dispatch', 'planet-1-2', 'u-7', 'extra'], { api });
+    assert.match(out, /Usage: dispatch_mecha/);
+    assert.equal(called, false);
   });
 });

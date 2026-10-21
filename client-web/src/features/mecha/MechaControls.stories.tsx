@@ -38,19 +38,17 @@ export const Mine: Story = {
     catalog: storyCatalog,
     planetId: 'planet-1-1',
     mecha: myMecha,
-    boundMecha: myMecha,
     player: storyPlayer,
   },
 };
 
-/** 别人的机甲（agent builder-a）：只读信息 + 接管；我已绑 u-3 → 提示接管后 u-3 变空闲。 */
+/** 别人的机甲（agent builder-a）：只读信息 + 接管（接管不会解绑我已绑的 u-3）。 */
 export const OtherAgent: Story = {
   args: {
     unit: mechaUnit(agentMecha),
     catalog: storyCatalog,
     planetId: 'planet-1-1',
     mecha: agentMecha,
-    boundMecha: myMecha,
     player: storyPlayer,
   },
 };
@@ -62,7 +60,6 @@ export const Idle: Story = {
     catalog: storyCatalog,
     planetId: 'planet-1-1',
     mecha: idleMecha,
-    boundMecha: myMecha,
     player: storyPlayer,
   },
 };
