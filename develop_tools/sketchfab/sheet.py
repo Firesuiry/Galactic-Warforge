@@ -58,6 +58,21 @@ BAN_WORDS = [
     "medieval", "roman", "greek", "ww1", "ww2", "world war", "historic", "historical",
     "animal", "rat ", "rat_", "insect", "plant", "tree", "flower", "fish", "bird",
     "horror", "backrooms", "creepy", "zombie", "skull", "skeleton",
+    # 非工业物件 / 游戏地图 / 品牌周边（同一关键词的误命中）
+    "coffee", "memento", "mug", "cup ", "bottle", "food", "cake", "bread",
+    "foundry map", "multiplayer", "halo ", "halo3", "level ", "map ",
+    "fly trap", "flytrap", "trap", "jimmy", "character ", "figure ", "figurine",
+    "plush", "sticker", "poster", "logo", "sign ",
+    # 其它 IP 的派生角色 / 影视角色（许可虽可用，但造型与本作世界观冲突）
+    "tower of fantasy", "uber soldier", "metro exodus", "clown", "halo", "predator",
+    "alien vs", "avp", "star wars", "star trek", "tie ", "x-wing", "starfighter",
+    "drop pod", "doom ", "warhammer", "40k", "terminator", "cyberpunk 2077",
+    "league of legends", "genshin", "overwatch", "destiny ", "starcraft",
+    "tripod", "rice field", "sen goku", "sengoku", "nova solution", "quad thorn",
+    "magnetic train", "magnetic vehicle", "battery train", "gravitas",
+    "extinguisher", "mercedes", "lamborghini", "porsche", "boeing", "cessna",
+    "me262", "fluorite", "limonite", "tractor", "dieselpunk", "steampunk",
+    "victorian", "drainage", "sinter", "glassware", "cabinet", "terminal",
 ]
 # 士兵槽（写实人形允许）以外，命中这些 tag 的重罚
 HUMAN_WORDS = ["human", "people", "person", "girl", "boy", "woman", "man ", "portrait", "head"]
@@ -104,6 +119,17 @@ def _text_blob(m: dict) -> str:
     return (m.get("name", "") + " " + tags).lower()
 
 
+BUILDING_BAD_CATS = {
+    "characters-creatures", "music", "furniture-home", "art-abstract",
+    "cultural-heritage-history", "food-drink", "people",
+}
+UNIT_BAD_CATS = {"architecture", "furniture-home", "music", "art-abstract", "cultural-heritage-history"}
+
+
+def is_building_slot(slot: str) -> bool:
+    return slot in S.BUILDING_SLOTS
+
+
 def reject_reason(m: dict, slot: str) -> str | None:
     if (m.get("faceCount") or 0) > FACE_LIMIT:
         return f"面数 {m['faceCount']}"
@@ -116,8 +142,9 @@ def reject_reason(m: dict, slot: str) -> str | None:
     if slot not in HUMAN_OK_SLOTS and any(w in blob for w in HUMAN_WORDS):
         return "写实人形"
     cats = {c["name"] for c in m.get("categories") or []}
-    if cats & {"furniture-home", "music", "art-abstract", "cultural-heritage-history"}:
-        return f"类目 {sorted(cats)}"
+    bad = BUILDING_BAD_CATS if is_building_slot(slot) else UNIT_BAD_CATS
+    if slot != "pack" and cats & bad:
+        return f"类目 {sorted(cats & bad)[0]}"
     return None
 
 
@@ -150,6 +177,24 @@ def score(m: dict, slot_kws: list[str]) -> float:
     return base * rel * staff
 
 
+def _matches_slot(m: dict, kws: list[str], slot: str = "") -> bool:
+    """名称/标签是否至少命中一个槽位实词（词干 5 字符前缀匹配，容忍 smeltery/smelter 这类派生）。
+
+    建筑槽要求命中在**名称**里：Sketchfab 的 tag 太杂（「Furnace」会挂 minecraft/character），
+    只靠 tag 命中会把无关物件带进来。单位槽允许 tag 命中（模型名常是代号）。
+    """
+    blob = _text_blob(m)
+    name = (m.get("name") or "").lower()
+    for t in _tokens(kws):
+        if t in name or (len(t) >= 5 and t[:5] in name):
+            return True
+    if not is_building_slot(slot):
+        for t in _tokens(kws):
+            if t in blob or (len(t) >= 5 and t[:5] in blob):
+                return True
+    return False
+
+
 def select(models: list[dict], slot: str, kws: list[str]) -> tuple[list[dict], list[tuple[dict, str]]]:
     rejected: list[tuple[dict, str]] = []
     ok: list[dict] = []
@@ -160,10 +205,22 @@ def select(models: list[dict], slot: str, kws: list[str]) -> tuple[list[dict], l
         else:
             ok.append(m)
     ok.sort(key=lambda m: score(m, kws), reverse=True)
-    good = [m for m in ok if _slug(m) in OK_LIC][:TOP_N]
+    matched = [m for m in ok if _matches_slot(m, kws, slot)]
+    unmatched = [m for m in ok if not _matches_slot(m, kws, slot)]
+    for m in unmatched:
+        m["_weak"] = True
+    good = [m for m in matched if _slug(m) in OK_LIC][:TOP_N]
     if len(good) < TOP_N:
-        nc = [m for m in ok if _slug(m) in NC_LIC][: TOP_N - len(good)]
+        nc = [m for m in matched if _slug(m) in NC_LIC][: TOP_N - len(good)]
         good.extend(nc)
+    # 相关度门槛后不足 8 个才用「弱相关」补位（图上标 弱相关）；建筑槽不补位——
+    # 建筑的名字必须点出功能，只靠 tag 命中的基本是误命中（灭火器、跑车），宁可少给。
+    if len(good) < TOP_N and not is_building_slot(slot):
+        for m in unmatched:
+            if len(good) >= TOP_N:
+                break
+            if _slug(m) in OK_LIC | NC_LIC:
+                good.append(m)
     return good[:TOP_N], rejected
 
 
@@ -269,6 +326,8 @@ def render_sheet(
             d.text((bx + 6, by + 3), "NC", font=f_badge, fill=(255, 255, 255))
         line1 = f"[{e['idx']}] {_ellipsis(e['name'], f_line, CELL_W - 6)}"
         line2 = f"{_ellipsis(e['author'], f_line, 110)} | {e['licenseShort']} | {e['faces']:,} 面 | {'有动画' if e['animated'] else '静态'}"
+        if e.get("weak"):
+            line2 += " | 弱相关"
         d.text((x, y + CELL_H + 6), line1, font=f_line, fill=(228, 232, 238))
         d.text((x, y + CELL_H + 24), line2, font=f_line, fill=(150, 158, 168))
 
@@ -295,6 +354,7 @@ def entry(idx: int, m: dict) -> dict:
         "viewerUrl": m.get("viewerUrl", ""),
         "thumbnail": _best_thumb(m),
         "queries": sorted(set(m.get("_queries") or [])),
+        "weak": bool(m.get("_weak")),
     }
 
 
