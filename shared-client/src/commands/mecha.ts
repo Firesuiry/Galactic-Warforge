@@ -2,10 +2,11 @@ import chalk from 'chalk';
 
 import type { MechaView } from '../types.js';
 import { NO_MECHA_HINT, selectMyMecha, sortMechas } from '../mecha.js';
+import { parseArgs } from './args.js';
 import { fmtCommandResponse, fmtError, table } from './format.js';
 import { resolveIssuerId, type CommandContext } from './game-commands.js';
 
-const USAGE = 'Usage: mecha list | mecha assign <mecha_id> [operator] | mecha assign <mecha_id> --release';
+const USAGE = 'Usage: mecha list | mecha assign <mecha_id> [operator] | mecha assign <mecha_id> --release | mecha dispatch <planet_id> [mecha_id]';
 
 /** 空表提示：造价从 /catalog 的 executor 条目读，不在客户端写死（调平衡不会漂移）。 */
 async function emptyMechaHint(api: CommandContext['api']): Promise<string> {
@@ -60,6 +61,23 @@ function fmtMechaTable(mechas: MechaView[], issuerId: string): string {
     return value;
   });
   return `${rendered}\n${chalk.dim('Construction = 施工 active/pending：active 通常为 0（1–2 tick 落成），pending 才是排队/缺料（见 planet_runtime --mine 的 wait_reason）')}`;
+}
+
+/**
+ * dispatch_mecha：把发令者的一台机甲瞬移到目标行星（第 22 轮 §2）。
+ * 一个发令者可以绑多台机甲，多台时服务端要求点名 mecha_id。
+ */
+export async function cmdDispatchMecha(args: string[], ctx: CommandContext): Promise<string> {
+  const parsed = parseArgs(args);
+  if (args.includes('--help') || parsed.positionals.length < 1 || parsed.positionals.length > 2) {
+    return fmtError('Usage: dispatch_mecha <planet_id> [mecha_id]');
+  }
+  const [planetId, mechaId] = parsed.positionals;
+  try {
+    return fmtCommandResponse(await ctx.api.cmdDispatchMecha(planetId, mechaId));
+  } catch (error) {
+    return fmtError(error instanceof Error ? error.message : String(error));
+  }
 }
 
 /** 回执里是否真的执行成功：以服务端结论为准，客户端预期不能替代它。 */
@@ -129,7 +147,10 @@ export async function cmdMecha(args: string[], ctx: CommandContext): Promise<str
         : `${mechaId} 已解绑（空闲）`;
       return `${fmtCommandResponse(response)}\n${note}`;
     }
-    return fmtError(`未知子命令: ${sub}（mecha list | mecha assign <mecha_id> [operator] | mecha assign <mecha_id> --release）`);
+    if (sub === 'dispatch') {
+      return cmdDispatchMecha(args.slice(1), ctx);
+    }
+    return fmtError(`未知子命令: ${sub}（mecha list | mecha assign <mecha_id> [operator] | mecha assign <mecha_id> --release | mecha dispatch <planet_id> [mecha_id]）`);
   } catch (error) {
     return fmtError(error instanceof Error ? error.message : String(error));
   }

@@ -1536,7 +1536,6 @@ export function PlanetEntityPanel({
           </section>
         ) : null}
         <MechaControls
-          boundMecha={myMecha}
           catalog={catalog}
           mecha={selectMechaById(summary, session.playerId, unit.id)}
           planetId={planet.planet_id}

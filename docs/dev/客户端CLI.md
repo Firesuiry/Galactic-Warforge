@@ -121,7 +121,8 @@ scripts/sw - < commands.txt             # 从 stdin 逐行执行
 - **研究**：至少 1 个 `running` 研究站（`matrix_lab` 不设配方即研究模式），所需矩阵须已在研究站本地库存，推进时真实消耗。`summary` 的 `tech.current_research.blocked_reason` 为 `waiting_lab`/`waiting_matrix`/`low_power`，`speed_multiplier` 与 `estimated_ticks_remaining` 反映供电降速。
 - **机甲**：背包挂在机甲上，`summary` / `briefing` 显示的是**当前发令者绑定的机甲**（`mechas.find(m => m.operator === issuer_id)`）的背包；未绑定时提示「未绑定机甲：mecha list / mecha assign <id>」。
   - `mecha list`：本方全部机甲（ID、星球、操作者、存活、背包格数、施工中/排队），当前发令者那台加粗。
-  - `mecha assign <mecha_id> [operator]`：把机甲绑给发令者（operator 缺省 = 自己），`--release` 解绑为空闲。同玩家任何发令者都能改绑本方机甲；绑定别人的机甲时对方自动解绑。
+  - `mecha assign <mecha_id> [operator]`：把机甲绑给发令者（operator 缺省 = 自己），`--release` 解绑为空闲。同玩家任何发令者都能改绑本方机甲；**一个发令者可以绑多台机甲**，绑定不会解绑同一 operator 的其它机甲。
+  - `mecha dispatch <planet_id> [mecha_id]`（等价 `dispatch_mecha <planet_id> [mecha_id]`）：把发令者的一台机甲瞬移到目标行星（本轮不做飞行时间）；绑了多台时必须点名 `mecha_id`。
   - 需要机甲的命令（`build` / `upgrade` / `demolish` / `transfer` / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / 安装物流载具 / 军工排产）一律由发令者绑定的机甲执行，不再带 `<executor_id>`；未绑定、机甲不在本星球或阵亡时返回 `EXECUTOR_UNAVAILABLE`。被别的发令者绑定的机甲不能 `move`/`attack`/`order`（该单位返回 `NOT_OPERATOR`），空闲机甲谁都能动。
   - `mine_resource` 在 6 cell 内采有限固体矿点（`resource_id` 是矿点 ID，不是物品 ID），每 10 tick 1 件；`craft_item` 只限 `handcraft_allowed=true` 且已解锁的配方，quantity 为批数。采矿每件耗 3 核心，手搓每批耗 `max(1, 时长/20)` 核心，缺能暂停。quantity 只接受正十进制安全整数。`refuel_mecha <fuel_item_id> [count]` 只接受 `items[].mecha_fuel_energy > 0` 的燃料，count 缺省 1，烧到核心满为止。靠近运行中的自有无线输电塔（18 cell）或电力感应塔（12 cell）自动充电。
   - 新机甲在战场分析基站制造：`produce <hq_id> executor`（成本：铁块 16、齿轮 8、磁线圈 8、电路板 8，从基站存储扣）。出厂时空闲、空背包，用 `mecha assign` 接管。
@@ -303,7 +304,7 @@ as                                     # 临时恢复为玩家本人发令
 <!-- BEGIN GENERATED COMMANDS -->
 <!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GAME_COMMANDS/COMMANDS/HELP_ENTRIES 与 shared-client 命令目录 -->
 
-### 游戏命令（65 条，对应 `POST /commands`）
+### 游戏命令（66 条，对应 `POST /commands`）
 
 | 动词 | 用法 | API 命令 | 权限类别 | 说明 |
 |---|---|---|---|---|
@@ -333,6 +334,7 @@ as                                     # 临时恢复为玩家本人发令
 | `demolish` | `demolish <entity_id> [--planet <planet_id>]` | `demolish` | build | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | `demolish_dyson <system_id> <node\|frame\|shell> <component_id>` | `demolish_dyson` | build | Demolish a Dyson sphere component |
 | `deploy_squad` | `deploy_squad <building_id> <blueprint_id> [--count <n>] [--planet <planet_id>]` | `deploy_squad` | combat | Consume a squad payload from a hub and create a combat squad |
+| `dispatch_mecha` | `dispatch_mecha <planet_id> [mecha_id]` | `dispatch_mecha` | management | 把发令者的一台机甲瞬移到目标行星（本轮不做飞行时间）；一个发令者绑了多台机甲时必须点名 mecha_id |
 | `dissolve_squad` | `dissolve_squad <squad_id> [--planet <id>]` | `dissolve_squad` | combat | 解散军团，单位保留当前指令 |
 | `fleet_assign` | `fleet_assign <fleet_id> <line\|vee\|circle\|wedge>` | `fleet_assign` | combat | Change a fleet formation |
 | `fleet_attack` | `fleet_attack <fleet_id> <planet_id> <target_id>` | `fleet_attack` | combat | Order a fleet to attack a target in the same system |
@@ -343,7 +345,7 @@ as                                     # 临时恢复为玩家本人发令
 | `install_logistics_vehicle` | `install_logistics_vehicle <station_id> <logistics_drone\|logistics_vessel> <quantity> [--source player\|station]` | `install_logistics_vehicle` | management | 消耗背包或站内成品安装运输器，受站点槽位上限限制 |
 | `launch_rocket` | `launch_rocket <building_id> <system_id> [--layer <n>] [--count <n>] [--planet <planet_id>]` | `launch_rocket` | management | Launch loaded rockets from a Vertical Launching Silo into a Dyson layer |
 | `launch_solar_sail` | `launch_solar_sail <building_id> [--count <n>] [--orbit-radius <n>] [--inclination <n>] [--planet <planet_id>]` | `launch_solar_sail` | management | Launch loaded solar sails from an EM Rail Ejector |
-| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release>` | `assign_mecha` | management | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
+| `mecha` | `mecha <list\|assign <mecha_id> [operator]\|assign <mecha_id> --release\|dispatch <planet_id> [mecha_id]>` | `assign_mecha` | management | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑；一个发令者可以绑多台）/ dispatch 把机甲投送到另一颗行星 |
 | `mine_resource` | `mine_resource <resource_id> <quantity> [--planet <planet_id>]` | `mine_resource` | management | 用我的机甲手动采集固体资源到机甲背包（按发令者机甲所在行星结算）。resource_id 取自 scene 的 resources[].id（资源节点 id，如 r-12），不是物品 id；矿点须在机甲 6 格内 |
 | `move` | `move <entity_id> <x> <y> [--z <z>]` | `move` | combat | Move entity to position |
 | `order` | `order <entity_id[,entity_id...]> <attack_move\|patrol\|guard\|hold\|follow\|retreat\|stop> [x y] [--target <entity_id>] [--planet <planet_id>]` | `unit_order` | combat | R5 部队指令：攻击移动/巡逻/守卫/坚守/跟随/撤退/停止（支持逗号分隔批量；--planet 跨行星同 ID 消歧） |

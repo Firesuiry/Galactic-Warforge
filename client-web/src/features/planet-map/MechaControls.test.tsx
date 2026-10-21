@@ -245,10 +245,9 @@ describe('操作者行（契约 §7.3）', () => {
     expect(screen.queryByLabelText('机甲物流请求')).toBeNull();
   });
 
-  it('别人的机甲：显示操作者与只读背包，隐藏控件；已有绑定时提示旧机甲变空闲', () => {
+  it('别人的机甲：显示操作者与只读背包，隐藏控件（接管不会解绑同一发令者的其它机甲）', () => {
     render(
       <MechaControls
-        boundMecha={mechaRecord({ unit_id: 'u-old' })}
         catalog={craftingCatalog}
         mecha={mechaRecord({ operator: 'builder-a', inventory: { iron_ingot: 3 }, inventory_slots_used: 1 })}
         planetId="planet-1-1"
@@ -257,7 +256,8 @@ describe('操作者行（契约 §7.3）', () => {
     );
     expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('builder-a');
     expect(screen.getByLabelText('机甲操作者')).toHaveTextContent('背包 1/40 格');
-    expect(screen.getByText('接管后 u-old 变为空闲')).toBeInTheDocument();
+    // 第 22 轮 §3：一个发令者可以绑多台机甲，接管不再把旧的挤成空闲，所以没有这条提示。
+    expect(screen.queryByText(/变为空闲/)).toBeNull();
     expect(screen.queryByRole('button', { name: '开始制造' })).toBeNull();
     expect(screen.queryByRole('button', { name: '补 1 个' })).toBeNull();
   });

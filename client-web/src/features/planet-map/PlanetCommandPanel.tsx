@@ -14,7 +14,7 @@ import type {
 
 import { toPlayerFacingMessage } from "@/common/player-facing-error";
 import { submitPlanetCommand } from "@/features/planet-commands/executor";
-import { selectMyMecha } from "@/features/mecha/model";
+import { selectMyMecha, selectPlayerMechas } from "@/features/mecha/model";
 import {
   canReceiveTransferItems,
   constructionTaskLabel,
@@ -252,6 +252,9 @@ export function PlanetCommandPanel({
   const [transferQuantity, setTransferQuantity] = useState("10");
   const [switchPlanetId, setSwitchPlanetId] = useState("");
   const [switchPlanetManualId, setSwitchPlanetManualId] = useState("");
+  /** 机甲投送（第 22 轮 §2）：目标行星 + 可选的点名机甲。 */
+  const [dispatchPlanetId, setDispatchPlanetId] = useState("");
+  const [dispatchMechaId, setDispatchMechaId] = useState("");
   const [rayReceiverBuildingId, setRayReceiverBuildingId] = useState("");
   const [rayReceiverMode, setRayReceiverMode] = useState<
     "power" | "photon" | "hybrid"
@@ -283,6 +286,8 @@ export function PlanetCommandPanel({
   /** 装料只从「我的机甲」背包扣（契约 §7.3）：玩家本身不再有 inventory。 */
   const myMecha = selectMyMecha(summary, playerId);
   const myMechaInventory = myMecha?.inventory;
+  /** 我的全部机甲（一个发令者可以绑多台，投送时要能点名）。 */
+  const myMechas = selectPlayerMechas(summary, playerId);
   const currentSystemId =
     planet.system_id ??
     system?.system_id ??
@@ -1949,6 +1954,64 @@ export function PlanetCommandPanel({
             type="button"
           >
             切换活动行星
+          </button>
+        </div>
+        <div className="section-title">机甲投送</div>
+        <p className="subtle-text">
+          把一台机甲瞬移到另一颗已加载行星（本轮不做飞行时间）。落点优先本方基站旁，
+          没有基站就落在行星中心附近；投送过去的机甲本身就是据点。
+        </p>
+        <div className="compact-form-grid">
+          <label className="field field--span-2">
+            <span>目标行星</span>
+            <select
+              onChange={(event) => setDispatchPlanetId(event.target.value)}
+              value={dispatchPlanetId}
+            >
+              <option value="">选择要投送到的行星</option>
+              {switchablePlanets.map((targetPlanet) => (
+                <option key={targetPlanet.planet_id} value={targetPlanet.planet_id}>
+                  {targetPlanet.name ?? targetPlanet.planet_id} ·{" "}
+                  {targetPlanet.planet_id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field field--span-2">
+            <span>机甲（绑了多台时必须点名）</span>
+            <select
+              onChange={(event) => setDispatchMechaId(event.target.value)}
+              value={dispatchMechaId}
+            >
+              <option value="">自动（只有一台机甲时）</option>
+              {myMechas.map((mecha) => (
+                <option key={mecha.unit_id} value={mecha.unit_id}>
+                  {mecha.unit_id} · {mecha.planet_id}
+                  {mecha.operator ? ` · ${mecha.operator}` : " · 空闲"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary-button field--span-2"
+            disabled={
+              !dispatchPlanetId ||
+              (busyAction !== "" && busyAction !== "dispatch_mecha")
+            }
+            onClick={() => {
+              const target = dispatchPlanetId;
+              void runCommand(
+                "dispatch_mecha",
+                () => client.cmdDispatchMecha(target, dispatchMechaId || undefined),
+                {
+                  planetId: target,
+                  focus: { planetId: target },
+                },
+              );
+            }}
+            type="button"
+          >
+            投送机甲
           </button>
         </div>
         </section>

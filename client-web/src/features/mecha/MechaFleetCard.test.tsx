@@ -24,7 +24,7 @@ describe('MechaFleetCard 操作者列（契约 §7.3 第 4 条）', () => {
 
   it('别人的操作者名正常字重（不是 strong），也没有「我」的强调类', () => {
     renderCard();
-    // u-6 阵亡但操作者是 builder-b：一个发令者只绑一台机甲，不能也挂在 p1 名下
+    // u-6 阵亡但操作者是 builder-b：操作者名原样显示，不能也挂在 p1 名下
     const other = within(row('u-6')).getByText('builder-b');
     expect(other.tagName).toBe('SPAN');
     expect(other.className).not.toContain('command-mechas__operator--me');

@@ -183,11 +183,11 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 <!-- BEGIN GENERATED COMMANDS -->
 <!-- 由 scripts/gen_command_docs.py 生成，勿手改；数据源 GET /catalog/commands 与 shared-client 命令目录 -->
 
-共 65 条公开命令。target 列为 `target` 必填字段；载荷列为 `payload` 字段（可选字段带 `?`）。
+共 66 条公开命令。target 列为 `target` 必填字段；载荷列为 `payload` 字段（可选字段带 `?`）。
 
 | 命令 | 层级 | target 必填 | payload | CLI 动词 | 说明 |
 |---|---|---|---|---|---|
-| `assign_mecha` | planet | `entity_id` | `operator` | `mecha` | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑） |
+| `assign_mecha` | planet | `entity_id` | `operator` | `mecha` | 列出本方机甲（含当前作业；Construction 列 active/pending 中 pending 才是排队/缺料）/ 把机甲绑给发令者（operator 缺省 = 自己；--release 解绑；一个发令者可以绑多台）/ dispatch 把机甲投送到另一颗行星 |
 | `attack` | planet | — | `target_entity_id` | `attack` | Attack target entity |
 | `blockade_planet` | planet | — | `task_force_id`, `planet_id` | `blockade_planet` | Issue a blockade intent against one planet |
 | `blueprint_create` | planet | — | `blueprint_id`, `domain`, `name?`, `base_frame_id?`, `base_hull_id?` | `blueprint_create` | Create a draft warfare blueprint |
@@ -214,6 +214,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 | `demolish` | planet | `entity_id` | — | `demolish` | Demolish building（按建筑所在行星结算） |
 | `demolish_dyson` | system | — | `system_id`, `component_type`, `component_id` | `demolish_dyson` | Demolish a Dyson sphere component |
 | `deploy_squad` | planet | — | `member_ids?`, `name?`, `building_id?`, `blueprint_id?`, `count?`, `planet_id?` | `deploy_squad` | Consume a squad payload from a hub and create a combat squad |
+| `dispatch_mecha` | planet | `planet_id` | — | `dispatch_mecha` | 把发令者的一台机甲瞬移到目标行星（本轮不做飞行时间）；一个发令者绑了多台机甲时必须点名 mecha_id |
 | `dissolve_squad` | planet | — | `squad_id` | `dissolve_squad` | 解散军团，单位保留当前指令 |
 | `fleet_assign` | system | — | `fleet_id`, `formation` | `fleet_assign` | Change a fleet formation |
 | `fleet_attack` | system | — | `fleet_id`, `planet_id`, `target_id` | `fleet_attack` | Order a fleet to attack a target in the same system |
@@ -255,7 +256,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **附加约束**（来自目录 `constraints`）：
 
-- `assign_mecha`：target.entity_id = 机甲单位 ID；payload.operator 必填（"" = 解绑）。同玩家的任何发令者都能改绑本方机甲；operator 已绑别的机甲时那台自动解绑。
+- `assign_mecha`：target.entity_id = 机甲单位 ID；payload.operator 必填（"" = 解绑）。同玩家的任何发令者都能改绑本方机甲。一个发令者可以绑多台机甲：绑定不会解绑同一 operator 的其它机甲（第 22 轮起取消抢占语义）。
 - `attack`：指定攻击目标：单位追击至射程内按冷却开火，不再一次性结算。 F4 行星路由：按施令单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧。
 - `blueprint_create`：exactly one of base_frame_id or base_hull_id
 - `build`：F4 行星路由：target.planet_id 选择落点行星；缺省落在玩家焦点行星（switch_active_planet 设定）。 elevation 只对 conveyor_belt_mk1/2/3 有效（0–4，缺省 0 = 地面）；高架带必须有明确 direction（不能 auto），地面占用只能是空地或低矮物流建筑。
@@ -264,6 +265,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 - `configure_traffic_monitor`：Full replacement; empty target_belt_id clears binding. Otherwise bind an adjacent owned Mk.I/II/III belt. Reconfiguration clears observations.
 - `craft_item`：由发令者绑定的机甲手搓，原料从它的背包扣。
 - `deploy_squad`：exactly one form: member_ids (group existing units) or building_id + blueprint_id [+ count, default 1] (spawn hub payloads as world units, then group them)
+- `dispatch_mecha`：把发令者的一台机甲瞬移到 target.planet_id 指定的已加载行星（本轮不做飞行时间）。target.planet_id 是目标星球，不是源星球。target.mecha_id 缺省时：发令者只有一台机甲就用它，有多台则必须点名（VALIDATION_FAILED）。落点优先本方基站旁，没有基站用行星中心附近。投送后机甲档案的 planet_id 同步更新，背包随档案走。
 - `form_squad`：entity_ids are 1-300 living owned military units (supply trucks may join); units already in a squad are rejected
 - `mine_resource`：由发令者绑定的机甲执行；未绑定/不在本星球/阵亡返回 EXECUTOR_UNAVAILABLE。
 - `move`：实时移动：命令只下达路径指令，单位每 tick 按移速沿路径推进；entity_ids 支持框选批量。 F4 行星路由：按目标单位所在行星结算；跨行星同 ID 时用 target.planet_id 消歧，缺省优先玩家焦点行星。
@@ -280,10 +282,14 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 ### 5.1 执行体与建造
 
-- 执行体（机甲）是玩家的星球 `Unit`（`type=executor`），每个玩家可有多台。**需要机甲的命令一律由发令者（`issuer_id`）绑定的那台执行**，不再从 `target.entity_id` 取机甲：`build` / `upgrade` / `demolish` / `transfer_item` / `install_logistics_bot` / `uninstall_logistics_bot` / `install_logistics_vehicle`(source=player) / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / `queue_military_production` / `refit_unit`。解析失败统一 `EXECUTOR_UNAVAILABLE`（未绑定 / 不在本星球 / 阵亡三种消息）。
+- 执行体（机甲）是玩家的星球 `Unit`（`type=executor`），每个玩家可有多台。**需要机甲的命令一律由发令者（`issuer_id`）绑定的那台执行**，不再从 `target.entity_id` 取机甲：`build` / `upgrade` / `demolish` / `transfer_item` / `install_logistics_bot` / `uninstall_logistics_bot` / `install_logistics_vehicle`(source=player) / `mine_resource` / `craft_item` / `cancel_mecha_job` / `refuel_mecha` / `configure_mecha_logistics` / `queue_military_production` / `refit_unit`。
+- 一个发令者可以绑多台机甲（第 22 轮），所以这些命令支持 `target.mecha_id` 点名执行；解析顺序：点名（必须本方机甲 → `ENTITY_NOT_FOUND`，必须绑给本发令者 → `NOT_OPERATOR`，必须在本星球 → `EXECUTOR_UNAVAILABLE`）→ 缺省取「本发令者绑定的、`planet_id` 等于当前世界行星的机甲里 unit ID 最小的那台」。一台都没有时：完全没有绑定 → `EXECUTOR_UNAVAILABLE`「<issuer> 还没有绑定机甲：先用 assign_mecha 接管一台（mecha list 查看）」；有绑定但都在别的星球 → `EXECUTOR_UNAVAILABLE`「你的机甲都在别的星球：<ids>（用 dispatch_mecha 投送，或 switch_active_planet 切焦点）」。阵亡仍是 `EXECUTOR_UNAVAILABLE`。
+- **路由**：`target.mecha_id` 指定的机甲在某行星时，不带 `target.planet_id` 的命令路由到那台机甲的行星（在「显式 planet_id」之后、实体引用之前生效）。`dispatch_mecha` 例外——它的 `target.planet_id` 是投送目标。
+- 开局只在出生星球（`battlefield.initial_active_planet_id`）建基站、造一台绑定的机甲并发放 bootstrap；其它已加载行星什么都不建，`scenario_bootstrap` 显式配置的建筑照旧注入。新行星一开始没有 foothold，`switch_active_planet` 会以 `VALIDATION_FAILED`「目标星球需先建立据点」拒绝，必须先把机甲 `dispatch_mecha` 投送过去（投送过去的机甲本身就算据点）。
 - 距离：目标处于己方建造中心（带 `build_radius` 的建筑，目前为 `battlefield_analysis_base`，半径 72 cell）覆盖内即可远程操作；覆盖外要求该机甲在 `units.yaml executor.mecha.operate_range`（18 cell）内，超距 `OUT_OF_RANGE`「超出机甲作业范围：<distance> > <operate_range>」。`queue_military_production` / `refit_unit` 不要求距离，只要求机甲在本星球。
 - 并发上限按机甲跨全部行星聚合（每台 `executor.mecha.concurrent_tasks` = 2）：`upgrade`/`demolish` 超限执行失败；`build` 超限进施工队列等待。区域并发建造上限 = 配置值 + `mass_construction` 等级。
-- `assign_mecha`：`target.entity_id` = 机甲单位 ID，`payload.operator` 必填（`""` = 解绑；非空须匹配 `^[A-Za-z0-9_.:-]{1,64}$`，可以是本玩家 ID）。一个 issuer_id 至多绑一台机甲、一台机甲至多一个操作者；同玩家的任何发令者都能改绑本方机甲；`operator` 已绑别的机甲时那台自动解绑（事件带 `released_mecha_id`）。机甲不存在/不是本方 → `ENTITY_NOT_FOUND` / `NOT_OWNER`；复活中的机甲也可以改绑。产出 `entity_updated`：`{mecha_id, operator, released_mecha_id?}`。
+- `assign_mecha`：`target.entity_id` = 机甲单位 ID，`payload.operator` 必填（`""` = 解绑；非空须匹配 `^[A-Za-z0-9_.:-]{1,64}$`，可以是本玩家 ID）。一台机甲至多一个操作者；同玩家的任何发令者都能改绑本方机甲。**一个发令者可以绑多台机甲**：绑定只写这一台档案的 `Operator`，不会解绑同一 operator 的其它机甲（第 22 轮取消抢占语义），同一台重复绑同一 operator = 幂等成功。机甲不存在/不是本方 → `ENTITY_NOT_FOUND` / `NOT_OWNER`；复活中的机甲也可以改绑。产出 `entity_updated`：`{mecha_id, operator}`。
+- `dispatch_mecha`：把发令者的一台机甲**瞬移**到 `target.planet_id` 指定的已加载行星（本轮不做飞行时间）。`target.planet_id` 是**目标**星球，不是源星球。`target.mecha_id` 缺省时：发令者只有一台机甲就用它，≥2 台 → `VALIDATION_FAILED`「你有 N 台机甲，dispatch_mecha 需要 target.mecha_id 点名」。校验顺序：目标星球运行时未加载 → `INVALID_TARGET`「星球运行时 %s 未加载」；未发现 → `VALIDATION_FAILED`「目标星球未被发现」；已在目标星球 → `VALIDATION_FAILED`「机甲 %s 已在 %s」；作业中（`mecha.job != nil`）→ `VALIDATION_FAILED`「机甲 %s 正在作业，先 cancel_mecha_job」。落点：本方基站旁（多个基站按 ID 升序）→ 行星中心附近空地 → 都没有则 `VALIDATION_FAILED`「%s 上没有机甲落点」。执行后源世界 `units`/`tile_units` 摘除、目标世界用**同一个 unit ID** 重建（满血满能量、空作业），档案 `planet_id` 改为目标行星，背包随档案走，`focus_planet_id` 不变。回执「机甲 %s 已投送到 %s」；产出 `entity_updated`：`{entity_type: "mecha", mecha_id, planet_id, from_planet_id}`（仅该玩家可见）。
 - `build`：
   - `direction`（传送带、集装机；默认 `east`，`auto` 允许多向路由）、`rotation`（0/90/180/270，作用于占地、端口、分拣器与物流方向）、`recipe_id`（非空；省略时回退 `default_recipe_id`，仍校验配方解锁）、`auto_approach`（施工先排队，执行体按真实路径耗能移动到范围内后开工；不可达拒绝）。缺料时 `INSUFFICIENT_RESOURCE`，message 一次列出**全部**缺口：「背包缺：铁块 3、齿轮 2」（`upgrade` / `craft_item` 同格式）。
   - **多层传送带（第 19 轮契约 §3）**：`elevation`（0–4，缺省 0 = 地面）只对 `conveyor_belt_mk1/mk2/mk3` 有效；其它建筑给 >0 → `INVALID_ELEVATION`「只有传送带可以架高」，越界同码「高度只能 0–4 层」。高架带方向：`direction` 优先，其次按 `rotation` 推（90=east、180=south、270=west、0=north），都没给时缺省 `east`；显式 `auto` 仍被拒绝（`INVALID_ELEVATION`）。高架格的地面占用只能是空地或低矮物流建筑（`conveyor_belt_*`、`splitter`、`automatic_piler`、`traffic_monitor`、`sorter_*`、`pile_sorter`，含施工中），否则 `POSITION_OCCUPIED`「高架传送带不能架在建筑上方」/「第 N 层该格下方有地面施工任务：<建筑>」；反过来，地面层造非低矮物流建筑时占地内不能有高架带或高架施工任务 → `POSITION_OCCUPIED`「上方有高架传送带」/「该格上方第 N 层已有传送带施工任务：<建筑>」。高架带不占 `TileBuilding`（地面单位可从下面走过，分拣器与建筑直连 IO 只接地面层），建筑 JSON 的 `conveyor.elevation` 表示所在层。连接规则：同层优先；同层没连上时看邻格 `a±1` 层的**纯传送带**，且必须是直行延续（`output == d'`），坡道不许转弯/侧汇；否则死头。
@@ -506,7 +512,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 **`GET /world/planets/{planet_id}/scene`**：局部场景。
 - 参数：`x` / `y` / `width` / `height`（图集窗口，默认 160、最大 257，越界自动裁剪）；可选 `near_x` / `near_y` / `radius`（0..128，非零时中心须为有效地格，否则 400）返回跨面补片。
-- 字段：`bounds`、`terrain`、`height`（可选 0..1，未探索为 0 或不下发）、`visible` / `explored`、`buildings`、`units`、`resources`、`surface_patches[]{bounds, terrain, height, visible, explored}`（未探索地形为 `unknown`，资源只在已探索格返回；实体合并到主响应并去重），以及整星计数。
+- 字段：`bounds`、`terrain`、`height`（可选 0..1，未探索为 0 或不下发）、`visible` / `explored`、`buildings`、`units`、`mecha_operators`（机甲单位 ID → 操作者，只含请求玩家自己档案里的非空绑定：3D 场景据此画 operator 名牌）、`resources`、`surface_patches[]{bounds, terrain, height, visible, explored}`（未探索地形为 `unknown`，资源只在已探索格返回；实体合并到主响应并去重），以及整星计数。
 - `buildings` 为 `model.Building` 直出，按类型带子结构：`conveyor`（含 `blocked_ticks`，带上有货却连续没动出去的 tick 数）、`splitter`、`sorter`、`production`（含 `progress_fraction`、`pending_outputs`）、`fractionation`、`spray_coater`、`traffic_monitor`、`distributor`、`unit_queue`、`rally_point`、`mining_item`（采集建筑唯一开采的矿种）、`runtime.functions.collect{resource_kind, coverage_radius}` 等。
 - `resources[]` 枯竭时带 `depleted: true`，仍保留输出。
 

@@ -81,7 +81,7 @@ import { cmdCheckpoint } from './checkpoint.js';
 import { cmdWait, type WaitOptions } from './wait.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
-import { cmdMecha } from './mecha.js';
+import { cmdDispatchMecha, cmdMecha } from './mecha.js';
 import {
   cmdBlueprints,
   cmdFleetStatus,
@@ -133,7 +133,8 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   install_logistics_bot: { handler: installBot },
   uninstall_logistics_bot: { handler: uninstallBot },
   configure_mecha_logistics: { handler: configureMechaLogistics },
-  mecha: { handler: cmdMecha, completions: ['list', 'assign'] },
+  mecha: { handler: cmdMecha, completions: ['list', 'assign', 'dispatch'] },
+  dispatch_mecha: { handler: cmdDispatchMecha },
   health: { handler: cmdHealth },
   metrics: { handler: cmdMetrics },
   summary: { handler: cmdSummary },
