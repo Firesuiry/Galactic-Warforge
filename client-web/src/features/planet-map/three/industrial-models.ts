@@ -541,12 +541,18 @@ export class IndustrialModels {
     this.ring(group, 'alloy', 0.235, 0.56, 0, -0.045);
     this.part(group, 'dome', armor, [0.49, 0.28, 0.49], [0, 0.745, -0.045]);
     this.ring(group, light, 0.22, 0.72, 0, -0.045);
-    // 穹顶肋条：从穹顶基部到顶心各 1 根细管，贴着球面走（俯视是放射状，侧面是拱肋）。
+    // 穹顶肋条：沿椭球面（a=.245 / c=.14，中心 y=.745）分两段从基部走到顶心，
+    // 俯视是放射状拱肋，侧面读得出穹顶分片（之前的单段直管会埋进球面，只剩几截虚线）。
+    const domeY = (r: number) => 0.745 + 0.14 * Math.sqrt(Math.max(0, 1 - (r / 0.245) ** 2)) + 0.004;
     for (let i = 0; i < 6; i++) {
-      const a = i * Math.PI / 3;
-      this.pipe(group, 'alloy', [Math.cos(a) * 0.235, 0.755, Math.sin(a) * 0.235 - 0.045], [Math.cos(a) * 0.075, 0.995, Math.sin(a) * 0.075 - 0.045], 0.007);
+      const a = i * Math.PI / 3, dx = Math.cos(a), dz = Math.sin(a);
+      this.pipe(group, 'alloy', [dx * 0.225, domeY(0.225), dz * 0.225 - 0.045], [dx * 0.135, domeY(0.135), dz * 0.135 - 0.045], 0.007);
+      this.pipe(group, 'alloy', [dx * 0.135, domeY(0.135), dz * 0.135 - 0.045], [dx * 0.045, domeY(0.045), dz * 0.045 - 0.045], 0.007);
     }
-    this.part(group, 'cylinder', 'graphite', [0.07, 0.05, 0.07], [0, 1.0, -0.045]);
+    // 穹顶顶部排气口：合金短筒 + 石墨格栅（不再是「一个黑洞」）。
+    this.part(group, 'cylinder', 'alloy', [0.09, 0.035, 0.09], [0, 0.888, -0.045]);
+    this.part(group, 'cylinder', 'graphite', [0.07, 0.045, 0.07], [0, 0.895, -0.045]);
+    this.ring(group, 'copper', 0.05, 0.918, 0, -0.045);
     // 两侧设备翼：装甲壳 + 通风格栅 + 螺栓排。
     for (const x of [-0.29, 0.29]) {
       this.box(group, armor, [0.17, 0.27, 0.47], [x, 0.36, 0.025]);

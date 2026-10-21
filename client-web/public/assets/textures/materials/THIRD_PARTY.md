@@ -7,7 +7,7 @@
 | --- | --- | --- | --- |
 | `painted_metal-*` | Paint004 | https://ambientcg.com/view?id=Paint004 | 白色涂装金属面板（陶瓷族，己方主装甲） |
 | `brushed_metal-*` | Metal010 | https://ambientcg.com/view?id=Metal010 | 拉丝钛（结构件、支架、炮管） |
-| `plate_metal-*` | MetalPlates003 | https://ambientcg.com/view?id=MetalPlates003 | 石墨色铆接钢板（底座、机架、暗部） |
+| `plate_metal-*` | MetalPlates001 | https://ambientcg.com/view?id=MetalPlates001 | 铆接钢板（底座、机架、暗部；1 格 1 块板） |
 | `diamond_plate-*` | DiamondPlate004 | https://ambientcg.com/view?id=DiamondPlate004 | 花纹钢板（地基、踏板、平台） |
 | `rubber-*` | Rubber001 | https://ambientcg.com/view?id=Rubber001 | 橡胶（传送带带面、轮子） |
 | `plastic-*` | Plastic013A | https://ambientcg.com/view?id=Plastic013A | 哑光塑料（线槽、按钮座、非金属小件） |

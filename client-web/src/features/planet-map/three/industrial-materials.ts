@@ -20,7 +20,7 @@ const ROOT = '/assets/textures/materials/';
 const MEAN_ALBEDO: Record<PbrFamily, string> = {
   ceramic: '#c2e3e8',
   alloy: '#848b92',
-  graphite: '#81878d',
+  graphite: '#80858c',
   plate: '#767c7e',
   rubber: '#1a1c1d',
   plastic: '#eeeae9',
