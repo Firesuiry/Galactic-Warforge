@@ -19,3 +19,5 @@
 | `lava_*` | Lava004 | https://ambientcg.com/view?id=Lava004 | 岩浆冷却硬壳；`lava_emissive.webp` 为其 Emission 图 |
 
 改动：仅裁切/缩放到 1024²、通道打包与 webp 压缩；未做内容修改。
+
+| `water_normal.webp` | Ice001（法线图派生） | https://ambientcg.com/view?id=Ice001 | 水面两层滚动法线（原法线 45% + 高斯模糊 55%，512²，非贴图内容原样） |
