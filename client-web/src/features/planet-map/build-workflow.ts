@@ -365,7 +365,7 @@ function buildReachability(
 ) {
   // 契约 §7.3：建造扣料/走位按「我的机甲」（summary.mechas 里 operator = 自己），
   // 不再读 players[me].executor。档案自带 operate_range（units.yaml executor.mecha）。
-  const myMecha = selectMyMecha(summary, playerId);
+  const myMecha = selectMyMecha(summary, playerId, planet.planet_id);
   const executorUnitId = myMecha?.unit_id;
   const executor = executorUnitId ? planet.units?.[executorUnitId] : undefined;
   const moveRange = executor?.move_range;

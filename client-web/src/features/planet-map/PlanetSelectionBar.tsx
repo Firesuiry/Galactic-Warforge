@@ -238,7 +238,7 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
     if (!resource) return null;
     // 「我的机甲」= summary 里 operator 等于自己的那台（契约 §7.3）：采集命令不再带 entity_id，
     // 服务端按发令者绑定的机甲执行；这里只用来显示能量/作业/距离。
-    const myMecha = selectMyMecha(summary, session.playerId);
+    const myMecha = selectMyMecha(summary, session.playerId, planet.planet_id);
     const mecha = myMecha ? planet.units?.[myMecha.unit_id] : undefined;
     // `/scene` 只返回相机窗口内的实体：同星球但镜头移开时 `planet.units` 里没有它，
     // 不能当成「不在本星球」——按档案的 planet_id 判断。

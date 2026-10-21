@@ -17,9 +17,15 @@ export function playerMechas(player?: Pick<PlayerState, 'mechas'> | null): Mecha
 /**
  * 「我的机甲」= 操作者等于自己的那台（契约 §7.3）。
  * shared-client 的版本取玩家那一层，这里包一层 summary，省得每个调用点自己拆。
+ *
+ * 一个发令者可以绑多台机甲（可能在不同行星），传 `planetId` 时优先取那颗行星上的那台。
  */
-export function selectMyMecha(summary: StateSummary | undefined, playerId: string): MechaView | undefined {
-  return selectMyMechaFromSummary(summary, playerId, playerId);
+export function selectMyMecha(
+  summary: StateSummary | undefined,
+  playerId: string,
+  planetId?: string,
+): MechaView | undefined {
+  return selectMyMechaFromSummary(summary, playerId, playerId, planetId);
 }
 
 /** 玩家的全部机甲（从 summary 取）。 */

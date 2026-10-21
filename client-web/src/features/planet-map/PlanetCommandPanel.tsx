@@ -284,7 +284,7 @@ export function PlanetCommandPanel({
     summary?.players?.[playerId]?.tech?.current_research?.tech_id ?? "";
   const playerTechState = summary?.players?.[playerId]?.tech;
   /** 装料只从「我的机甲」背包扣（契约 §7.3）：玩家本身不再有 inventory。 */
-  const myMecha = selectMyMecha(summary, playerId);
+  const myMecha = selectMyMecha(summary, playerId, planet.planet_id);
   const myMechaInventory = myMecha?.inventory;
   /** 我的全部机甲（一个发令者可以绑多台，投送时要能点名）。 */
   const myMechas = selectPlayerMechas(summary, playerId);

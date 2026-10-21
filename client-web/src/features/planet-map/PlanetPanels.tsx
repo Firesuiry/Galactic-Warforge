@@ -993,7 +993,7 @@ export function PlanetEntityPanel({
   onCommandSettled,
 }: PlanetEntityPanelProps) {
   const session = useSessionSnapshot();
-  const myMecha = selectMyMecha(summary, session.playerId);
+  const myMecha = selectMyMecha(summary, session.playerId, planet.planet_id);
   const { selected } = usePlanetViewStore(
     useShallow((state) => ({
       selected: state.selected,

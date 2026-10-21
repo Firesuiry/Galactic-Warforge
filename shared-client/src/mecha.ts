@@ -13,15 +13,26 @@ function mechasOf(summaryOrBriefing: MechaHolder): MechaView[] {
 /**
  * 「我的机甲」= `mechas.find(m => m.operator === issuerId)`。
  * 服务端不额外区分发令者，客户端按自己的 issuer_id 在列表里找。
+ *
+ * 第 22 轮起一个 issuer 可以绑多台机甲（可能分散在不同行星），传了 `planetId`
+ * 时优先取那台行星上的（命令按它结算），没传或本星球没有时退回第一台。
  */
 export function selectMyMecha(
   summaryOrBriefing: MechaHolder,
   issuerId: string,
+  planetId?: string,
 ): MechaView | undefined {
   if (!issuerId) {
     return undefined;
   }
-  return mechasOf(summaryOrBriefing).find((mecha) => mecha.operator === issuerId);
+  const bound = mechasOf(summaryOrBriefing).filter((mecha) => mecha.operator === issuerId);
+  if (planetId) {
+    const onPlanet = bound.find((mecha) => mecha.planet_id === planetId);
+    if (onPlanet) {
+      return onPlanet;
+    }
+  }
+  return bound[0];
 }
 
 /** 从完整 summary 里取自己那一层的机甲列表。 */
@@ -29,8 +40,9 @@ export function selectMyMechaFromSummary(
   summary: StateSummary | null | undefined,
   playerId: string,
   issuerId: string,
+  planetId?: string,
 ): MechaView | undefined {
-  return selectMyMecha(summary?.players?.[playerId], issuerId);
+  return selectMyMecha(summary?.players?.[playerId], issuerId, planetId);
 }
 
 /** 按 unit_id 排序的机甲表格（mecha list / 总览共用）。 */
