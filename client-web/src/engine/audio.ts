@@ -9,7 +9,8 @@
  *   并做 ±4% 音高 / ±2 dB 音量扰动。
  * - **回退**：采样未加载完（或加载失败）时用程序合成音顶上（`buildSoundSpecs` 的旧语义
  *   原样保留），所以 jsdom / 首帧 / 弱网都不会「没声音」或报错。
- * - **循环声床**：ambient / music 用 BufferSource(loop=true) + 交叉淡化切换。
+ * - **循环声床**：每层（风 / 基地嗡鸣 / 轨道低频）各一路 BufferSource(loop=true) + GainNode，
+ *   同时播放、各自增益；消失的层淡出（1.5s）。配乐同机制，切换 3s 交叉淡化。
  *
  * 设计约束（与旧版一致，测试依赖）：
  * - 惰性创建 AudioContext，首次用户手势（pointerdown/keydown 捕获阶段）后 unlock，
@@ -452,7 +453,6 @@ export function setMix(patch: Partial<MixSettings>) {
   };
   persistMix(mix);
   applyMixGains();
-  if (ambientCurrent) applyAmbientLevel();
   if (musicCurrent) applyMusicLevel();
 }
 
@@ -623,10 +623,12 @@ function publishProbe() {
     get contextState() { return context?.state ?? null; },
     get mix() { return { ...mix }; },
     get samples() { return { loaded: samplesLoaded, requested: samplesRequested }; },
-    get ambient() { return ambientCurrent?.name ?? null; },
+    get ambient() { return ambientCurrent.map((voice) => voice.name); },
     get music() { return musicCurrent?.name ?? null; },
-    /** 想要（等待采样）的声床/配乐（加载完成前 ambient/music 仍是 null）。 */
-    get wantedAmbient() { return ambientWanted?.name ?? null; },
+    /** 想要（等待采样）的声床/配乐（加载完成前 ambient/music 仍是空的）。 */
+    get wantedAmbient() { return ambientWanted.map((layer) => layer.name); },
+    /** 各声床层的实际电平（验收：贴地 + 40 台运行建筑时风与机械都 > 0）。 */
+    get ambientLevels() { return getAmbientLevels(); },
     /** 场景 hook 调过几次 apply（排查「hook 没跑」与「采样没就绪」）。 */
     get sceneTicks() { return sceneTicks; },
     get wantedMusic() { return musicWanted?.name ?? null; },
@@ -656,8 +658,11 @@ function manifestPaths(bus: 'sfx' | 'ui', key: string): readonly string[] {
 // ---------- 播放入口 ----------
 
 export interface PlayOptions {
-  /** 空间位置（格坐标）——仅 sfx 用；缺省为非空间音。 */
-  spatial?: { tile: { x: number; y: number }; volumeDb: number; pan: number } | null;
+  /**
+   * 空间位置（格坐标）——仅 sfx 用；缺省为非空间音。
+   * 没有 tile（实体反查不到、按画面外处理）时只套用 volumeDb / pan。
+   */
+  spatial?: { tile?: { x: number; y: number }; volumeDb: number; pan: number } | null;
   /** 覆盖总线（默认按 SAMPLE_KEY）。 */
   bus?: 'sfx' | 'ui';
 }
@@ -878,12 +883,24 @@ interface LoopVoice {
   gain: GainNode;
 }
 
-let ambientCurrent: { name: AmbientName; voice: LoopVoice; level: number } | null = null;
+/** 正在播放的一路声床（风 / 基地嗡鸣 / 轨道低频各占一路，挂同一个 ambient 总线）。 */
+interface AmbientVoice {
+  name: AmbientName;
+  voice: LoopVoice;
+  level: number;
+}
+
+/** 想要的声床层（采样未就绪时只记下，tickAudioLoops 补起）。 */
+export interface AmbientLayerWanted {
+  name: AmbientName;
+  level: number;
+}
+
+let ambientCurrent: AmbientVoice[] = [];
 let musicCurrent: { name: MusicName; voice: LoopVoice; level: number } | null = null;
-/** 目标声床 / 配乐（即使采样未就绪也记下，加载完由 tickAudioLoops 起播）。 */
-let ambientWanted: { name: AmbientName; level: number } | null = null;
+/** 目标声床层 / 配乐（即使采样未就绪也记下，加载完由 tickAudioLoops 起播）。 */
+let ambientWanted: AmbientLayerWanted[] = [];
 let musicWanted: { name: MusicName; level: number } | null = null;
-let ambientTargetLevel = 0;
 let musicTargetLevel = 1;
 /** 页面切换交叉淡化（1.5s）/ 配乐状态切换（3s）。 */
 export const AMBIENT_CROSSFADE_SECONDS = 1.5;
@@ -920,13 +937,6 @@ function fadeOutLoop(ctx: AudioContext, voice: LoopVoice, seconds: number) {
   voice.source.stop(ctx.currentTime + seconds + 0.05);
 }
 
-function applyAmbientLevel() {
-  const ctx = context;
-  if (!ctx || !ambientCurrent) return;
-  ambientCurrent.level = ambientTargetLevel;
-  ambientCurrent.voice.gain.gain.setTargetAtTime(ambientTargetLevel, ctx.currentTime, 0.2);
-}
-
 function applyMusicLevel() {
   const ctx = context;
   if (!ctx || !musicCurrent) return;
@@ -934,10 +944,12 @@ function applyMusicLevel() {
   musicCurrent.voice.gain.gain.setTargetAtTime(musicTargetLevel, ctx.currentTime, 0.2);
 }
 
-/** 设置环境声床（null = 停止）；页面切换走 1.5s 交叉淡化。 */
-export function setAmbient(name: AmbientName | null, level = 1) {
-  ambientTargetLevel = name ? clamp01(level) : 0;
-  ambientWanted = name ? { name, level: ambientTargetLevel } : null;
+/**
+ * 设置环境声床层（空数组 = 停止）。每层各占一路 BufferSource + GainNode，
+ * 同时播放、各自增益（贴地时风与基地嗡鸣叠加）；消失的层 1.5s 淡出，新层 1.5s 淡入。
+ */
+export function setAmbientLayers(layers: readonly AmbientLayerWanted[]) {
+  ambientWanted = layers.map((layer) => ({ name: layer.name, level: clamp01(layer.level) }));
   reconcileAmbient();
 }
 
@@ -949,18 +961,21 @@ function reconcileAmbient() {
   if (!isAudioSupported() || !unlocked) return;
   const ctx = ensureContext();
   if (!ctx || !busGains) return;
-  const wanted = ambientWanted;
-  if (ambientCurrent?.name === (wanted?.name ?? null)) {
-    applyAmbientLevel();
-    return;
-  }
-  if (ambientCurrent) {
-    fadeOutLoop(ctx, ambientCurrent.voice, AMBIENT_CROSSFADE_SECONDS);
-    ambientCurrent = null;
-  }
-  if (wanted) {
-    const voice = startLoop(ctx, 'ambient', wanted.name, ambientTargetLevel);
-    if (voice) ambientCurrent = { name: wanted.name, voice, level: ambientTargetLevel };
+  const wantedNames = new Set(ambientWanted.map((layer) => layer.name));
+  ambientCurrent = ambientCurrent.filter((voice) => {
+    if (wantedNames.has(voice.name)) return true;
+    fadeOutLoop(ctx, voice.voice, AMBIENT_CROSSFADE_SECONDS);
+    return false;
+  });
+  for (const layer of ambientWanted) {
+    const existing = ambientCurrent.find((voice) => voice.name === layer.name);
+    if (existing) {
+      existing.level = layer.level;
+      existing.voice.gain.gain.setTargetAtTime(layer.level, ctx.currentTime, 0.2);
+      continue;
+    }
+    const voice = startLoop(ctx, 'ambient', layer.name, layer.level);
+    if (voice) ambientCurrent.push({ name: layer.name, voice, level: layer.level });
   }
 }
 
@@ -985,6 +1000,7 @@ function reconcileMusic() {
     musicCurrent = null;
   }
   if (wanted) {
+    // 配乐懒加载：进入该状态时才取（low 档不预载，见 features/audio/quality.ts）。
     const voice = startLoop(ctx, 'music', wanted.name, musicTargetLevel);
     if (voice) musicCurrent = { name: wanted.name, voice, level: musicTargetLevel };
   }
@@ -1000,8 +1016,13 @@ export function tickAudioLoops() {
   reconcileMusic();
 }
 
-export function getAmbientName(): AmbientName | null {
-  return ambientCurrent?.name ?? null;
+export function getAmbientNames(): AmbientName[] {
+  return ambientCurrent.map((voice) => voice.name);
+}
+
+/** 各声床层当前的目标电平（风 / 机械 / 轨道各一路，测试与探针用）。 */
+export function getAmbientLevels(): Partial<Record<AmbientName, number>> {
+  return Object.fromEntries(ambientCurrent.map((voice) => [voice.name, voice.level]));
 }
 
 export function getMusicName(): MusicName | null {
@@ -1010,11 +1031,10 @@ export function getMusicName(): MusicName | null {
 
 /** 测试用：当前声床/配乐状态重置（模块级单例）。 */
 export function resetLoopsForTests() {
-  ambientCurrent = null;
+  ambientCurrent = [];
   musicCurrent = null;
-  ambientWanted = null;
+  ambientWanted = [];
   musicWanted = null;
-  ambientTargetLevel = 0;
   musicTargetLevel = 1;
   spatialTrimDb = 0;
 }

@@ -4,10 +4,14 @@ import {
   COMBAT_FALLOFF_MS,
   COMBAT_WINDOW_MS,
   FACTORY_FULL_BUILDINGS,
+  FACTORY_MAX_DB,
   factoryLevelForBuildings,
   fireSoundForTurret,
   resolveAmbient,
   resolveMusic,
+  SPACE_CROSSFADE_START_ALTITUDE,
+  SPACE_VIEW_ALTITUDE,
+  spaceLevelForAltitude,
   TENSE_THREAT_LEVEL,
   windLevelForAltitude,
 } from '@/features/audio/ambient-music';
@@ -16,40 +20,58 @@ describe('resolveAmbient 环境声床', () => {
   it('行星贴地：风为主（电平随高度减弱）', () => {
     const ground = resolveAmbient({ page: 'planet', altitude: 5, runningBuildings: 0 });
     const high = resolveAmbient({ page: 'planet', altitude: 50, runningBuildings: 0 });
-    expect(ground.name).toBe('wind');
-    expect(ground.level).toBeGreaterThan(high.level);
+    expect(ground.layers.map((layer) => layer.name)).toEqual(['wind']);
+    expect(high.layers.map((layer) => layer.name)).toEqual(['wind']);
+    expect(ground.layers[0].level).toBeGreaterThan(high.layers[0].level);
   });
 
-  it('运行中建筑 40 座时机械嗡鸣到 −18 dB 并压过风', () => {
-    // 风在贴地满档是 1.0（0 dB），机械上限 −18 dB：机械永不「压过」风，
-    // 主导声仍是风，但电平取两者较大值、嗡鸣电平按契约在 40 座时到 −18 dB。
-    expect(factoryLevelForBuildings(FACTORY_FULL_BUILDINGS)).toBeCloseTo(10 ** (-18 / 20), 5);
-    const factory = resolveAmbient({ page: 'planet', altitude: 5, runningBuildings: FACTORY_FULL_BUILDINGS });
-    expect(factory.name).toBe('wind');
-    expect(factory.level).toBeCloseTo(windLevelForAltitude(5), 5);
+  it('贴地 + 40 台运行建筑：风与机械两路同时播放，机械路 = −18 dB 上限', () => {
+    const ambient = resolveAmbient({ page: 'planet', altitude: 5, runningBuildings: FACTORY_FULL_BUILDINGS });
+    expect(ambient.layers.map((layer) => layer.name)).toEqual(['wind', 'factory']);
+    const wind = ambient.layers.find((layer) => layer.name === 'wind')!;
+    const factory = ambient.layers.find((layer) => layer.name === 'factory')!;
+    expect(wind.level).toBeGreaterThan(0);
+    expect(factory.level).toBeGreaterThan(0);
+    expect(factory.level).toBeCloseTo(10 ** (FACTORY_MAX_DB / 20), 5);
+    expect(wind.level).toBeCloseTo(windLevelForAltitude(5), 5);
   });
 
-  it('中空时风仍高于机械上限（机械永不喧宾夺主）', () => {
-    const ambient = resolveAmbient({ page: 'planet', altitude: 55, runningBuildings: FACTORY_FULL_BUILDINGS });
-    expect(ambient.name).toBe('wind');
-    expect(factoryLevelForBuildings(FACTORY_FULL_BUILDINGS)).toBeLessThan(windLevelForAltitude(60));
-  });
-
-  it('0 座运行时嗡鸣电平为 0（不切到 factory）', () => {
+  it('0 座运行建筑时只有风（没有机械路）', () => {
     expect(factoryLevelForBuildings(0)).toBe(0);
     const ambient = resolveAmbient({ page: 'planet', altitude: 5, runningBuildings: 0 });
-    expect(ambient.name).toBe('wind');
+    expect(ambient.layers.map((layer) => layer.name)).toEqual(['wind']);
   });
 
-  it('全球视角 / 恒星系页 → 轨道低频；其它页静默', () => {
-    expect(resolveAmbient({ page: 'planet', altitude: 300, runningBuildings: 40 })).toEqual({ name: 'space', level: 1 });
-    expect(resolveAmbient({ page: 'system', altitude: 0, runningBuildings: 0 })).toEqual({ name: 'space', level: 1 });
-    expect(resolveAmbient({ page: 'other', altitude: 0, runningBuildings: 0 })).toEqual({ name: null, level: 0 });
+  it('中空 55 高度仍两路；高度 120–190 风淡出、轨道低频淡入', () => {
+    const mid = resolveAmbient({ page: 'planet', altitude: 55, runningBuildings: FACTORY_FULL_BUILDINGS });
+    expect(mid.layers.map((layer) => layer.name)).toEqual(['wind', 'factory']);
+
+    const crossing = resolveAmbient({ page: 'planet', altitude: 155, runningBuildings: FACTORY_FULL_BUILDINGS });
+    const names = crossing.layers.map((layer) => layer.name);
+    expect(names).toContain('space');
+    expect(names).toContain('wind');
+    const space = crossing.layers.find((layer) => layer.name === 'space')!;
+    const wind = crossing.layers.find((layer) => layer.name === 'wind')!;
+    expect(space.level).toBeGreaterThan(0);
+    expect(space.level).toBeLessThan(1);
+    expect(wind.level).toBeLessThan(windLevelForAltitude(155));
   });
 
-  it('风电平在高度 60 以上保持底噪，不归零', () => {
+  it('全球视角 / 恒星系页 → 只剩轨道低频；其它页静默', () => {
+    expect(resolveAmbient({ page: 'planet', altitude: 300, runningBuildings: 40 }))
+      .toEqual({ layers: [{ name: 'space', level: 1 }] });
+    expect(resolveAmbient({ page: 'system', altitude: 0, runningBuildings: 0 }))
+      .toEqual({ layers: [{ name: 'space', level: 1 }] });
+    expect(resolveAmbient({ page: 'other', altitude: 0, runningBuildings: 0 })).toEqual({ layers: [] });
+  });
+
+  it('风电平在高度 60 以上保持底噪，不归零；轨道声床 120 以下不出现', () => {
     expect(windLevelForAltitude(60)).toBeGreaterThan(0);
     expect(windLevelForAltitude(1000)).toBe(windLevelForAltitude(60));
+    expect(spaceLevelForAltitude(SPACE_CROSSFADE_START_ALTITUDE)).toBe(0);
+    expect(spaceLevelForAltitude(SPACE_VIEW_ALTITUDE)).toBe(1);
+    expect(resolveAmbient({ page: 'planet', altitude: 119, runningBuildings: 0 }).layers.map((l) => l.name))
+      .toEqual(['wind']);
   });
 });
 

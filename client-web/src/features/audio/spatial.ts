@@ -47,6 +47,8 @@ export const SPATIAL_DB_PER_TILE = 0.6;
 export const SPATIAL_MAX_TILES = 60;
 /** 全球视角的整体衰减（dB）。 */
 export const GLOBAL_VIEW_TRIM_DB = -10;
+/** 实体 id 反查不到坐标（不在当前相机窗口）时的衰减（dB）：能听见但明显在画面外。 */
+export const OFFSCREEN_VOLUME_DB = -12;
 /** 全球视角判定阈值（与 planet-three-status 的 groundView 阈值同口径）。 */
 export const GLOBAL_VIEW_ALTITUDE = 190;
 
@@ -129,3 +131,10 @@ export function spatialForTile(tile: TilePoint | null | undefined): { tile: Tile
   if (!result.audible) return undefined;
   return { tile, volumeDb: result.volumeDb, pan: result.pan };
 }
+
+/**
+ * 实体 id 反查不到坐标时（服务端事件只有 id、实体不在当前相机窗口）：
+ * 按「画面外」处理——固定 −12 dB、不做声相；没有监听器（非行星页）时同样返回这组参数，
+ * 避免画面外的战斗和贴脸的战斗一样响。
+ */
+export const OFFSCREEN_SPATIAL = { volumeDb: OFFSCREEN_VOLUME_DB, pan: 0 } as const;

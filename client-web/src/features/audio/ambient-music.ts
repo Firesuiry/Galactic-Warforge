@@ -2,12 +2,12 @@
  * 环境声床 + 动态配乐状态机（第 23 轮 3A 音频分支）。
  *
  * 纯函数只负责「画面状态 → 想要的声音」：
- * - 声床：行星贴地 = 风（随高度减弱）+ 基地机械嗡鸣（随运行中建筑数线性增强，上限 −18 dB）；
- *   中空 = 只剩风；全球视角 / 恒星系页 = 轨道低频。
+ * - 声床：行星贴地 = 风（随高度减弱）+ 基地机械嗡鸣（随运行中建筑数线性增强，上限 −18 dB）
+ *   两路同时播放；中空以上风淡出、轨道低频淡入；全球视角 / 恒星系页 = 只剩轨道低频。
  * - 配乐：三档——探索/建设（calm）、紧张（黑雾被激怒 / 威胁等级高 / 敌军逼近）、
  *   交战（最近 10s 有己方参与的战斗事件）。交战结束 15s 后回落。
  *
- * 实际播放/交叉淡化在 engine/audio.ts（setAmbient / setMusic），这里只管状态与电平。
+ * 实际播放/交叉淡化在 engine/audio.ts（setAmbientLayers / setMusic），这里只管状态与电平。
  */
 
 import type { AmbientName, MusicName } from '@/engine/audio';
@@ -22,10 +22,15 @@ export interface AmbientInput {
   runningBuildings: number;
 }
 
-export interface AmbientState {
-  name: AmbientName | null;
-  /** 线性电平（0..1），已含各层叠加上限。 */
+export interface AmbientLayer {
+  name: AmbientName;
+  /** 线性电平（0..1），已含交叉淡化与各层上限。 */
   level: number;
+}
+
+export interface AmbientState {
+  /** 同时播放的声床层：贴地是风 + 基地嗡鸣两路，中空起叠上轨道低频。 */
+  layers: AmbientLayer[];
 }
 
 /** 风的最高电平（贴地满档）。 */
@@ -36,11 +41,22 @@ const WIND_HIGH_ALTITUDE_LEVEL = 0.35;
 export const FACTORY_MAX_DB = -18;
 /** 嗡鸣满档对应的运行中建筑数。 */
 export const FACTORY_FULL_BUILDINGS = 40;
+/** 风 → 轨道低频交叉淡化的起点高度（中空偏上）。 */
+export const SPACE_CROSSFADE_START_ALTITUDE = 120;
+/** 完全进入轨道声床的高度（与 globalView 阈值同口径）。 */
+export const SPACE_VIEW_ALTITUDE = 190;
 
-/** 高度 → 风电平系数（贴地 1 → 高度 60 起 0.35）。 */
+/** 高度 → 风电平系数（贴地 1 → 高度 60 起 0.35；不含与轨道声床的交叉淡化）。 */
 export function windLevelForAltitude(altitude: number): number {
   const t = Math.max(0, Math.min(1, altitude / 60));
   return WIND_MAX_LEVEL * (1 - t) + WIND_HIGH_ALTITUDE_LEVEL * t;
+}
+
+/** 高度 → 轨道低频电平（120 以下 0，190 起 1，线性交叉淡化）。 */
+export function spaceLevelForAltitude(altitude: number): number {
+  if (altitude <= SPACE_CROSSFADE_START_ALTITUDE) return 0;
+  const t = (altitude - SPACE_CROSSFADE_START_ALTITUDE) / (SPACE_VIEW_ALTITUDE - SPACE_CROSSFADE_START_ALTITUDE);
+  return Math.min(1, Math.max(0, t));
 }
 
 /** 运行中建筑数 → 嗡鸣电平（0 → −∞，40 → −18 dB，线性 dB）。 */
@@ -52,24 +68,25 @@ export function factoryLevelForBuildings(runningBuildings: number): number {
 }
 
 /**
- * 画面状态 → 声床。
- * - 恒星系页 / 行星全球视角：轨道低频（space），电平 1；
- * - 行星贴地 / 中空：风（电平随高度）+ 嗡鸣（按运行建筑数）。
- *   风与嗡鸣共用 ambient 总线（两条采样不能同时挂在同一个 name 上），
- *   所以这里按「谁更响」选主导声，电平取两者较大值——契约要求的是「随状态变化」，
- *   听感上贴地时风与机械此起彼伏，不出现两条声床互打架。
+ * 画面状态 → 声床层（可同时多层，引擎里各自一路 GainNode）：
+ * - 恒星系页：只有轨道低频；
+ * - 行星贴地 / 中空：风（电平随高度减弱）+ 基地嗡鸣（随运行中建筑数线性增强，
+ *   上限 −18 dB）两路同时播放，各自增益；
+ * - 高度 120–190 之间：风线性淡出、轨道低频线性淡入（交叉淡化）；
+ * - 其它页：静默（空数组）。
  */
 export function resolveAmbient(input: AmbientInput): AmbientState {
-  if (input.page === 'system') return { name: 'space', level: 1 };
-  if (input.page === 'other') return { name: null, level: 0 };
-  if (input.altitude > 190) return { name: 'space', level: 1 };
-  // 风垫底、机械叠上去：两条采样挂同一个 ambient 总线会互相打架，所以取「更响的那条」
-  // 当主导声（机械明显起来时切到 factory），电平取两者较大值。
-  const wind = windLevelForAltitude(input.altitude);
+  if (input.page === 'system') return { layers: [{ name: 'space', level: 1 }] };
+  if (input.page === 'other') return { layers: [] };
+  const space = spaceLevelForAltitude(input.altitude);
+  if (space >= 1) return { layers: [{ name: 'space', level: 1 }] };
+  const layers: AmbientLayer[] = [];
+  const wind = windLevelForAltitude(input.altitude) * (1 - space);
+  if (wind > 0) layers.push({ name: 'wind', level: wind });
   const factory = factoryLevelForBuildings(input.runningBuildings);
-  const mixLevel = Math.max(wind, factory);
-  if (factory > wind * 1.2) return { name: 'factory', level: mixLevel };
-  return { name: 'wind', level: mixLevel };
+  if (factory > 0) layers.push({ name: 'factory', level: factory });
+  if (space > 0) layers.push({ name: 'space', level: space });
+  return { layers };
 }
 
 /** 配乐状态输入。 */

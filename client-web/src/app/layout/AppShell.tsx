@@ -9,7 +9,9 @@ import { TopNav } from '@/widgets/TopNav';
 
 export function AppShell() {
   const { pathname } = useLocation();
-  // App 级游戏音效：订阅战斗事件总线（此处全局只挂一次）
+  // App 级游戏音效：订阅战斗事件总线（此处全局只挂一次）。
+  // 实体反查（坐标 / 类型 / 归属）读 features/audio/battle-context 的当前行星索引，
+  // 由行星页与战争工作台各自在挂载时写入（见 use-planet-audio-scene / WarPage）。
   useGameAudio();
   return (
     <div className="app-shell">

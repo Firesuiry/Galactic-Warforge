@@ -519,7 +519,7 @@ describe('混音设置与总线', () => {
 });
 
 describe('循环声床与配乐', () => {
-  it('setAmbient/setMusic 在采样就绪后起循环 BufferSource（loop=true）', async () => {
+  it('setAmbientLayers/setMusic 在采样就绪后起循环 BufferSource（loop=true）', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
     const audio = await importFreshAudio();
     audio.unlockAudio();
@@ -528,14 +528,30 @@ describe('循环声床与配乐', () => {
     const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
     audio.preloadSamples([AUDIO_MANIFEST.ambient.wind[0], AUDIO_MANIFEST.music.calm[0]]);
     await flush();
-    audio.setAmbient('wind', 0.8);
+    audio.setAmbientLayers([{ name: 'wind', level: 0.8 }]);
     audio.setMusic('calm', 0.35);
     audio.tickAudioLoops();
 
     const loops = ctx.sources.filter((source) => source.loop);
     expect(loops.length).toBe(2);
-    expect(audio.getAmbientName()).toBe('wind');
+    expect(audio.getAmbientNames()).toEqual(['wind']);
     expect(audio.getMusicName()).toBe('calm');
+  });
+
+  it('双声床：风与机械各一路循环，同时播放、各自增益', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    audio.preloadSamples([AUDIO_MANIFEST.ambient.wind[0], AUDIO_MANIFEST.ambient.factory[0]]);
+    await flush();
+
+    audio.setAmbientLayers([{ name: 'wind', level: 1 }, { name: 'factory', level: 0.126 }]);
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx.sources.filter((source) => source.loop).length).toBe(2);
+    expect(audio.getAmbientNames().sort()).toEqual(['factory', 'wind']);
+    // 每路各自一个 GainNode（loop 的 source 之后创建的那个 gain）
+    expect(audio.getAmbientLevels()).toEqual({ wind: 1, factory: 0.126 });
   });
 
   it('切换声床会停掉旧循环（交叉淡化的 stop 排在淡化之后）', async () => {
@@ -545,14 +561,27 @@ describe('循环声床与配乐', () => {
     const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
     audio.preloadSamples([AUDIO_MANIFEST.ambient.wind[0], AUDIO_MANIFEST.ambient.space[0]]);
     await flush();
-    audio.setAmbient('wind', 1);
+    audio.setAmbientLayers([{ name: 'wind', level: 1 }]);
     const ctx = FakeAudioContext.instances[0];
     const first = ctx.sources.filter((source) => source.loop);
     expect(first.length).toBe(1);
 
-    audio.setAmbient('space', 1);
+    audio.setAmbientLayers([{ name: 'space', level: 1 }]);
     expect(first[0].stop).toHaveBeenCalled();
-    expect(audio.getAmbientName()).toBe('space');
+    expect(audio.getAmbientNames()).toEqual(['space']);
+  });
+
+  it('配乐懒加载：未预载时 setMusic 只记目标，tickAudioLoops 在加载完后起播', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    // 不预载：setMusic 只发起一次加载并记下目标，此刻还没起播
+    audio.setMusic('tense', 1);
+    expect(audio.getMusicName()).toBeNull();
+    await flush();
+    audio.tickAudioLoops();
+    expect(audio.getMusicName()).toBe('tense');
+    expect(FakeAudioContext.instances[0].sources.filter((source) => source.loop).length).toBe(1);
   });
 
   it('setMusic(null) 停配乐；无 AudioContext 时全部 no-op', async () => {
@@ -571,7 +600,7 @@ describe('循环声床与配乐', () => {
     vi.resetModules();
     const noCtx = await importFreshAudio();
     expect(() => {
-      noCtx.setAmbient('wind', 1);
+      noCtx.setAmbientLayers([{ name: 'wind', level: 1 }]);
       noCtx.setMusic('calm', 1);
       noCtx.tickAudioLoops();
       noCtx.setSpatialTrimDb(-10);

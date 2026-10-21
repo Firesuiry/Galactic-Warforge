@@ -5,21 +5,33 @@
  *   同时写进 spatial.ts 的监听器（空间化用）与 engine 的全球视角衰减（−10 dB）；
  * - 声床/配乐目标由纯函数 resolveAmbient / resolveMusic 算（见 ambient-music.ts），
  *   实际交叉淡化在 engine/audio.ts；采样未加载完时由 tickAudioLoops 补起；
- * - 战斗事件总线只用来记「最近一次己方参与的战斗时间」（配乐交战档）。
+ * - 战斗事件总线只用来记「最近一次己方参与的战斗时间」（配乐交战档）；
+ *   己方参与判定见 battle-context.ts（按 attacker/target 实体归属反查）。
  *
- * 卸载时恢复配乐为 calm、清掉空间监听器（离开行星页后声床由页面级 hook 接管）。
+ * 卸载时恢复配乐为 calm、清掉空间监听器与实体索引（离开行星页后声床由页面级 hook 接管）。
  */
 
 import { useEffect, useRef } from 'react';
 
 import type { PlanetRuntimeView } from '@shared/types';
 
-import { getSpatialTrimDb, noteSceneTick, setAmbient, setMusic, setSpatialTrimDb, tickAudioLoops } from '@/engine/audio';
+import {
+  getSpatialTrimDb,
+  noteSceneTick,
+  preloadSamples,
+  setAmbientLayers,
+  setMusic,
+  setSpatialTrimDb,
+  tickAudioLoops,
+} from '@/engine/audio';
+import { AUDIO_MANIFEST } from '@/engine/audio-manifest';
 import type { GameEventDetail } from '@shared/types';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import { resolveAmbient, resolveMusic } from '@/features/audio/ambient-music';
+import { battleOwnInvolvement, buildBattleEntityIndex, getBattleEntityIndex, setBattleEntityIndex } from '@/features/audio/battle-context';
 import { globalViewTrimDb, setAudioListener, type AudioListenerSnapshot } from '@/features/audio/spatial';
+import { readAudioQuality, shouldPreloadMusic } from '@/features/audio/quality';
 
 /** 相机快照轮询间隔（与场景状态刷新的 500ms 同频）。 */
 export const AUDIO_CAMERA_POLL_MS = 500;
@@ -61,22 +73,29 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
   latest.current = { planet, runtime, playerId };
 
   // 战斗事件：记最近一次「己方参与」的时间（受袭或己方开火都算）。
+  // 行星战斗事件不带 owner 字段，按 attacker/target 实体归属从当前行星索引反查。
   useEffect(() => subscribeBattleEvents((event) => {
-    const payload = event.payload;
-    const own = latest.current.playerId;
-    const attackerOwner = typeof payload.attacker_owner === 'string' ? payload.attacker_owner : undefined;
-    const targetOwner = typeof payload.target_owner === 'string' ? payload.target_owner : undefined;
-    const ownInvolved = attackerOwner === own || targetOwner === own
-      || (event.type === 'missile_salvo_fired' && payload.source !== 'enemy_force')
-      || event.type === 'battle_report_generated';
-    if (ownInvolved) lastCombatAt.current = event.at;
+    if (battleOwnInvolvement(event, latest.current.playerId, getBattleEntityIndex())) {
+      lastCombatAt.current = event.at;
+    }
   }), []);
+
+  // 实体索引：每来一帧行星窗口数据就整份换掉（AppShell 注入的 resolver 读它）。
+  useEffect(() => {
+    setBattleEntityIndex(buildBattleEntityIndex(planet));
+    return () => setBattleEntityIndex(null);
+  }, [planet]);
 
   useEffect(() => {
     if (frozen) {
-      setAmbient(null);
+      setAmbientLayers([]);
       setMusic(null);
       return undefined;
+    }
+    const quality = readAudioQuality();
+    // high / balanced 预载配乐；low 只在进入对应状态时懒加载（见 quality.ts）。
+    if (shouldPreloadMusic(quality)) {
+      preloadSamples(Object.values(AUDIO_MANIFEST.music).map((paths) => paths[0]));
     }
     const apply = () => {
       noteSceneTick();
@@ -105,7 +124,7 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
         altitude: state.altitude,
         runningBuildings: countRunningBuildings(currentPlanet, own),
       });
-      setAmbient(ambient.name, ambient.level);
+      setAmbientLayers(ambient.layers);
       const tick = currentRuntime?.tick ?? 0;
       const music = resolveMusic({
         // 黑雾敌对：dark_fog_provoked 给的 until_tick 还没过；威胁等级 ≥ 3 也算紧张。
@@ -124,7 +143,7 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
       window.clearInterval(timer);
       setAudioListener(null);
       setSpatialTrimDb(0);
-      setAmbient(null);
+      setAmbientLayers([]);
       setMusic(null);
     };
   }, [frozen]);

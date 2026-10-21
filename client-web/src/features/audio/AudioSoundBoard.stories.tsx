@@ -1,7 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
 
-import { getMix, getMusicName, isMuted, setMix, setMuted, setMusic, sfx, unlockAudio, type MusicName } from '@/engine/audio';
+import {
+  getAmbientNames,
+  getMix,
+  getMusicName,
+  isMuted,
+  setAmbientLayers,
+  setMix,
+  setMuted,
+  setMusic,
+  sfx,
+  unlockAudio,
+  type AmbientName,
+  type MusicName,
+} from '@/engine/audio';
 import { AudioMixSliders } from '@/widgets/TopNav';
 
 /**
@@ -31,11 +44,18 @@ const SFX_GROUPS: ReadonlyArray<{ title: string; items: SfxKey[] }> = [
 ];
 
 const MUSIC: MusicName[] = ['calm', 'tense', 'combat'];
+/** 声床层预设：贴地（风 + 机械两路叠加）/ 中空 / 轨道。 */
+const AMBIENT_PRESETS: ReadonlyArray<{ label: string; layers: Array<{ name: AmbientName; level: number }> }> = [
+  { label: '贴地（风 1.0 + 机械 0.126）', layers: [{ name: 'wind', level: 1 }, { name: 'factory', level: 0.126 }] },
+  { label: '中空（风 0.5）', layers: [{ name: 'wind', level: 0.5 }] },
+  { label: '轨道（space 1.0）', layers: [{ name: 'space', level: 1 }] },
+];
 
 function SoundBoard() {
   const [mix, setMixState] = useState(getMix());
   const [muted, setMutedState] = useState(isMuted());
   const [music, setMusicState] = useState<MusicName | null>(getMusicName());
+  const [ambient, setAmbientState] = useState<AmbientName[]>(getAmbientNames());
   const [lastPlayed, setLastPlayed] = useState<string>('—');
 
   // 首次交互解锁（浏览器自动播放策略）。
@@ -80,6 +100,39 @@ function SoundBoard() {
           </div>
         </div>
       ))}
+
+      <div className="panel" style={{ padding: 14, display: 'grid', gap: 8 }}>
+        <strong>环境声床（可叠加；1.5s 交叉淡化）</strong>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {AMBIENT_PRESETS.map((preset) => (
+            <button
+              className="secondary-button"
+              key={preset.label}
+              onClick={() => {
+                unlockAudio();
+                setAmbientLayers(preset.layers);
+                setAmbientState(getAmbientNames());
+              }}
+              type="button"
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setAmbientLayers([]);
+              setAmbientState([]);
+            }}
+            type="button"
+          >
+            停止声床
+          </button>
+        </div>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          当前：{ambient.length > 0 ? ambient.join(' + ') : '无'}
+        </span>
+      </div>
 
       <div className="panel" style={{ padding: 14, display: 'grid', gap: 8 }}>
         <strong>配乐（3s 交叉淡化）</strong>

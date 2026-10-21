@@ -4,7 +4,8 @@ import type { GameEventDetail } from '@shared/types';
 
 import type { BattleEvent } from '@/engine/battle-events';
 import { sfx } from '@/engine/audio';
-import { resetAudioListenerForTests } from '@/features/audio/spatial';
+import { resetBattleEntityIndexForTests, setBattleEntityIndex } from '@/features/audio/battle-context';
+import { OFFSCREEN_SPATIAL, resetAudioListenerForTests, setAudioListener } from '@/features/audio/spatial';
 import { isBuildingCompletionEvent, playPlanetEventAudio } from '@/features/audio/planet-audio';
 import { playBattleEventAudio, resetBattleAudioResolversForTests, setBattleAudioResolvers } from '@/features/audio/use-game-audio';
 
@@ -57,19 +58,19 @@ describe('playBattleEventAudio 战斗事件 → 音效', () => {
 
   it('battle_report_generated：target_destroyed 升级大爆炸，否则小爆炸', () => {
     playBattleEventAudio(battleEvent('battle_report_generated', { report: { target_destroyed: true } }));
-    expect(sfx.explosion).toHaveBeenCalledWith(true, undefined);
+    expect(sfx.explosion).toHaveBeenCalledWith(true, OFFSCREEN_SPATIAL);
 
     playBattleEventAudio(battleEvent('battle_report_generated', { report: { target_destroyed: false } }));
-    expect(sfx.explosion).toHaveBeenCalledWith(false, undefined);
+    expect(sfx.explosion).toHaveBeenCalledWith(false, OFFSCREEN_SPATIAL);
 
     playBattleEventAudio(battleEvent('battle_report_generated', {}));
-    expect(sfx.explosion).toHaveBeenCalledWith(false, undefined);
+    expect(sfx.explosion).toHaveBeenCalledWith(false, OFFSCREEN_SPATIAL);
     expect(sfx.explosion).toHaveBeenCalledTimes(3);
   });
 
-  it('entity_destroyed → 大爆炸', () => {
+  it('entity_destroyed → 大爆炸；无坐标无 id 反查时按画面外 −12 dB', () => {
     playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1' }));
-    expect(sfx.explosion).toHaveBeenCalledWith(true, undefined);
+    expect(sfx.explosion).toHaveBeenCalledWith(true, OFFSCREEN_SPATIAL);
   });
 
   it('damage_applied → 按攻击方炮塔类型的开火音 + 命中', () => {
@@ -200,7 +201,7 @@ describe('战斗音效空间化', () => {
     expect(sfx.explosion).toHaveBeenCalledWith(true, expect.objectContaining({ volumeDb: -1.2, pan: 0.5 }));
   });
 
-  it('超过 60 格不播（spatial 为 undefined，按非空间音播放）', async () => {
+  it('超过 60 格不播（spatial 为 undefined，按画面外 −12 dB 播放）', async () => {
     const { setAudioListener } = await import('@/features/audio/spatial');
     setAudioListener({
       center: { x: 10, y: 10 },
@@ -211,14 +212,79 @@ describe('战斗音效空间化', () => {
       faceSize: 32,
       project: null,
     });
-    // 同面 60 格内没有该点：距离查询失败 → audible=false → 不空间化
+    // 同面 60 格内没有该点：距离查询失败 → audible=false → 按画面外处理
     playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1', position: { x: 300, y: 10 } }));
-    expect(sfx.explosion).toHaveBeenCalledWith(true, undefined);
+    expect(sfx.explosion).toHaveBeenCalledWith(true, OFFSCREEN_SPATIAL);
   });
 
   it('攻击方 id 由场景反查（resolveType 钩子）', () => {
     setBattleAudioResolvers({ type: (id) => (id === 'b1' ? 'laser_turret' : undefined) });
     playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'b1', target_id: 'u1' }));
+    expect(sfx.fireLaser).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('实体 id 反查（damage_applied / salvo 只有 id）', () => {
+  beforeEach(() => {
+    resetBattleEntityIndexForTests();
+    resetAudioListenerForTests();
+  });
+
+  function indexWith(entries: Array<[string, { ownerId: string; type: string; tile: { x: number; y: number } }]>) {
+    setBattleEntityIndex(new Map(entries));
+  }
+
+  it('有坐标：按球面距离衰减与屏幕 x 声相', () => {
+    setAudioListener({
+      center: { x: 10, y: 10 },
+      altitude: 10,
+      globalView: false,
+      width: 1000,
+      height: 800,
+      faceSize: 32,
+      project: () => ({ x: 250, y: 400, visible: true }),
+    });
+    indexWith([['b1', { ownerId: 'p1', type: 'gauss_turret', tile: { x: 13, y: 10 } }]]);
+    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'b1', target_id: 'u1' }));
+    // 距离 3 格 → −1.8 dB；屏幕 x 250/1000 → pan −0.5
+    expect(sfx.fireGauss).toHaveBeenCalledWith(expect.objectContaining({ volumeDb: expect.closeTo(-1.8, 5), pan: -0.5 }));
+  });
+
+  it('仅目标 id 可反查（攻击方查不到）时用目标坐标', () => {
+    setAudioListener({
+      center: { x: 10, y: 10 },
+      altitude: 10,
+      globalView: false,
+      width: 1000,
+      height: 800,
+      faceSize: 32,
+      project: null,
+    });
+    indexWith([['u1', { ownerId: 'p2', type: 'soldier', tile: { x: 20, y: 10 } }]]);
+    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'ghost', target_id: 'u1' }));
+    // 距离 10 格 → −6 dB；project 为 null → pan 0
+    expect(sfx.hit).toHaveBeenCalledWith(expect.objectContaining({ volumeDb: expect.closeTo(-6, 5), pan: 0 }));
+  });
+
+  it('都反查不到：按画面外 −12 dB、无声相', () => {
+    setAudioListener({
+      center: { x: 10, y: 10 },
+      altitude: 10,
+      globalView: false,
+      width: 1000,
+      height: 800,
+      faceSize: 32,
+      project: () => ({ x: 500, y: 400, visible: true }),
+    });
+    indexWith([]);
+    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'ghost', target_id: 'ghost2' }));
+    expect(sfx.hit).toHaveBeenCalledWith(OFFSCREEN_SPATIAL);
+    expect(sfx.fireGeneric).toHaveBeenCalledWith(OFFSCREEN_SPATIAL);
+  });
+
+  it('默认 resolver 直接读当前行星索引（AppShell 不需要注入）', () => {
+    indexWith([['b2', { ownerId: 'p1', type: 'laser_turret', tile: { x: 11, y: 10 } }]]);
+    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'b2' }));
     expect(sfx.fireLaser).toHaveBeenCalledTimes(1);
   });
 });

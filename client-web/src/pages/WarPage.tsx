@@ -15,6 +15,7 @@ import { TaskForceForm } from '@/features/war/components/forms/TaskForceForm';
 import { TheaterForm } from '@/features/war/components/forms/TheaterForm';
 import { ProductionQueuePanel } from '@/features/war/components/ProductionQueuePanel';
 import { BattlefieldMap } from '@/features/war/battlefield/BattlefieldMap';
+import { buildBattleEntityIndex, setBattleEntityIndex } from '@/features/audio/battle-context';
 import { toPlayerFacingMessage } from '@/common/player-facing-error';
 import { normalizeCompletedTechIds } from '@/features/planet-map/research-workflow';
 import { useWarRealtime } from '@/features/war/hooks/use-war-realtime';
@@ -239,6 +240,14 @@ export function WarPage() {
       && building.runtime?.functions?.production));
   const ownPlanetBuildings = Object.values(planetSceneQuery.data?.buildings ?? {})
     .filter((building) => building.owner_id === session.playerId);
+
+  // 战争工作台没有 3D 相机：战斗音效的实体反查用当前选中行星的 48×48 场景窗口。
+  // 行星页会覆盖这份索引（挂载时写入、卸载清空），这里只在该页不活跃时生效。
+  useEffect(() => {
+    if (!planetSceneQuery.data) return undefined;
+    setBattleEntityIndex(buildBattleEntityIndex(planetSceneQuery.data));
+    return () => setBattleEntityIndex(null);
+  }, [planetSceneQuery.data]);
   const completedTechIds = normalizeCompletedTechIds(
     summaryQuery.data?.players?.[session.playerId]?.tech,
   );

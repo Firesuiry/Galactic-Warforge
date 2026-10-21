@@ -15,12 +15,19 @@ import { useEffect } from 'react';
 import { sfx } from '@/engine/audio';
 import { payloadTile, subscribeBattleEvents, type BattleEvent } from '@/engine/battle-events';
 import { fireSoundForTurret } from '@/features/audio/ambient-music';
-import { spatialForTile, type TilePoint } from '@/features/audio/spatial';
+import {
+  battleAttackerId,
+  battleTargetId,
+  getBattleEntityIndex,
+  resolveEntityTile,
+  resolveEntityType,
+} from '@/features/audio/battle-context';
+import { OFFSCREEN_SPATIAL, spatialForTile, type TilePoint } from '@/features/audio/spatial';
 
 /**
  * 事件里能拿到的格坐标：总线锚点（emitBattleEvent 从 payload 提取）→ payload 原样
  * → 由 resolveTile 按实体 id 反查。服务端 damage_applied / salvo 只带实体 id，
- * 后两条兜底是它们的路径。
+ * 后两条兜底是它们的路径；都查不到时按「画面外」（−12 dB、无声相）播放。
  */
 function eventTile(event: BattleEvent, resolveTile: (id: string | undefined) => TilePoint | null): TilePoint | null {
   if (event.tile) return event.tile;
@@ -28,7 +35,8 @@ function eventTile(event: BattleEvent, resolveTile: (id: string | undefined) => 
     ?? payloadTile(event.payload.target_pos)
     ?? payloadTile(event.payload.from);
   if (fromPayload) return fromPayload;
-  return resolveTile(event.attackerId ?? (typeof event.payload.target_id === 'string' ? event.payload.target_id : undefined));
+  // 攻击方优先，其次目标（damage_applied 两侧都可能是画面内实体）。
+  return resolveTile(battleAttackerId(event)) ?? resolveTile(battleTargetId(event));
 }
 
 /**
@@ -46,7 +54,8 @@ export function playBattleEventAudio(
   resolveType?: (id: string | undefined) => string | undefined,
 ): void {
   const tile = eventTile(event, resolveTile ?? resolveTileHook);
-  const spatial = spatialForTile(tile);
+  // 有坐标按距离/声相；反查不到（实体不在相机窗口）按画面外 −12 dB、无声相。
+  const spatial = spatialForTile(tile) ?? OFFSCREEN_SPATIAL;
   switch (event.type) {
     case 'missile_salvo_fired':
       sfx.fireMissile(spatial);
@@ -66,8 +75,7 @@ export function playBattleEventAudio(
       // 开火音按攻击方炮塔类型（总线字段 → payload → 场景反查）；黑雾/舰队用通用开火音。
       const attackerType = event.attackerType
         ?? (typeof event.payload.attacker_type === 'string' ? event.payload.attacker_type : undefined)
-        ?? (resolveType ?? resolveTypeHook)(event.attackerId
-          ?? (typeof event.payload.attacker_id === 'string' ? event.payload.attacker_id : undefined));
+        ?? (resolveType ?? resolveTypeHook)(battleAttackerId(event));
       const fire = fireSoundForTurret(attackerType);
       sfx[fire](spatial);
       sfx.hit(spatial);
@@ -79,8 +87,8 @@ export function playBattleEventAudio(
 }
 
 /** 场景反查钩子：AppShell 注入（当前行星场景快照里的实体位置/类型）。 */
-let resolveTileHook: (id: string | undefined) => TilePoint | null = () => null;
-let resolveTypeHook: (id: string | undefined) => string | undefined = () => undefined;
+let resolveTileHook: (id: string | undefined) => TilePoint | null = (id) => resolveEntityTile(id, getBattleEntityIndex());
+let resolveTypeHook: (id: string | undefined) => string | undefined = (id) => resolveEntityType(id, getBattleEntityIndex());
 
 export function setBattleAudioResolvers(hooks: {
   tile?: (id: string | undefined) => TilePoint | null;
@@ -91,8 +99,8 @@ export function setBattleAudioResolvers(hooks: {
 }
 
 export function resetBattleAudioResolversForTests() {
-  resolveTileHook = () => null;
-  resolveTypeHook = () => undefined;
+  resolveTileHook = (id) => resolveEntityTile(id, getBattleEntityIndex());
+  resolveTypeHook = (id) => resolveEntityType(id, getBattleEntityIndex());
 }
 
 /** App 级游戏音效 hook：订阅战斗事件总线，卸载时退订。 */
