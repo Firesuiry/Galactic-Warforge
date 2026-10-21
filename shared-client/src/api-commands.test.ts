@@ -195,9 +195,9 @@ describe('issuer serialization', () => {
         return { ok: true, json: async () => ({ accepted: true }) } as Response;
       },
     });
-    await api.cmdBuild({ x: 4, y: 5 }, 'wind_turbine', { mechaId: 'u-3' });
+    await api.cmdBuild({ x: 4, y: 5, z: 0 }, 'wind_turbine', { mechaId: 'u-3' });
     assert.deepEqual((body.commands as Array<{ target: unknown }>)[0].target, {
-      layer: 'planet', position: { x: 4, y: 5 }, mecha_id: 'u-3',
+      layer: 'planet', position: { x: 4, y: 5, z: 0 }, mecha_id: 'u-3',
     });
   });
 });
