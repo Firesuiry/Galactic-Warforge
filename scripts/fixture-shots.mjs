@@ -68,7 +68,10 @@ if (!(await reachable())) {
 }
 
 fs.mkdirSync(outDir, { recursive: true });
-const browser = await chromium.launch({ headless: true, args: ['--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const gpuArgs = ['--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist'];
+// 测帧率时解除 vsync / 60 帧上限，才看得出性能余量（截图像素不受影响）。
+if (measureFps) gpuArgs.push('--disable-gpu-vsync', '--disable-frame-rate-limit');
+const browser = await chromium.launch({ headless: true, args: gpuArgs });
 const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
