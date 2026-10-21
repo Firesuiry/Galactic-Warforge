@@ -229,6 +229,35 @@ func TestSwitchActivePlanetCommandUpdatesSummaryEndpoint(t *testing.T) {
 
 	initialActive := core.ActivePlanetID()
 
+	// 第 22 轮 §1：非出生行星开局没有据点，switch_active_planet 会被拒。
+	// 先把机甲投送过去（投送过去的机甲本身就是据点），再切焦点。
+	dispatch := postCommandRequest(t, srv, model.CommandRequest{
+		RequestID:  "req-dispatch-to-planet-1-1",
+		IssuerType: "player",
+		IssuerID:   "p1",
+		Commands: []model.Command{{
+			Type:   model.CmdDispatchMecha,
+			Target: model.CommandTarget{Layer: "planet", PlanetID: "planet-1-1"},
+		}},
+	})
+	if !dispatch.Accepted {
+		t.Fatalf("expected dispatch_mecha request to be accepted, got %+v", dispatch.Results)
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		ws := core.WorldForPlanet("planet-1-1")
+		if ws == nil {
+			return false
+		}
+		ws.RLock()
+		defer ws.RUnlock()
+		for _, unit := range ws.Units {
+			if unit != nil && unit.OwnerID == "p1" {
+				return true
+			}
+		}
+		return false
+	}, "dispatch_mecha was not applied by tick loop")
+
 	resp := postCommandRequest(t, srv, model.CommandRequest{
 		RequestID:  "req-switch-active-planet",
 		IssuerType: "player",
