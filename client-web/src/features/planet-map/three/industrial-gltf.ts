@@ -166,8 +166,12 @@ async function prepareFile(file: string) {
   templates.set(file, variants);
 }
 
-/** 加载建筑/单位用到的全部 GLB；重复调用返回同一个 promise。 */
+/** 加载建筑/单位用到的全部 GLB；重复调用返回同一个 promise。
+ *
+ * `?procedural-models` 跳过加载，用来做「程序化模型 / 现成模型」同机位对照
+ * （固定机位脚本 `scripts/playtest-shots/models.mjs` 靠它拍修前图，不用切分支）。 */
 export function preloadIndustrialGltf(): Promise<void> {
+  if (!loading && new URLSearchParams(window.location.search).has('procedural-models')) loading = Promise.resolve();
   if (!loading) {
     const files = [...new Set([...Object.values(BUILDING_GLTF), ...Object.values(UNIT_GLTF)].map((spec) => spec.file))];
     loading = Promise.all(files.map(prepareFile)).then(() => undefined);
