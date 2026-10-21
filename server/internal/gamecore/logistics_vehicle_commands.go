@@ -61,7 +61,7 @@ func (gc *GameCore) execInstallLogisticsVehicle(ws *model.WorldState, playerID s
 	cost := []model.ItemAmount{{ItemID: itemID, Quantity: quantity}}
 	var record *model.MechaRecord
 	if source == "player" {
-		mecha, failure := issuerMecha(ws, player, issuerID)
+		mecha, failure := issuerMecha(ws, player, issuerID, cmd.Target.MechaID)
 		if failure != nil {
 			return *failure, nil
 		}

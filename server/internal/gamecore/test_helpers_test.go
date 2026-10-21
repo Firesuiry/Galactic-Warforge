@@ -44,9 +44,20 @@ func grantAllItems(ws *model.WorldState, playerID string, qty int) {
 	if player == nil {
 		return
 	}
-	record := player.MechaByOperator(player.PlayerID)
+	var record *model.MechaRecord
+	if bound := player.MechasByOperator(player.PlayerID); len(bound) > 0 {
+		// 优先本行星上的那台（多绑时取 unit ID 最小的）。
+		for _, candidate := range bound {
+			if candidate.PlanetID == ws.PlanetID {
+				record = candidate
+				break
+			}
+		}
+		if record == nil {
+			record = bound[0]
+		}
+	}
 	if record == nil {
-		// 未绑定（例如非出生星球上的开局机甲）：退回该行星上第一台机甲。
 		record = mechaOnPlanet(ws, player.PlayerID, ws.PlanetID)
 	}
 	if record == nil {

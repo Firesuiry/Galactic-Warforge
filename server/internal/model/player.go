@@ -86,13 +86,27 @@ func (ps *PlayerState) MechaByUnitID(unitID string) *MechaRecord {
 	return ps.Mechas[unitID]
 }
 
-// MechaByOperator returns the mecha bound to an issuer_id.
-func (ps *PlayerState) MechaByOperator(operator string) *MechaRecord {
+// MechasByOperator 返回绑定给某个 issuer_id 的全部机甲，按 unit ID 升序。
+// 第 22 轮起一个发令者可以绑多台机甲（分散在不同行星），命令用 target.mecha_id
+// 点名执行哪一台；缺省时由执行器取「当前行星上 unit ID 最小」的那台。
+func (ps *PlayerState) MechasByOperator(operator string) []*MechaRecord {
 	if ps == nil || operator == "" {
 		return nil
 	}
-	for _, id := range sortedMechaIDs(ps.Mechas) {
+	ids := sortedMechaIDs(ps.Mechas)
+	out := make([]*MechaRecord, 0, len(ids))
+	for _, id := range ids {
 		if mecha := ps.Mechas[id]; mecha != nil && mecha.Operator == operator {
+			out = append(out, mecha)
+		}
+	}
+	return out
+}
+
+// MechaByOperatorOnPlanet 返回某行星上绑定给 operator 的机甲，按 unit ID 升序取第一台。
+func (ps *PlayerState) MechaByOperatorOnPlanet(operator, planetID string) *MechaRecord {
+	for _, mecha := range ps.MechasByOperator(operator) {
+		if mecha.PlanetID == planetID {
 			return mecha
 		}
 	}

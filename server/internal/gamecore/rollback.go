@@ -183,7 +183,9 @@ func applyWorldState(dst, src *model.WorldState) {
 	dst.TileBuilding = src.TileBuilding
 	dst.BeltLayers = src.BeltLayers
 	dst.TileUnits = src.TileUnits
-	dst.EntityCounter = src.EntityCounter
+		// 共享计数器只前进不回退：其它行星没有一起回滚，回退会让新实体撞上
+	// 它们已经分配过的 ID。
+	dst.RaiseEntityCounter(src.EntityCounter())
 	dst.Pipelines = src.Pipelines
 	dst.ConveyorTraffic = nil
 }

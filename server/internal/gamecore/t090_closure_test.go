@@ -156,6 +156,15 @@ func TestResearchConsumesRealMatricesFromRunningLabs(t *testing.T) {
 func TestSwitchActivePlanetAndSaveRestorePreserveMultiPlanetRuntime(t *testing.T) {
 	core, cfg, mapCfg := newTwoPlanetTestCore(t)
 
+	// 第 22 轮 §1：非出生行星开局没有据点，switch_active_planet 会拒绝。
+	// 先把机甲投送过去（投送过去的机甲本身就是据点），再切焦点。
+	dispatch := issueInternalCommand(core, "p1", model.Command{
+		Type:   model.CmdDispatchMecha,
+		Target: model.CommandTarget{Layer: "planet", PlanetID: "planet-1-1"},
+	})
+	if dispatch.Code != model.CodeOK {
+		t.Fatalf("dispatch_mecha to planet-1-1 failed: %s (%s)", dispatch.Code, dispatch.Message)
+	}
 	res := issueInternalCommand(core, "p1", model.Command{
 		Type: model.CommandType("switch_active_planet"),
 		Payload: map[string]any{

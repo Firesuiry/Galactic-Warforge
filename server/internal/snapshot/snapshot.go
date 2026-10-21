@@ -182,8 +182,20 @@ func (snap *Snapshot) RestoreRuntime() (map[string]*model.WorldState, string, *m
 			break
 		}
 	}
+	// 实体 ID 全局唯一（契约 §6）：每颗行星的快照各存一份计数器值，恢复时
+	// 取最大值重挂到同一个共享分配器上——读档后继续造的实体不会与任何一颗
+	// 行星已有的 ID 撞号。
+	entityIDs := model.NewEntityIDAllocator()
+	var maxCounter int64
 	for _, world := range worlds {
 		world.Players = sharedPlayers
+		if counter := world.EntityCounter(); counter > maxCounter {
+			maxCounter = counter
+		}
+	}
+	entityIDs.SetValue(maxCounter)
+	for _, world := range worlds {
+		world.ShareEntityIDs(entityIDs)
 	}
 	activePlanetID := snap.ActivePlanetID
 	if activePlanetID == "" {

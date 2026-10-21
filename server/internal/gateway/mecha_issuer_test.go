@@ -197,7 +197,7 @@ func TestSnapshotRoundTripPreservesMechas(t *testing.T) {
 	srv, rt, _, _ := newCheckpointServer(t)
 	ws := rt.Current().Core.World()
 	ws.Lock()
-	starter := ws.Players["p1"].MechaByOperator("p1")
+	starter := firstBoundMecha(ws.Players["p1"], "p1")
 	if starter == nil {
 		ws.Unlock()
 		t.Fatal("expected starter mecha for p1")

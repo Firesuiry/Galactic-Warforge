@@ -10,8 +10,9 @@ import (
 	"siliconworld/internal/queue"
 )
 
-// 第 21 轮审查 B1：多行星开局时，一个玩家只能有一台绑定的开局机甲
-// （契约 §2.2「一个 issuer_id 至多绑一台机甲」），bootstrap 也只发一次。
+// 第 22 轮契约 §1：开局只在出生星球（InitialActivePlanetID）给每个玩家建基站、
+// 造一台绑定的机甲、发一次 bootstrap；其它已加载行星什么都不建（没有基站、
+// 没有机甲、没有物资），必须靠 dispatch_mecha 把机甲投送过去。
 func TestMultiPlanetStarterMechaBindsOnlyStarterPlanet(t *testing.T) {
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
@@ -88,16 +89,26 @@ func TestMultiPlanetStarterMechaBindsOnlyStarterPlanet(t *testing.T) {
 		if got := boundRecord.Inventory[model.ItemGear]; got != 40 {
 			t.Fatalf("%s: bootstrap gear = %d, want 40 (only once)", playerID, got)
 		}
-		// 另一颗行星的开局机甲存在但空闲，背包为空（bootstrap 没重复发放）。
-		other := mechaOnPlanet(worlds[otherPlanetID], playerID, otherPlanetID)
+		// 非出生行星上什么都没有：没有基站、没有机甲。
+		other := worlds[otherPlanetID]
 		if other == nil {
-			t.Fatalf("%s: expected a starter mecha on %s", playerID, otherPlanetID)
+			t.Fatalf("%s: expected runtime for %s", playerID, otherPlanetID)
 		}
-		if other.Operator != "" {
-			t.Fatalf("%s: non-starter planet mecha must be idle, got operator %q", playerID, other.Operator)
+		if record := mechaOnPlanet(other, playerID, otherPlanetID); record != nil {
+			t.Fatalf("%s: non-starter planet must not get a starter mecha, got %s", playerID, record.UnitID)
 		}
-		if other.Inventory.Count() != 0 {
-			t.Fatalf("%s: bootstrap leaked to non-starter planet mecha: %+v", playerID, other.Inventory)
+		for _, unit := range other.Units {
+			if unit != nil && unit.OwnerID == playerID {
+				t.Fatalf("%s: non-starter planet must not get any unit, got %s", playerID, unit.ID)
+			}
+		}
+		for _, building := range other.Buildings {
+			if building != nil && building.OwnerID == playerID {
+				t.Fatalf("%s: non-starter planet must not get a base, got %s", playerID, building.ID)
+			}
+		}
+		if playerHasFootholdOnWorld(other, playerID) {
+			t.Fatalf("%s: non-starter planet must not have a foothold", playerID)
 		}
 	}
 }

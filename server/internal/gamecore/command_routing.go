@@ -11,11 +11,14 @@ import (
 // resolveCommandWorld 为每条命令解析它应当结算的世界，优先级（仅限
 // 行星层命令，即注册表里 route != routeSpace 的命令）：
 //  1. target.planet_id 显式路由提示；
-//  2. 命令引用的目标实体（建筑/单位/建造任务）所在行星——跨行星同 ID 时
+//  2. target.mecha_id 点名的机甲所在行星（点名在 B 星的机甲时命令落到 B 星；
+//     dispatch_mecha 例外，它的 planet_id 就是目标星球）；
+//  3. 命令引用的目标实体（建筑/单位/建造任务）所在行星——跨行星同 ID 时
 //     优先落在玩家焦点行星；
-//  3. 发令者绑定机甲所在行星（需要机甲的命令因此自动落在机甲身边）；
-//  4. 玩家焦点行星（switch_active_planet 写入的 PlayerState.FocusPlanetID）；
-//  5. 全局活动行星（冷启动/兜底默认值）。
+//  4. 发令者绑定的机甲里「本星球有」的那台所在行星（一台发令者可能绑多台，
+//     按 unit ID 升序取第一台所在的行星）；
+//  5. 玩家焦点行星（switch_active_planet 写入的 PlayerState.FocusPlanetID）；
+//  6. 全局活动行星（冷启动/兜底默认值）。
 //
 // 太空层/玩家级命令（fleet_*、task_force_*、theater_*、blueprint_*、dyson、
 // research 等）的 target.planet_id 是作战参数而非路由提示，不参与路由；
@@ -35,6 +38,16 @@ func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, issuerID stri
 		return ws, nil
 	}
 
+	// 点名的机甲在哪颗行星，命令就落到哪颗（dispatch_mecha 除外：它的
+	// target.planet_id 是投送目标，机甲此刻还在源行星）。
+	if route != routeSpace && cmd.Type != model.CmdDispatchMecha && cmd.Target.MechaID != "" && player != nil {
+		if record := player.MechaByUnitID(cmd.Target.MechaID); record != nil && record.PlanetID != "" {
+			if ws := gc.WorldForPlanet(record.PlanetID); ws != nil {
+				return ws, nil
+			}
+		}
+	}
+
 	focusPlanetID := ""
 	if player != nil {
 		focusPlanetID = player.FocusPlanetID
@@ -44,8 +57,12 @@ func (gc *GameCore) resolveCommandWorld(player *model.PlayerState, issuerID stri
 	}
 
 	// 发令者机甲所在行星：不带 planet_id、也不引用实体时，命令自动落到机甲身边。
+	// 一个发令者可以绑多台（分散在不同行星），按 unit ID 升序取第一台。
 	if player != nil {
-		if record := player.MechaByOperator(issuerID); record != nil && record.PlanetID != "" {
+		for _, record := range player.MechasByOperator(issuerID) {
+			if record.PlanetID == "" {
+				continue
+			}
 			if ws := gc.WorldForPlanet(record.PlanetID); ws != nil {
 				return ws, nil
 			}

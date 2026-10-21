@@ -68,7 +68,7 @@ func TestCheckpointAPILifecycle(t *testing.T) {
 	// 造一点可断言的实体状态：p1 开局机甲背包里的铁块。
 	ws := rt.Current().Core.World()
 	ws.Lock()
-	mecha := ws.Players["p1"].MechaByOperator("p1")
+	mecha := firstBoundMecha(ws.Players["p1"], "p1")
 	if mecha == nil {
 		t.Fatal("expected starter mecha for p1")
 	}
@@ -162,7 +162,7 @@ func TestCheckpointAPILifecycle(t *testing.T) {
 	ws = rt.Current().Core.World()
 	ws.Lock()
 	ws.Tick = 99999
-	ws.Players["p1"].MechaByOperator("p1").Inventory = model.ItemInventory{"iron_ingot": 0}
+	firstBoundMecha(ws.Players["p1"], "p1").Inventory = model.ItemInventory{"iron_ingot": 0}
 	ws.Unlock()
 
 	rec = doGameRequest(t, srv, http.MethodPost, "/checkpoints/base-ok/load", "key1", nil)
@@ -188,7 +188,7 @@ func TestCheckpointAPILifecycle(t *testing.T) {
 	if newSess.StartedAt.Equal(startedBefore) {
 		t.Fatal("hot load must produce a new session (started_at should change)")
 	}
-	if got := newSess.Core.World().Players["p1"].MechaByOperator("p1").Inventory["iron_ingot"]; got != 7 {
+	if got := firstBoundMecha(newSess.Core.World().Players["p1"], "p1").Inventory["iron_ingot"]; got != 7 {
 		t.Fatalf("mecha backpack lost across checkpoint load: %d", got)
 	}
 	if rt.SourceCheckpoint() != "base-ok" {

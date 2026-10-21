@@ -102,7 +102,7 @@ func CaptureWorld(ws *model.WorldState) *WorldSnapshot {
 		MapWidth:        ws.MapWidth,
 		MapHeight:       ws.MapHeight,
 		Surface:         (surface.Grid{Size: ws.MapWidth / 3}).Metadata(),
-		EntityCounter:   ws.EntityCounter,
+		EntityCounter:   ws.EntityCounter(),
 		Players:         make(map[string]*model.PlayerState, len(ws.Players)),
 		Buildings:       make(map[string]*BuildingSnapshot, len(ws.Buildings)),
 		Units:           make(map[string]*model.Unit, len(ws.Units)),
@@ -157,7 +157,7 @@ func (snap *WorldSnapshot) Restore() (*model.WorldState, error) {
 
 	ws := model.NewWorldState(snap.PlanetID, snap.Surface.FaceSize)
 	ws.Tick = snap.Tick
-	ws.EntityCounter = snap.EntityCounter
+	ws.SetEntityCounter(snap.EntityCounter)
 	// 资源基线：磁盘快照里没有（由地图配置 + seed 重建，见 gamecore.NewFromSave），
 	// 进程内快照由 CaptureWorld 带上；两者都没有时下面按「全部已变化」兜底。
 	ws.ResourceBaseline = cloneResourceBaseline(snap.ResourceBaseline)

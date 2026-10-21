@@ -325,7 +325,9 @@ func TestMechaCoop_03_ExplicitPlanetWithoutMechaRejected(t *testing.T) {
 		Target:  model.CommandTarget{Position: &site, PlanetID: "planet-1-2"},
 		Payload: map[string]any{"building_type": string(model.BuildingTypeWindTurbine)},
 	})
-	if res.Code != model.CodeExecutorUnavailable || !strings.Contains(res.Message, "不在本星球") {
+	// 第 22 轮 §4：有绑定但都不在本星球 → 新的 EXECUTOR_UNAVAILABLE 文案
+	// （列出绑定机甲，提示 dispatch_mecha / switch_active_planet）。
+	if res.Code != model.CodeExecutorUnavailable || !strings.Contains(res.Message, "你的机甲都在别的星球") {
 		t.Fatalf("explicit foreign-planet build: %s (%s)", res.Code, res.Message)
 	}
 	if got := f4ConstructionTaskCount(planetA, "p1"); got != 0 {
@@ -386,13 +388,16 @@ func TestMechaCoop_05_AssignMechaCases(t *testing.T) {
 		})
 	}
 
-	// 把 B 绑给已绑 A 的发令者：A 自动变空闲，事件写明 released_mecha_id。
+	// 第 22 轮 §3：把 B 绑给已绑 A 的发令者——不再抢占，A 保持绑定。
 	res, events := assign(unitB.ID, "p1")
 	if res.Code != model.CodeOK || recordB.Operator != "p1" {
 		t.Fatalf("bind B to p1: %s (%s) record=%+v", res.Code, res.Message, recordB)
 	}
-	if starter.Operator != "" {
-		t.Fatalf("previous mecha A must become idle, got operator %q", starter.Operator)
+	if starter.Operator != "p1" {
+		t.Fatalf("assign_mecha must not release the other mecha of the same operator, got %q", starter.Operator)
+	}
+	if bound := ws.Players["p1"].MechasByOperator("p1"); len(bound) != 2 {
+		t.Fatalf("one issuer must be able to bind two mechas, got %d", len(bound))
 	}
 	released := 0
 	for _, evt := range events {
@@ -400,12 +405,19 @@ func TestMechaCoop_05_AssignMechaCases(t *testing.T) {
 			continue
 		}
 		released++
-		if evt.Payload["released_mecha_id"] != starter.UnitID || evt.Payload["mecha_id"] != unitB.ID {
-			t.Fatalf("single event must carry mecha_id=%s released_mecha_id=%s, got %+v", unitB.ID, starter.UnitID, evt.Payload)
+		if evt.Payload["mecha_id"] != unitB.ID || evt.Payload["operator"] != "p1" {
+			t.Fatalf("event must carry mecha_id=%s operator=p1, got %+v", unitB.ID, evt.Payload)
+		}
+		if _, ok := evt.Payload["released_mecha_id"]; ok {
+			t.Fatalf("assign_mecha must not report released_mecha_id any more: %+v", evt.Payload)
 		}
 	}
 	if released != 1 {
 		t.Fatalf("assign_mecha must emit exactly one entity_updated, got %d: %+v", released, events)
+	}
+	// 同一台机甲重复绑同一 operator = 幂等成功。
+	if res, _ := assign(unitB.ID, "p1"); res.Code != model.CodeOK || recordB.Operator != "p1" {
+		t.Fatalf("idempotent rebind: %s (%s)", res.Code, res.Message)
 	}
 
 	// operator: "" 解绑。

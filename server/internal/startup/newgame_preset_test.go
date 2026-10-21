@@ -118,7 +118,7 @@ server:
 	if player == nil {
 		t.Fatal("p1 missing from new world")
 	}
-	p1Mecha := player.MechaByOperator("p1")
+	p1Mecha := firstBoundMecha(player, "p1")
 	if p1Mecha == nil || p1Mecha.Inventory[model.ItemIronIngot] != 100 || p1Mecha.Inventory[model.ItemGear] != 40 {
 		t.Fatalf("p1 mecha backpack not bootstrapped: %+v", p1Mecha)
 	}
@@ -126,7 +126,7 @@ server:
 	if botPlayer == nil {
 		t.Fatal("p2 missing from new world")
 	}
-	botMecha := botPlayer.MechaByOperator("p2")
+	botMecha := firstBoundMecha(botPlayer, "p2")
 	if botMecha == nil || botMecha.Inventory[model.ItemCircuitBoard] != 12 {
 		t.Fatalf("p2 bootstrap missing: %+v", botMecha)
 	}
@@ -201,7 +201,7 @@ server:
 	}
 	// 覆盖后的 bootstrap 生效：新局只发 7 个石材（不再继承预设的 100 铁块）。
 	player := sess.Core.World().Players["p1"]
-	mecha := player.MechaByOperator("p1")
+	mecha := firstBoundMecha(player, "p1")
 	if mecha == nil || mecha.Inventory[model.ItemStoneBrick] != 7 || mecha.Inventory[model.ItemIronIngot] != 0 {
 		t.Fatalf("p1 bootstrap override not applied: %+v (want 7 stone_brick, 0 iron_ingot)", mecha)
 	}

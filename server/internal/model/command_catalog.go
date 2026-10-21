@@ -441,7 +441,13 @@ var commandSpecs = []CommandStructureSpec{
 		Type:                  CmdAssignMecha,
 		RequiredTargetFields:  []string{"entity_id"},
 		RequiredPayloadFields: []string{"operator"},
-		Constraints:           []string{"target.entity_id = 机甲单位 ID；payload.operator 必填（\"\" = 解绑）。同玩家的任何发令者都能改绑本方机甲；operator 已绑别的机甲时那台自动解绑。"},
+		Constraints:           []string{"target.entity_id = 机甲单位 ID；payload.operator 必填（\"\" = 解绑）。同玩家的任何发令者都能改绑本方机甲。一个发令者可以绑多台机甲：绑定不会解绑同一 operator 的其它机甲（第 22 轮起取消抢占语义）。"},
+	},
+	{
+		Type:                  CmdDispatchMecha,
+		RequiredTargetFields:  []string{"planet_id"},
+		RequiredPayloadFields: []string{},
+		Constraints:           []string{"把发令者的一台机甲瞬移到 target.planet_id 指定的已加载行星（本轮不做飞行时间）。target.planet_id 是目标星球，不是源星球。target.mecha_id 缺省时：发令者只有一台机甲就用它，有多台则必须点名（VALIDATION_FAILED）。落点优先本方基站旁，没有基站用行星中心附近。投送后机甲档案的 planet_id 同步更新，背包随档案走。"},
 	},
 	{
 		Type:                  CmdBuildDysonNode,
@@ -549,6 +555,10 @@ func requireTargetField(cmd Command, field string) []CommandIssue {
 		if cmd.Target.EntityID == "" {
 			return []CommandIssue{MissingFieldIssue("target.entity_id")}
 		}
+	case "mecha_id":
+		if cmd.Target.MechaID == "" {
+			return []CommandIssue{MissingFieldIssue("target.mecha_id")}
+		}
 	case "position":
 		if cmd.Target.Position == nil {
 			return []CommandIssue{MissingFieldIssue("target.position")}
@@ -594,6 +604,7 @@ func buildCommandSchema(spec CommandStructureSpec) map[string]any {
 		"system_id": map[string]any{"type": "string"},
 		"planet_id": map[string]any{"type": "string"},
 		"entity_id": map[string]any{"type": "string"},
+		"mecha_id":  map[string]any{"type": "string"},
 		"position": map[string]any{
 			"type":     "object",
 			"required": []string{"x", "y"},

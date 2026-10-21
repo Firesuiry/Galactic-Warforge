@@ -26,8 +26,8 @@ func starterMecha(ws *model.WorldState, playerID string) *model.MechaRecord {
 	if player == nil {
 		return nil
 	}
-	if record := player.MechaByOperator(playerID); record != nil {
-		return record
+	if records := player.MechasByOperator(playerID); len(records) > 0 {
+		return records[0]
 	}
 	for _, record := range player.SortedMechas() {
 		return record

@@ -140,7 +140,7 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 	app.Current().Core.World().Tick = 42
 	// 第 16 轮起没有矿物池：用背包物品 + 电网结余证明状态被持久化并恢复。
 	// 背包挂在机甲档案上：往开局机甲背包里放物品。
-	starterMecha := app.Current().Core.World().Players["p1"].MechaByOperator("p1")
+	starterMecha := firstBoundMecha(app.Current().Core.World().Players["p1"], "p1")
 	if starterMecha == nil {
 		t.Fatal("expected starter mecha for p1")
 	}
@@ -179,7 +179,7 @@ func TestResumeFromGzipSavePreservesState(t *testing.T) {
 	if player == nil || player.Resources.Energy != 77 {
 		t.Fatalf("expected player state restored, got %+v", player)
 	}
-	restoredMecha := player.MechaByOperator("p1")
+	restoredMecha := firstBoundMecha(player, "p1")
 	if restoredMecha == nil || restoredMecha.Inventory[model.ItemQuantumChip] != 5 {
 		t.Fatalf("expected mecha backpack restored, got %+v", restoredMecha)
 	}
@@ -346,7 +346,7 @@ overrides:
 	if player.Resources.Energy != 0 {
 		t.Fatalf("unexpected bootstrap resources: %+v", player.Resources)
 	}
-	bootstrapMecha := player.MechaByOperator("p1")
+	bootstrapMecha := firstBoundMecha(player, "p1")
 	if bootstrapMecha == nil || bootstrapMecha.Inventory[model.ItemFrameMaterial] != 6 || bootstrapMecha.Inventory[model.ItemQuantumChip] != 4 {
 		t.Fatalf("unexpected bootstrap mecha backpack: %+v", bootstrapMecha)
 	}

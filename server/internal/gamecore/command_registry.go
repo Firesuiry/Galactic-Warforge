@@ -105,7 +105,8 @@ func handleIssuer[P any](route commandRoute, exec func(*GameCore, *model.WorldSt
 	}}
 }
 
-// handleMecha 登记「由发令者绑定的机甲执行」的命令。
+// handleMecha 登记「由发令者绑定的机甲执行」的命令：路由后按 target.mecha_id
+// 点名（缺省取本星球最小 ID）解析机甲，失败在进入执行器之前返回。
 func handleMecha[P any](route commandRoute, exec func(*GameCore, *model.WorldState, string, model.Command, P, mechaContext) (model.CommandResult, []*model.GameEvent)) commandHandler {
 	return commandHandler{route: route, payload: reflect.TypeFor[P](), bind: func(cmd model.Command) (boundCommand, error) {
 		payload, err := decodePayload[P](cmd.Payload)
@@ -119,7 +120,7 @@ func handleMecha[P any](route commandRoute, exec func(*GameCore, *model.WorldSta
 		return boundCommand{
 			refs: route.refs(cmd, refs),
 			exec: func(gc *GameCore, ws *model.WorldState, playerID, issuerID string) (model.CommandResult, []*model.GameEvent) {
-				mecha, failure := issuerMecha(ws, ws.Players[playerID], issuerID)
+				mecha, failure := issuerMecha(ws, ws.Players[playerID], issuerID, cmd.Target.MechaID)
 				if failure != nil {
 					return *failure, nil
 				}
@@ -192,6 +193,7 @@ var commandHandlers = map[model.CommandType]commandHandler{
 	model.CmdQueueMilitaryProduction:   handleMecha(routePlanet, (*GameCore).execQueueMilitaryProduction),
 	model.CmdRefitUnit:                 handleMecha(routePlanet, (*GameCore).execRefitUnit),
 	model.CmdAssignMecha:               handle(routePlanet, (*GameCore).execAssignMecha),
+	model.CmdDispatchMecha:             handleIssuer(routePlanet, (*GameCore).execDispatchMecha),
 	model.CmdBuildDysonNode:            handle(routeSpace, (*GameCore).execBuildDysonNode),
 	model.CmdBuildDysonFrame:           handle(routeSpace, (*GameCore).execBuildDysonFrame),
 	model.CmdBuildDysonShell:           handle(routeSpace, (*GameCore).execBuildDysonShell),

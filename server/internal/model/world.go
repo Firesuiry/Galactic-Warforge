@@ -118,7 +118,60 @@ type WorldState struct {
 	PathScratchQueue  []int32             `json:"-"`
 	TileUnits         map[string][]string `json:"-"`
 
-	EntityCounter int64 `json:"-"`
+	// EntityIDs 是本局共享的实体 ID 分配器：同一局内所有已加载行星指向同一个
+	// 实例，实体 ID 因此全局唯一（见 EntityIDAllocator）。不进快照——快照按行星
+	// 各存一份计数器值，读档时取最大值重新挂回。
+	EntityIDs *EntityIDAllocator `json:"-"`
+}
+
+// EntityIDAllocator 是同一局内所有已加载行星共享的实体 ID 计数器。
+//
+// 第 22 轮起实体 ID 必须跨行星唯一：PlayerState.Mechas 按 unit ID 索引，
+// 每颗行星各自从 1 数起会让两颗行星各出一台 `u-24`，后加载行星的机甲档案
+// 直接覆盖前一颗（审计 P0）。格式仍是 `prefix-N`（CLI 与测试大量依赖
+// `b-1` / `u-3` 形态），只是 N 由这一个计数器统一分配。
+type EntityIDAllocator struct {
+	counter atomic.Int64
+}
+
+// NewEntityIDAllocator 返回一个从 0 起数的分配器。
+func NewEntityIDAllocator() *EntityIDAllocator { return &EntityIDAllocator{} }
+
+// Next 分配下一个实体 ID。
+func (a *EntityIDAllocator) Next(prefix string) string {
+	if a == nil {
+		return prefix + "-1"
+	}
+	return prefix + "-" + strconv.FormatInt(a.counter.Add(1), 10)
+}
+
+// Value 返回当前计数器值（快照与回放摘要用）。
+func (a *EntityIDAllocator) Value() int64 {
+	if a == nil {
+		return 0
+	}
+	return a.counter.Load()
+}
+
+// SetValue 把计数器设成 v（读档恢复用）。
+func (a *EntityIDAllocator) SetValue(v int64) {
+	if a == nil {
+		return
+	}
+	a.counter.Store(v)
+}
+
+// Raise 把计数器抬到至少 v（回滚用：只前进不回退，避免与仍在线分配过的 ID 撞号）。
+func (a *EntityIDAllocator) Raise(v int64) {
+	if a == nil {
+		return
+	}
+	for {
+		current := a.counter.Load()
+		if current >= v || a.counter.CompareAndSwap(current, v) {
+			return
+		}
+	}
 }
 
 // NewWorldState creates an empty world state
@@ -148,6 +201,7 @@ func NewWorldState(planetID string, faceSize int) *WorldState {
 		PowerGrid:         NewPowerGridGraph(surface.Grid{Size: faceSize}),
 		Construction:      NewConstructionQueue(),
 		CombatRuntime:     NewCombatRuntimeState(),
+		EntityIDs:         NewEntityIDAllocator(),
 	}
 
 	// Initialize grid
@@ -174,10 +228,27 @@ func (ws *WorldState) RLock() { ws.mu.RLock() }
 // RUnlock releases read lock
 func (ws *WorldState) RUnlock() { ws.mu.RUnlock() }
 
-// NextEntityID generates a new unique entity ID
+// NextEntityID 分配一个新的实体 ID。同一局内所有已加载行星共享 EntityIDs
+// （见 EntityIDAllocator），因此 ID 跨行星唯一。
 func (ws *WorldState) NextEntityID(prefix string) string {
-	ws.EntityCounter++
-	return prefix + "-" + int64ToStr(ws.EntityCounter)
+	return ws.EntityIDs.Next(prefix)
+}
+
+// EntityCounter 返回本行星共享分配器的当前计数值（快照/回放摘要用）。
+func (ws *WorldState) EntityCounter() int64 { return ws.EntityIDs.Value() }
+
+// SetEntityCounter 恢复共享分配器的计数值（读档用）。
+func (ws *WorldState) SetEntityCounter(v int64) { ws.EntityIDs.SetValue(v) }
+
+// RaiseEntityCounter 把共享分配器抬到至少 v（回滚用，只前进不回退）。
+func (ws *WorldState) RaiseEntityCounter(v int64) { ws.EntityIDs.Raise(v) }
+
+// ShareEntityIDs 让本世界与 others 共用同一个实体 ID 分配器（同一局的所有行星）。
+func (ws *WorldState) ShareEntityIDs(allocator *EntityIDAllocator) {
+	if ws == nil || allocator == nil {
+		return
+	}
+	ws.EntityIDs = allocator
 }
 
 // tileKeyCacheDim TileKey 缓存覆盖的坐标范围（x、y 均 < 该值）。立方体球面地图
