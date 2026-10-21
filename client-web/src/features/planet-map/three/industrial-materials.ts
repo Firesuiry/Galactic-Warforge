@@ -86,6 +86,11 @@ export function preloadIndustrialMaterials(): Promise<boolean> {
   return loading;
 }
 
+/** 某材质族的贴图组（未就绪返回 undefined；调用方回退程序纹理）。 */
+export function materialTextures(family: PbrFamily): { albedo: THREE.Texture; orm: THREE.Texture; normal: THREE.Texture } | undefined {
+  return textures.get(family);
+}
+
 /** 贴图是否就绪（同步查询）。 */
 export function industrialMaterialsReady(): boolean {
   return textures.size > 0;

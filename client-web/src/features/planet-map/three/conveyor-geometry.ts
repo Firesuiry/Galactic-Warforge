@@ -5,6 +5,7 @@ import type { TilePoint } from '../model';
 import { getBuildingFootprint } from '../model';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation, beltVisualSpeed, logisticsTier, occupiesGround } from '../logistics-tier';
 import { beltDeckTexture } from './logistics-marks';
+import { createPbrMaterial, materialTextures } from './industrial-materials';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 
 const directions: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
@@ -304,22 +305,43 @@ export class ConveyorGeometry {
   constructor(private readonly options: { ghost?: boolean } = {}) {
     this.group.name = options.ghost ? 'conveyor-ghost' : 'continuous-conveyors';
     const ghost = (opacity: number) => ({ color: CONVEYOR_GHOST_COLOR, transparent: true, opacity, depthWrite: false, roughness: .5, metalness: .1 });
-    this.materials = options.ghost
-      ? [.28, .36, .55].map(opacity => new THREE.MeshStandardMaterial({ ...ghost(opacity), side: THREE.DoubleSide }))
-      : [
+    if (options.ghost) {
+      this.materials = [.28, .36, .55].map(opacity => new THREE.MeshStandardMaterial({ ...ghost(opacity), side: THREE.DoubleSide }));
+    } else {
+      // PBR 贴图就绪时用真实材质（橡胶带面 + 拉丝金属边框）；没就绪就退回纯色。
+      const pbr = (family: 'graphite' | 'alloy', color: string, parameters: THREE.MeshStandardMaterialParameters) =>
+        createPbrMaterial(family, color, { ...parameters, side: THREE.DoubleSide }, 2.4)
+        ?? new THREE.MeshStandardMaterial({ ...parameters, color, side: THREE.DoubleSide });
+      this.materials = [
         // 机身/内斜面/底面/端盖：深石墨。
-        new THREE.MeshStandardMaterial({ color: '#2a3338', roughness: .6, metalness: .25, side: THREE.DoubleSide }),
+        pbr('graphite', '#2a3338', { roughness: .6, metalness: .25 }),
         // 侧壁 + 支撑柱：中灰金属。
-        new THREE.MeshStandardMaterial({ color: '#6f7d84', roughness: .58, metalness: .28, side: THREE.DoubleSide }),
+        pbr('alloy', '#6f7d84', { roughness: .58, metalness: .28 }),
         // 侧栏顶边：亮色哑光（远景的识别线）。不能太光滑：太阳镜面高光会冲过 bloom 阈值，
         // 屏幕一侧（背着太阳的那半边视线）的整段带栏会糊成一片白光。
-        new THREE.MeshStandardMaterial({ color: '#b9c4c8', roughness: .62, metalness: .12, side: THREE.DoubleSide }),
+        pbr('alloy', '#b9c4c8', { roughness: .62, metalness: .12 }),
       ];
+    }
+    // 带面：橡胶底纹（PBR 就绪时用 Rubber001 的胎纹法线 + 粗糙度，重复 2 次/格）叠档位色箭头。
+    // 箭头贴图同时作 emissiveMap，只有箭头微微自发光；橡胶底几乎不自发光。
+    const rubber = materialTextures('rubber');
     this.deckMaterials = DECK_TIERS.map(tier => {
       const map = beltDeckTexture(tier);
       const material = options.ghost
         ? new THREE.MeshStandardMaterial({ ...ghost(.6), map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .35 })
-        : new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .55, roughness: .58, metalness: .12 });
+        : new THREE.MeshStandardMaterial({
+          map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .42,
+          roughness: .88, metalness: .04,
+          ...(rubber ? { normalMap: rubber.normal, roughnessMap: rubber.orm, normalScale: new THREE.Vector2(.6, .6) } : {}),
+        });
+      if (rubber) {
+        // 带面几何自带 UV（u 沿流向、v 横跨带面），直接用 UV 采样而不是三平面：
+        // 带面是一张薄片，三平面会在侧面退化；这里把橡胶纹按 2 次/格重复。
+        for (const key of ['normalMap', 'roughnessMap'] as const) {
+          const texture = material[key];
+          if (texture) { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(2, 1); texture.anisotropy = 4; }
+        }
+      }
       material.polygonOffset = true;
       material.polygonOffsetFactor = -2;
       return material;

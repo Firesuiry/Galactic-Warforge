@@ -437,13 +437,17 @@ export class IndustrialModels {
     }
   }
 
+  /** 传送带（单格原型；整网由 `conveyor-geometry.ts` 画）：橡胶带面 + 拉丝金属侧栏 + 铜导轨。 */
   private conveyor(group: THREE.Group, light: Finish) {
     this.box(group, 'graphite', [0.53, 0.085, 0.89], [0, 0.16, 0]);
+    // 带面：橡胶（暗、粗糙），比侧栏低一点，读得出「凹陷的带面」。
+    this.box(group, 'rubber', [0.46, 0.022, 0.86], [0, 0.205, 0]);
     for (const x of [-0.28, 0.28]) {
-      this.box(group, 'ceramic', [0.055, 0.1, 0.91], [x, 0.2, 0]);
+      this.box(group, 'alloy', [0.055, 0.1, 0.91], [x, 0.2, 0]);
       this.box(group, 'copper', [0.059, 0.025, 0.81], [x, 0.258, 0]);
+      this.bolts(group, 0.3, 0.235, 4, 'alloy', 0.011);
     }
-    for (let i = 0; i < 10; i++) this.box(group, 'alloy', [0.48, 0.018, 0.036], [0, 0.217, -0.38 + i * 0.085]);
+    for (let i = 0; i < 10; i++) this.box(group, 'alloy', [0.44, 0.012, 0.03], [0, 0.22, -0.38 + i * 0.085]);
     this.box(group, light, [0.15, 0.018, 0.045], [0, 0.231, 0.33]);
     for (const x of [-0.22, 0.22]) for (const z of [-0.33, 0.33]) this.box(group, 'graphite', [0.075, 0.15, 0.09], [x, 0.075, z]);
   }
@@ -661,17 +665,24 @@ export class IndustrialModels {
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
     const { armor, light } = UNIT_FINISH[faction];
     if (type === 'logistics_bot') {
+      // 物流无人机：装甲机身 + 玻璃传感窗 + 四旋翼臂（保留 4 个 industrialRotation 节点），
+      // 加面板缝、散热格栅与底部吊挂梁（货箱 logistics-bot-cargo 挂在下面）。
       this.box(group, armor, [0.4, 0.16, 0.3], [0, 0.2, 0]);
+      this.box(group, 'alloy', [0.42, 0.02, 0.32], [0, 0.285, 0]);
       this.box(group, 'glass', [0.23, 0.065, 0.025], [0, 0.235, 0.16]);
+      this.decal(group, 'graphite', [0.3, 0.012], [0, 0.292, 0], [-Math.PI / 2, 0, 0]);
+      this.vents(group, 0, 0.16, -0.12, 3);
       for (const x of [-0.26, 0.26]) for (const z of [-0.2, 0.2]) {
         this.pipe(group, 'alloy', [0, 0.2, 0], [x, 0.21, z], 0.027);
         this.ring(group, 'graphite', 0.105, 0.21, x, z);
         const rotor = new THREE.Group(); rotor.position.set(x, 0.22, z); group.add(rotor);
         this.box(rotor, 'alloy', [0.18, 0.012, 0.025], [0, 0, 0]);
+        this.box(rotor, 'graphite', [0.05, 0.014, 0.05], [0, 0, 0]);
         this.registerRotation(rotor, 'y', 24);
         this.box(group, light, [0.045, 0.025, 0.045], [x, 0.19, z]);
       }
       for (const x of [-0.16, 0.16]) this.box(group, 'graphite', [0.025, 0.13, 0.19], [x, 0.055, 0]);
+      for (const z of [-0.08, 0.08]) this.box(group, 'alloy', [0.26, 0.016, 0.02], [0, 0.03, z]);
     } else if (type === 'transport_robot') {
       // 运输机器人（§4）：小型轮式底盘 + 青色灯带，车顶货箱有货才显示
       // （planet-three-scene 按 haul.cargo 上色/显隐，节点名 transport-robot-cargo）。
@@ -680,10 +691,16 @@ export class IndustrialModels {
         for (const z of [-0.12, 0.12]) this.part(group, 'cylinder', 'rubber', [0.13, 0.06, 0.13], [side * 0.18, 0.065, z], [0, 0, Math.PI / 2]);
       }
       this.box(group, armor, [0.4, 0.1, 0.44], [0, 0.18, 0]);
+      // 车顶货箱平台：石墨底板 + 四角卡扣（货箱 transport-robot-cargo 落在上面）。
+      this.box(group, 'graphite', [0.34, 0.016, 0.34], [0, 0.238, 0]);
+      for (const x of [-0.15, 0.15]) for (const z of [-0.15, 0.15]) this.box(group, 'alloy', [0.03, 0.03, 0.03], [x, 0.25, z]);
       this.box(group, 'glass', [0.18, 0.05, 0.02], [0, 0.21, 0.225], [-0.16, 0, 0]);
       for (const x of [-0.15, 0.15]) this.box(group, light, [0.05, 0.03, 0.02], [x, 0.155, 0.225]);
       this.box(group, light, [0.34, 0.016, 0.02], [0, 0.24, -0.22]);
       this.pipe(group, 'alloy', [0.1, 0.24, -0.1], [0.1, 0.38, -0.1], 0.005);
+      // 侧面警示条 + 前保险杠。
+      for (const side of [-1, 1]) this.decal(group, 'hazard', [0.24, 0.018], [side * 0.201, 0.17, 0], [0, side * Math.PI / 2, 0]);
+      this.box(group, 'graphite', [0.36, 0.035, 0.03], [0, 0.13, 0.235]);
     } else if (type === 'executor' || /mech|mecha/.test(type)) {
       // 重型机甲：双腿、装甲躯干、驾驶舱与肩部武器，和普通工人/士兵模型明确区分。
       for (const side of [-1, 1]) {

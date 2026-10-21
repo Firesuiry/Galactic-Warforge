@@ -3,6 +3,7 @@ import type { Building } from '@shared/types';
 import type { TilePoint } from '../model';
 import { getBuildingFootprint, toTilePoint } from '../model';
 import { getItemColorValue } from '../item-colors';
+import { createPbrMaterial } from './industrial-materials';
 import { surfaceOffset } from '@shared/surface';
 import { occupiesGround, tierColor } from '../logistics-tier';
 import { OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns, stepTile, type CardinalDirection } from '../logistics-direction';
@@ -218,11 +219,15 @@ export class SorterRigs {
     const solid = (parameters: THREE.MeshStandardMaterialParameters, ghostColor: string, opacity: number) => ghost
       ? new THREE.MeshStandardMaterial({ color: ghostColor, roughness: .5, metalness: .1, transparent: true, opacity, depthWrite: false })
       : new THREE.MeshStandardMaterial(parameters);
+    // 分拣臂金属 + 关节暗色（3A 画质 §7）：PBR 贴图就绪时用拉丝钛/石墨板的真实材质，
+    // 未就绪时保持纯色；ghost 永远是半透明绿，不贴图。
+    const pbr = (family: 'alloy' | 'graphite', parameters: THREE.MeshStandardMaterialParameters, ghostColor: string, opacity: number) =>
+      (!ghost && createPbrMaterial(family, String(parameters.color), parameters, 2.2)) || solid(parameters, ghostColor, opacity);
     this.materials = {
-      graphite: solid({ color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
-      ceramic: solid({ color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
+      graphite: pbr('graphite', { color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
+      ceramic: pbr('alloy', { color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
       // 粗糙度压到 .46：太光滑时太阳高光会冲过 bloom 阈值，屏幕某一侧的机械臂整片发白。
-      alloy: solid({ color: '#8d9da4', roughness: .46, metalness: .6 }, '#45c987', .7),
+      alloy: pbr('alloy', { color: '#8d9da4', roughness: .46, metalness: .6 }, '#45c987', .7),
       // 档位灯：不受光照，按实例色（档位色）显示，亮度压在 bloom 阈值下。
       light: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, transparent: ghost, opacity: ghost ? .8 : 1, depthWrite: !ghost }),
       // 端点小座：实例色（正常 = 合金灰；ghost = 绿/黄/红表示端点接没接上）。
