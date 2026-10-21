@@ -25,8 +25,10 @@ python3 develop_tools/sketchfab/fetch.py --from-candidates tmp/3a-models/candida
 
 - token：仓库根 `.env` 的 `SKETCHFAB_TOKEN=...`（gitignore），或同名环境变量。**不打印、不写进提交与报告。**
 - 搜索接口不需要 token，只有下载需要。
-- 网络特性：`api.sketchfab.com` 单次搜索经常 20–200 s 才返回（服务端排队），高并发反而能把尾延迟摊薄；
-  `search.py` 默认 24 并发。响应写 `/tmp/sketchfab-cache/api/`，按 URL 哈希缓存，重跑免费。
+- 网络特性：本机到 `api.sketchfab.com` / `media.sketchfab.com` 单次请求经常 1–200 s 才返回（服务端排队，
+  与请求大小无关）。实测串行最差（每张图约 60 s），**高并发反而把尾延迟摊平**：搜索 24 并发、缩略图 120 并发，
+  110 个搜索约 5 分钟、290 张缩略图约 5 分钟。响应写 `/tmp/sketchfab-cache/`，按 URL 哈希缓存，重跑免费。
+- 下载（`fetch.py`）需要 token；本阶段只实现，未批量下载。
 
 ## 筛选口径
 

@@ -151,7 +151,7 @@ def _thumb_path(url: str) -> Path:
     return THUMB_CACHE / (re.sub(r"[^A-Za-z0-9]", "_", url[-80:]) + ".jpg")
 
 
-def prefetch_thumbs(urls: list[str], workers: int = 16) -> None:
+def prefetch_thumbs(urls: list[str], workers: int = 120) -> None:
     """并发预取缩略图（media.sketchfab.com 单张可能排队到 60s+，串行会卡死）。"""
     THUMB_CACHE.mkdir(parents=True, exist_ok=True)
     todo = list(dict.fromkeys(u for u in urls if u and not _thumb_path(u).is_file()))
