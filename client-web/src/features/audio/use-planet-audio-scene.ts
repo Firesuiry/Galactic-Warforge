@@ -1,0 +1,171 @@
+/**
+ * 行星页音频场景 hook（第 23 轮）：把「画面状态」接到声床与配乐。
+ *
+ * - 相机状态每 500ms 从 3D 场景快照拉一次（与场景已有的状态刷新同频），
+ *   同时写进 spatial.ts 的监听器（空间化用）与 engine 的全球视角衰减（−10 dB）；
+ * - 声床/配乐目标由纯函数 resolveAmbient / resolveMusic 算（见 ambient-music.ts），
+ *   实际交叉淡化在 engine/audio.ts；采样未加载完时由 tickAudioLoops 补起；
+ * - 战斗事件总线只用来记「最近一次己方参与的战斗时间」（配乐交战档）。
+ *
+ * 卸载时恢复配乐为 calm、清掉空间监听器（离开行星页后声床由页面级 hook 接管）。
+ */
+
+import { useEffect, useRef } from 'react';
+
+import type { PlanetRuntimeView } from '@shared/types';
+
+import { getSpatialTrimDb, setAmbient, setMusic, setSpatialTrimDb, tickAudioLoops } from '@/engine/audio';
+import type { GameEventDetail } from '@shared/types';
+import type { PlanetRenderView } from '@/features/planet-map/model';
+import { subscribeBattleEvents } from '@/engine/battle-events';
+import { resolveAmbient, resolveMusic } from '@/features/audio/ambient-music';
+import { globalViewTrimDb, setAudioListener, type AudioListenerSnapshot } from '@/features/audio/spatial';
+
+/** 相机快照轮询间隔（与场景状态刷新的 500ms 同频）。 */
+export const AUDIO_CAMERA_POLL_MS = 500;
+
+/** 音频只需要场景的三个只读能力（getCameraState / project），不依赖 Three 场景类型。 */
+export interface AudioSceneHandle {
+  getCameraState: () => {
+    center: { x: number; y: number } | null;
+    altitude: number;
+    tilt: number;
+    groundView: boolean;
+  };
+  project: (tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null;
+}
+
+export interface PlanetAudioSceneInput {
+  planet: PlanetRenderView | undefined;
+  runtime: PlanetRuntimeView | undefined;
+  /** 3D 场景句柄的 ref（未就绪时 current 为 null）：只用 getCameraState / project，不改场景逻辑。 */
+  sceneRef: { current: AudioSceneHandle | null };
+  playerId: string;
+  /** 深链/截图冻结时不播（?freeze=1）。 */
+  frozen?: boolean;
+}
+
+/** 载入区域里运行中的己方建筑数（声床嗡鸣电平的输入）。 */
+export function countRunningBuildings(planet: PlanetRenderView | undefined, playerId: string): number {
+  if (!planet) return 0;
+  let count = 0;
+  for (const building of Object.values(planet.buildings ?? {})) {
+    if (building.owner_id === playerId && building.hp > 0 && building.runtime?.state === 'running') count += 1;
+  }
+  return count;
+}
+
+export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, frozen = false }: PlanetAudioSceneInput): void {
+  const lastCombatAt = useRef<number | null>(null);
+  const latest = useRef({ planet, runtime, playerId });
+  latest.current = { planet, runtime, playerId };
+
+  // 战斗事件：记最近一次「己方参与」的时间（受袭或己方开火都算）。
+  useEffect(() => subscribeBattleEvents((event) => {
+    const payload = event.payload;
+    const own = latest.current.playerId;
+    const attackerOwner = typeof payload.attacker_owner === 'string' ? payload.attacker_owner : undefined;
+    const targetOwner = typeof payload.target_owner === 'string' ? payload.target_owner : undefined;
+    const ownInvolved = attackerOwner === own || targetOwner === own
+      || (event.type === 'missile_salvo_fired' && payload.source !== 'enemy_force')
+      || event.type === 'battle_report_generated';
+    if (ownInvolved) lastCombatAt.current = event.at;
+  }), []);
+
+  useEffect(() => {
+    if (frozen) {
+      setAmbient(null);
+      setMusic(null);
+      return undefined;
+    }
+    const apply = () => {
+      const { planet: currentPlanet, runtime: currentRuntime, playerId: own } = latest.current;
+      const sceneHandle = sceneRef.current;
+      const faceSize = currentPlanet?.surface?.face_size ?? 32;
+      if (sceneHandle) {
+        const state = sceneHandle.getCameraState();
+        const snapshot: AudioListenerSnapshot = {
+          center: state.center,
+          altitude: state.altitude,
+          globalView: state.altitude > 190,
+          width: typeof window !== 'undefined' ? window.innerWidth : 0,
+          height: typeof window !== 'undefined' ? window.innerHeight : 0,
+          faceSize,
+          project: (tile) => sceneHandle.project(tile),
+        };
+        setAudioListener(snapshot);
+        setSpatialTrimDb(globalViewTrimDb(state.altitude));
+        const ambient = resolveAmbient({
+          page: 'planet',
+          altitude: state.altitude,
+          runningBuildings: countRunningBuildings(currentPlanet, own),
+        });
+        setAmbient(ambient.name, ambient.level);
+      }
+      const tick = currentRuntime?.tick ?? 0;
+      const music = resolveMusic({
+        // 黑雾敌对：dark_fog_provoked 给的 until_tick 还没过；威胁等级 ≥ 3 也算紧张。
+        darkFogHostile: tenseUntilTick > tick,
+        threatLevel: currentRuntime?.threat_level ?? 0,
+        lastCombatAt: lastCombatAt.current,
+        now: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+      });
+      setMusic(music);
+      // 采样加载完成后补起目标声床 / 配乐。
+      tickAudioLoops();
+    };
+    apply();
+    const timer = window.setInterval(apply, AUDIO_CAMERA_POLL_MS);
+    return () => {
+      window.clearInterval(timer);
+      setAudioListener(null);
+      setSpatialTrimDb(0);
+      setAmbient(null);
+      setMusic(null);
+    };
+  }, [frozen]);
+}
+
+/** 当前空间化整体衰减（测试/调试用）。 */
+export function currentSpatialTrimDb() {
+  return getSpatialTrimDb();
+}
+
+/**
+ * SSE 事件 → 配乐「紧张」信号：黑雾被激怒 / 敌军波次来袭。返回新的 lastCombatAt 或 null。
+ * 纯函数（时间由调用方给），供 hook 与单测共用。
+ */
+export function tenseSignalFromEvent(
+  event: GameEventDetail,
+  current: { hostileUntilTick: number; nowTick: number } | null,
+  nowTick: number,
+): { hostileUntilTick: number } | null {
+  if (event.event_type === 'dark_fog_provoked') {
+    const until = event.payload?.until_tick;
+    if (typeof until === 'number' && Number.isFinite(until)) {
+      return { hostileUntilTick: until };
+    }
+  }
+  if (event.event_type === 'enemy_wave_incoming') {
+    // 波次来袭在直到「波次结束」都算紧张：给 600 tick 的保守窗口（服务端没有结束事件）。
+    return { hostileUntilTick: Math.max(current?.hostileUntilTick ?? 0, nowTick + 600) };
+  }
+  return null;
+}
+
+/** 模块级「紧张窗口」：SSE 回调（use-planet-realtime）写，音频场景 hook 读。 */
+let tenseUntilTick = 0;
+
+export function noteTenseEvent(event: GameEventDetail, nowTick: number) {
+  const next = tenseSignalFromEvent(event, { hostileUntilTick: tenseUntilTick, nowTick }, nowTick);
+  if (next) tenseUntilTick = next.hostileUntilTick;
+}
+
+export function getTenseUntilTick() {
+  return tenseUntilTick;
+}
+
+/** 测试用：清空紧张窗口。 */
+export function resetTenseWindowForTests() {
+  tenseUntilTick = 0;
+}

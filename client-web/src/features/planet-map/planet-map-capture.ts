@@ -27,4 +27,6 @@ export interface PlanetMapCapture {
   captureScreenshot: () => HTMLCanvasElement | null;
   /** 3D 场景按需读取相机状态；2D / 未就绪时为 undefined。 */
   getViewport?: () => PlanetThreeViewportSnapshot | null;
+  /** 格 → 画布 CSS 坐标（音频声相用；2D / 未就绪时 undefined）。 */
+  projectTile?: (tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null;
 }

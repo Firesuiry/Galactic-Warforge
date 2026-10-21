@@ -1,20 +1,26 @@
 /**
- * WebAudio 程序化音效引擎：零音频资源文件，全部用振荡器 + 白噪声实时合成。
+ * 游戏音频引擎（第 23 轮 3A 音频分支）。
  *
- * 设计约束：
- * - 惰性创建 AudioContext，遵循浏览器自动播放策略：首次用户手势
- *   （pointerdown/keydown，捕获阶段）后 unlock；unlock 之前所有播放调用静默丢弃。
- * - 主 GainNode → destination；静音状态持久化到 localStorage（sw.audio.muted）。
- * - 合成原语只有两个：tone（振荡器 + 指数包络）与 noiseBurst（预生成 1s 白噪声
- *   buffer 循环 + BiquadFilter 扫频）；对外语义 API 全部映射为纯数据 SoundSpec，
- *   由 buildSoundSpecs 纯函数生成，便于测试断言。
- * - 并发保护：同类音效 50ms 窗口内最多播 3 次（SSE 批量战斗事件同帧到达时
- *   不炸耳朵）；战斗音效带 ±30 音分随机 detune，避免机关枪感。
- * - 无 AudioContext 的环境（jsdom、旧浏览器）整体降级为 no-op：所有 API 可调用、
- *   不抛错、不创建任何节点。
+ * 结构：
+ * - **总线**：master ← music / ambient / sfx / ui，各自一个 GainNode（设置面板的五个滑条）；
+ *   另有 spatial 总线下挂到 sfx，空间衰减与全球视角整体压低只改它。
+ * - **采样**：public/assets/audio 下的 Opus 成品（见 develop_tools/audio/build.mjs 与
+ *   THIRD_PARTY.md），按需 `decodeAudioData` 懒加载并缓存；同一音效有多个变体，随机挑一个
+ *   并做 ±4% 音高 / ±2 dB 音量扰动。
+ * - **回退**：采样未加载完（或加载失败）时用程序合成音顶上（`buildSoundSpecs` 的旧语义
+ *   原样保留），所以 jsdom / 首帧 / 弱网都不会「没声音」或报错。
+ * - **循环声床**：ambient / music 用 BufferSource(loop=true) + 交叉淡化切换。
+ *
+ * 设计约束（与旧版一致，测试依赖）：
+ * - 惰性创建 AudioContext，首次用户手势（pointerdown/keydown 捕获阶段）后 unlock，
+ *   unlock 之前所有播放调用静默丢弃。
+ * - 静音持久化到 localStorage（sw.audio.muted），音量存 sw.audio.mix。
+ * - 同类音效 50ms 窗口内最多播 3 次；静音 / 无 AudioContext / 采样失败都不抛错。
  */
 
-// ---------- 音效规格（纯数据） ----------
+import { AUDIO_MANIFEST } from './audio-manifest';
+
+// ---------- 程序合成规格（回退路径，纯数据） ----------
 
 export interface ToneSpec {
   kind: 'tone';
@@ -49,7 +55,9 @@ export interface NoiseSpec {
 
 export type SoundSpec = ToneSpec | NoiseSpec;
 
+/** 语义音效名（保留旧名 + 第 23 轮扩充）。 */
 export type SoundName =
+  // 旧名（保持映射语义，测试仍覆盖）
   | 'fire'
   | 'explosion'
   | 'intercept'
@@ -58,7 +66,65 @@ export type SoundName =
   | 'buildComplete'
   | 'researchComplete'
   | 'alert'
-  | 'uiClick';
+  | 'uiClick'
+  // 开火按炮塔类型
+  | 'fireGauss'
+  | 'fireLaser'
+  | 'fireMissile'
+  | 'firePlasma'
+  | 'fireGeneric'
+  // 战斗
+  | 'explosionNear'
+  | 'explosionFar'
+  | 'hit'
+  // 建造
+  | 'buildPlace'
+  | 'demolish'
+  | 'beltPlace'
+  | 'constructionComplete'
+  // 单位与指令
+  | 'unitSelect'
+  | 'unitAck'
+  | 'orderMove'
+  | 'orderAttack'
+  | 'notify'
+  // UI
+  | 'uiHover'
+  | 'uiPanelOpen'
+  | 'uiPanelClose';
+
+/** 音效 → 采样清单键（AUDIO_MANIFEST 的 sfx / ui 分组）。 */
+export const SAMPLE_KEY: Record<SoundName, { bus: 'sfx' | 'ui'; key: string }> = {
+  fire: { bus: 'sfx', key: 'fire-generic' },
+  explosion: { bus: 'sfx', key: 'explosion-near' },
+  intercept: { bus: 'sfx', key: 'intercept' },
+  commandOk: { bus: 'sfx', key: 'command-ok' },
+  commandFail: { bus: 'sfx', key: 'command-fail' },
+  buildComplete: { bus: 'sfx', key: 'construction-complete' },
+  researchComplete: { bus: 'sfx', key: 'research-complete' },
+  alert: { bus: 'sfx', key: 'alert' },
+  uiClick: { bus: 'ui', key: 'click' },
+  fireGauss: { bus: 'sfx', key: 'fire-gauss' },
+  fireLaser: { bus: 'sfx', key: 'fire-laser' },
+  fireMissile: { bus: 'sfx', key: 'fire-missile' },
+  firePlasma: { bus: 'sfx', key: 'fire-plasma' },
+  fireGeneric: { bus: 'sfx', key: 'fire-generic' },
+  explosionNear: { bus: 'sfx', key: 'explosion-near' },
+  explosionFar: { bus: 'sfx', key: 'explosion-far' },
+  hit: { bus: 'sfx', key: 'hit' },
+  buildPlace: { bus: 'sfx', key: 'build-place' },
+  demolish: { bus: 'sfx', key: 'demolish' },
+  beltPlace: { bus: 'sfx', key: 'belt-place' },
+  constructionComplete: { bus: 'sfx', key: 'construction-complete' },
+  unitSelect: { bus: 'sfx', key: 'unit-select' },
+  unitAck: { bus: 'sfx', key: 'unit-ack' },
+  orderMove: { bus: 'sfx', key: 'order-move' },
+  orderAttack: { bus: 'sfx', key: 'order-attack' },
+  notify: { bus: 'sfx', key: 'notify' },
+  uiHover: { bus: 'ui', key: 'hover' },
+  uiPanelOpen: { bus: 'ui', key: 'panel-open' },
+  uiPanelClose: { bus: 'ui', key: 'panel-close' },
+};
 
 export interface BuildSoundOptions {
   /** explosion 专用：大爆炸（击毁）更久更沉。 */
@@ -71,28 +137,43 @@ export interface BuildSoundOptions {
 const COMBAT_DETUNE_CENTS = 30;
 
 /**
- * 语义音效 → 合成参数映射（纯函数）。音量克制：单音 peak 均 ≤ 0.22；
- * 除大爆炸（0.8s）外所有音效总时长 < 1s。
+ * 语义音效 → 合成参数映射（纯函数，采样缺失时的回退）。
+ * 音量克制：单音 peak 均 ≤ 0.22；除大爆炸（0.8s）外所有音效总时长 < 1s。
  */
 export function buildSoundSpecs(name: SoundName, options: BuildSoundOptions = {}): SoundSpec[] {
   const random = options.random ?? Math.random;
   const combatDetune = () => Math.round((random() - 0.5) * 2 * COMBAT_DETUNE_CENTS);
 
   switch (name) {
-    // 导弹/火箭发射：短促下滑音
     case 'fire':
+    case 'fireGeneric':
+    case 'fireGauss':
+    case 'fireLaser':
+    case 'fireMissile':
+    case 'firePlasma':
+      // 开火：短促下滑音（各类型只在音高/波形上区分）
       return [
-        { kind: 'tone', type: 'sawtooth', freq: 720, freqEnd: 160, duration: 0.15, gain: 0.16, detune: combatDetune() },
+        {
+          kind: 'tone',
+          type: name === 'firePlasma' ? 'square' : 'sawtooth',
+          freq: name === 'fireGauss' ? 900 : name === 'fireLaser' ? 1250 : name === 'firePlasma' ? 480 : 720,
+          freqEnd: 160,
+          duration: 0.15,
+          gain: 0.16,
+          detune: combatDetune(),
+        },
       ];
-    // 爆炸：噪声低通扫频；big 追加一记低频下潜
-    case 'explosion': {
+    case 'explosion':
+    case 'explosionNear':
+    case 'explosionFar': {
       const big = options.big === true;
+      const far = name === 'explosionFar';
       const specs: SoundSpec[] = [
         {
           kind: 'noise',
-          duration: big ? 0.8 : 0.4,
-          filterFreq: big ? 4200 : 2600,
-          filterEnd: big ? 120 : 240,
+          duration: big ? 0.8 : far ? 0.55 : 0.4,
+          filterFreq: big ? 4200 : far ? 1400 : 2600,
+          filterEnd: big ? 120 : far ? 180 : 240,
           filterType: 'lowpass',
           gain: big ? 0.2 : 0.18,
         },
@@ -102,41 +183,59 @@ export function buildSoundSpecs(name: SoundName, options: BuildSoundOptions = {}
       }
       return specs;
     }
-    // 点防拦截：高频咔哒
     case 'intercept':
       return [
         { kind: 'tone', type: 'square', freq: 2400, freqEnd: 1700, duration: 0.08, gain: 0.1, detune: combatDetune() },
       ];
-    // 指令成功：双音上行
+    case 'hit':
+      return [
+        { kind: 'noise', duration: 0.12, filterFreq: 3200, filterEnd: 900, filterType: 'bandpass', gain: 0.14 },
+      ];
     case 'commandOk':
       return [
         { kind: 'tone', type: 'sine', freq: 660, duration: 0.07, gain: 0.14 },
         { kind: 'tone', type: 'sine', freq: 880, duration: 0.1, gain: 0.14, delay: 0.07 },
       ];
-    // 指令失败：低音方波下行
     case 'commandFail':
       return [
         { kind: 'tone', type: 'square', freq: 200, freqEnd: 95, duration: 0.24, gain: 0.14 },
       ];
-    // 建造完成：三音和弦 chime（C5/E5/G5 齐响）
     case 'buildComplete':
+    case 'constructionComplete':
       return [523.25, 659.25, 783.99].map((freq): ToneSpec => ({
         kind: 'tone', type: 'sine', freq, duration: 0.35, gain: 0.07,
       }));
-    // 研究完成：上行琶音
     case 'researchComplete':
       return [523.25, 659.25, 783.99, 1046.5].map((freq, index): ToneSpec => ({
         kind: 'tone', type: 'triangle', freq, duration: 0.1, gain: 0.12, delay: index * 0.08,
       }));
-    // 告警：双脉冲警示音
     case 'alert':
       return [0, 0.16].map((delay): ToneSpec => ({
         kind: 'tone', type: 'square', freq: 740, duration: 0.09, gain: 0.13, delay,
       }));
-    // UI 点按：极短 tick
+    case 'notify':
+      return [{ kind: 'tone', type: 'sine', freq: 880, duration: 0.12, gain: 0.1 }];
+    case 'buildPlace':
+    case 'beltPlace':
+    case 'demolish':
+      return [
+        { kind: 'noise', duration: 0.09, filterFreq: 1800, filterEnd: 700, filterType: 'lowpass', gain: 0.12 },
+      ];
+    case 'unitSelect':
+    case 'unitAck':
+      return [{ kind: 'tone', type: 'sine', freq: 990, duration: 0.05, gain: 0.08 }];
+    case 'orderMove':
+    case 'orderAttack':
+      return [{ kind: 'tone', type: 'triangle', freq: 720, freqEnd: 900, duration: 0.08, gain: 0.1 }];
     case 'uiClick':
+    case 'uiHover':
       return [
         { kind: 'tone', type: 'square', freq: 1250, duration: 0.03, gain: 0.07 },
+      ];
+    case 'uiPanelOpen':
+    case 'uiPanelClose':
+      return [
+        { kind: 'tone', type: 'sine', freq: 520, freqEnd: 780, duration: 0.08, gain: 0.08 },
       ];
   }
 }
@@ -167,10 +266,45 @@ export function createRateLimiter(windowMs = 50, maxPlays = 3): SoundRateLimiter
   };
 }
 
-// ---------- 引擎状态 ----------
+// ---------- 混音设置 ----------
 
+export type MixBus = 'master' | 'music' | 'ambient' | 'sfx' | 'ui';
+
+export interface MixSettings {
+  master: number;
+  music: number;
+  ambient: number;
+  sfx: number;
+  ui: number;
+}
+
+/** 默认混音：音乐 .35（契约 §7），其余 1。 */
+export const DEFAULT_MIX: MixSettings = { master: 1, music: 0.35, ambient: 0.6, sfx: 1, ui: 0.8 };
+
+const MIX_STORAGE_KEY = 'sw.audio.mix';
 const MUTED_STORAGE_KEY = 'sw.audio.muted';
 const MIN_GAIN = 0.0001;
+
+function readPersistedMix(): MixSettings {
+  try {
+    const raw = globalThis.localStorage?.getItem(MIX_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_MIX };
+    const parsed = JSON.parse(raw) as Partial<MixSettings>;
+    return {
+      master: clamp01(parsed.master ?? DEFAULT_MIX.master),
+      music: clamp01(parsed.music ?? DEFAULT_MIX.music),
+      ambient: clamp01(parsed.ambient ?? DEFAULT_MIX.ambient),
+      sfx: clamp01(parsed.sfx ?? DEFAULT_MIX.sfx),
+      ui: clamp01(parsed.ui ?? DEFAULT_MIX.ui),
+    };
+  } catch {
+    return { ...DEFAULT_MIX };
+  }
+}
+
+function clamp01(value: number) {
+  return Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+}
 
 type AudioContextCtor = typeof AudioContext;
 
@@ -199,16 +333,37 @@ function persistMuted(next: boolean) {
   }
 }
 
+function persistMix(next: MixSettings) {
+  try {
+    globalThis.localStorage?.setItem(MIX_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // 同上
+  }
+}
+
 let context: AudioContext | null = null;
 let masterGain: GainNode | null = null;
+/** 五条总线（master 之外的四条挂到 master 上；spatial 挂到 sfx 上）。 */
+let busGains: Record<Exclude<MixBus, 'master'>, GainNode> | null = null;
+let spatialGain: GainNode | null = null;
 let noiseBuffer: AudioBuffer | null = null;
 let unlocked = false;
 let muted = readPersistedMuted();
-let volume = 1;
+let mix: MixSettings = readPersistedMix();
+/** 空间化总衰减（dB）：全球视角整体 −10 dB，贴地视角 0。 */
+let spatialTrimDb = 0;
 const limiter = createRateLimiter();
+/** 采样缓存：路径 → 已解码 AudioBuffer；解码中 / 失败的路径记在下面两张表里。 */
+const sampleCache = new Map<string, AudioBuffer>();
+const samplesLoading = new Set<string>();
+const samplesFailed = new Set<string>();
 
 function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function dbToGain(db: number) {
+  return 10 ** (db / 20);
 }
 
 function ensureContext(): AudioContext | null {
@@ -221,15 +376,29 @@ function ensureContext(): AudioContext | null {
   }
   context = new Ctor();
   masterGain = context.createGain();
-  masterGain.gain.value = muted ? 0 : volume;
   masterGain.connect(context.destination);
+  busGains = {
+    music: context.createGain(),
+    ambient: context.createGain(),
+    sfx: context.createGain(),
+    ui: context.createGain(),
+  };
+  for (const gain of Object.values(busGains)) gain.connect(masterGain);
+  spatialGain = context.createGain();
+  spatialGain.connect(busGains.sfx);
+  applyMixGains();
   return context;
 }
 
-function applyMasterGain() {
-  if (masterGain) {
-    masterGain.gain.value = muted ? 0 : volume;
-  }
+/** 把 mix 设置写到各总线（master 乘静音）。 */
+function applyMixGains() {
+  if (!masterGain || !busGains) return;
+  masterGain.gain.value = muted ? 0 : mix.master;
+  busGains.music.gain.value = mix.music;
+  busGains.ambient.gain.value = mix.ambient;
+  busGains.sfx.gain.value = mix.sfx;
+  busGains.ui.gain.value = mix.ui;
+  if (spatialGain) spatialGain.gain.value = dbToGain(spatialTrimDb);
 }
 
 // ---------- 对外控制 API ----------
@@ -237,20 +406,48 @@ function applyMasterGain() {
 export function setMuted(next: boolean) {
   muted = next;
   persistMuted(next);
-  applyMasterGain();
+  applyMixGains();
 }
 
 export function isMuted(): boolean {
   return muted;
 }
 
+/** 兼容旧 API：等同于 master 总线音量。 */
 export function setVolume(next: number) {
-  volume = Math.min(1, Math.max(0, next));
-  applyMasterGain();
+  setMix({ master: next });
 }
 
 export function getVolume(): number {
-  return volume;
+  return mix.master;
+}
+
+export function getMix(): MixSettings {
+  return { ...mix };
+}
+
+export function setMix(patch: Partial<MixSettings>) {
+  mix = {
+    master: clamp01(patch.master ?? mix.master),
+    music: clamp01(patch.music ?? mix.music),
+    ambient: clamp01(patch.ambient ?? mix.ambient),
+    sfx: clamp01(patch.sfx ?? mix.sfx),
+    ui: clamp01(patch.ui ?? mix.ui),
+  };
+  persistMix(mix);
+  applyMixGains();
+  if (ambientCurrent) applyAmbientLevel();
+  if (musicCurrent) applyMusicLevel();
+}
+
+/** 空间化总衰减：全球视角 −10 dB（见 features/audio/spatial.ts）。 */
+export function setSpatialTrimDb(db: number) {
+  spatialTrimDb = db;
+  if (spatialGain) spatialGain.gain.value = dbToGain(spatialTrimDb);
+}
+
+export function getSpatialTrimDb() {
+  return spatialTrimDb;
 }
 
 /**
@@ -268,7 +465,11 @@ export function unlockAudio() {
   }
 }
 
-// ---------- 合成原语 ----------
+export function isUnlocked() {
+  return unlocked;
+}
+
+// ---------- 合成原语（回退路径） ----------
 
 /** 指数包络：attack 升到 peak → 保持到 duration-release → 释放到 ~0。 */
 function applyEnvelope(
@@ -300,7 +501,7 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
   return noiseBuffer;
 }
 
-function scheduleTone(ctx: AudioContext, spec: ToneSpec) {
+function scheduleTone(ctx: AudioContext, spec: ToneSpec, destination: AudioNode) {
   const startAt = ctx.currentTime + (spec.delay ?? 0);
   const oscillator = ctx.createOscillator();
   oscillator.type = spec.type;
@@ -314,7 +515,7 @@ function scheduleTone(ctx: AudioContext, spec: ToneSpec) {
   const gain = ctx.createGain();
   applyEnvelope(gain.gain, startAt, spec.gain, spec.duration, spec.attack, spec.release);
   oscillator.connect(gain);
-  gain.connect(masterGain!);
+  gain.connect(destination);
   oscillator.start(startAt);
   oscillator.stop(startAt + spec.duration + 0.05);
   oscillator.onended = () => {
@@ -323,7 +524,7 @@ function scheduleTone(ctx: AudioContext, spec: ToneSpec) {
   };
 }
 
-function scheduleNoiseBurst(ctx: AudioContext, spec: NoiseSpec) {
+function scheduleNoiseBurst(ctx: AudioContext, spec: NoiseSpec, destination: AudioNode) {
   const startAt = ctx.currentTime + (spec.delay ?? 0);
   const source = ctx.createBufferSource();
   source.buffer = getNoiseBuffer(ctx);
@@ -338,7 +539,7 @@ function scheduleNoiseBurst(ctx: AudioContext, spec: NoiseSpec) {
   applyEnvelope(gain.gain, startAt, spec.gain, spec.duration, spec.attack, spec.release);
   source.connect(filter);
   filter.connect(gain);
-  gain.connect(masterGain!);
+  gain.connect(destination);
   source.start(startAt);
   source.stop(startAt + spec.duration + 0.05);
   source.onended = () => {
@@ -348,9 +549,108 @@ function scheduleNoiseBurst(ctx: AudioContext, spec: NoiseSpec) {
   };
 }
 
+// ---------- 采样加载 ----------
+
+/** 已加载的采样数 / 已发起加载数（调试与测试用）。 */
+let samplesLoaded = 0;
+let samplesRequested = 0;
+
+/**
+ * 取一条采样的 AudioBuffer；未加载时发起加载并返回 null（调用方回退合成音）。
+ * 加载失败只记一次警告、之后不再重试，避免弱网下每次播放都打一发请求。
+ */
+function getSample(ctx: AudioContext, path: string): AudioBuffer | null {
+  const cached = sampleCache.get(path);
+  if (cached) return cached;
+  if (samplesLoading.has(path) || samplesFailed.has(path)) return null;
+  samplesLoading.add(path);
+  samplesRequested += 1;
+  void (async () => {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bytes = await response.arrayBuffer();
+      sampleCache.set(path, await ctx.decodeAudioData(bytes));
+      samplesLoaded += 1;
+    } catch (error) {
+      samplesFailed.add(path);
+      console.warn(`[audio] 采样加载失败，回退合成音：${path}`, error);
+    } finally {
+      samplesLoading.delete(path);
+    }
+  })();
+  return null;
+}
+
+/** 预加载若干采样（页面切换时调，避免首次播放回退）。 */
+export function preloadSamples(paths: readonly string[]) {
+  const ctx = ensureContext();
+  if (!ctx) return;
+  for (const path of paths) getSample(ctx, path);
+}
+
+export function sampleStats() {
+  return { loaded: samplesLoaded, requested: samplesRequested };
+}
+
+/** 测试用：清空采样缓存与统计。 */
+export function resetSampleCacheForTests() {
+  sampleCache.clear();
+  samplesLoading.clear();
+  samplesFailed.clear();
+  samplesLoaded = 0;
+  samplesRequested = 0;
+}
+
+function manifestPaths(bus: 'sfx' | 'ui', key: string): readonly string[] {
+  const group = bus === 'sfx' ? AUDIO_MANIFEST.sfx : AUDIO_MANIFEST.ui;
+  return (group as Record<string, readonly string[]>)[key] ?? [];
+}
+
 // ---------- 播放入口 ----------
 
-function play(name: SoundName, options?: { big?: boolean }) {
+export interface PlayOptions {
+  /** 空间位置（格坐标）——仅 sfx 用；缺省为非空间音。 */
+  spatial?: { tile: { x: number; y: number }; volumeDb: number; pan: number } | null;
+  /** 覆盖总线（默认按 SAMPLE_KEY）。 */
+  bus?: 'sfx' | 'ui';
+}
+
+/** 随机扰动幅度（契约：音高 ±4%，音量 ±2 dB）。 */
+const PITCH_JITTER = 0.04;
+const VOLUME_JITTER_DB = 2;
+
+function playSample(
+  ctx: AudioContext,
+  path: string,
+  buffer: AudioBuffer,
+  destination: AudioNode,
+  random: () => number,
+  volumeDb: number,
+  pan: number,
+) {
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.playbackRate.value = 1 + (random() - 0.5) * 2 * PITCH_JITTER;
+  const gain = ctx.createGain();
+  gain.gain.value = dbToGain(volumeDb + (random() - 0.5) * 2 * VOLUME_JITTER_DB);
+  source.connect(gain);
+  if (typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    gain.connect(panner);
+    panner.connect(destination);
+  } else {
+    gain.connect(destination);
+  }
+  source.start();
+  source.onended = () => {
+    source.disconnect();
+    gain.disconnect();
+  };
+}
+
+function play(name: SoundName, options?: { big?: boolean; spatial?: PlayOptions['spatial'] }) {
   if (!isAudioSupported() || muted || !unlocked) {
     return;
   }
@@ -358,7 +658,7 @@ function play(name: SoundName, options?: { big?: boolean }) {
     return;
   }
   const ctx = ensureContext();
-  if (!ctx) {
+  if (!ctx || !busGains) {
     return;
   }
   if (ctx.state === 'suspended') {
@@ -366,28 +666,77 @@ function play(name: SoundName, options?: { big?: boolean }) {
     void ctx.resume().catch(() => {});
     return;
   }
+  const target = SAMPLE_KEY[name];
+  const destination = target.bus === 'ui' ? busGains.ui : spatialGain ?? busGains.sfx;
+  const spatial = options?.spatial ?? null;
+  // 空间音：距离衰减 + 左右声相（distance 与 pan 由 features/audio/spatial.ts 算好）。
+  if (spatial && target.bus === 'sfx') {
+    const attenuation = spatial.volumeDb;
+    if (attenuation <= -60) return; // > 60 格不播
+  }
+  const paths = manifestPaths(target.bus, target.key);
+  if (paths.length > 0) {
+    const path = paths[Math.floor(Math.random() * paths.length)] ?? paths[0];
+    const buffer = getSample(ctx, path);
+    if (buffer) {
+      playSample(ctx, path, buffer, destination, Math.random, spatial?.volumeDb ?? 0, spatial?.pan ?? 0);
+      return;
+    }
+  }
+  // 采样未就绪：合成回退（保持旧测试语义）。
   buildSoundSpecs(name, options).forEach((spec) => {
     if (spec.kind === 'tone') {
-      scheduleTone(ctx, spec);
+      scheduleTone(ctx, spec, destination);
     } else {
-      scheduleNoiseBurst(ctx, spec);
+      scheduleNoiseBurst(ctx, spec, destination);
     }
   });
 }
 
 /** 语义化音效 API：每个都是调好参数的短函数。 */
 export const sfx = {
-  /** 导弹/火箭发射：短促下滑音。 */
-  fire() {
-    play('fire');
+  /** 通用开火（旧名；具体炮塔用 fireGauss/fireLaser/fireMissile/firePlasma）。 */
+  fire(spatial?: PlayOptions['spatial']) {
+    play('fire', { spatial });
+  },
+  fireGauss(spatial?: PlayOptions['spatial']) {
+    play('fireGauss', { spatial });
+  },
+  fireLaser(spatial?: PlayOptions['spatial']) {
+    play('fireLaser', { spatial });
+  },
+  fireMissile(spatial?: PlayOptions['spatial']) {
+    play('fireMissile', { spatial });
+  },
+  firePlasma(spatial?: PlayOptions['spatial']) {
+    play('firePlasma', { spatial });
+  },
+  fireGeneric(spatial?: PlayOptions['spatial']) {
+    play('fireGeneric', { spatial });
   },
   /** 爆炸；big = 击毁级大爆炸。 */
-  explosion(big = false) {
-    play('explosion', { big });
+  explosion(big = false, spatial?: PlayOptions['spatial']) {
+    play('explosion', { big, spatial });
+  },
+  /** 近距爆炸。 */
+  explosionNear(spatial?: PlayOptions['spatial']) {
+    play('explosionNear', { spatial });
+  },
+  /** 远距爆炸（低频闷响）。 */
+  explosionFar(spatial?: PlayOptions['spatial']) {
+    play('explosionFar', { spatial });
+  },
+  /** 按距离分档的爆炸（近/远）。 */
+  explosionAt(distance: number, spatial?: PlayOptions['spatial']) {
+    play(distance > 18 ? 'explosionFar' : 'explosionNear', { big: distance <= 6, spatial });
   },
   /** 点防拦截：高频咔哒。 */
-  intercept() {
-    play('intercept');
+  intercept(spatial?: PlayOptions['spatial']) {
+    play('intercept', { spatial });
+  },
+  /** 命中：短促金属声。 */
+  hit(spatial?: PlayOptions['spatial']) {
+    play('hit', { spatial });
   },
   /** 指令成功：双音上行。 */
   commandOk() {
@@ -397,9 +746,13 @@ export const sfx = {
   commandFail() {
     play('commandFail');
   },
-  /** 建造完成：三音和弦 chime。 */
+  /** 建造完成：三音和弦 chime（旧名，等同 constructionComplete）。 */
   buildComplete() {
     play('buildComplete');
+  },
+  /** 施工完成（落成）。 */
+  constructionComplete() {
+    play('constructionComplete');
   },
   /** 研究完成：上行琶音。 */
   researchComplete() {
@@ -409,11 +762,210 @@ export const sfx = {
   alert() {
     play('alert');
   },
+  /** 通知提示。 */
+  notify() {
+    play('notify');
+  },
+  /** 建造放置（ghost 确认）。 */
+  buildPlace() {
+    play('buildPlace');
+  },
+  /** 拆除。 */
+  demolish() {
+    play('demolish');
+  },
+  /** 传送带放置。 */
+  beltPlace() {
+    play('beltPlace');
+  },
+  /** 单位选中。 */
+  unitSelect() {
+    play('unitSelect');
+  },
+  /** 单位应答。 */
+  unitAck() {
+    play('unitAck');
+  },
+  /** 移动指令。 */
+  orderMove() {
+    play('orderMove');
+  },
+  /** 攻击指令。 */
+  orderAttack() {
+    play('orderAttack');
+  },
   /** UI 点按：极短 tick。 */
   uiClick() {
     play('uiClick');
   },
+  /** UI 悬停。 */
+  uiHover() {
+    play('uiHover');
+  },
+  /** 打开面板。 */
+  uiPanelOpen() {
+    play('uiPanelOpen');
+  },
+  /** 关闭面板。 */
+  uiPanelClose() {
+    play('uiPanelClose');
+  },
 } as const;
+
+/** 编译期契约：每个 SoundName 都必须有对应的 sfx 方法（notifications 等按名字索引）。 */
+const SOUND_API_COVERAGE: Record<SoundName, unknown> = sfx;
+void SOUND_API_COVERAGE;
+
+// ---------- 循环声床与配乐 ----------
+
+export type AmbientName = 'wind' | 'factory' | 'space';
+export type MusicName = 'calm' | 'tense' | 'combat';
+
+interface LoopVoice {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+}
+
+let ambientCurrent: { name: AmbientName; voice: LoopVoice; level: number } | null = null;
+let musicCurrent: { name: MusicName; voice: LoopVoice; level: number } | null = null;
+/** 目标声床 / 配乐（即使采样未就绪也记下，加载完由 tickAudioLoops 起播）。 */
+let ambientWanted: { name: AmbientName; level: number } | null = null;
+let musicWanted: { name: MusicName; level: number } | null = null;
+let ambientTargetLevel = 0;
+let musicTargetLevel = 1;
+/** 页面切换交叉淡化（1.5s）/ 配乐状态切换（3s）。 */
+export const AMBIENT_CROSSFADE_SECONDS = 1.5;
+export const MUSIC_CROSSFADE_SECONDS = 3;
+
+function loopPath(bus: 'ambient' | 'music', name: string) {
+  const group = bus === 'ambient' ? AUDIO_MANIFEST.ambient : AUDIO_MANIFEST.music;
+  return (group as Record<string, readonly string[]>)[name]?.[0] ?? null;
+}
+
+function startLoop(ctx: AudioContext, bus: 'ambient' | 'music', name: string, level: number): LoopVoice | null {
+  const path = loopPath(bus, name);
+  if (!path) return null;
+  const buffer = getSample(ctx, path);
+  if (!buffer) return null; // 未就绪：等加载完下一次 setX 再起（调用方每 500ms 刷新一次状态）
+  const destination = bus === 'ambient' ? busGains!.ambient : busGains!.music;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  source.connect(gain);
+  gain.connect(destination);
+  source.start();
+  // 淡入（交叉淡化的一半；旧声床在 fadeOutLoop 里同时淡出）
+  gain.gain.linearRampToValueAtTime(level, ctx.currentTime + (bus === 'ambient' ? AMBIENT_CROSSFADE_SECONDS : MUSIC_CROSSFADE_SECONDS));
+  return { source, gain };
+}
+
+function fadeOutLoop(ctx: AudioContext, voice: LoopVoice, seconds: number) {
+  voice.gain.gain.cancelScheduledValues(ctx.currentTime);
+  voice.gain.gain.setValueAtTime(voice.gain.gain.value, ctx.currentTime);
+  voice.gain.gain.linearRampToValueAtTime(0, ctx.currentTime + seconds);
+  voice.source.stop(ctx.currentTime + seconds + 0.05);
+}
+
+function applyAmbientLevel() {
+  const ctx = context;
+  if (!ctx || !ambientCurrent) return;
+  ambientCurrent.level = ambientTargetLevel;
+  ambientCurrent.voice.gain.gain.setTargetAtTime(ambientTargetLevel, ctx.currentTime, 0.2);
+}
+
+function applyMusicLevel() {
+  const ctx = context;
+  if (!ctx || !musicCurrent) return;
+  musicCurrent.level = musicTargetLevel;
+  musicCurrent.voice.gain.gain.setTargetAtTime(musicTargetLevel, ctx.currentTime, 0.2);
+}
+
+/** 设置环境声床（null = 停止）；页面切换走 1.5s 交叉淡化。 */
+export function setAmbient(name: AmbientName | null, level = 1) {
+  ambientTargetLevel = name ? clamp01(level) : 0;
+  ambientWanted = name ? { name, level: ambientTargetLevel } : null;
+  reconcileAmbient();
+}
+
+/**
+ * 让实际声床跟上 ambientWanted：采样未就绪时先什么都不做，
+ * 由 tickAudioLoops（调用方每 500ms 一次）在加载完后补起。
+ */
+function reconcileAmbient() {
+  if (!isAudioSupported() || !unlocked) return;
+  const ctx = ensureContext();
+  if (!ctx || !busGains) return;
+  const wanted = ambientWanted;
+  if (ambientCurrent?.name === (wanted?.name ?? null)) {
+    applyAmbientLevel();
+    return;
+  }
+  if (ambientCurrent) {
+    fadeOutLoop(ctx, ambientCurrent.voice, AMBIENT_CROSSFADE_SECONDS);
+    ambientCurrent = null;
+  }
+  if (wanted) {
+    const voice = startLoop(ctx, 'ambient', wanted.name, ambientTargetLevel);
+    if (voice) ambientCurrent = { name: wanted.name, voice, level: ambientTargetLevel };
+  }
+}
+
+/** 设置配乐状态（null = 停止）；状态切换走 3s 交叉淡化。 */
+export function setMusic(name: MusicName | null, level = 1) {
+  musicTargetLevel = name ? clamp01(level) : 0;
+  musicWanted = name ? { name, level: musicTargetLevel } : null;
+  reconcileMusic();
+}
+
+function reconcileMusic() {
+  if (!isAudioSupported() || !unlocked) return;
+  const ctx = ensureContext();
+  if (!ctx || !busGains) return;
+  const wanted = musicWanted;
+  if (musicCurrent?.name === (wanted?.name ?? null)) {
+    applyMusicLevel();
+    return;
+  }
+  if (musicCurrent) {
+    fadeOutLoop(ctx, musicCurrent.voice, MUSIC_CROSSFADE_SECONDS);
+    musicCurrent = null;
+  }
+  if (wanted) {
+    const voice = startLoop(ctx, 'music', wanted.name, musicTargetLevel);
+    if (voice) musicCurrent = { name: wanted.name, voice, level: musicTargetLevel };
+  }
+}
+
+/**
+ * 周期调用（与场景状态刷新同频）：采样加载完成后补起目标声床 / 配乐。
+ * 未 unlock / 无 AudioContext 时是 no-op。
+ */
+export function tickAudioLoops() {
+  if (!unlocked) return;
+  reconcileAmbient();
+  reconcileMusic();
+}
+
+export function getAmbientName(): AmbientName | null {
+  return ambientCurrent?.name ?? null;
+}
+
+export function getMusicName(): MusicName | null {
+  return musicCurrent?.name ?? null;
+}
+
+/** 测试用：当前声床/配乐状态重置（模块级单例）。 */
+export function resetLoopsForTests() {
+  ambientCurrent = null;
+  musicCurrent = null;
+  ambientWanted = null;
+  musicWanted = null;
+  ambientTargetLevel = 0;
+  musicTargetLevel = 1;
+  spatialTrimDb = 0;
+}
 
 // ---------- 自动播放策略：首次手势解锁 ----------
 

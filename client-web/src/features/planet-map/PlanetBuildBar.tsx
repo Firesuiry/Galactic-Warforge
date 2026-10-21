@@ -367,6 +367,7 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           onClick={() => {
             setBuildBarDocked(false);
             onExpand?.();
+            sfx.uiPanelOpen();
           }}
           type="button"
         >
@@ -561,7 +562,10 @@ export function PlanetBuildBar({ catalog, planet, summary, dimensional = false, 
           <button
             aria-label="收起建造栏"
             className="planet-build-bar__tool"
-            onClick={() => setBuildBarDocked(true)}
+            onClick={() => {
+              setBuildBarDocked(true);
+              sfx.uiPanelClose();
+            }}
             title="收起建造栏"
             type="button"
           >

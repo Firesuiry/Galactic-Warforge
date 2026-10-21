@@ -304,6 +304,11 @@ function main() {
     });
   }
 
+  // 引擎侧清单：直接生成可 import 的 TS 模块（public/ 下的文件不应被 JS import，
+  // 打进 bundle 的是这一份；public 里只放成品音频与许可说明）。
+  const manifestPath = path.join(ROOT, 'client-web/src/engine/audio-manifest.ts');
+  fs.writeFileSync(manifestPath, `// 由 develop_tools/audio/build.mjs 生成，不要手改。\n` +
+    `export const AUDIO_MANIFEST = ${JSON.stringify(manifest, null, 2)} as const;\n`);
   fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   writeThirdParty(rows);
   console.log(`\n[audio] 总体积 ${(totalBytes / 1024 / 1024).toFixed(2)} MB（预算 20 MB）`);

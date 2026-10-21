@@ -260,7 +260,7 @@ describe('引擎行为（stub AudioContext）', () => {
 
     expect(FakeAudioContext.instances).toHaveLength(1);
     const ctx = FakeAudioContext.instances[0];
-    // 主增益 → destination
+    // 主增益 → destination（第 23 轮起还多四条总线 GainNode，主增益仍是第一个）
     expect(ctx.gains[0].connect).toHaveBeenCalledWith(ctx.destination);
     // 一个锯齿波振荡器：720 → 160 下滑，峰值 0.16
     expect(ctx.oscillators).toHaveLength(1);
@@ -270,7 +270,8 @@ describe('引擎行为（stub AudioContext）', () => {
     expect(osc.frequency.exponentialRampToValueAtTime).toHaveBeenCalledWith(160, 0.15);
     expect(osc.start).toHaveBeenCalledWith(0);
     expect(osc.stop).toHaveBeenCalled();
-    const voiceGain = ctx.gains[1];
+    // 总线（master + music/ambient/sfx/ui + spatial）之后才是每次发声的包络增益
+    const voiceGain = ctx.gains.at(-1)!;
     expect(voiceGain.gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.16, 0.005);
   });
 

@@ -7,7 +7,7 @@ import { Bot, ChartColumn, Cpu, Flag, FlaskConical, Hourglass, Orbit, Rewind, Sa
 import { NavLink, useNavigate } from 'react-router-dom';
 
 import { Icon } from '@/common/Icon';
-import { isMuted, setMuted, sfx } from '@/engine/audio';
+import { getMix, isMuted, setMix, setMuted, sfx, type MixBus, type MixSettings } from '@/engine/audio';
 import { isPowerAlertType } from '@/features/notifications/event-toasts';
 import { formatInventorySummary, inventoryStackRows, pickKeyItems } from '@/features/inventory-summary';
 import { mechaSlotUsage, selectMyMecha } from '@/features/mecha/model';
@@ -42,6 +42,7 @@ export function TopNav() {
   const [saveMessage, setSaveMessage] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(() => isMuted());
+  const [mix, setMixState] = useState<MixSettings>(() => getMix());
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   const summaryQuery = useQuery({
@@ -105,6 +106,11 @@ export function TopNav() {
   function handleSave() {
     setSaveMessage('');
     saveMutation.mutate();
+  }
+
+  function handleMixChange(bus: MixBus, value: number) {
+    setMix({ [bus]: value });
+    setMixState(getMix());
   }
 
   function handleToggleMute() {
@@ -286,6 +292,11 @@ export function TopNav() {
           </button>
           {settingsOpen ? (
             <div className="top-nav__settings-pop" role="menu">
+              {/* 音量混音（第 23 轮）：五个滑条 + 静音开关，存 localStorage（sw.audio.mix） */}
+              <div className="top-nav__settings-section" aria-label="音量">
+                <div className="top-nav__settings-section-title">音量</div>
+                <AudioMixSliders mix={mix} muted={audioMuted} onChange={handleMixChange} onToggleMute={handleToggleMute} />
+              </div>
               <div className="top-nav__settings-row">
                 <span className="top-nav__settings-label">玩家</span>
                 <span>{session.playerId}</span>
@@ -315,6 +326,51 @@ export function TopNav() {
         </div>
       </div>
     </header>
+  );
+}
+
+/** 音量滑条定义：键 / 文案 / aria-label。 */
+const MIX_SLIDERS: ReadonlyArray<{ bus: MixBus; label: string }> = [
+  { bus: 'master', label: '主音量' },
+  { bus: 'music', label: '音乐' },
+  { bus: 'ambient', label: '环境' },
+  { bus: 'sfx', label: '音效' },
+  { bus: 'ui', label: '界面' },
+];
+
+/** 设置面板里的五条音量滑条 + 静音开关（0–100 显示，内部 0..1）。 */
+export function AudioMixSliders({ mix, muted, onChange, onToggleMute }: {
+  mix: MixSettings;
+  muted: boolean;
+  onChange: (bus: MixBus, value: number) => void;
+  onToggleMute: () => void;
+}) {
+  return (
+    <div className="audio-mix">
+      {MIX_SLIDERS.map(({ bus, label }) => (
+        <label className="audio-mix__row" key={bus}>
+          <span className="audio-mix__label">{label}</span>
+          <input
+            aria-label={label}
+            className="audio-mix__slider"
+            max={100}
+            min={0}
+            onChange={(event) => onChange(bus, Number(event.target.value) / 100)}
+            type="range"
+            value={Math.round(mix[bus] * 100)}
+          />
+          <span className="audio-mix__value">{Math.round(mix[bus] * 100)}</span>
+        </label>
+      ))}
+      <button
+        aria-pressed={muted}
+        className="secondary-button audio-mix__mute"
+        onClick={onToggleMute}
+        type="button"
+      >
+        {muted ? '取消静音' : '静音'}
+      </button>
+    </div>
   );
 }
 

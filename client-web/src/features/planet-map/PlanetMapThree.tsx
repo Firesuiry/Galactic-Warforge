@@ -296,7 +296,7 @@ export function PlanetMapThree(props: Props) {
     } else {
       store.setSelected(null);
     }
-    if (ids.length > 0) sfx.uiClick();
+    if (ids.length > 0) sfx.unitSelect();
   }
 
   // 点选落空提示是「一次性回执」，2.4s 后自动消失（与迷雾提示的常驻语义不同）。
@@ -446,6 +446,8 @@ export function PlanetMapThree(props: Props) {
       captureScreenshot: () => scene.current?.capture() ?? null,
       // R20-A ⑥：调试面板按需拉相机状态（打开面板 / 点「复制链接」时）。
       getViewport: () => viewportReader.current?.() ?? null,
+      // 音频声相：格 → 画布 CSS 坐标（scene.project 已在场景里，这里只透出）。
+      projectTile: (tile) => scene.current?.project(tile) ?? null,
     });
   }, [ready]);
 
