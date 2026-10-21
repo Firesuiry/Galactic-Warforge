@@ -240,7 +240,7 @@ describe('issuer commands', () => {
     assert.ok(COMMANDS.as);
     assert.ok(COMMANDS.mecha);
     const mechaHelp = await dispatch('help mecha', { api, currentPlayer: 'p1', rl: {} as never });
-    assert.match(mechaHelp, /mecha <list\|assign <mecha_id> \[operator\]\|assign <mecha_id> --release>/);
+    assert.match(mechaHelp, /mecha <list\|assign <mecha_id> \[operator\]\|assign <mecha_id> --release\|dispatch <planet_id> \[mecha_id\]>/);
   });
 
   it('switches issuer with as <name> and restores the player with bare as', async () => {
