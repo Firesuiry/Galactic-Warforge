@@ -209,22 +209,25 @@ export class SelectionOverlay {
     this.entries.clear();
     for (const glow of this.glows) { glow.mesh.removeFromParent(); glow.mesh.geometry.dispose(); if (glow.ownMaterial) (glow.mesh.material as THREE.Material).dispose(); }
     this.glows = [];
-    const lineWidth = this.scale() * SELECTION_LINE_TILES;
     for (const item of items) {
       const material = this.lineMaterial(item.color, item.opacity);
+      // 线宽必须按世界单位（不是格）：格宽在 288 格面上只有 0.386，0.055 格 ≈ 0.02 世界单位，
+      // 色带贴地几乎看不见。取「0.02 格 → 世界」并留一点下限。
+      const worldWidth = Math.max(this.scale() * 0.02, 0.006);
       const geometry = item.kind === 'building'
-        ? bracketGeometry(item.tile, faceSize, this.radius + this.scale() * 0.05, lineWidth, 0)
+        ? bracketGeometry(item.tile, faceSize, this.radius + this.scale() * 0.05, worldWidth, 0)
         : item.kind === 'unit'
-          ? ringGeometry(item.tile, faceSize, this.radius, lineWidth, 0.34)
-          : ringGeometry(item.tile, faceSize, this.radius, lineWidth * 0.8, 0.42);
+          ? ringGeometry(item.tile, faceSize, this.radius, worldWidth, 0.34)
+          : ringGeometry(item.tile, faceSize, this.radius, worldWidth * 0.8, 0.42);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.renderOrder = item.kind === 'hover' ? 11 : 12;
       this.group.add(mesh);
       this.entries.set(item.key, { mesh, kind: item.kind, color: item.color, born: now, tile: item.tile, footprint: item.footprint });
       if (item.kind === 'building' && item.footprint?.length) {
-        // 柔和地面光晕只画在占地中心一格。
+        // 柔和地面光晕：盖住整个占地（中心在最暗处，边缘极淡），不是一格小圆。
         const center = item.footprint[Math.floor(item.footprint.length / 2)];
-        const glowGeometry = glowDisc(center, faceSize, this.radius, 0.9);
+        const span = Math.sqrt(item.footprint.length) * 0.75;
+        const glowGeometry = glowDisc(center, faceSize, this.radius, Math.max(0.9, span));
         const glow = new THREE.Mesh(glowGeometry, this.glowMaterial(item.color));
         glow.renderOrder = 10;
         this.group.add(glow);

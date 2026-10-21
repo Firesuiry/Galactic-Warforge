@@ -114,8 +114,8 @@ const HOLO_FRAGMENT = /* glsl */ `
   varying vec3 vLocal;
 
   void main() {
-    // 局部 Y 归一化到 0..1：模型局部单位 = 1 格，占高约 1.2 格（地基 + 机身）。
-    float height = clamp((vLocal.y + 0.05) / 1.2, 0.0, 1.0);
+    // 模型局部单位 = 1 格，机身高度约 0.6 格（模型组已在场景侧按占地缩放）。
+    float height = clamp(vLocal.y / 0.62, 0.0, 1.0);
     // 显形前沿：进度线下方实心，上方溶解；前沿 0.08 宽度做柔化。
     float reveal = smoothstep(height, height + 0.08, uProgress);
     if (reveal <= 0.001) discard;
@@ -127,7 +127,7 @@ const HOLO_FRAGMENT = /* glsl */ `
     vec3 color = mix(uColor, uEdge, fresnel * 0.8 + scan * 0.35);
     // 基础半透明 + 菲涅尔边 + 前沿亮线。
     float front = smoothstep(0.0, 0.06, uProgress - height) * (1.0 - smoothstep(0.06, 0.14, uProgress - height));
-    float alpha = (0.16 + fresnel * 0.55 + scan * 0.12 + front * 0.7) * reveal;
+    float alpha = (0.07 + fresnel * 0.42 + scan * 0.08 + front * 0.6) * reveal;
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
   }
 `;

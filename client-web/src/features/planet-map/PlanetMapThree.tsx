@@ -768,6 +768,10 @@ export function PlanetMapThree(props: Props) {
       },
       // 绘制调用统计（模型素材验收用）：getter 不会被 bindSceneMethods 绑上，这里显式取一次。
       renderStats: () => target.renderStats,
+      // 3A 画质 VFX 夹具钩子（仅测试构建）：固定位置注入合成特效，按相位定格。
+      // 见 `three/vfx/fixture-hooks.ts`；真机不使用（故事壳只在夹具里调）。
+      vfxPhase: (phase: string, seconds?: number) => target.applyVfxFixturePhase(phase, seconds),
+      vfxStats: () => target.vfxStats(),
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);

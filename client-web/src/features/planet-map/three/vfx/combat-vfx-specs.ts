@@ -176,25 +176,26 @@ export function combatVfxFromEvent(
   const specs: CombatVfxSpecs = { bursts: [], decals: [], lights: [], shockwaves: [], tracers: [] };
   specs.bursts.push({
     style: PARTICLE_STYLES.fire, at: add(target, normal, 0.12), normal,
-    velocity: { x: normal.x * 1.6, y: normal.y * 1.6, z: normal.z * 1.6 },
-    count: Math.round(18 * scale), life: 0.72, scale: scale, spread: 2.4, seed, tint: [1, 1, 1],
+    velocity: { x: normal.x * 0.5, y: normal.y * 0.5, z: normal.z * 0.5 },
+    count: Math.round(44 * scale), life: 0.9, scale: scale, spread: 2.4, seed, tint: [1, 1, 1],
   });
   specs.bursts.push({
     style: PARTICLE_STYLES.smoke, at: add(target, normal, 0.2), normal,
-    velocity: { x: normal.x * 0.9, y: normal.y * 0.9, z: normal.z * 0.9 },
-    count: Math.round(12 * scale), life: 1.9, scale: scale, spread: 1.2, seed: seed + 1, tint: [0.55, 0.55, 0.55],
+    velocity: { x: normal.x * 0.4, y: normal.y * 0.4, z: normal.z * 0.4 },
+    count: Math.round(20 * scale), life: 2.4, scale: scale, spread: 1.3, seed: seed + 1, tint: [0.72, 0.72, 0.72],
   });
   specs.bursts.push({
     style: PARTICLE_STYLES.debris, at: add(target, normal, 0.16), normal,
-    velocity: { x: normal.x * 2.8, y: normal.y * 2.8, z: normal.z * 2.8 },
-    count: Math.round(14 * scale), life: 1.1, scale: scale, spread: 3.4, seed: seed + 2, tint: [1, 1, 1],
+    velocity: { x: normal.x * 1.5, y: normal.y * 1.5, z: normal.z * 1.5 },
+    count: Math.round(12 * scale), life: 1.2, scale: scale * 1.6, spread: 4.0, seed: seed + 2, tint: [1, 1, 1],
   });
+  // 中心闪光只留一点：爆炸的层次靠火球/烟/碎片，一个大白球会把它们全糊掉。
   specs.bursts.push({
-    style: PARTICLE_STYLES.flash, at: add(target, normal, 0.3), normal,
+    style: PARTICLE_STYLES.flash, at: add(target, normal, 0.12), normal,
     velocity: { x: 0, y: 0, z: 0 },
-    count: 2, life: 0.18, scale: 2.4 * scale, spread: 0, seed: seed + 3, tint: [1, 1, 1],
+    count: 1, life: 0.12, scale: 0.55 * scale, spread: 0, seed: seed + 3, tint: [1, 0.9, 0.7],
   });
-  specs.shockwaves.push({ at: add(target, normal, 0.03), normal, size: 1.6 * scale, life: 0.55 });
+  specs.shockwaves.push({ at: add(target, normal, 0.04), normal, size: 2.6 * scale, life: 0.55 });
   specs.lights.push({ at: add(target, normal, 0.6), color: 0xffb066, intensity: 26 * scale, life: 0.28, distance: 6 * scale });
   specs.decals.push({ at: add(target, normal, 0.004), normal, size: 1.1 * scale, life: 6 });
   return specs;

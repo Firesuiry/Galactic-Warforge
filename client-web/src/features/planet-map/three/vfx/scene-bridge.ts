@@ -50,10 +50,18 @@ export function buildSelectionItems(
       for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
         tiles.push(surfaceOffset(building.position, dx, dy, faceSize));
       }
-      items.push({
-        key: `selected:${selected.id}`, tile: { x: Math.round(building.position.x), y: Math.round(building.position.y) },
-        color: SELECTION_COLORS.footprint, kind: 'building', opacity: 0.95, footprint: tiles,
-      });
+      // 括号只画在占地**四角格**（整块每格都画会变成一格一格的虚线，读不出「选中了这个建筑」）。
+      const corners = footprint.width <= 1 && footprint.height <= 1
+        ? [tiles[0]]
+        : [tiles[0], tiles[footprint.width - 1], tiles[tiles.length - footprint.width], tiles[tiles.length - 1]];
+      for (const [index, corner] of corners.entries()) {
+        items.push({
+          key: `selected:${selected.id}:${index}`, tile: { x: Math.round(corner.x), y: Math.round(corner.y) },
+          color: SELECTION_COLORS.footprint, kind: 'building', opacity: 0.95,
+          // 只在左下角那格挂地面光晕（`footprint` 非空即画光晕）。
+          footprint: index === 0 ? tiles : undefined,
+        });
+      }
     }
   } else if (selected?.kind === 'unit') {
     const unit = data.planet.units?.[selected.id];

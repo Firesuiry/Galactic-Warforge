@@ -24,6 +24,9 @@ export const ATLAS_FRAMES: Record<AtlasKind, { start: number; count: number }> =
 
 export const ATLAS_URL = '/assets/vfx/particles.png';
 
+/** 图集网格（4×4）。生成脚本与本常量必须一致。 */
+export const ATLAS_GRID = 4;
+
 let texture: THREE.Texture | null = null;
 let pending = false;
 const listeners = new Set<(texture: THREE.Texture) => void>();

@@ -29,6 +29,7 @@ import { ConstructionFlash, ConstructionHolo, HoloMaterials, type HoloTask } fro
 import { SelectionOverlay, type SelectionItem } from './selection';
 import { SupplyAuraLayer, supplyAurasFrom, type SupplyAuraItem } from './supply-aura';
 import { ensureAtlas } from './atlas';
+import { applyFixturePhase, type FixtureContext } from './fixture-hooks';
 
 /** 冻结下的固定时间（秒）：所有动画停在这个相位。 */
 export const FROZEN_TIME = 1.35;
@@ -62,14 +63,16 @@ export class VfxLayer {
   private readonly reducedMotion: boolean;
   private sources: ActivitySource[] = [];
   private time = 0;
+  /** 冻结相位（夹具可覆盖；每帧 update 都用它，避免被 animate 循环重置）。 */
+  private frozenPhase = FROZEN_TIME;
 
   constructor(private readonly parent: THREE.Object3D, options: VfxLayerOptions) {
     this.settings = VFX_QUALITY[options.quality];
     this.frozen = options.frozen;
     this.reducedMotion = options.reducedMotion;
     ensureAtlas();
-    this.particles = new ParticleSystem(parent, this.settings);
-    this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights);
+    this.particles = new ParticleSystem(parent, this.settings, this.frozen);
+    this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights, options.scale);
     this.shake = new CameraShake(options.shakeEnabled ?? (() => !options.frozen && !options.reducedMotion));
     this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius);
     this.constructionFlash = new ConstructionFlash(parent, options.radius, options.scale);
@@ -125,24 +128,50 @@ export class VfxLayer {
   }
 
   /** 世界尺度：粒子尺寸（格）→ 屏幕像素的换算系数。 */
-  setWorldScale(pixelScale: number): void {
-    this.particles.setWorldScale(pixelScale);
+  setWorldScale(pixelScale: number, tileSize: number): void {
+    this.particles.setWorldScale(pixelScale, tileSize);
+  }
+
+  /** 相机（曳光 billboard 用）；场景在构造后与 resize 时各调一次即可。 */
+  setCamera(camera: THREE.Camera): void {
+    this.combat.setCamera(camera);
   }
 
   /** 每帧推进（`dt` 秒；冻结时内部固定时间）。 */
   update(dt: number, cameraHeight: number, faceSize: number): void {
     if (this.frozen) {
-      this.time = FROZEN_TIME;
+      this.time = this.frozenPhase;
     } else if (!this.reducedMotion) {
       this.time += Math.max(0, dt);
     }
-    this.combat.update(this.frozen ? 0 : dt, this.time, cameraHeight);
-    this.shake.update(this.frozen ? 0 : dt);
+    // 冻结下也用传入的 dt 推进「已存在对象」的寿命（夹具按相位注入时需要它停在爆发后若干毫秒）；
+    // 粒子本身按 uTime 解析求值，dt 只影响曳光/焦痕/冲击波/点光源。
+    this.combat.update(dt, this.time, cameraHeight);
+    this.shake.update(dt);
     this.holo.setTime(this.time);
     this.constructionFlash.update(this.frozen ? 0 : dt);
+    // 夹具排错：粒子批是否可见/时间/纹理。
+    (this as unknown as { _debug?: unknown })._debug = this.particles.debugInfo();
     this.selection.animate(this.time, this.frozen);
     this.auras.animate(this.time, this.frozen);
     this.emitters.update(this.sources, dt, this.time, faceSize, this.frozen);
+  }
+
+  /**
+   * 夹具定格：把 VFX 时钟拨到指定相位（冻结截图用；真机不调用）。
+   * 粒子/曳光/冲击波都按 `uTime` 解析求值，拨时钟后立刻处于该相位。
+   */
+  setFrozenPhase(seconds: number): void {
+    this.frozenPhase = seconds;
+    this.time = seconds;
+    this.particles.setTime(seconds);
+    this.combat.setTime(seconds);
+    this.holo.setTime(seconds);
+  }
+
+  /** 夹具：按相位注入合成特效（见 `fixture-hooks.ts`）。 */
+  applyFixturePhase(phase: string, seconds: number | undefined, context: FixtureContext): number {
+    return applyFixturePhase(this, phase, seconds, context);
   }
 
   /** 当前时间（秒，冻结下固定）。 */
@@ -150,7 +179,7 @@ export class VfxLayer {
 
   /** 诊断：粒子/战斗对象计数。 */
   stats() {
-    return { time: this.time, particles: this.particles.counts(), combat: this.combat.counts(), emitters: this.emitters.activeEmitters };
+    return { time: this.time, particles: this.particles.counts(), combat: this.combat.counts(), emitters: this.emitters.activeEmitters, debug: this.particles.debugInfo() };
   }
 
   dispose(): void {

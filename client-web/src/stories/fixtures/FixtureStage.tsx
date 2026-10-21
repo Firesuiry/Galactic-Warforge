@@ -25,6 +25,11 @@ export type CameraView = {
   zoom: number;
   /** 绝对相机高度（覆盖 zoom；中空 / 远景机位用）。 */
   altitude?: number;
+  /**
+   * 特效试验场相位（`?vfxPhase=`）：场景就绪后在固定位置注入合成特效并定格。
+   * 仅夹具使用；见 `three/vfx/fixture-hooks.ts`。
+   */
+  vfxPhase?: 'Explosion' | 'TurretFire' | 'Construction' | 'Industry' | 'Selection';
 };
 
 type ThreeTestScene = {
@@ -33,6 +38,7 @@ type ThreeTestScene = {
   zoom(factor: number): void;
   setAltitude(altitude: number): void;
   getCenterTile(): { x: number; y: number } | null;
+  vfxPhase?(phase: string, seconds?: number): number;
 };
 
 /**
@@ -77,6 +83,7 @@ export function FixtureStage({ fixture, view }: { fixture: Fixture; view: Camera
     let cancelled = false;
     let timer = 0;
     let attempts = 0;
+    let injected = false;
     const apply = () => {
       if (cancelled) return;
       const scene = (window as unknown as { __planetThree?: ThreeTestScene }).__planetThree;
@@ -88,6 +95,11 @@ export function FixtureStage({ fixture, view }: { fixture: Fixture; view: Camera
         else if (view.zoom !== 1) scene.zoom(view.zoom);
         const landed = scene.getCenterTile();
         if (landed && landed.x === view.focus.x && landed.y === view.focus.y) {
+          // 机位落位后注入特效试验场相位（只做一次；scene 内部按固定相位定格）。
+          if (view.vfxPhase && !injected) {
+            injected = true;
+            scene.vfxPhase?.(view.vfxPhase);
+          }
           return;
         }
       }

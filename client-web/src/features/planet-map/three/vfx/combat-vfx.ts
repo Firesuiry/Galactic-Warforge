@@ -40,7 +40,7 @@ function burstFrom(spec: VfxBurst) {
 }
 
 interface Timed { elapsed: number; duration: number }
-interface TracerFx extends Timed { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; width: number }
+interface TracerFx extends Timed { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; width: number; direction: THREE.Vector3 }
 interface DecalFx extends Timed { mesh: THREE.Mesh; size: number }
 interface ShockwaveFx extends Timed { mesh: THREE.Mesh; size: number }
 interface LightFx extends Timed { light: THREE.PointLight; base: number; active: boolean }
@@ -71,7 +71,13 @@ export class CombatVfx {
   private readonly tracerMaterials = new Map<number, THREE.MeshBasicMaterial>();
   private readonly maxLights: number;
 
-  constructor(parent: THREE.Object3D, particles: ParticleSystem, maxLights: number = COMBAT_VFX_LIMITS.lights) {
+  constructor(
+    parent: THREE.Object3D,
+    particles: ParticleSystem,
+    maxLights: number = COMBAT_VFX_LIMITS.lights,
+    /** 一格的世界长度：贴花/冲击波/曳光尺寸以「格」给出，落成 mesh 时要换算。 */
+    private readonly tileScale: () => number = () => 1,
+  ) {
     this.particles = particles;
     this.maxLights = maxLights;
     this.group.name = 'combat-vfx';
@@ -124,7 +130,7 @@ export class CombatVfx {
     }
     const fx = this.freeTracers.pop() ?? {
       mesh: new THREE.Mesh(this.tracerGeometry, this.tracerMaterial(spec.color)),
-      from: new THREE.Vector3(), to: new THREE.Vector3(), width: 1, elapsed: 0, duration: spec.life,
+      from: new THREE.Vector3(), to: new THREE.Vector3(), width: 1, direction: new THREE.Vector3(), elapsed: 0, duration: spec.life,
     };
     fx.mesh.material = this.tracerMaterial(spec.color);
     fx.from.set(spec.from.x, spec.from.y, spec.from.z);
@@ -137,16 +143,26 @@ export class CombatVfx {
     this.poseTracer(fx, 0);
   }
 
+  /** 相机（billboard 用）：由场景每帧传入，未传时退化为世界对齐。 */
+  private camera?: THREE.Camera;
+  setCamera(camera: THREE.Camera): void { this.camera = camera; }
+
   /** 曳光：放在两点中点，沿方向拉伸，法线朝向相机（billboard 绕轴旋转）。 */
   private poseTracer(fx: TracerFx, t: number): void {
-    const direction = new THREE.Vector3().subVectors(fx.to, fx.from);
-    const length = direction.length() || 0.0001;
-    fx.mesh.position.copy(fx.from).addScaledVector(direction, 0.5);
-    fx.mesh.quaternion.setFromUnitVectors(Y_AXIS, direction.normalize());
-    // 面向相机：在拉伸平面内绕自身长轴旋转到最朝向相机（简单近似：保持世界对齐即可，
-    // 细长条在近景/远景都可读，不做逐帧重定向以免增加每帧开销）。
-    fx.mesh.rotateY(0);
-    const width = fx.width * (1 - t * 0.35);
+    fx.direction.subVectors(fx.to, fx.from);
+    const length = fx.direction.length() || 0.0001;
+    fx.mesh.position.copy(fx.from).addScaledVector(fx.direction, 0.5);
+    // Billboard 长条：局部 +Y 对齐弹道方向，平面法线尽量朝向相机（否则斜视角下是一条线）。
+    fx.direction.normalize();
+    const toCamera = this.camera
+      ? this.camera.position.clone().sub(fx.mesh.position).normalize()
+      : new THREE.Vector3(0, 0, 1);
+    const side = new THREE.Vector3().crossVectors(fx.direction, toCamera);
+    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    const normal = new THREE.Vector3().crossVectors(side, fx.direction).normalize();
+    fx.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, fx.direction, normal));
+    const width = fx.width * this.tileScale() * (1 - t * 0.35);
     fx.mesh.scale.set(width, length, 1);
     (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95 * (1 - t);
     void Z_AXIS;
@@ -167,10 +183,10 @@ export class CombatVfx {
     fx.mesh.position.set(spec.at.x, spec.at.y, spec.at.z);
     fx.mesh.quaternion.setFromUnitVectors(Z_AXIS, normal);
     fx.mesh.renderOrder = 9;
-    fx.size = spec.size;
+    fx.size = spec.size * this.tileScale();
     fx.elapsed = 0;
     fx.duration = spec.life;
-    fx.mesh.scale.setScalar(spec.size);
+    fx.mesh.scale.setScalar(fx.size);
     this.group.add(fx.mesh);
     this.decals.push(fx);
   }
@@ -194,10 +210,10 @@ export class CombatVfx {
     fx.mesh.position.set(spec.at.x, spec.at.y, spec.at.z);
     fx.mesh.quaternion.setFromUnitVectors(Z_AXIS, normal);
     fx.mesh.renderOrder = 12;
-    fx.size = spec.size;
+    fx.size = spec.size * this.tileScale();
     fx.elapsed = 0;
     fx.duration = spec.life;
-    fx.mesh.scale.setScalar(spec.size * 0.25);
+    fx.mesh.scale.setScalar(fx.size * 0.35);
     this.group.add(fx.mesh);
     this.shockwaves.push(fx);
   }
@@ -231,11 +247,18 @@ export class CombatVfx {
    * 逐帧推进。`dt` 秒；`frozen` 时不推进（画面定格在固定相位）。
    * `time` 秒：交给粒子系统的统一时钟（冻结时由调用方给固定值）。
    */
+  /** 夹具定格：只拨粒子时钟（曳光/焦痕按 dt 推进，夹具里 dt=0 即停在首帧）。 */
+  setTime(seconds: number): void {
+    this.particles.setTime(seconds);
+  }
+
   update(dt: number, time: number, cameraHeight: number): void {
     this.particles.setTime(time);
     this.particles.setCamera(cameraHeight);
     const step = Math.max(0, dt);
     this.advance(this.tracers, step, (fx) => this.releaseTracer(fx), (fx, t) => this.poseTracer(fx, t));
+    // 相机变化后重定向曳光（billboard）；只在有曳光时做，平时零开销。
+    if (this.camera && this.tracers.length) for (const fx of this.tracers) this.poseTracer(fx, Math.min(fx.elapsed / fx.duration, 1));
     this.advance(this.decals, step, (fx) => this.releaseDecal(fx), (fx, t) => {
       fx.mesh.scale.setScalar(fx.size * (1 + t * 0.12));
       const material = fx.mesh.material as THREE.MeshBasicMaterial;

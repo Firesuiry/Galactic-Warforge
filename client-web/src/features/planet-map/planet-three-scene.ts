@@ -294,6 +294,7 @@ export class PlanetThreeScene {
       reducedMotion: this.reducedMotion.matches,
       shakeEnabled: () => !this.frozen && !this.reducedMotion.matches,
     });
+    this.vfx.setCamera(this.camera);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       if (!tap) return;
@@ -326,6 +327,27 @@ export class PlanetThreeScene {
   }
 
   getQuality() { return this.quality; }
+
+  /**
+   * 夹具：按 `?vfxPhase=` 在固定位置注入合成特效并定格到指定相位。
+   * 只在测试构建（`window.__planetThree` 存在）里由故事壳调用；真机不触发。
+   * 返回注入的指令条数（测试用）。
+   */
+  applyVfxFixturePhase(phase: string, seconds?: number): number {
+    return this.vfx.applyFixturePhase(phase, seconds, {
+      normal: (x, y) => this.normal(x, y),
+      radius: RADIUS,
+      scale: this.tileScale(),
+      faceSize: this.data?.planet.surface.face_size ?? 16,
+      buildings: this.data?.planet.buildings,
+      catalog: this.data?.catalog,
+    });
+  }
+
+  /** 夹具/诊断：VFX 层计数（粒子、战斗对象、发射器）。 */
+  vfxStats() {
+    return this.vfx.stats();
+  }
 
   /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
    * 取上一帧的 `renderer.info.render`，要在动画跑过一帧之后再读。 */
@@ -1698,7 +1720,7 @@ export class PlanetThreeScene {
         this.updateTurretAims(dt, time);
       }
       // 3A 画质 VFX：粒子/工业氛围/施工全息/选中/补给光环（冻结时内部固定相位）。
-      this.vfx.setWorldScale(this.particlePixelScale());
+      this.vfx.setWorldScale(this.particlePixelScale(), this.tileScale());
       this.vfx.update(dt, this.altitude, this.data?.planet.surface.face_size ?? 16);
       this.rangeCircles.animate(time / 1000, this.frozen || reducedMotion);
       this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);

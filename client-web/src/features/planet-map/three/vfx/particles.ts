@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 
-import { ATLAS_FRAMES, atlasTexture, onAtlasReady, type AtlasKind } from './atlas';
+import { ATLAS_FRAMES, ATLAS_GRID, atlasTexture, onAtlasReady, type AtlasKind } from './atlas';
 import { clamp01, rand, randSigned, smoothstep, type VfxQualitySettings } from './common';
 
 /** 一种粒子外观（决定贴图行、混合模式、尺寸/颜色随寿命的曲线）。 */
@@ -30,7 +30,7 @@ export interface ParticleStyle {
   colorTo: [number, number, number];
   /** 初始不透明度。 */
   opacity: number;
-  /** 重力（格/秒²，沿局部 +Y；负值下落）。 */
+  /** 重力（格/秒²，沿表面法线：正值落向地面，负值上飘）。 */
   gravity: number;
   /** 空气阻力（1/秒，速度按 e^{-drag·t} 衰减）。 */
   drag: number;
@@ -84,6 +84,9 @@ class ParticleBatch {
     this.geometry = new THREE.BufferGeometry();
     const emitTime = new Float32Array(capacity).fill(-1e6);
     const birth = new Float32Array(capacity * 3);
+    // three 的 Points 以 `position` 作为顶点位置属性（没有时整批被剔除）；它的值不参与
+    // 运动计算（着色器用 birth + 解析位移），但必须存在且与 birth 同步，否则视锥剔除/绘制异常。
+    const position = new Float32Array(capacity * 3);
     const velocity = new Float32Array(capacity * 3);
     const params = new Float32Array(capacity * 4); // life, size, growth, opacity
     const colorFrom = new Float32Array(capacity * 3);
@@ -91,9 +94,12 @@ class ParticleBatch {
     const style = new Float32Array(capacity * 4); // gravity, drag, frameStart, frameCount
     const frames = new Float32Array(capacity); // 该粒子的帧数（随机取 1..count）
     const seed = new Float32Array(capacity);
+    // 表面法线：重力沿 -normal（星球表面向下），不能沿世界 Y（行星任意位置的法线都不同）。
+    const normals = new Float32Array(capacity * 3);
     for (const [name, array, size] of [
-      ['emitTime', emitTime, 1], ['birth', birth, 3], ['velocity', velocity, 3], ['params', params, 4],
+      ['position', position, 3], ['emitTime', emitTime, 1], ['birth', birth, 3], ['velocity', velocity, 3], ['params', params, 4],
       ['colorFrom', colorFrom, 3], ['colorTo', colorTo, 3], ['style', style, 4], ['frames', frames, 1], ['seed', seed, 1],
+      ['surfaceNormal', normals, 3],
     ] as const) {
       this.geometry.setAttribute(name, new THREE.BufferAttribute(array, size).setUsage(THREE.DynamicDrawUsage));
     }
@@ -111,7 +117,7 @@ class ParticleBatch {
         uHasTexture: { value: getTexture() ? 1 : 0 },
         uFadeNear: { value: 2.2 },
         uFadeFar: { value: 90 },
-        uGrid: { value: 4 },
+        uGrid: { value: ATLAS_GRID },
         // 占位：ParticleSystem.setWorldScale 按「格宽 × 屏幕高度」更新。
         uPixelScale: { value: 650 },
       },
@@ -126,12 +132,13 @@ class ParticleBatch {
    * 写一批粒子（覆盖最旧的槽位）。count 由调用方按档位缩过。
    * 整批一次性写入，属性各标记一次 needsUpdate（一次上传，不逐粒子）。
    */
-  emit(burst: ParticleBurst, style: ParticleStyle, count: number): number {
+  emit(burst: ParticleBurst, style: ParticleStyle, count: number, emitTimeOverride?: number, tileSize = 1): number {
     if (count <= 0) return 0;
     const scale = burst.scale ?? 1;
     const spread = (burst.spread ?? 1) * style.spread;
     const emitTime = this.geometry.getAttribute('emitTime') as THREE.BufferAttribute;
     const birth = this.geometry.getAttribute('birth') as THREE.BufferAttribute;
+    const positionAttr = this.geometry.getAttribute('position') as THREE.BufferAttribute;
     const velocity = this.geometry.getAttribute('velocity') as THREE.BufferAttribute;
     const params = this.geometry.getAttribute('params') as THREE.BufferAttribute;
     const colorFromAttr = this.geometry.getAttribute('colorFrom') as THREE.BufferAttribute;
@@ -139,12 +146,17 @@ class ParticleBatch {
     const styleAttr = this.geometry.getAttribute('style') as THREE.BufferAttribute;
     const frames = this.geometry.getAttribute('frames') as THREE.BufferAttribute;
     const seeds = this.geometry.getAttribute('seed') as THREE.BufferAttribute;
+    const normalAttr = this.geometry.getAttribute('surfaceNormal') as THREE.BufferAttribute;
     const tint = burst.tint ?? [1, 1, 1];
     const frame = ATLAS_FRAMES[style.kind];
     for (let i = 0; i < count; i++) {
       const index = this.cursor;
       this.cursor = (this.cursor + 1) % this.capacity;
       const seed = (burst.seed + i * 977) | 0;
+      // 抖动幅度：spread 是「格/秒」量级的速度扰动，sqrt 分布让多数粒子聚在中心、少数飞远。
+      // 抖动与抬升都是「速度」（格/秒），先按 spread 缩放，再统一乘格宽换算成世界单位。
+      // 速度扰动幅度 = spread（格/秒）。sqrt 分布：多数粒子靠近中心、少数飞到外圈，
+      // 火球才有「核 + 外焰」的层次（均匀分布会散成一圈点）。
       const jitter = Math.sqrt(rand(seed, 1)) * spread;
       const angle = rand(seed, 2) * Math.PI * 2;
       const lift = randSigned(seed, 3) * spread * 0.35;
@@ -156,25 +168,31 @@ class ParticleBatch {
       const ux = tx / tlen, uy = ty / tlen, uz = tz / tlen;
       const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
       const cx = Math.cos(angle) * jitter, cy = Math.sin(angle) * jitter;
+      // 出生点抖动按「格」→ 世界单位；只给很小的初始散布（否则火球一开始就散成一圈）。
       birth.setXYZ(index,
-        burst.position.x + (ux * cx + vx * cy) * 0.5,
-        burst.position.y + (uy * cx + vy * cy) * 0.5,
-        burst.position.z + (uz * cx + vz * cy) * 0.5);
+        burst.position.x + (ux * cx + vx * cy) * 0.12 * tileSize,
+        burst.position.y + (uy * cx + vy * cy) * 0.12 * tileSize,
+        burst.position.z + (uz * cx + vz * cy) * 0.12 * tileSize);
+      positionAttr.setXYZ(index, birth.getX(index), birth.getY(index), birth.getZ(index));
+      // 速度单位是「格/秒」，世界位移要乘格宽；抖动同理（cx/cy 已是格）。
       velocity.setXYZ(index,
-        burst.velocity.x + (ux * cx + vx * cy) + nx * lift,
-        burst.velocity.y + (uy * cx + vy * cy) + ny * lift,
-        burst.velocity.z + (uz * cx + vz * cy) + nz * lift);
-      emitTime.setX(index, this.time);
+        (burst.velocity.x + (ux * cx + vx * cy) + nx * lift) * tileSize,
+        (burst.velocity.y + (uy * cx + vy * cy) + ny * lift) * tileSize,
+        (burst.velocity.z + (uz * cx + vz * cy) + nz * lift) * tileSize);
+      emitTime.setX(index, emitTimeOverride ?? this.time);
       const life = burst.life * (0.75 + rand(seed, 4) * 0.5);
       params.setXYZW(index, life, style.size * scale * (0.75 + rand(seed, 5) * 0.5), style.growth, style.opacity);
       colorFromAttr.setXYZ(index, style.colorFrom[0] * tint[0], style.colorFrom[1] * tint[1], style.colorFrom[2] * tint[2]);
       colorToAttr.setXYZ(index, style.colorTo[0] * tint[0], style.colorTo[1] * tint[1], style.colorTo[2] * tint[2]);
-      styleAttr.setXYZW(index, style.gravity, style.drag, frame.start, style.surface ? 1 : 0);
+      // 重力单位是「格/秒²」，写缓冲时换算成世界单位（与速度一致）。
+      styleAttr.setXYZW(index, style.gravity * tileSize, style.drag, frame.start, style.surface ? 1 : 0);
       frames.setX(index, Math.max(1, Math.min(frame.count, Math.round(frame.count * (0.6 + rand(seed, 6) * 0.4)))));
       seeds.setX(index, rand(seed, 7) * 6.283);
+      normalAttr.setXYZ(index, nx, ny, nz);
     }
     emitTime.needsUpdate = true;
     birth.needsUpdate = true;
+    positionAttr.needsUpdate = true;
     velocity.needsUpdate = true;
     params.needsUpdate = true;
     colorFromAttr.needsUpdate = true;
@@ -182,7 +200,11 @@ class ParticleBatch {
     styleAttr.needsUpdate = true;
     frames.needsUpdate = true;
     seeds.needsUpdate = true;
+    normalAttr.needsUpdate = true;
     this.live = Math.min(this.capacity, this.live + count);
+    // 只画已写入的槽位（环形缓冲写满后恒为容量；死粒子在顶点着色器里推出裁剪空间）。
+    // 顶点着色器用 `position` 计算裁剪坐标（出生点作为初始值），位置缓冲也要写出生点。
+    this.geometry.setDrawRange(0, this.live);
     return count;
   }
 
@@ -214,6 +236,16 @@ class ParticleBatch {
 
   get capacitySize(): number { return this.capacity; }
 
+  debugInfo(): Record<string, unknown> {
+    return {
+      capacity: this.capacity, cursor: this.cursor, live: this.live,
+      drawRange: this.geometry.drawRange, visible: this.points.visible,
+      uTime: this.material.uniforms.uTime.value,
+      uHasTexture: this.material.uniforms.uHasTexture.value,
+      uPixelScale: this.material.uniforms.uPixelScale.value,
+    };
+  }
+
   dispose(): void {
     this.points.removeFromParent();
     this.geometry.dispose();
@@ -222,6 +254,7 @@ class ParticleBatch {
 }
 
 const VERTEX_SHADER = /* glsl */ `
+  // position 由 three 自动提供（= birth 的副本，只用于顶点数量与包围盒，不参与运动）。
   attribute float emitTime;
   attribute vec3 birth;
   attribute vec3 velocity;
@@ -231,6 +264,7 @@ const VERTEX_SHADER = /* glsl */ `
   attribute vec4 style;    // gravity, drag, frameStart, surface
   attribute float frames;  // 帧数
   attribute float seed;
+  attribute vec3 surfaceNormal;
 
   uniform float uTime;
   uniform float uFadeNear;
@@ -259,8 +293,8 @@ const VERTEX_SHADER = /* glsl */ `
     float drag = style.y;
     float k = drag > 0.0001 ? (1.0 - exp(-drag * age)) / drag : age;
     vec3 pos = birth + velocity * k;
-    // 重力沿「局部 +Y」近似为世界 +Y（球面局部法线由发射时 velocity 的 normal 分量承担）。
-    pos.y += 0.5 * style.x * age * age;
+    // 重力沿表面法线向下（负值 = 向上飘：火焰/烟），不是世界 +Y。
+    pos -= surfaceNormal * (0.5 * style.x * age * age);
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
@@ -325,8 +359,13 @@ export class ParticleSystem {
   private readonly unsubscribeAtlas: () => void;
   private time = 0;
   private pending = 0;
+  /** 冻结模式（由 `setTime` 的第二参数或场景构造时的 frozen 决定）。 */
+  private frozen = false;
+  /** 一格的世界长度：粒子的速度/尺寸以「格」为单位，写缓冲前换算成世界单位。 */
+  private tileSize = 1;
 
-  constructor(parent: THREE.Object3D, settings: VfxQualitySettings) {
+  constructor(parent: THREE.Object3D, settings: VfxQualitySettings, frozen = false) {
+    this.frozen = frozen;
     this.settings = settings;
     this.group.name = 'vfx-particles';
     // 环形缓冲：按 55/45 分配给两种混合模式（火焰/火花多，烟/尘次之）。
@@ -353,8 +392,15 @@ export class ParticleSystem {
     if (this.pending >= MAX_BURSTS_PER_FRAME) return 0;
     this.pending += 1;
     const batch = style.blend === 'additive' ? this.additive : this.alpha;
-    return batch.emit(burst, style, Math.round(burst.count * this.settings.emissionScale));
+    const count = Math.max(1, Math.round(burst.count * this.settings.emissionScale));
+    // 冻结：粒子按 uTime 解析求值，若在「当前时间」发射会处于 t=0（淡入 0、不可见）。
+    // 冻结下统一把发射时刻往前推一个寿命的 35%（画面停在爆发中段），且**不消耗**发射预算。
+    const emitTime = this.frozen ? this.time - burst.life * 0.35 : this.time;
+    return batch.emit(burst, style, count, emitTime, this.tileSize);
   }
+
+  /** 冻结开关（场景构造时传入；夹具注入时也用它）。 */
+  setFrozen(frozen: boolean): void { this.frozen = frozen; }
 
   /** 每帧调用：推进 uniform 时间并清空单帧发射预算。 */
   setTime(seconds: number): void {
@@ -368,8 +414,9 @@ export class ParticleSystem {
    * 世界尺度：粒子尺寸单位是「格」，投影到屏幕像素需要 `tileSize × 屏幕高度 / 2tan(fov/2)`。
    * 场景在 resize/聚焦后调用；默认 650 与旧工业光点口径一致（RADIUS=100、16 格面、1000px 高）。
    */
-  setWorldScale(pixelScale: number): void {
+  setWorldScale(pixelScale: number, tileSize = this.tileSize): void {
     const scale = Math.max(1, pixelScale);
+    this.tileSize = Math.max(0.0001, tileSize);
     for (const batch of [this.additive, this.alpha]) batch.setPixelScale(scale);
   }
 
@@ -383,6 +430,11 @@ export class ParticleSystem {
   counts(): { additive: number; alpha: number; total: number } {
     const a = this.additive.aliveCount(), b = this.alpha.aliveCount();
     return { additive: a, alpha: b, total: a + b };
+  }
+
+  /** 诊断：某一批当前的有效 draw range 与 uniform（夹具排错用）。 */
+  debugInfo(): { additive: Record<string, unknown>; alpha: Record<string, unknown> } {
+    return { additive: this.additive.debugInfo(), alpha: this.alpha.debugInfo() };
   }
 
   /** 当前时间（秒，冻结下由调用方固定）。 */
@@ -400,33 +452,33 @@ export class ParticleSystem {
 export const PARTICLE_STYLES = {
   /** 火焰：白热 → 橙红，上飘、轻微上浮。 */
   fire: {
-    kind: 'fire', blend: 'additive', size: 0.55, growth: 1.9, colorFrom: [1, 0.92, 0.72], colorTo: [0.85, 0.24, 0.06],
-    opacity: 0.9, gravity: 1.4, drag: 2.2, spread: 0.5, surface: true,
+    kind: 'fire', blend: 'additive', size: 0.26, growth: 2.4, colorFrom: [1, 0.88, 0.62], colorTo: [0.95, 0.3, 0.06],
+    opacity: 0.5, gravity: -0.5, drag: 2.2, spread: 0.28, surface: true,
   } satisfies ParticleStyle,
   /** 烟：深灰 → 浅灰，缓慢上升并扩散（alpha 混合）。 */
   smoke: {
-    kind: 'smoke', blend: 'alpha', size: 0.5, growth: 3.4, colorFrom: [0.2, 0.21, 0.23], colorTo: [0.52, 0.55, 0.58],
-    opacity: 0.42, gravity: 0.85, drag: 1.1, spread: 0.35, surface: true,
+    kind: 'smoke', blend: 'alpha', size: 0.55, growth: 3.0, colorFrom: [0.3, 0.3, 0.32], colorTo: [0.66, 0.68, 0.7],
+    opacity: 0.5, gravity: -0.9, drag: 0.9, spread: 0.35, surface: true,
   } satisfies ParticleStyle,
   /** 白色蒸汽：比烟更亮、更快消散。 */
   steam: {
-    kind: 'smoke', blend: 'alpha', size: 0.36, growth: 2.8, colorFrom: [0.72, 0.78, 0.82], colorTo: [0.9, 0.93, 0.95],
-    opacity: 0.3, gravity: 1.1, drag: 1.4, spread: 0.3, surface: true,
+    kind: 'smoke', blend: 'alpha', size: 0.24, growth: 2.8, colorFrom: [0.72, 0.78, 0.82], colorTo: [0.9, 0.93, 0.95],
+    opacity: 0.3, gravity: -1.1, drag: 1.4, spread: 0.3, surface: true,
   } satisfies ParticleStyle,
   /** 火花：细长条，弹跳感（重力下坠 + 高阻力）。 */
   spark: {
-    kind: 'spark', blend: 'additive', size: 0.34, growth: 0.6, colorFrom: [1, 0.82, 0.42], colorTo: [0.95, 0.32, 0.08],
-    opacity: 0.95, gravity: -3.2, drag: 0.6, spread: 1.1, surface: true,
+    kind: 'spark', blend: 'additive', size: 0.3, growth: 0.5, colorFrom: [1, 0.82, 0.42], colorTo: [0.95, 0.32, 0.08],
+    opacity: 0.95, gravity: 3.2, drag: 0.6, spread: 1.1, surface: true,
   } satisfies ParticleStyle,
   /** 焊花：冷白偏青（装配台焊接）。 */
   weld: {
-    kind: 'spark', blend: 'additive', size: 0.3, growth: 0.5, colorFrom: [0.92, 0.98, 1], colorTo: [0.42, 0.86, 1],
-    opacity: 0.9, gravity: -2.4, drag: 1.2, spread: 0.8, surface: true,
+    kind: 'spark', blend: 'additive', size: 0.18, growth: 0.5, colorFrom: [0.92, 0.98, 1], colorTo: [0.42, 0.86, 1],
+    opacity: 0.9, gravity: 2.4, drag: 1.2, spread: 0.8, surface: true,
   } satisfies ParticleStyle,
   /** 尘土：采矿机扬尘（alpha）。 */
   dust: {
-    kind: 'smoke', blend: 'alpha', size: 0.32, growth: 2.4, colorFrom: [0.44, 0.4, 0.33], colorTo: [0.62, 0.58, 0.5],
-    opacity: 0.34, gravity: 0.5, drag: 1.6, spread: 0.55, surface: true,
+    kind: 'smoke', blend: 'alpha', size: 0.2, growth: 2.4, colorFrom: [0.44, 0.4, 0.33], colorTo: [0.62, 0.58, 0.5],
+    opacity: 0.34, gravity: -0.5, drag: 1.6, spread: 0.4, surface: true,
   } satisfies ParticleStyle,
   /** 碎屑：小而硬的颗粒，抛物线飞出（additive 让它在暗部也看得见）。 */
   debris: {
@@ -435,13 +487,13 @@ export const PARTICLE_STYLES = {
   } satisfies ParticleStyle,
   /** 全息光粒：缓慢上升的青色光点（研究站）。 */
   holo: {
-    kind: 'glow', blend: 'additive', size: 0.2, growth: 0.7, colorFrom: [0.32, 0.9, 1], colorTo: [0.16, 0.52, 0.95],
-    opacity: 0.75, gravity: 0.55, drag: 1.6, spread: 0.16, surface: true,
+    kind: 'glow', blend: 'additive', size: 0.12, growth: 0.7, colorFrom: [0.32, 0.9, 1], colorTo: [0.16, 0.52, 0.95],
+    opacity: 0.75, gravity: -0.55, drag: 1.6, spread: 0.16, surface: true,
   } satisfies ParticleStyle,
   /** 冲击波环（作为 billboard 的扁平闪光，配合网格环用）。 */
   flash: {
-    kind: 'glow', blend: 'additive', size: 1.2, growth: 2.2, colorFrom: [1, 0.94, 0.8], colorTo: [1, 0.5, 0.18],
-    opacity: 0.85, gravity: 0, drag: 3.5, spread: 0.1, surface: true,
+    kind: 'glow', blend: 'additive', size: 0.4, growth: 1.7, colorFrom: [1, 0.92, 0.72], colorTo: [1, 0.42, 0.12],
+    opacity: 0.55, gravity: 0, drag: 3.5, spread: 0.1, surface: true,
   } satisfies ParticleStyle,
 } as const;
 
