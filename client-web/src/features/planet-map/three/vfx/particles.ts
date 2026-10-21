@@ -112,6 +112,8 @@ class ParticleBatch {
         uFadeNear: { value: 2.2 },
         uFadeFar: { value: 90 },
         uGrid: { value: 4 },
+        // 占位：ParticleSystem.setWorldScale 按「格宽 × 屏幕高度」更新。
+        uPixelScale: { value: 650 },
       },
     });
     this.points = new THREE.Points(this.geometry, this.material);
@@ -190,6 +192,10 @@ class ParticleBatch {
     this.material.uniforms.uTime.value = seconds;
   }
 
+  setPixelScale(scale: number): void {
+    this.material.uniforms.uPixelScale.value = scale;
+  }
+
   setTexture(texture: THREE.Texture | null): void {
     this.material.uniforms.uTexture.value = texture;
     this.material.uniforms.uHasTexture.value = texture ? 1 : 0;
@@ -230,6 +236,7 @@ const VERTEX_SHADER = /* glsl */ `
   uniform float uFadeNear;
   uniform float uFadeFar;
   uniform float uGrid;
+  uniform float uPixelScale;
 
   varying vec3 vColor;
   varying float vAlpha;
@@ -260,7 +267,9 @@ const VERTEX_SHADER = /* glsl */ `
     float dist = max(-mv.z, 0.001);
     float fade = smoothstep(uFadeNear, uFadeNear + 1.0, dist) * (1.0 - smoothstep(uFadeFar * 0.6, uFadeFar, dist));
     float sizeT = mix(1.0, params.z, t);
-    gl_PointSize = clamp(params.y * sizeT * 650.0 / dist, 1.0, 220.0);
+    // 尺寸按世界单位投影：particleSize 的单位是「格」，先换算成世界长度再按视距缩放
+    // （旧工业光点写死的 650 只对 RADIUS=100 / 16 格面成立，这里由 uniform 统一）。
+    gl_PointSize = clamp(params.y * sizeT * uPixelScale / dist, 1.0, 220.0);
 
     vColor = mix(colorFrom, colorTo, t);
     // 淡入淡出：前 12% 快速淡入，后 45% 淡出。
@@ -353,6 +362,15 @@ export class ParticleSystem {
     this.additive.setTime(seconds);
     this.alpha.setTime(seconds);
     this.pending = 0;
+  }
+
+  /**
+   * 世界尺度：粒子尺寸单位是「格」，投影到屏幕像素需要 `tileSize × 屏幕高度 / 2tan(fov/2)`。
+   * 场景在 resize/聚焦后调用；默认 650 与旧工业光点口径一致（RADIUS=100、16 格面、1000px 高）。
+   */
+  setWorldScale(pixelScale: number): void {
+    const scale = Math.max(1, pixelScale);
+    for (const batch of [this.additive, this.alpha]) batch.setPixelScale(scale);
   }
 
   /** 相机高度（世界单位）：近处/远处淡出。 */

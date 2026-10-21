@@ -5,65 +5,68 @@
  * 旧补给光环是一条很粗的实心薄荷绿环（半宽 ≈ .32 格、不透明 .85 × 呼吸），抢画面；
  * 这里改成细虚线 + 极淡填充，运行/停机颜色语义不变（运行薄荷绿、停机暗红）。
  *
- * 建造 ghost 的供电范围圈同一画法（`RANGE_CIRCLE_*` 口径不变，只换虚线）。
+ * 虚线「流动」不重建几何：`setFlow(phase)` 把环整体绕自身轴旋转一个小于一个 dash 周期的
+ * 角度——视觉上虚线沿圆周缓慢滑动，冻结时相位固定。
  */
 
 import * as THREE from 'three';
 
 import { ribbonGeometry } from '../surface-ribbon';
+import { tileFrame } from '../projection';
 
 /** 虚线环参数（格）。 */
 export const DASH_RING = {
+  /** 线宽（格）：硬约束 ≤ .06。 */
   width: 0.055,
+  /** 一段虚线的弧长（格）。 */
   dash: 0.42,
+  /** 段间距（格）。 */
   gap: 0.26,
   opacity: 0.62,
   /** 填充不透明度：中心 0 → 边缘 0.05。 */
   fillEdge: 0.05,
   /** 虚线流动速度（圈/秒），freeze 下为 0。 */
-  flow: 0.08,
+  flow: 0.06,
 } as const;
 
 /**
- * 虚线环几何：在单位法线环上按弧长切段。
- *
- * `loop`：闭合环上的单位法线（首尾不重复）；`radiusTiles`：环半径（格），
- * 用于把 dash/gap（格）换算成段数比例。
+ * 虚线环几何：把单位法线环按「弧长 ≈ 格数 × 每格段数」切成若干段，每段单独一条细带。
+ * `loop` 为闭合环（首尾不重复），`tileSize` 用于把格换算成弧长。
  */
-export function dashedRingGeometry(loop: THREE.Vector3[], radius: number, halfWidth: number, dash: number, gap: number): THREE.BufferGeometry {
+export function dashedRingGeometry(loop: THREE.Vector3[], radius: number, halfWidth: number, tileSize: number, radiusTiles: number): THREE.BufferGeometry {
   const count = loop.length;
-  const period = Math.max(1, Math.round((count * (dash + gap)) / Math.max(dash + gap, 1e-6) / 8));
-  const dashCount = Math.max(1, Math.round(period * (dash / (dash + gap))));
+  const circumference = Math.max(0.001, 2 * Math.PI * radiusTiles);
+  const periodTiles = DASH_RING.dash + DASH_RING.gap;
+  const periods = Math.max(3, Math.round(circumference / periodTiles));
+  const pointsPerPeriod = count / periods;
+  const dashPoints = Math.max(2, Math.round(pointsPerPeriod * (DASH_RING.dash / periodTiles)));
   const positions: number[] = [];
   const indices: number[] = [];
   let base = 0;
-  // 沿环按 period 个点为一组，前 dashCount 个点连成一段（不闭合）。
-  for (let start = 0; start < count; start += period) {
-    const end = Math.min(count, start + dashCount);
-    if (end - start < 2) continue;
-    const segment = loop.slice(start, end);
+  for (let start = 0; start < count; start += pointsPerPeriod) {
+    const from = Math.round(start);
+    const to = Math.min(count - 1, from + dashPoints);
+    if (to - from < 1) continue;
+    const segment = loop.slice(from, to + 1);
     const ribbon = ribbonGeometry(segment, radius, halfWidth);
     const array = ribbon.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < array.count; i++) positions.push(array.getX(i), array.getY(i), array.getZ(i));
-    // ribbonGeometry 的索引按 (count) 个点循环，这里段是开放的：重建索引（每对相邻点一个四边形）。
-    const points = segment.length;
-    for (let i = 0; i < points - 1; i++) {
+    // 开放段：每对相邻点一个四边形（ribbonGeometry 的索引按闭合环写，这里重建）。
+    for (let i = 0; i < segment.length - 1; i++) {
       const a = base + i * 2, b = base + (i + 1) * 2;
       indices.push(a, a + 1, b, b, a + 1, b + 1);
     }
-    base += points * 2;
+    base += segment.length * 2;
     ribbon.dispose();
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
+  void tileSize;
   return geometry;
 }
 
-/**
- * 径向渐变盘（中心 0 → 边缘 alpha）。
- * `loop`：闭合环；`center`：圆心法线；顶点色 alpha 从 0 到 `edgeAlpha`。
- */
+/** 径向渐变盘：中心 alpha 0 → 边缘 `edgeAlpha`（顶点色）。 */
 export function radialDiscGeometry(loop: THREE.Vector3[], center: THREE.Vector3, radius: number, edgeAlpha: number): THREE.BufferGeometry {
   const positions: number[] = [];
   const colors: number[] = [];
@@ -82,12 +85,7 @@ export function radialDiscGeometry(loop: THREE.Vector3[], center: THREE.Vector3,
   return geometry;
 }
 
-/**
- * 虚线环材质：流动相位用 `uFlow` uniform（沿环方向偏移段索引，画面平滑）。
- * 简化实现：相位写进顶点属性（每次重建几何代价高），这里改用「整圈缓慢自转」——
- * 视觉上是虚线沿圆周流动，且不重建几何。
- */
-export function createDashRingMaterial(color: string, opacity = DASH_RING.opacity): THREE.MeshBasicMaterial {
+export function createDashRingMaterial(color: string, opacity: number = DASH_RING.opacity): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color, transparent: true, opacity, depthWrite: false,
     side: THREE.DoubleSide, toneMapped: false,
@@ -101,9 +99,23 @@ export function createRadialFillMaterial(color: string): THREE.MeshBasicMaterial
   });
 }
 
-/** 补给光环配色（运行 / 停机 / 补给车）。 */
+/** 补给光环配色（运行 / 停机 / 补给车）——语义与旧版一致。 */
 export const SUPPLY_AURA_COLORS = {
   running: '#5ff0b0',
   stopped: '#e0727f',
   truck: '#7dc5f4',
 } as const;
+
+/** 虚线流动相位（0..1，冻结时由调用方给固定值）。 */
+export function dashFlowPhase(seconds: number, frozen: boolean): number {
+  return frozen ? 0.25 : (seconds * DASH_RING.flow) % 1;
+}
+
+/**
+ * 贴球面虚线环的「流动」：绕环心轴旋转一个小于一个 dash 周期的角度。
+ * 返回可直接 `quaternion.premultiply` 的旋转（轴 = 该格法线）。
+ */
+export function flowRotation(tile: { x: number; y: number }, faceSize: number, phase: number): THREE.Quaternion {
+  const { normal } = tileFrame(tile, faceSize);
+  return new THREE.Quaternion().setFromAxisAngle(normal, phase * (DASH_RING.dash + DASH_RING.gap) * 0.9 * Math.PI * 2 / 6);
+}

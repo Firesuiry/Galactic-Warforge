@@ -19,13 +19,15 @@ import type { PlanetRenderQuality } from '../render-quality';
 import { CameraShake, shakeFromExplosion } from '../camera-shake';
 import { collectActivity, type ActivitySource } from '../industrial-activity';
 import type { PlanetThreeData } from '../../planet-three-scene';
-import { tileNormal, surfaceTileSize } from '../projection';
+import { surfaceTileSize } from '../projection';
 import { VFX_QUALITY, type VfxQualitySettings } from './common';
 import { ParticleSystem } from './particles';
 import { CombatVfx } from './combat-vfx';
 import { combatVfxFromEvent, type CombatPointLike } from './combat-vfx-specs';
 import { IndustryEmitters, registerBuildingType } from './emitters';
-import { ConstructionFlash, HoloMaterials } from './construction-holo';
+import { ConstructionFlash, ConstructionHolo, HoloMaterials, type HoloTask } from './construction-holo';
+import { SelectionOverlay, type SelectionItem } from './selection';
+import { SupplyAuraLayer, supplyAurasFrom, type SupplyAuraItem } from './supply-aura';
 import { ensureAtlas } from './atlas';
 
 /** 冻结下的固定时间（秒）：所有动画停在这个相位。 */
@@ -34,6 +36,10 @@ export const FROZEN_TIME = 1.35;
 export interface VfxLayerOptions {
   radius: number;
   scale: () => number;
+  /** 建筑模型工厂（`IndustrialModels`，与实物共享几何）。 */
+  models: { building(type: string, width: number, depth: number, own: boolean): THREE.Object3D };
+  /** 格 → 世界组局部单位法线。 */
+  normalOf: (tile: { x: number; y: number }) => THREE.Vector3;
   quality: PlanetRenderQuality;
   frozen: boolean;
   reducedMotion: boolean;
@@ -47,6 +53,9 @@ export class VfxLayer {
   readonly shake: CameraShake;
   readonly holo = new HoloMaterials();
   readonly constructionFlash: ConstructionFlash;
+  readonly construction: ConstructionHolo;
+  readonly selection: SelectionOverlay;
+  readonly auras: SupplyAuraLayer;
   private readonly emitters: IndustryEmitters;
   private readonly settings: VfxQualitySettings;
   private readonly frozen: boolean;
@@ -64,14 +73,40 @@ export class VfxLayer {
     this.shake = new CameraShake(options.shakeEnabled ?? (() => !options.frozen && !options.reducedMotion));
     this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius);
     this.constructionFlash = new ConstructionFlash(parent, options.radius, options.scale);
+    this.construction = new ConstructionHolo(parent, options.models, this.holo, options.radius, options.scale, this.constructionFlash, options.normalOf);
+    this.selection = new SelectionOverlay(parent, options.radius, options.scale);
+    this.auras = new SupplyAuraLayer(options.radius);
+    parent.add(this.auras.group);
+  }
+
+  /** 补给光环（运行/停机语义不变，画法换成细虚线 + 极淡渐变）。 */
+  syncAuras(items: readonly SupplyAuraItem[], faceSize: number): void {
+    this.auras.sync(items, faceSize);
+  }
+
+  /** 选中/悬停反馈（括号 / 细环 / 方向三角）。 */
+  syncSelection(items: readonly SelectionItem[], faceSize: number, now: number): void {
+    this.selection.sync(items, faceSize, now);
+  }
+
+  /** 施工全息（目标模型 + 按进度溶解）。 */
+  syncConstruction(tasks: readonly HoloTask[], faceSize: number): void {
+    this.construction.sync(tasks, faceSize);
   }
 
   get qualitySettings(): VfxQualitySettings { return this.settings; }
 
-  /** 权威活动源（`collectActivity` 的输出）：工业氛围只认这里的 active 标记。 */
-  setActivity(data: PlanetThreeData): ActivitySource[] {
+  /**
+   * 权威活动源（`collectActivity` 的输出）：工业氛围只认这里的 active 标记。
+   * `enabled` 是场景当前的图层开关（建筑层关掉时不冒烟）。
+   */
+  setActivity(data: PlanetThreeData, enabled: { buildings?: boolean; power?: boolean } = {}): ActivitySource[] {
     for (const building of Object.values(data.planet.buildings ?? {})) registerBuildingType(building.id, building.type);
-    this.sources = collectActivity(data);
+    this.sources = collectActivity(data).filter((source) => {
+      if (source.kind === 'energy') return enabled.power !== false;
+      if (source.kind === 'cargo' || source.kind === 'flight') return false;
+      return enabled.buildings !== false;
+    });
     return this.sources;
   }
 
@@ -89,6 +124,11 @@ export class VfxLayer {
     void camera;
   }
 
+  /** 世界尺度：粒子尺寸（格）→ 屏幕像素的换算系数。 */
+  setWorldScale(pixelScale: number): void {
+    this.particles.setWorldScale(pixelScale);
+  }
+
   /** 每帧推进（`dt` 秒；冻结时内部固定时间）。 */
   update(dt: number, cameraHeight: number, faceSize: number): void {
     if (this.frozen) {
@@ -100,13 +140,9 @@ export class VfxLayer {
     this.shake.update(this.frozen ? 0 : dt);
     this.holo.setTime(this.time);
     this.constructionFlash.update(this.frozen ? 0 : dt);
+    this.selection.animate(this.time, this.frozen);
+    this.auras.animate(this.time, this.frozen);
     this.emitters.update(this.sources, dt, this.time, faceSize, this.frozen);
-  }
-
-  /** 施工完成的一次闪光（场景在任务消失时调用）。 */
-  completeConstruction(tile: { x: number; y: number }, faceSize: number): void {
-    const normal = tileNormal(tile, faceSize);
-    this.constructionFlash.spawn(normal.clone().multiplyScalar(0), normal);
   }
 
   /** 当前时间（秒，冻结下固定）。 */
@@ -121,6 +157,9 @@ export class VfxLayer {
     this.combat.dispose();
     this.particles.dispose();
     this.constructionFlash.dispose();
+    this.construction.dispose();
+    this.selection.dispose();
+    this.auras.dispose();
     this.holo.dispose();
     this.shake.clear();
     void this.parent;

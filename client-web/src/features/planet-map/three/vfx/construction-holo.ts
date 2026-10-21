@@ -27,9 +27,13 @@ export class HoloMaterials {
     blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
   });
 
-  /** 按建筑类型取全息材质（同一个类型全场共享一个材质实例）。 */
-  get(type: string): THREE.ShaderMaterial {
-    let material = this.materials.get(type);
+  /**
+   * 按建筑类型取全息材质（同一个类型全场共享一个材质实例）。
+   * 进度是**每实例**的（同一类型可能同时有多处在建），所以每个施工任务克隆一份材质；
+   * 克隆只做一次、随任务缓存，不逐帧克隆（§2.5）。类型键只用于命名与调试。
+   */
+  get(type: string, key = type): THREE.ShaderMaterial {
+    let material = this.materials.get(key);
     if (material) return material;
     material = new THREE.ShaderMaterial({
       transparent: true,
@@ -46,17 +50,27 @@ export class HoloMaterials {
       fragmentShader: HOLO_FRAGMENT,
     });
     material.name = `holo:${type}`;
-    this.materials.set(type, material);
+    // 类型键上的材质是共享兜底（不在 dispose 时被单个任务释放）。
+    if (key === type) material.userData.shared = true;
+    this.materials.set(key, material);
     return material;
   }
 
   /** 完工闪光材质（叠加混合，由场景按时序改 opacity）。 */
   get flash(): THREE.MeshBasicMaterial { return this.flashMaterial; }
 
-  /** 全场进度/时间更新（同一类型的实例共享材质，一次写入全部生效）。 */
-  setProgress(type: string, progress: number): void {
-    const material = this.materials.get(type);
+  /** 按实例键写进度（0..1）。 */
+  setProgress(key: string, progress: number): void {
+    const material = this.materials.get(key);
     if (material) material.uniforms.uProgress.value = Math.min(1, Math.max(0, progress));
+  }
+
+  /** 释放某个实例的材质（施工完成/取消）。共享键（= 类型）不释放。 */
+  release(key: string): void {
+    const material = this.materials.get(key);
+    if (!material || material.userData.shared) return;
+    material.dispose();
+    this.materials.delete(key);
   }
 
   setTime(seconds: number): void {
@@ -173,6 +187,114 @@ export class ConstructionFlash {
     for (const entry of this.pool) { entry.mesh.removeFromParent(); entry.material.dispose(); }
     this.pool.length = 0;
     this.ring.dispose();
+    this.group.removeFromParent();
+  }
+}
+
+/** 场景侧的施工任务输入（进度已按 `constructionBarProgress` 归一）。 */
+export interface HoloTask {
+  id: string;
+  buildingType: string;
+  position: { x: number; y: number };
+  rotation?: number;
+  /** 占地（格）。 */
+  width: number;
+  height: number;
+  /** 0..1；null = 无法计算进度（只画边光轮廓，不溶解）。 */
+  progress: number | null;
+}
+
+/**
+ * 施工全息层：按任务 id 复用模型与材质；进度只写 uniform。
+ *
+ * - 模型来自 `IndustrialModels.building`（与实物同一套几何，缓存共享）；
+ * - 每个任务一份全息材质克隆（进度是每实例的），任务结束释放；
+ * - 任务消失（完工或取消）时在格上打一次闪光环。
+ */
+export class ConstructionHolo {
+  readonly group = new THREE.Group();
+  private readonly entries = new Map<string, { holder: THREE.Group; material: THREE.ShaderMaterial; task: HoloTask }>();
+
+  constructor(
+    parent: THREE.Object3D,
+    private readonly models: { building(type: string, width: number, depth: number, own: boolean): THREE.Object3D },
+    private readonly materials: HoloMaterials,
+    private readonly radius: number,
+    private readonly scale: () => number,
+    private readonly flash: ConstructionFlash,
+    private readonly normalOf: (tile: { x: number; y: number }) => THREE.Vector3,
+  ) {
+    this.group.name = 'construction-holo';
+    parent.add(this.group);
+  }
+
+  /** 同步任务集合（签名不变时只更新进度 uniform）。 */
+  sync(tasks: readonly HoloTask[], faceSize: number): void {
+    void faceSize;
+    const live = new Set<string>();
+    for (const task of tasks) {
+      live.add(task.id);
+      let entry = this.entries.get(task.id);
+      if (!entry || entry.task.buildingType !== task.buildingType || entry.task.width !== task.width || entry.task.height !== task.height) {
+        if (entry) { entry.holder.removeFromParent(); this.materials.release(`task:${task.id}`); }
+        entry = this.create(task);
+        this.entries.set(task.id, entry);
+      }
+      entry.task = task;
+      const progress = task.progress ?? 0;
+      entry.material.uniforms.uProgress.value = progress;
+      // 位置/朝向（任务可能旋转过，且跨面时需要重算法线）。
+      const normal = this.normalOf(task.position);
+      const ts = this.scale();
+      const center = new THREE.Vector3();
+      for (let dy = 0; dy < task.height; dy++) for (let dx = 0; dx < task.width; dx++) {
+        center.add(this.normalOf({ x: task.position.x + dx, y: task.position.y + dy }));
+      }
+      center.normalize();
+      entry.holder.position.copy(center).multiplyScalar(this.radius + ts * 0.025);
+      const east = this.normalOf({ x: task.position.x + 0.001, y: task.position.y }).sub(normal);
+      east.addScaledVector(normal, -east.dot(normal)).normalize();
+      const south = new THREE.Vector3().crossVectors(east, normal).normalize();
+      entry.holder.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, normal, south));
+      entry.holder.rotateY(-Number(task.rotation ?? 0) * Math.PI / 180);
+      entry.holder.scale.setScalar(ts);
+    }
+    for (const [id, entry] of this.entries) {
+      if (live.has(id)) continue;
+      // 任务结束：完工闪光（取消也打一次，读起来是「这一格有动静」）。
+      this.flash.spawn(entry.holder.position.clone(), this.normalOf(entry.task.position));
+      entry.holder.removeFromParent();
+      this.materials.release(`task:${id}`);
+      this.entries.delete(id);
+    }
+  }
+
+  private create(task: HoloTask): { holder: THREE.Group; material: THREE.ShaderMaterial; task: HoloTask } {
+    const holder = new THREE.Group();
+    const model = this.models.building(task.buildingType, task.width * 0.86, task.height * 0.86, true);
+    const material = this.materials.get(task.buildingType, `task:${task.id}`);
+    // 模型是共享缓存的：这里克隆一份网格树，只换材质，不碰原模型的几何/材质。
+    model.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const mesh = new THREE.Mesh(object.geometry, material);
+      mesh.position.copy(object.position);
+      mesh.quaternion.copy(object.quaternion);
+      mesh.scale.copy(object.scale);
+      holder.add(mesh);
+    });
+    holder.renderOrder = 14;
+    this.group.add(holder);
+    return { holder, material, task };
+  }
+
+  get count(): number { return this.entries.size; }
+
+  dispose(): void {
+    for (const [id, entry] of this.entries) {
+      entry.holder.removeFromParent();
+      this.materials.release(`task:${id}`);
+    }
+    this.entries.clear();
     this.group.removeFromParent();
   }
 }

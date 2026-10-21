@@ -147,3 +147,120 @@ export interface SelectionItem {
   footprint?: TilePoint[];
   opacity: number;
 }
+
+/**
+ * 选中/悬停反馈层：括号（建筑）、细环 + 方向三角（单位）、悬停细环。
+ *
+ * - 几何按「key + 格」缓存，签名变化才重建（悬停切换每帧都有，不能每次重建）；
+ * - 括号收拢动画：`animate(seconds, frozen)` 写 `inset`（0 → 1 的快照），冻结时固定在收拢完成；
+ * - 材质按颜色缓存（共享），不逐实例克隆。
+ */
+export class SelectionOverlay {
+  readonly group = new THREE.Group();
+  private readonly materials = new Map<string, THREE.MeshBasicMaterial>();
+  private readonly glowMaterials = new Map<string, THREE.MeshBasicMaterial>();
+  private entries = new Map<string, { mesh: THREE.Mesh; kind: SelectionItem['kind']; color: string; born: number; tile: TilePoint; footprint?: TilePoint[] }>();
+  private glows: { mesh: THREE.Mesh; color: string; ownMaterial?: boolean }[] = [];
+  private radius: number;
+  private scale: () => number;
+  private signature = '';
+
+  constructor(parent: THREE.Object3D, radius: number, scale: () => number) {
+    this.radius = radius;
+    this.scale = scale;
+    this.group.name = 'selection-overlay';
+    parent.add(this.group);
+  }
+
+  private lineMaterial(color: string, opacity: number): THREE.MeshBasicMaterial {
+    const key = `${color}:${opacity.toFixed(2)}`;
+    let material = this.materials.get(key);
+    if (!material) {
+      material = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity, depthWrite: false,
+        side: THREE.DoubleSide, toneMapped: false,
+      });
+      this.materials.set(key, material);
+    }
+    return material;
+  }
+
+  private glowMaterial(color: string): THREE.MeshBasicMaterial {
+    let material = this.glowMaterials.get(color);
+    if (!material) {
+      material = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.16, depthWrite: false,
+        side: THREE.DoubleSide, vertexColors: true, toneMapped: false,
+      });
+      this.glowMaterials.set(color, material);
+    }
+    return material;
+  }
+
+  /** 同步选中/悬停项（签名不变直接返回）。 */
+  sync(items: readonly SelectionItem[], faceSize: number, now: number): void {
+    const signature = JSON.stringify(items.map((item) => [item.key, item.tile.x, item.tile.y, item.color, item.kind, item.footprint?.length ?? 0, item.opacity]));
+    if (signature === this.signature) return;
+    this.signature = signature;
+    for (const entry of this.entries.values()) {
+      entry.mesh.removeFromParent();
+      entry.mesh.geometry.dispose();
+    }
+    this.entries.clear();
+    for (const glow of this.glows) { glow.mesh.removeFromParent(); glow.mesh.geometry.dispose(); if (glow.ownMaterial) (glow.mesh.material as THREE.Material).dispose(); }
+    this.glows = [];
+    const lineWidth = this.scale() * SELECTION_LINE_TILES;
+    for (const item of items) {
+      const material = this.lineMaterial(item.color, item.opacity);
+      const geometry = item.kind === 'building'
+        ? bracketGeometry(item.tile, faceSize, this.radius + this.scale() * 0.05, lineWidth, 0)
+        : item.kind === 'unit'
+          ? ringGeometry(item.tile, faceSize, this.radius, lineWidth, 0.34)
+          : ringGeometry(item.tile, faceSize, this.radius, lineWidth * 0.8, 0.42);
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.renderOrder = item.kind === 'hover' ? 11 : 12;
+      this.group.add(mesh);
+      this.entries.set(item.key, { mesh, kind: item.kind, color: item.color, born: now, tile: item.tile, footprint: item.footprint });
+      if (item.kind === 'building' && item.footprint?.length) {
+        // 柔和地面光晕只画在占地中心一格。
+        const center = item.footprint[Math.floor(item.footprint.length / 2)];
+        const glowGeometry = glowDisc(center, faceSize, this.radius, 0.9);
+        const glow = new THREE.Mesh(glowGeometry, this.glowMaterial(item.color));
+        glow.renderOrder = 10;
+        this.group.add(glow);
+        this.glows.push({ mesh: glow, color: item.color });
+      }
+      if (item.kind === 'unit' && item.direction) {
+        const triangle = new THREE.Mesh(directionTriangle(item.tile, faceSize, this.radius, item.direction), this.lineMaterial(item.color, item.opacity).clone());
+        triangle.renderOrder = 13;
+        this.group.add(triangle);
+        // 方向三角不参与括号动画，单独登记以便下次重建时清掉。
+        this.glows.push({ mesh: triangle, color: item.color, ownMaterial: true });
+      }
+    }
+  }
+
+  /** 收拢动画：括号从满格向内收（0 → 1，220ms），冻结时直接收拢完成。 */
+  animate(seconds: number, frozen: boolean): void {
+    for (const entry of this.entries.values()) {
+      if (entry.kind !== 'building') continue;
+      const t = frozen ? 1 : Math.min(1, Math.max(0, (seconds - entry.born) / BRACKET_SNAP_SECONDS));
+      const eased = 1 - (1 - t) ** 3;
+      (entry.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95 * (0.55 + eased * 0.45);
+    }
+  }
+
+  get count(): number { return this.entries.size; }
+
+  dispose(): void {
+    for (const entry of this.entries.values()) { entry.mesh.removeFromParent(); entry.mesh.geometry.dispose(); }
+    this.entries.clear();
+    for (const glow of this.glows) { glow.mesh.removeFromParent(); glow.mesh.geometry.dispose(); if (glow.ownMaterial) (glow.mesh.material as THREE.Material).dispose(); }
+    this.glows = [];
+    this.materials.forEach((material) => material.dispose());
+    this.materials.clear();
+    this.glowMaterials.forEach((material) => material.dispose());
+    this.glowMaterials.clear();
+    this.group.removeFromParent();
+  }
+}
