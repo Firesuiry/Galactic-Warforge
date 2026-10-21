@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react';
 
 import type { PlanetRuntimeView } from '@shared/types';
 
-import { getSpatialTrimDb, setAmbient, setMusic, setSpatialTrimDb, tickAudioLoops } from '@/engine/audio';
+import { getSpatialTrimDb, noteSceneTick, setAmbient, setMusic, setSpatialTrimDb, tickAudioLoops } from '@/engine/audio';
 import type { GameEventDetail } from '@shared/types';
 import type { PlanetRenderView } from '@/features/planet-map/model';
 import { subscribeBattleEvents } from '@/engine/battle-events';
@@ -79,11 +79,15 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
       return undefined;
     }
     const apply = () => {
+      noteSceneTick();
       const { planet: currentPlanet, runtime: currentRuntime, playerId: own } = latest.current;
       const sceneHandle = sceneRef.current;
       const faceSize = currentPlanet?.surface?.face_size ?? 32;
+      // 场景句柄由 PlanetPage 每 500ms 刷新；首帧可能还没就绪（capture 未上报），
+      // 此时按「贴地、中心未知」给默认值——声床/配乐不依赖 3D 是否就绪，不能因为
+      // 场景没起来就整个静音（真机排查：句柄为 null 时声床永远不起）。
+      const state = sceneHandle?.getCameraState() ?? { center: null, altitude: 10, tilt: 0.65, groundView: true };
       if (sceneHandle) {
-        const state = sceneHandle.getCameraState();
         const snapshot: AudioListenerSnapshot = {
           center: state.center,
           altitude: state.altitude,
@@ -94,14 +98,14 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
           project: (tile) => sceneHandle.project(tile),
         };
         setAudioListener(snapshot);
-        setSpatialTrimDb(globalViewTrimDb(state.altitude));
-        const ambient = resolveAmbient({
-          page: 'planet',
-          altitude: state.altitude,
-          runningBuildings: countRunningBuildings(currentPlanet, own),
-        });
-        setAmbient(ambient.name, ambient.level);
       }
+      setSpatialTrimDb(globalViewTrimDb(state.altitude));
+      const ambient = resolveAmbient({
+        page: 'planet',
+        altitude: state.altitude,
+        runningBuildings: countRunningBuildings(currentPlanet, own),
+      });
+      setAmbient(ambient.name, ambient.level);
       const tick = currentRuntime?.tick ?? 0;
       const music = resolveMusic({
         // 黑雾敌对：dark_fog_provoked 给的 until_tick 还没过；威胁等级 ≥ 3 也算紧张。

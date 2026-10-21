@@ -353,6 +353,22 @@ let mix: MixSettings = readPersistedMix();
 /** 空间化总衰减（dB）：全球视角整体 −10 dB，贴地视角 0。 */
 let spatialTrimDb = 0;
 const limiter = createRateLimiter();
+/** 播放诊断计数（window.__swAudio.diag）。 */
+let sceneTicks = 0;
+/** 音频场景 hook 每次 apply 调一次（诊断用）。 */
+export function noteSceneTick() {
+  sceneTicks += 1;
+}
+const diag = {
+  playCalls: 0,
+  skippedUnsupported: 0,
+  skippedMuted: 0,
+  skippedLocked: 0,
+  skippedLimited: 0,
+  skippedSuspended: 0,
+  samplePlays: 0,
+  sampleMisses: 0,
+};
 /** 采样缓存：路径 → 已解码 AudioBuffer；解码中 / 失败的路径记在下面两张表里。 */
 const sampleCache = new Map<string, AudioBuffer>();
 const samplesLoading = new Set<string>();
@@ -570,7 +586,9 @@ function getSample(ctx: AudioContext, path: string): AudioBuffer | null {
       const response = await fetch(path);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const bytes = await response.arrayBuffer();
-      sampleCache.set(path, await ctx.decodeAudioData(bytes));
+      // 显式 copy：部分浏览器下 fetch 的 ArrayBuffer 是 detachable，decodeAudioData 会
+      // 把它转移走，后续同 buffer 复用会报「已 detach」——这里给解码器一份独立副本。
+      sampleCache.set(path, await ctx.decodeAudioData(bytes.slice(0)));
       samplesLoaded += 1;
     } catch (error) {
       samplesFailed.add(path);
@@ -592,6 +610,34 @@ export function preloadSamples(paths: readonly string[]) {
 export function sampleStats() {
   return { loaded: samplesLoaded, requested: samplesRequested };
 }
+
+/**
+ * 调试探针（E2E/真机排查用）：`window.__swAudio` 暴露解锁/采样/循环/空间状态。
+ * 只读；生产构建也在（几十字节，试玩驱动依赖它核对「音频真的在跑」）。
+ */
+function publishProbe() {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __swAudio?: unknown }).__swAudio = {
+    get unlocked() { return unlocked; },
+    get muted() { return muted; },
+    get contextState() { return context?.state ?? null; },
+    get mix() { return { ...mix }; },
+    get samples() { return { loaded: samplesLoaded, requested: samplesRequested }; },
+    get ambient() { return ambientCurrent?.name ?? null; },
+    get music() { return musicCurrent?.name ?? null; },
+    /** 想要（等待采样）的声床/配乐（加载完成前 ambient/music 仍是 null）。 */
+    get wantedAmbient() { return ambientWanted?.name ?? null; },
+    /** 场景 hook 调过几次 apply（排查「hook 没跑」与「采样没就绪」）。 */
+    get sceneTicks() { return sceneTicks; },
+    get wantedMusic() { return musicWanted?.name ?? null; },
+    get spatialTrimDb() { return spatialTrimDb; },
+    /** 已缓存的采样路径（验收：页面切过去后应当有 sfx/ui/ambient/music）。 */
+    get cachedSamples() { return [...sampleCache.keys()].map((path) => path.replace(/^\/assets\/audio\//, '')); },
+    get diag() { return { ...diag }; },
+  };
+}
+
+publishProbe();
 
 /** 测试用：清空采样缓存与统计。 */
 export function resetSampleCacheForTests() {
@@ -651,10 +697,13 @@ function playSample(
 }
 
 function play(name: SoundName, options?: { big?: boolean; spatial?: PlayOptions['spatial'] }) {
-  if (!isAudioSupported() || muted || !unlocked) {
-    return;
-  }
+  // 诊断计数（window.__swAudio.diag）：排查「点了没声」是没解锁 / 静音 / 限流还是采样没就绪。
+  diag.playCalls += 1;
+  if (!isAudioSupported()) { diag.skippedUnsupported += 1; return; }
+  if (muted) { diag.skippedMuted += 1; return; }
+  if (!unlocked) { diag.skippedLocked += 1; return; }
   if (!limiter.allow(name, now())) {
+    diag.skippedLimited += 1;
     return;
   }
   const ctx = ensureContext();
@@ -663,6 +712,7 @@ function play(name: SoundName, options?: { big?: boolean; spatial?: PlayOptions[
   }
   if (ctx.state === 'suspended') {
     // 非手势上下文 resume 可能被拒；本次播放丢弃，下个手势可恢复
+    diag.skippedSuspended += 1;
     void ctx.resume().catch(() => {});
     return;
   }
@@ -679,9 +729,11 @@ function play(name: SoundName, options?: { big?: boolean; spatial?: PlayOptions[
     const path = paths[Math.floor(Math.random() * paths.length)] ?? paths[0];
     const buffer = getSample(ctx, path);
     if (buffer) {
+      diag.samplePlays += 1;
       playSample(ctx, path, buffer, destination, Math.random, spatial?.volumeDb ?? 0, spatial?.pan ?? 0);
       return;
     }
+    diag.sampleMisses += 1;
   }
   // 采样未就绪：合成回退（保持旧测试语义）。
   buildSoundSpecs(name, options).forEach((spec) => {
