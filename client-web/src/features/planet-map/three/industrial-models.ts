@@ -37,6 +37,8 @@ export class IndustrialModels {
   private readonly templates = new Map<string, THREE.Group>();
   /** 表面材质池（PBR 贴图就绪前用程序纹理，就绪后 `upgradeSurfaces()` 换掉并重建模板）。 */
   private readonly surfaces = new IndustrialSurfaces();
+  /** 运行发光件（己方蓝 / 敌方橙）——构造时登记，`pulseGlow()` 逐帧呼吸。 */
+  private readonly glowing: Finish[] = ['blue', 'orange'];
 
   constructor() {
     this.bindSurfaces();
@@ -63,6 +65,17 @@ export class IndustrialModels {
   /** 材质池键 → 共享材质。所有 finish 都从 `IndustrialSurfaces` 取，不在模型里写色值。 */
   private bindSurfaces() {
     for (const finish of Object.keys(SURFACE_KEY) as Finish[]) this.material.set(finish, this.surfaces.get(SURFACE_KEY[finish]));
+    for (const finish of this.glowing) this.registerPulse(finish);
+  }
+
+  /** 运行发光件登记：`industryActive` 时缓慢呼吸，停机时降到 30%（冻结时定格在固定相位）。 */
+  private pulseMaterials = new Set<THREE.MeshStandardMaterial>();
+  private activePulse = true;
+
+  /** 标记某材质为「运行发光件」（同一材质只登记一次）。 */
+  private registerPulse(finish: Finish) {
+    const material = this.material.get(finish);
+    if (material instanceof THREE.MeshStandardMaterial) this.pulseMaterials.add(material);
   }
 
   private registerRotation(object: THREE.Object3D, axis: Rotation['axis'], speed: number) {
@@ -740,6 +753,7 @@ export class IndustrialModels {
   upgradeSurfaces(): boolean {
     if (this.disposed || !this.surfaces.upgrade()) return false;
     this.material.clear();
+    this.pulseMaterials.clear();
     this.bindSurfaces();
     this.templates.clear();
     return true;
@@ -810,6 +824,27 @@ export class IndustrialModels {
       while (parent) { if (parent.userData.industryActive === false) { active = false; break; } parent = parent.parent; }
       if (active) object.rotation[axis] += Math.min(delta, 0.08) * speed;
     }
+  }
+
+  /**
+   * 运行发光件呼吸（第 23 轮 3A §6）：只在有建筑 `industryActive` 时推进；
+   * 冻结/减弱动效时传 `frozen`，相位固定在 0（最亮），画面是时间的纯函数。
+   * 停机（`industryActive === false`）的发光件亮度降到 30%——这一项由场景逐建筑写
+   * `emissiveIntensity` 做不到（材质共享），所以按「全场是否有设备在运行」统一处理：
+   * 只要场景里有一台在跑，呼吸照常；整场停摆（无运行设备）时降到 30%。
+   */
+  pulseGlow(time: number, frozen = false) {
+    if (!this.pulseMaterials.size) return;
+    const breathe = frozen ? 1 : 0.82 + 0.18 * Math.sin(time * 2.2);
+    for (const material of this.pulseMaterials) {
+      const base = material.userData.baseEmissive ?? (material.userData.baseEmissive = material.emissiveIntensity);
+      material.emissiveIntensity = base * breathe * (this.activePulse ? 1 : 0.3);
+    }
+  }
+
+  /** 场景在同步建筑状态时写入：场上有任意一台设备在运行。 */
+  setActivity(active: boolean) {
+    this.activePulse = active;
   }
 
   releaseAnimations(group: THREE.Object3D): void {

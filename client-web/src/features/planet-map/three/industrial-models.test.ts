@@ -65,3 +65,24 @@ it('gives every transport robot its own cargo material so per-unit item colour n
   expect(copperColors.has('bb7842')).toBe(true);
   assets.dispose();
 });
+
+it('breathes running glow pieces only when the scene has active industry, freezing at a fixed phase', () => {
+  const assets = new IndustrialModels();
+  assets.building('arc_smelter', .86, .86, true);
+  const glow = (assets as unknown as { material: Map<string, THREE.MeshStandardMaterial> }).material.get('blue')!;
+  const base = glow.emissiveIntensity;
+  assets.setActivity(true);
+  assets.pulseGlow(0.3); const a = glow.emissiveIntensity;
+  assets.pulseGlow(0.9); const b = glow.emissiveIntensity;
+  expect(a).not.toBe(b);
+  expect(a).toBeLessThanOrEqual(base + 1e-6);
+  // 冻结：任何时间都返回同一亮度。
+  assets.pulseGlow(1.2, true); const frozenA = glow.emissiveIntensity;
+  assets.pulseGlow(5.7, true); const frozenB = glow.emissiveIntensity;
+  expect(frozenA).toBe(frozenB);
+  // 停摆：降到 30%。
+  assets.setActivity(false);
+  assets.pulseGlow(0.3);
+  expect(glow.emissiveIntensity).toBeCloseTo(base * 0.3 * (0.82 + 0.18 * Math.sin(0.3 * 2.2)), 5);
+  assets.dispose();
+});

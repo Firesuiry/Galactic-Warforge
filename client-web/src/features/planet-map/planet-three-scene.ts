@@ -20,6 +20,7 @@ import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
+import { StatusLights } from './three/status-lights';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
@@ -197,6 +198,8 @@ export class PlanetThreeScene {
   private readonly rangeCircles = new RangeCircleOverlay(RADIUS);
   private readonly detectionMarks = new DetectionOverlay(RADIUS);
   private readonly constructionBars = new ConstructionProgressOverlay(RADIUS);
+  /** 建筑状态灯（第 23 轮 3A）：全场 2 个 InstancedMesh，状态切换只写 instanceColor。 */
+  private readonly statusLights = new StatusLights(() => this.tileScale());
   /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
   private beltDragPath: BeltDragCell[] = [];
 
@@ -517,10 +520,14 @@ export class PlanetThreeScene {
         return group;
       });
     }
+    let anyRunning = false;
     for (const building of Object.values(planet.buildings ?? {})) {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
+      if (building.runtime?.state === 'running') anyRunning = true;
     }
+    // 发光件呼吸：整场没有任何设备在运行（停摆）时降到 30%，否则正常呼吸。
+    this.industrial.setActivity(anyRunning);
     this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
     this.sorterRigs.refresh(sorters, this.groundMap, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
     this.layer('buildings').add(this.sorterRigs.group);
@@ -562,6 +569,14 @@ export class PlanetThreeScene {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
     this.syncPowerAlertMarks(visibleBuildings);
+    // 状态灯只挂己方建筑（不暴露敌方产线状态），灯位按建筑类型偏移；状态只取权威 runtime.state。
+    this.layer('buildings').add(this.statusLights.group);
+    this.statusLights.refresh(visibleBuildings.flatMap((building) => {
+      const group = building.owner_id === playerId ? this.staticEntities.get(`building:${building.id}`)?.group : undefined;
+      if (!group) return [];
+      const footprint = getBuildingFootprint(building);
+      return [{ id: building.id, type: building.type, state: building.runtime?.state, root: group, width: footprint.width, height: footprint.height }];
+    }));
     const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
     }));
@@ -1677,8 +1692,12 @@ export class PlanetThreeScene {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
     const reducedMotion = this.reducedMotion.matches;
     if (!document.hidden && !this.frozen && !reducedMotion) this.industrial.animate(time / 1000, dt);
+    // 运行发光件呼吸：只在场上有设备在运行（`setActivity`）时按 2.2 rad/s 呼吸；冻结定格在最亮相位。
+    if (!document.hidden) this.industrial.pulseGlow(time / 1000, this.frozen || reducedMotion);
     if (!document.hidden) {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
+      // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格（画面是时间的纯函数）。
+      this.statusLights.update(time / 1000, this.frozen || reducedMotion);
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
@@ -1727,6 +1746,7 @@ export class PlanetThreeScene {
     canvas.removeEventListener('wheel', this.wheel);
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
+    this.statusLights.dispose();
     this.conveyors.dispose();
     this.conveyorGhost.dispose();
     this.sorterRigs.dispose();
