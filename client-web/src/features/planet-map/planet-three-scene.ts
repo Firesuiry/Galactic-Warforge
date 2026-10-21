@@ -230,6 +230,8 @@ export class PlanetThreeScene {
     const quality = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
     this.renderer.setPixelRatio(quality.pixelRatio);
     this.renderer.setClearColor('#030912');
+    // 每帧自己重置绘制统计（composer 会多次 render，autoReset 只保留最后一趟的数字）。
+    this.renderer.info.autoReset = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -308,6 +310,17 @@ export class PlanetThreeScene {
   }
 
   getQuality() { return this.quality; }
+
+  /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
+   * 取上一帧的 `renderer.info.render`，要在动画跑过一帧之后再读。 */
+  get renderStats() {
+    const { render, memory } = this.renderer.info;
+    return {
+      calls: render.calls, triangles: render.triangles,
+      geometries: memory.geometries, textures: memory.textures,
+      static: this.staticBatches.stats, dynamic: this.dynamicBatches.stats,
+    };
+  }
 
   setQuality(quality: PlanetRenderQuality) {
     this.quality = quality;
@@ -1623,6 +1636,7 @@ export class PlanetThreeScene {
       }
       // 阶段标签贴机器人（机器人移动是每帧插值的，标签跟着走才不脱节）。
       this.updateHaulLabels();
+      this.renderer.info.reset();
       this.composer.render();
     }
     this.frame = requestAnimationFrame(this.animate);

@@ -24,6 +24,9 @@ export interface GltfModelSpec {
   scale?: number;
   /** 绕 Y 的朝向修正（弧度，默认 0）。 */
   yaw?: number;
+  /** 内置附挂件（士兵的步枪）：模板阶段用程序化几何挂上去，不额外加载 GLB。
+   * `at` 是主体包围盒的相对坐标（0..1），尺寸按主体高度换算。 */
+  attach?: 'rifle';
 }
 
 /**
@@ -38,11 +41,11 @@ export const BUILDING_GLTF: Record<string, GltfModelSpec> = {
   recomposing_assembler: { file: 'city/building-c.glb' },
   chemical_plant: { file: 'city/building-l.glb' },
   quantum_chemical_plant: { file: 'city/building-m.glb' },
-  barracks: { file: 'city/building-s.glb' },
-  supply_station: { file: 'city/building-p.glb' },
+  barracks: { file: 'city/building-a.glb' },
+  supply_station: { file: 'city/building-g.glb' },
   vehicle_factory: { file: 'city/building-f.glb' },
   water_pump: { file: 'city/water-tower.glb' },
-  automatic_piler: { file: 'city/shipping-container-a.glb' },
+  automatic_piler: { file: 'space/barrels.glb' },
   airfield: { file: 'space/hangar_largeA.glb' },
   ray_receiver: { file: 'space/satelliteDish_large.glb' },
   em_rail_ejector: { file: 'space/rocket_baseA.glb' },
@@ -67,11 +70,14 @@ export const BUILDING_GLTF: Record<string, GltfModelSpec> = {
  */
 export const UNIT_GLTF: Record<string, GltfModelSpec> = {
   worker: { file: 'space/astronautA.glb', scale: 0.8 },
-  soldier: { file: 'space/astronautB.glb', scale: 0.8 },
+  // 士兵与工兵是同一套宇航服（只差配色），远处分不清：给士兵挂一把步枪。
+  soldier: { file: 'space/astronautB.glb', scale: 0.8, attach: 'rifle' },
   scout: { file: 'space/rover.glb', scale: 1.05 },
   attack_drone: { file: 'space/craft_speederA.glb', scale: 1.5 },
-  logistics_drone: { file: 'space/craft_cargoA.glb', scale: 1.6 },
-  logistics_ship: { file: 'space/craft_cargoB.glb', scale: 1.6 },
+  // 物流无人机/运输船在场景里统一按 `'ship'` 渲染（planet-three-scene 的 runtime.logistics_drones /
+  // logistics_ships 共用一个类型），星图上的舰队标记用 `'cargo_ship'`。
+  ship: { file: 'space/craft_cargoB.glb', scale: 1.6 },
+  cargo_ship: { file: 'space/craft_cargoB.glb', scale: 1.4 },
 };
 
 const ROOT = '/assets/models/';
@@ -79,13 +85,18 @@ const loader = new GLTFLoader();
 
 /** 阵营涂装：与 `IndustrialModels` 的 UNIT_FINISH 同义（己方白蓝、敌方橙、黑雾紫/暗红）。 */
 type TintKey = UnitFaction | 'own-building' | 'enemy-building';
-const TINT: Record<TintKey, { body: number; accent: number }> = {
-  'own-building': { body: 0xffffff, accent: 0x2fc4e8 },
-  'enemy-building': { body: 0xffb9a2, accent: 0xff720d },
-  own: { body: 0xffffff, accent: 0x2fc4e8 },
-  enemy: { body: 0xffb9a2, accent: 0xff720d },
-  fog_neutral: { body: 0x9c92c0, accent: 0x7d5cff },
-  fog_hostile: { body: 0x8f4a4a, accent: 0xff2a2a },
+/**
+ * 底色系数。Kenney City Kit 的墙体是中性灰（colormap 里约 #8e95b3 / #667a99），
+ * 直接搬进场景会比现有「白陶瓷」暗一档，所以己方建筑把底色提亮到 >1（线性空间允许），
+ * 只留深灰窗与结构线，深灰占比才压得住。
+ */
+const TINT: Record<TintKey, { body: [number, number, number]; accent: number }> = {
+  'own-building': { body: [1.5, 1.5, 1.52], accent: 0x2fc4e8 },
+  'enemy-building': { body: [1.3, 1.02, 0.9], accent: 0xff720d },
+  own: { body: [1.18, 1.18, 1.2], accent: 0x2fc4e8 },
+  enemy: { body: [1.14, 0.86, 0.78], accent: 0xff720d },
+  fog_neutral: { body: [0.72, 0.66, 0.88], accent: 0x7d5cff },
+  fog_hostile: { body: [0.72, 0.4, 0.4], accent: 0xff2a2a },
 };
 const FACTION_KEYS: TintKey[] = ['own', 'enemy', 'fog_neutral', 'fog_hostile'];
 
@@ -96,7 +107,15 @@ interface Prepared {
 }
 
 const templates = new Map<string, Map<TintKey, Prepared>>();
-const accentGeometry = new THREE.RingGeometry(0.44, 0.5, 28).rotateX(-Math.PI / 2);
+/** 阵营识别件：建筑正面的窄发光条（不是地面圆环——地面环会被读成选中框）。 */
+const accentGeometry = new THREE.BoxGeometry(1, 1, 1);
+/** 士兵步枪：全场共用一个几何/材质（合批后只多 1 个绘制调用）。 */
+const rifleGeometry = new THREE.BoxGeometry(1, 1, 1);
+let rifleShared: THREE.MeshStandardMaterial | undefined;
+function rifleMaterial() {
+  rifleShared ??= new THREE.MeshStandardMaterial({ color: 0x26363e, roughness: 0.5, metalness: 0.6 });
+  return rifleShared;
+}
 const accentMaterials = new Map<number, THREE.MeshStandardMaterial>();
 let loading: Promise<void> | undefined;
 
@@ -110,14 +129,48 @@ function accentMaterial(color: number): THREE.MeshStandardMaterial {
 }
 
 /**
+ * 士兵的步枪：按**模板局部坐标**拼三个方块（枪身 / 枪管 / 弹匣），由 `instantiateUnit` 挂到
+ * 已缩放的实例上——这样尺寸跟着模板包围盒走，不会撑大归一化包围盒，也不用再加载一个 GLB。
+ */
+function rifleMesh(size: THREE.Vector3): THREE.Group {
+  const rifle = new THREE.Group();
+  const material = rifleMaterial();
+  const stock = new THREE.Mesh(rifleGeometry, material);
+  stock.scale.set(size.y * 0.1, size.y * 0.1, size.y * 0.42);
+  const barrel = new THREE.Mesh(rifleGeometry, material);
+  barrel.scale.set(size.y * 0.045, size.y * 0.045, size.y * 0.3);
+  barrel.position.set(0, size.y * 0.02, size.y * 0.34);
+  const magazine = new THREE.Mesh(rifleGeometry, material);
+  magazine.scale.set(size.y * 0.06, size.y * 0.16, size.y * 0.08);
+  magazine.position.set(0, -size.y * 0.11, size.y * 0.02);
+  rifle.add(stock, barrel, magazine);
+  // 端在身前：宇航员模型正面朝 +Z，枪管朝前上方伸出轮廓外，等距视角下才读得出来。
+  rifle.position.set(size.x * 0.12, size.y * 0.42, size.z * 0.42);
+  rifle.rotation.set(-0.12, 0.2, -0.18);
+  for (const mesh of rifle.children) { mesh.castShadow = true; mesh.receiveShadow = true; }
+  return rifle;
+}
+
+/**
  * 模板准备：转成标准材质（Kenney Space Kit 是 unlit，进场景没有明暗会像贴纸）、
  * 按阵营乘底色、居中落地。只在加载时做一次。
  *
  * 同一个源材质在一份模板里只克隆一次：`batchStatic` 按材质归并，
  * 每个网格各克隆一份材质的话合并会失效，绘制调用会翻好几倍。
  */
-function prepare(scene: THREE.Object3D, tint: number): Prepared {
+/**
+ * 模板准备：转成标准材质（Kenney Space Kit 是 unlit，进场景没有明暗会像贴纸）、
+ * 按阵营乘底色、居中落地。只在加载时做一次。
+ *
+ * 同一个源材质在一份模板里只克隆一次：`batchStatic` 按材质归并，
+ * 每个网格各克隆一份材质的话合并会失效，绘制调用会翻好几倍。
+ */
+function prepare(scene: THREE.Object3D, tint: readonly [number, number, number]): Prepared {
   const root = scene.clone(true);
+  // 先量主体：附挂件不参与归一化，否则一把枪会把整个人缩小。
+  const host = new THREE.Box3().setFromObject(root);
+  const size = host.getSize(new THREE.Vector3());
+  const center = host.getCenter(new THREE.Vector3());
   const materials = new Map<THREE.Material, THREE.Material>();
   root.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -136,7 +189,7 @@ function prepare(scene: THREE.Object3D, tint: number): Prepared {
           material.metalness = Math.min(material.metalness, 0.3);
         }
       }
-      if (material instanceof THREE.MeshStandardMaterial) material.color.multiply(new THREE.Color(tint));
+      if (material instanceof THREE.MeshStandardMaterial) material.color.multiply(new THREE.Color(...tint));
       materials.set(source, material);
     }
     object.material = material;
@@ -149,21 +202,24 @@ function prepare(scene: THREE.Object3D, tint: number): Prepared {
       geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.getAttribute('position').count * 2), 2));
     }
   });
-  const bounds = new THREE.Box3().setFromObject(root);
-  const size = bounds.getSize(new THREE.Vector3());
-  const center = bounds.getCenter(new THREE.Vector3());
-  root.position.set(-center.x, -bounds.min.y, -center.z);
+  root.position.set(-center.x, -host.min.y, -center.z);
   const wrapper = new THREE.Group();
   wrapper.add(root);
   return { group: wrapper, size };
 }
 
-async function prepareFile(file: string) {
-  if (templates.has(file)) return;
-  const gltf = await loader.loadAsync(ROOT + file);
+/** 模板键：主体文件 + 附挂件（同主体不同附挂件要分开缓存，否则士兵会拿到工兵的模板）。 */
+function templateKey(spec: GltfModelSpec) {
+  return spec.attach ? `${spec.file}+${spec.attach}` : spec.file;
+}
+
+async function prepareSpec(spec: GltfModelSpec) {
+  const key = templateKey(spec);
+  if (templates.has(key)) return;
+  const scene = (await loader.loadAsync(ROOT + spec.file)).scene;
   const variants = new Map<TintKey, Prepared>();
-  for (const key of FACTION_KEYS) variants.set(key, prepare(gltf.scene, TINT[key].body));
-  templates.set(file, variants);
+  for (const faction of FACTION_KEYS) variants.set(faction, prepare(scene, TINT[faction].body));
+  templates.set(key, variants);
 }
 
 /** 加载建筑/单位用到的全部 GLB；重复调用返回同一个 promise。
@@ -173,8 +229,8 @@ async function prepareFile(file: string) {
 export function preloadIndustrialGltf(): Promise<void> {
   if (!loading && new URLSearchParams(window.location.search).has('procedural-models')) loading = Promise.resolve();
   if (!loading) {
-    const files = [...new Set([...Object.values(BUILDING_GLTF), ...Object.values(UNIT_GLTF)].map((spec) => spec.file))];
-    loading = Promise.all(files.map(prepareFile)).then(() => undefined);
+    const specs = new Map([...Object.values(BUILDING_GLTF), ...Object.values(UNIT_GLTF)].map((spec) => [templateKey(spec), spec]));
+    loading = Promise.all([...specs.values()].map(prepareSpec)).then(() => undefined);
   }
   return loading;
 }
@@ -210,14 +266,18 @@ function fitUnit(prepared: Prepared, spec: GltfModelSpec): THREE.Group {
  */
 export function instantiateBuilding(type: string, width: number, depth: number, own: boolean): THREE.Group | null {
   const spec = BUILDING_GLTF[type];
-  const prepared = spec && templates.get(spec.file)?.get(own ? 'own' : 'enemy');
+  const prepared = spec && templates.get(templateKey(spec))?.get(own ? 'own' : 'enemy');
   if (!spec || !prepared) return null;
   const group = fit(prepared, spec, width * 0.86, depth * 0.86);
   group.name = `gltf-${type}`;
-  // 阵营识别：地面发光环。几何与材质全场共用，静态合批后每阵营只多 1 个绘制调用。
+  // 阵营识别：正面的窄发光条（不是地面圆环——圆环会被读成选中框）。几何与材质全场共用，
+  // 静态合批后每阵营只多 1 个绘制调用。
+  // accent 挂在**已缩放**的组下，所以尺寸用模板自身的局部包围盒，不能用占地（占地已被 group.scale 吃掉）。
   const accent = new THREE.Mesh(accentGeometry, accentMaterial(TINT[own ? 'own-building' : 'enemy-building'].accent));
-  accent.scale.set(width / group.scale.x, 1, depth / group.scale.z);
-  accent.position.y = 0.008;
+  accent.scale.set(prepared.size.x * 0.26, prepared.size.y * 0.05, prepared.size.z * 0.04);
+  accent.position.set(0, prepared.size.y * 0.42, prepared.size.z * 0.51);
+  accent.castShadow = false;
+  accent.receiveShadow = false;
   group.add(accent);
   return group;
 }
@@ -225,9 +285,10 @@ export function instantiateBuilding(type: string, width: number, depth: number, 
 /** 同步实例化单位模型：涂装按阵营取材质变体，同样不写共享材质。 */
 export function instantiateUnit(type: string, faction: UnitFaction): THREE.Group | null {
   const spec = UNIT_GLTF[type];
-  const prepared = spec && templates.get(spec.file)?.get(faction);
+  const prepared = spec && templates.get(templateKey(spec))?.get(faction);
   if (!spec || !prepared) return null;
   const group = fitUnit(prepared, spec);
   group.name = `gltf-unit-${type}`;
+  if (spec.attach === 'rifle') group.add(rifleMesh(prepared.size));
   return group;
 }

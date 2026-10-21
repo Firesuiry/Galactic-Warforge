@@ -76,15 +76,15 @@ export async function runSnippet(driver, body, timeoutMs = 180000) {
   return text ? JSON.parse(text) : null;
 }
 
-const pageReady = () =>
+const pageReady = (extra = '') =>
   "await page.emulateMedia({ reducedMotion: 'no-preference' });\n" +
-  "await L.open3d(page, 'high');\n" +
+  `await L.open3d(page, 'high', ${JSON.stringify(extra)});\n` +
   'await L.sleep(3000);\n';
 
 /** 3D 机位：focus（含 close）、zoom、tilt、绕 Z 轴转（侧视/斜视）。 */
 export async function shoot3d(driver, shot, outDir) {
   const body = `
-${pageReady()}
+${pageReady(shot.query ?? '')}
 // 鼠标停在顶栏空白处（HUD 上不触发地块悬停），避免悬停提示挡住画面或贴边被裁。
 await page.mouse.move(1000, 26);
 await L.focus(page, { x: ${shot.focus.x}, y: ${shot.focus.y} }, true);
@@ -92,11 +92,16 @@ ${shot.tilt != null ? `await page.evaluate(() => window.__planetThree.setTilt(${
 ${shot.zoom != null ? `await page.evaluate(() => window.__planetThree.zoom(${shot.zoom}));` : ''}
 ${shot.rotateZ ? `await page.evaluate((a) => window.__planetThree.rotateView(a), ${shot.rotateZ});` : ''}
 await L.sleep(${shot.settleMs ?? 2200});
+const stats = await page.evaluate(() => {
+  const scene = window.__planetThree;
+  const get = (name) => { const value = scene?.[name]; return typeof value === 'function' ? value() : value; };
+  return { stats: get('renderStats'), calls: get('renderCalls') };
+});
 await page.screenshot({ path: ${JSON.stringify(path.join(outDir, shot.name + '.png'))}, timeout: 120000 });
-return S.errors.slice(-5);
+return { errors: S.errors.slice(-5), stats };
 `;
-  const errs = await runSnippet(driver, body);
-  return errs ?? [];
+  const result = await runSnippet(driver, body);
+  return result ?? { errors: [] };
 }
 
 // ---- 2x 特写：裁剪局部再放大（纯 Node 解码 PNG，避免额外依赖）----
