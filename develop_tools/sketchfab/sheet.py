@@ -70,6 +70,28 @@ BAN_WORDS = [
     "league of legends", "genshin", "overwatch", "destiny ", "starcraft",
     "tripod", "rice field", "sen goku", "sengoku", "nova solution", "quad thorn",
     "magnetic train", "magnetic vehicle", "battery train", "gravitas",
+    "bombed", "ruins", "ruined", "abandoned city", "guest base", "base delta",
+    "starbase", "fontana", "first aid", "medkit", "fastener", "bolt kit", "screw kit",
+    "health kit", "battletech", "bo t hangar", "hangar bay", "e-walking", "e walking",
+    "scout soviet", "bo t", "機庫", "hangar 3d", "battletech",
+    "iron ore", "ore chunk", "eotech", "scope ", "tinbot", "automata",
+    "hoverboard", "material demo", "clear coat", "screenshot", "render test",
+    "car jack", "jack stand", "garage", "halloween", "rom ", "xci", "nsp",
+    "simulator", "bus ", "bus lowpoly", "kart", "drill kart", "loader",
+    "lincoln", "town car", "gmc ", "vendura", "price car", "bicycle", "car lift",
+    "sedan", "hatchback", "civilian car", "passenger car", "pickup truck",
+    "optimus", "transformers", "gripen", "jas 39", "pondy", "fighter jet",
+    "mule.x4", "logistics walker",
+    # 特定载具型号/品牌（军车/民车），与「补给/维修」语义无关
+    "lightbody", "ramcharger", "dodge", "ford ", "ural", "boar-53", "boar 53",
+    "humvee", "hmmwv", "land rover", "jeep wrangler", "ambulance",
+    "grafitti", "graffiti", "soviet btr", "btr-80", "ifv", "fighting vehicle",
+    "hangar pipes", "rusted hangar", "military outpost kit",
+    "barn", "farmhouse", "farm house", "cabin", "cottage", "shed ", "log house",
+    # 手持武器 / 实验室小器材 / 民用加油站（建筑槽误命中）
+    "hand railgun", "handrailgun", "uzi", "sniper", "handheld", "hand gun",
+    "diybio", "ventilador", "talha", "centrifuga", "compresor",
+    "gas pump", "gas station", "petrol station", "fuel dispenser",
     "extinguisher", "mercedes", "lamborghini", "porsche", "boeing", "cessna",
     "me262", "fluorite", "limonite", "tractor", "dieselpunk", "steampunk",
     "victorian", "drainage", "sinter", "glassware", "cabinet", "terminal",
@@ -79,6 +101,8 @@ HUMAN_WORDS = ["human", "people", "person", "girl", "boy", "woman", "man ", "por
 HUMAN_OK_SLOTS = {"soldier", "worker"}
 
 FACE_LIMIT = 300_000
+# 允许「弱相关」补位的槽位（模型名常是代号、名称里没有槽位词）。其余槽位宁缺毋滥。
+WEAK_FILL_SLOTS: set[str] = set()
 TOP_N = 8
 
 
@@ -189,9 +213,10 @@ def _matches_slot(m: dict, kws: list[str], slot: str = "") -> bool:
         if t in name or (len(t) >= 5 and t[:5] in name):
             return True
     if not is_building_slot(slot):
-        for t in _tokens(kws):
-            if t in blob or (len(t) >= 5 and t[:5] in blob):
-                return True
+        # 单位槽允许 tag 命中，但要求命中两个以上实词，避免「Eotech 553」这类靠杂 tag 混入
+        hits = sum(1 for t in _tokens(kws) if t in blob or (len(t) >= 5 and t[:5] in blob))
+        if hits >= 2:
+            return True
     return False
 
 
@@ -215,7 +240,7 @@ def select(models: list[dict], slot: str, kws: list[str]) -> tuple[list[dict], l
         good.extend(nc)
     # 相关度门槛后不足 8 个才用「弱相关」补位（图上标 弱相关）；建筑槽不补位——
     # 建筑的名字必须点出功能，只靠 tag 命中的基本是误命中（灭火器、跑车），宁可少给。
-    if len(good) < TOP_N and not is_building_slot(slot):
+    if len(good) < TOP_N and not is_building_slot(slot) and slot in WEAK_FILL_SLOTS:
         for m in unmatched:
             if len(good) >= TOP_N:
                 break

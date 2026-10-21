@@ -34,8 +34,10 @@ python3 develop_tools/sketchfab/fetch.py --from-candidates tmp/3a-models/candida
 
 - `downloadable=true`；面数 ≤ 300k；
 - 许可优先级 CC0 > CC-BY > CC-BY-SA；CC-BY-NC* 只在该槽位合格候选不足 8 个时补入，图上红框 + `NC` 角标；
-- 名称/标签命中整栋场景、房间内景、玩具卡通风词表（`sheet.py` 的 `BAN_WORDS`）剔除；
-  士兵/工兵槽以外的写实人形剔除；
+- 名称/标签命中整栋场景、房间内景、玩具卡通风、其它 IP 衍生、同词不同义（家具/生物/民用车/手持武器…）
+  的词表（`sheet.py` 的 `BAN_WORDS`）剔除；士兵/工兵槽以外的写实人形剔除；
+- **建筑槽要求槽位实词出现在名称里**，单位槽允许名称命中或 tag 命中 ≥2 个实词（Sketchfab 的 tag 太杂）；
+  门槛后不足 8 个的槽位宁缺毋滥，不拿弱相关补位（`WEAK_FILL_SLOTS` 目前为空）；
 - 同一槽位合并多个关键词结果去重，按 `log10(点赞+10)^2 × 相关度`（相关度 = 命中关键词数、名称/标签命中、
   staff pick）取前 8。
 - 联系表：每槽 4×2，格子 300×225（API 缩略图取 ≥720 宽里最小的那张，contain 缩放），
