@@ -516,11 +516,11 @@ type PlanetSceneView struct {
 	Units          map[string]*model.Unit      `json:"units,omitempty"`
 	// MechaOperators 是本玩家机甲单位的操作者（unit ID → operator，仅非空项）：
 	// 3D 行星场景据此在机甲头顶画 operator 名牌（第 22 轮契约 §5）。
-	MechaOperators map[string]string           `json:"mecha_operators,omitempty"`
-	Resources      []*model.ResourceNodeState  `json:"resources,omitempty"`
-	BuildingCount  int                         `json:"building_count,omitempty"`
-	UnitCount      int                         `json:"unit_count,omitempty"`
-	ResourceCount  int                         `json:"resource_count,omitempty"`
+	MechaOperators map[string]string          `json:"mecha_operators,omitempty"`
+	Resources      []*model.ResourceNodeState `json:"resources,omitempty"`
+	BuildingCount  int                        `json:"building_count,omitempty"`
+	UnitCount      int                        `json:"unit_count,omitempty"`
+	ResourceCount  int                        `json:"resource_count,omitempty"`
 }
 
 type PlanetOverviewRequest struct {
