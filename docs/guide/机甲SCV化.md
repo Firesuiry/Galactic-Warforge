@@ -27,8 +27,13 @@
 | --- | --- |
 | 命令类型 | `dispatch_mecha` |
 | 路由 | `routePlanet`：`target.planet_id` = **目标**星球 |
-| 执行者 | `handleMecha`（需要机甲，失败码 `EXECUTOR_UNAVAILABLE`） |
+| 执行者 | 普通 `handle(routePlanet, …)`；执行器自己解析机甲（**不能**用 `handleMecha`，它是在目标行星里找机甲，而投送时机甲还在源行星） |
 | 载荷 | 无（`payload` 可省略或 `{}`） |
+
+选哪台机甲：`target.mecha_id` 非空就用它（必须是本方机甲、必须属于该 issuer）；
+为空时 issuer 只有 1 台就用它，≥2 台报 `VALIDATION_FAILED`「你有 N 台机甲，
+dispatch_mecha 需要 target.mecha_id 点名」，一台都没有报 `EXECUTOR_UNAVAILABLE`。
+「源行星」= 该机甲的 `record.PlanetID`（不是玩家焦点行星）。
 
 前置校验（按顺序，失败即返回，不产生副作用）：
 
@@ -100,6 +105,10 @@ MechaID string `json:"mecha_id,omitempty"`
 **路由**：`resolveCommandWorld` 里在「显式 `target.planet_id`」之后、实体引用之前
 加一条——`target.mecha_id` 指定的机甲在某行星时，路由到那台机甲的行星。这样
 「点名在 B 星的机甲 + 不写 planet_id」的 `build` 会落到 B 星。
+
+**例外**：`dispatch_mecha` 的 `target.planet_id` 是**目标**行星，不能被这条规则
+改路由到源行星。实现上加 `if cmd.Type != model.CmdDispatchMecha` 或给
+`commandRoute` 加标志位。
 
 ## 5. 显示（「宣传自己在操作」）
 
