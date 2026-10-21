@@ -1,0 +1,391 @@
+/**
+ * 地表片元着色器（第 23 轮 3A 画质地表分支）。
+ *
+ * 分工：
+ * - `terrain.ts` 负责每格属性图集（颜色 / 属性 / 海岸 / 热度）与 uniform 绑定；
+ * - 本文件只写着色逻辑：球面三平面采样（无立方体面接缝）、群落高度混合、水面、岩浆、
+ *   未探索面纱。所有动画都只用 `swTime`，冻结时 `swTime = 0` 即固定相位。
+ *
+ * 信息诚实：纹理层号只由服务端 terrain 与行星 kind 决定；未知格不取任何地形色。
+ */
+
+export const SHADER_HEADER = /* glsl */`
+  varying vec3 swSurfacePosition;
+  // 世界空间法线（对象空间 = 世界空间：行星球面 mesh 无旋转/缩放）。
+  varying vec3 swSurfaceWorldNormal;
+  uniform sampler2D swOverviewColor;
+  uniform sampler2D swOverviewProperties;
+  uniform sampler2D swLocalColor;
+  uniform sampler2D swLocalProperties;
+  uniform sampler2D swOverviewCoast;
+  uniform sampler2D swLocalCoast;
+  uniform sampler2D swOverviewHeat;
+  uniform sampler2D swLocalHeat;
+  uniform sampler2DArray swAlbedoArray;
+  uniform sampler2DArray swPackedArray;
+  uniform sampler2D swWaterNormal;
+  uniform sampler2D swLavaEmissionMap;
+  uniform vec2 swMapDimensions;
+  uniform vec2 swLocalDimensions;
+  uniform vec2 swOverviewDimensions;
+  uniform float swTime;
+  uniform float swFog;
+  uniform vec4 swPatchBounds[7];
+  uniform vec4 swPatchUV[7];
+  // 星球群落（biome.ts）：色相/饱和/明度偏置与可建造地三种土的权重。
+  uniform vec3 swSoilWeights;
+  uniform vec3 swBiomeTint;
+  uniform float swBiomeSaturation;
+  uniform float swBiomeBrightness;
+  uniform float swBiomeIce;
+  uniform float swSeed;
+  uniform float swDebug;
+  // 对象空间太阳方向与相机位置（场景每帧写入；行星球面只有旋转，没有平移/缩放）。
+  uniform vec3 swSunObject;
+  uniform vec3 swCameraObject;
+  // 片元内跨 include 段传递（map_fragment → roughness / normal / emissive）。
+  float swWaterMask = 0.0;
+  float swLavaMask = 0.0;
+  // 水面世界空间法线扰动（xy），由 map_fragment 段写入、normal 段使用。
+  vec2 swWaterNormalXY = vec2(0.0);
+  float swWaveDetailOut = 0.0;
+  vec3 swWaterSky = vec3(0.0);
+  float swWaterFresnel = 0.0;
+  float swWaterMetal = 0.02;
+  vec3 swEastW = vec3(1.0, 0.0, 0.0);
+  vec3 swSouthW = vec3(0.0, 0.0, 1.0);
+  float swHeightField = 0.0;
+  vec3 swLavaEmissive = vec3(0.0);
+
+  float swHash(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.17, 0.43, 0.71));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+  float swNoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(swHash(i), swHash(i + vec3(1,0,0)), f.x),
+      mix(swHash(i + vec3(0,1,0)), swHash(i + vec3(1,1,0)), f.x), f.y),
+      mix(mix(swHash(i + vec3(0,0,1)), swHash(i + vec3(1,0,1)), f.x),
+      mix(swHash(i + vec3(0,1,1)), swHash(i + vec3(1,1,1)), f.x), f.y), f.z);
+  }
+  float swFbm(vec3 p) {
+    return swNoise(p) * 0.55 + swNoise(p * 2.03 + 13.7) * 0.27 + swNoise(p * 4.13 + 31.1) * 0.12 + swNoise(p * 8.31) * 0.06;
+  }
+
+  /** 球面三平面权重：对象空间坐标连续，所以立方体面接缝处纹理天然连续。 */
+  vec3 swTriplanarWeights(vec3 p) {
+    vec3 w = pow(abs(normalize(p)), vec3(7.0));
+    return w / max(dot(w, vec3(1.0)), 0.0001);
+  }
+
+  struct SwSurface {
+    vec3 albedo;
+    float height;
+    float rough;
+  };
+
+  /** 按层号取一张地表纹理（albedo + 打包通道），三平面混合。 */
+  SwSurface swSampleLayer(float layer, vec3 pos, vec3 blend, float scale) {
+    vec3 p = pos * scale;
+    vec4 ax = texture2D(swAlbedoArray, vec3(p.zy, layer));
+    vec4 ay = texture2D(swAlbedoArray, vec3(p.xz, layer));
+    vec4 az = texture2D(swAlbedoArray, vec3(p.xy, layer));
+    vec4 px = texture2D(swPackedArray, vec3(p.zy, layer));
+    vec4 py = texture2D(swPackedArray, vec3(p.xz, layer));
+    vec4 pz = texture2D(swPackedArray, vec3(p.xy, layer));
+    SwSurface s;
+    s.albedo = ax.rgb * blend.x + ay.rgb * blend.y + az.rgb * blend.z;
+    s.height = px.a * blend.x + py.a * blend.y + pz.a * blend.z;
+    s.rough = px.b * blend.x + py.b * blend.y + pz.b * blend.z;
+    return s;
+  }
+
+  /** 高度混合：两层按各自的纹理高度互相「顶开」，得到自然的边界而不是线性糊。 */
+  float swHeightBlend(float heightA, float heightB, float weightA, float weightB, float noise) {
+    return smoothstep(-0.16, 0.16, (heightA - heightB) * 2.2 + (weightA - weightB) * 2.4 + (noise - 0.5) * 0.5);
+  }
+
+  vec3 swSaturate(vec3 color, float amount) {
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(luma), color, amount);
+  }
+`;
+
+export const SHADER_COLOR = /* glsl */`
+  vec3 swP = normalize(swSurfacePosition);
+  vec3 swA = abs(swP);
+  float swFace; vec2 swFaceUV;
+  if (swA.z >= swA.x && swA.z >= swA.y) {
+    swFace = swP.z >= 0.0 ? 0.0 : 2.0;
+    swFaceUV = vec2(swP.z >= 0.0 ? swP.x : -swP.x, -swP.y) / swA.z;
+  } else if (swA.x >= swA.y) {
+    swFace = swP.x >= 0.0 ? 1.0 : 3.0;
+    swFaceUV = vec2(swP.x >= 0.0 ? -swP.z : swP.z, -swP.y) / swA.x;
+  } else {
+    swFace = swP.y >= 0.0 ? 4.0 : 5.0;
+    swFaceUV = vec2(swP.x, swP.y >= 0.0 ? swP.z : -swP.z) / swA.y;
+  }
+  swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
+  vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + clamp(swFaceUV,0.000001,0.999999)) / vec2(3.0,2.0);
+  vec2 swFaceOrigin = vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0);
+  vec2 swOverviewHalfTexel = 0.5 / swOverviewDimensions;
+  vec2 swOverviewUV = clamp(swUV, swFaceOrigin + swOverviewHalfTexel,
+    swFaceOrigin + 1.0 / vec2(3.0,2.0) - swOverviewHalfTexel);
+  vec4 swProps = texture2D(swOverviewProperties, swOverviewUV);
+  vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
+  vec4 swCoast = texture2D(swOverviewCoast, swOverviewUV);
+  vec4 swHeat = texture2D(swOverviewHeat, swOverviewUV);
+  vec2 swCellUV = fract(swUV * swOverviewDimensions);
+  // Fog boundary glow: an unknown cell that touches an explored cell in the local
+  // scene window. Sampled from the same atlas the surface reads, so a fog edge can
+  // never imply undiscovered terrain data.
+  float swKnownEdge = 0.0;
+  for(int i=0;i<7;i++) {
+    vec4 bounds = swPatchBounds[i];
+    if(bounds.z <= 0.0) continue;
+    vec2 uv = (swUV - bounds.xy) / bounds.zw;
+    if(all(greaterThanEqual(uv,vec2(0))) && all(lessThanEqual(uv,vec2(1)))) {
+      vec4 rect = swPatchUV[i];
+      vec2 texel = 0.5 / swLocalDimensions;
+      vec2 packedUV = clamp(rect.xy+uv*rect.zw, rect.xy+texel, rect.xy+rect.zw-texel);
+      swProps = texture2D(swLocalProperties,packedUV);
+      swAlbedo = texture2D(swLocalColor,packedUV).rgb;
+      swCoast = texture2D(swLocalCoast,packedUV);
+      swHeat = texture2D(swLocalHeat,packedUV);
+      swCellUV = fract(swUV * swMapDimensions);
+      if(swProps.b < 0.5) {
+        vec2 low = rect.xy+texel, high = rect.xy+rect.zw-texel;
+        for(int dy=-1;dy<=1;dy++) {
+          for(int dx=-1;dx<=1;dx++) {
+            if(dx==0 && dy==0) continue;
+            float neighbor = texture2D(swLocalProperties, clamp(packedUV + vec2(float(dx),float(dy))*texel, low, high)).b;
+            swKnownEdge = max(swKnownEdge, smoothstep(0.05,0.95,neighbor));
+          }
+        }
+      }
+    }
+  }
+  float swMapWidth = swMapDimensions.x;
+  float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
+  // 已探索边界软化：heat.a 是「本格到未知区的格数」渐变，只在已探索格内部生效，
+  // 未探索格永远不会因为插值露出地形色。
+  float swKnown = min(smoothstep(0.05,0.95,swProps.b), smoothstep(0.02, 0.98, swHeat.a));
+  float swWater = smoothstep(0.15, 0.85, swProps.r);
+  float swRock = swProps.g;
+  float swLava = smoothstep(0.72, 0.98, swHeat.r) * swKnown;
+  float swLavaNear = smoothstep(0.02, 0.85, swHeat.r) * (1.0 - swLava);
+  float swShoreNear = smoothstep(0.02, 0.9, swHeat.g);
+  float swContinental = swFbm(swP * 8.0);
+  float swPixelFootprint = length(fwidth(swSurfacePosition));
+  float swMicroDetail = 1.0 - smoothstep(0.09, 0.42, swPixelFootprint);
+  float swGrain = mix(0.5, swFbm(swSurfacePosition * 2.4), swMicroDetail);
+  float swFine = mix(0.5, swNoise(swSurfacePosition * 13.0), 1.0 - smoothstep(0.025, 0.12, swPixelFootprint));
+  float swRidges = abs(swNoise(swSurfacePosition * 1.7 + swContinental) * 2.0 - 1.0);
+  // 纹理一次重复 ≈ 4 格；贴地时脚下一格约 300px，故在「每格像素覆盖 > 0.3 格」就开始淡出，
+  // 远景（全球视角）只剩图集宏观色，避免摩尔纹闪烁。
+  float swTexScale = 1.0 / max(0.0001, swTileWorldSize * 4.0);
+  float swTexDetail = 1.0 - smoothstep(0.25, 1.1, swPixelFootprint / max(0.0001, swTileWorldSize));
+  // 近景用第二尺度采样打散平铺重复感（低频大块 + 细节层）。
+  float swTexMacro = 1.0 / max(0.0001, swTileWorldSize * 13.0);
+  vec3 swTriW = swTriplanarWeights(swSurfacePosition);
+  float swBiomeNoise = swFbm(swP * 5.3 + swSeed * 17.0);
+  float swBiomeNoise2 = swFbm(swP * 15.7 + swSeed * 31.0 + 7.0);
+  // 服务端 height（0..1）只做颜色/潮湿度变化，不抬升几何（建筑与拾取都在数学球面上）。
+  float swElevation = swHeat.b;
+  vec3 swSurfaceAlbedo = swAlbedo;
+  float swSurfaceRough = 0.92;
+  float swSurfaceHeight = 0.0;
+
+  if (swKnown > 0.001) {
+    if (swWater > 0.5) {
+      // 水面：深青底 + 近岸浅色（海岸距离来自跨面邻接的 coast 通道，未知边界不出泡沫）。
+      vec4 swEdgeDistance = vec4(swCellUV.y, 1.0-swCellUV.x, 1.0-swCellUV.y, swCellUV.x);
+      vec4 swCoastDistance = mix(vec4(1.0), swEdgeDistance, swCoast);
+      float swShoreDistance = min(min(swCoastDistance.x,swCoastDistance.y),min(swCoastDistance.z,swCoastDistance.w));
+      float swDepth = smoothstep(0.0, 0.55, swShoreDistance);
+      vec3 swDeep = vec3(0.008, 0.038, 0.055);
+      vec3 swShallow = vec3(0.020, 0.100, 0.110);
+      vec3 swWaterAlbedo = mix(swShallow, swDeep, swDepth);
+      // 两层滚动法线（细节用高度扰动交给 normal 段；冻结时 swTime 固定相位）。
+      vec3 swWavePosition = swSurfacePosition / max(0.0001, swTileWorldSize);
+      float swWaveDetail = 1.0 - smoothstep(0.025, 0.16, swPixelFootprint / swTileWorldSize);
+      float swWaveA = sin(dot(swWavePosition, vec3(14.0, 8.0, 19.0)) - swTime * 1.3);
+      float swWaveB = sin(dot(swWavePosition, vec3(-31.0, 17.0, 12.0)) + swTime * 1.7);
+      float swWaveC = sin(dot(swWavePosition, vec3(53.0, 26.0, -39.0)) - swTime * 2.1);
+      // 水波 UV 用球面三平面（与地形纹理同一套，无接缝），两个不同尺度各自滚动。
+      // 水面用球面 UV（经度/纬度）：球面上处处连续，没有三平面在 45° 处的混合带。
+      // 重复次数按格宽定：约 4 格一次，近景可见细浪、远处交给 mipmap。
+      float swWaveRepeat = max(2.0, swMapWidth / 3.0 / 4.0);
+      vec2 swSphereUV = vec2(atan(swP.z, swP.x) / 6.2831853 + 0.5, asin(clamp(swP.y, -1.0, 1.0)) / 3.14159265 + 0.5);
+      // 极点处经度会挤压：按纬度补偿横向重复次数。
+      float swLat = max(0.25, cos(asin(clamp(swP.y, -1.0, 1.0))));
+      vec2 swWaveUV1 = vec2(swSphereUV.x * swWaveRepeat / swLat, swSphereUV.y * swWaveRepeat) + vec2(swTime * 0.012, swTime * 0.007);
+      vec2 swWaveUV2 = vec2(swSphereUV.x * swWaveRepeat * 0.47 / swLat, swSphereUV.y * swWaveRepeat * 0.47) - vec2(swTime * 0.007, swTime * 0.015);
+      vec3 swWaterN1 = texture2D(swWaterNormal, swWaveUV1).rgb;
+      vec3 swWaterN2 = texture2D(swWaterNormal, swWaveUV2).rgb;
+      // 水波法线：两层法线图 xy 的偏差（z 分量用作强度包络），按细节距离淡出。
+      float swRipple = ((swWaterN1.r - 0.5) + (swWaterN2.g - 0.5)) * swWaveDetail * 2.2;
+      swWaterNormalXY = vec2(swWaterN1.r - 0.5, swWaterN2.g - 0.5) * 2.6 * swWaveDetail;
+      swEastW = normalize(cross(vec3(0.0, 1.0, 0.0), swP) + vec3(0.0001));
+      swSouthW = cross(swP, swEastW);
+      swWaveDetailOut = swWaveDetail;
+      // 波纹明暗 + 轻微浪峰高光（确定性：只依赖 swTime）。
+      float swWaveCrest = swRipple * 6.0 + (swWaveA * swWaveB) * 0.10 * swWaveDetail;
+      swSurfaceAlbedo = swWaterAlbedo * (0.85 + swWaveCrest * 0.30);
+      swSurfaceAlbedo += vec3(0.06, 0.10, 0.115) * max(0.0, swWaveCrest) * 0.45 * swWaveDetail;
+      // 泡沫线：只在已知陆/水相邻处出现（跨面邻接规则不变）。
+      float swFoamEdge = 0.035 + 0.010 * swWaveA;
+      float swFoamAA = max(fwidth(swShoreDistance), 0.003);
+      float swFoam = (1.0-smoothstep(swFoamEdge,swFoamEdge+swFoamAA,swShoreDistance)) * swKnown;
+      swSurfaceAlbedo += vec3(0.10, 0.17, 0.17) * swFoam * (0.6 + swWaveB * 0.2);
+      // 菲涅尔 + 假环境反射：反射方向由扰动法线决定，天空色按反射仰角从地平线雾色渐变到天顶深青，
+      // 再叠一个太阳镜面高光（对象空间计算：太阳相对相机固定，世界旋转时高光跟着转）。
+      vec3 swViewDir = normalize(swCameraObject - swSurfacePosition);
+      float swGrazing = 1.0 - clamp(dot(swViewDir, swP), 0.0, 1.0);
+      float swFresnel = 0.02 + 0.98 * pow(swGrazing, 5.0);
+      // 水面在 PBR 上是「粗糙介质 + 自定义天空反射」：环境图（程序化房间）会给光滑面
+      // 映出大片云状亮斑，这里把粗糙度压高让环境项几乎不贡献，反射由 swWaterSky 负责。
+      swSurfaceRough = mix(0.40, 0.60, swGrazing);
+      // 水体视为电介质：金属度 0（默认 metalnessFactor 0.02 在 ACES 下也会把环境图拉成亮斑）。
+      swWaterMetal = 0.0;
+      swWaterFresnel = swFresnel;
+      swSurfaceHeight = (swWaveA * 0.0012 + swWaveB * 0.0006 + swWaveC * 0.0003) * swTileWorldSize * swWaveDetail
+        + swRipple * swTileWorldSize * 0.0016;
+      swWaterMask = swKnown;
+    } else if (swLava > 0.5) {
+      // 岩浆：冷却硬壳纹理 + 自发光；缓慢流动（swTime 冻结即固定相位）。
+      vec3 swFlow = swSurfacePosition * swTexScale * 1.4;
+      // 冷却硬壳：暗色玄武质壳层；缝隙里的热熔体才发光。硬壳用低频噪声决定厚薄，
+      // 避免整片橙红（那样在近景读成一块发光塑料）。
+      vec3 swCrust = texture2D(swAlbedoArray, vec3(swFlow.xz, 10.0)).rgb;
+      vec3 swCrustB = texture2D(swAlbedoArray, vec3(swFlow.zy + swTime * 0.004, 10.0)).rgb;
+      float swCrustMask = smoothstep(0.42, 0.72, swFbm(swSurfacePosition * 1.1 + 9.0));
+      vec3 swEmit = texture2D(swLavaEmissionMap, swFlow.xz * 0.8 + vec2(swTime * 0.003, -swTime * 0.002)).rgb;
+      // 壳越厚越暗（几乎黑），薄处透出暗红。
+      swSurfaceAlbedo = mix(vec3(0.045, 0.038, 0.036), mix(swCrust, swCrustB, 0.35) * 0.16, 1.0 - swCrustMask);
+      // 橙红自发光（#ff5a1f 量级）：emissive 图 × 色温 × (1 - 壳厚)。
+      vec3 swLavaGlow = swEmit * vec3(1.0, 0.30, 0.09) * 1.15 * (1.0 - swCrustMask * 0.85);
+      swLavaGlow += vec3(0.55, 0.12, 0.03) * 0.12;
+      swLavaEmissive = swLavaGlow * swKnown;
+      swSurfaceRough = mix(0.82, 0.55, 1.0 - swCrustMask);
+      swSurfaceHeight = texture2D(swPackedArray, vec3(swFlow.xz, 10.0)).a * 0.35 + swCrustMask * 0.25;
+      swLavaMask = swKnown;
+    } else {
+      // 陆地：按权重取两种纹理做高度混合。
+      float swLayerA; float swLayerB; float swWeightA; float swWeightB;
+      if (swRock > 0.5) {
+        swLayerA = 6.0; swLayerB = 7.0;
+        swWeightA = 0.55 + swBiomeNoise * 0.45;
+        swWeightB = 1.0 - swWeightA;
+      } else if (swBiomeIce > 0.5) {
+        // 雪 / 蓝冰 / 裸岩：三个权重归一化后取前两名，避免同分时选层不稳定。
+        float wSnow = swSoilWeights.x * (0.5 + swBiomeNoise * 0.7);
+        float wBare = swSoilWeights.y * (0.5 + (1.0 - swBiomeNoise) * 0.5);
+        float wIce = swSoilWeights.z * (0.6 + swBiomeNoise2 * 0.6);
+        float total = wSnow + wBare + wIce;
+        wSnow /= total; wBare /= total; wIce /= total;
+        float wTop = max(wSnow, max(wBare, wIce));
+        swWeightA = wTop;
+        swWeightB = 1.0 - wTop;
+        if (wTop == wSnow) { swLayerA = 8.0; swLayerB = wIce >= wBare ? 9.0 : 7.0; }
+        else if (wTop == wIce) { swLayerA = 9.0; swLayerB = wSnow >= wBare ? 8.0 : 7.0; }
+        else { swLayerA = 7.0; swLayerB = wSnow >= wIce ? 8.0 : 9.0; }
+      } else {
+        // 苔草 / 火山土 / 碎石：大尺度噪声决定区块，纹理高度决定交界。
+        float wMoss = swSoilWeights.x * (0.45 + swBiomeNoise * 0.9);
+        float wSoil = swSoilWeights.y * (0.35 + swBiomeNoise2 * 0.9);
+        float wGravel = swSoilWeights.z * (0.4 + (1.0 - swBiomeNoise) * 0.8);
+        float total = wMoss + wSoil + wGravel;
+        wMoss /= total; wSoil /= total; wGravel /= total;
+        float wTop = max(wMoss, max(wSoil, wGravel));
+        swWeightA = wTop;
+        swWeightB = 1.0 - wTop;
+        if (wTop == wMoss) { swLayerA = 0.0; swLayerB = wSoil >= wGravel ? 2.0 : 3.0; }
+        else if (wTop == wSoil) { swLayerA = 2.0; swLayerB = wMoss >= wGravel ? 0.0 : 3.0; }
+        else { swLayerA = 3.0; swLayerB = wMoss >= wSoil ? 0.0 : 2.0; }
+      }
+      SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScale);
+      SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScale);
+      // 宏观尺度再采一次主层，用低频权重混合，破坏同一张贴图的周期性重复。
+      SwSurface swMacro = swSampleLayer(swLayerA, swSurfacePosition + vec3(0.37, 0.11, 0.53), swTriW, swTexMacro);
+      float swMacroMix = 0.30 + 0.18 * swBiomeNoise2;
+      float swBlend = swHeightBlend(swA.height, swB.height, swWeightA, swWeightB, swBiomeNoise2);
+      // 群落交界处打散成 1–3 格宽的斑块，而不是沿噪声等值线的整片边界。
+      swBlend = smoothstep(0.22, 0.78, swBlend + (swBiomeNoise2 - 0.5) * 0.55);
+      vec3 swTextured = mix(swB.albedo, swA.albedo, swBlend);
+      swTextured = mix(swTextured, swTextured * (swMacro.albedo * 2.1 + 0.45), swMacroMix * swTexDetail);
+      float swRoughTextured = mix(swB.rough, swA.rough, swBlend);
+      // 潮湿度：低洼（height 小）更湿、颜色偏冷偏暗；高处更干更亮。
+      float swWet = (1.0 - swElevation) * (0.35 + swBiomeNoise * 0.35);
+      swTextured *= mix(1.0, 0.78, swWet) * mix(0.92, 1.10, swElevation);
+      swTextured = mix(swTextured, swTextured * vec3(0.86, 0.94, 1.0), swWet * 0.5);
+      // 近景至少保留 72% 纹理，宏观色只做色相底；否则近景会被旧图集色压回「纯色平面」。
+      swSurfaceAlbedo = mix(swAlbedo, swTextured, mix(0.72, 1.0, swTexDetail));
+      swSurfaceRough = mix(0.92, swRoughTextured, swTexDetail);
+      swSurfaceHeight = mix(0.0, (swA.height * swBlend + swB.height * (1.0 - swBlend) - 0.5) * 0.02, swTexDetail);
+      // 临水一圈沙泥；临岩浆一圈焦土/火山灰。两者都来自已探索邻格的烘焙距离。
+      float swSand = swShoreNear * (1.0 - swRock);
+      vec3 swSandAlbedo = swSampleLayer(5.0, swSurfacePosition, swTriW, swTexScale).albedo;
+      swSurfaceAlbedo = mix(swSurfaceAlbedo, swSandAlbedo, clamp(swSand * 0.75, 0.0, 1.0));
+      float swScorch = swLavaNear * (1.0 - swRock);
+      swSurfaceAlbedo = mix(swSurfaceAlbedo, swSurfaceAlbedo * vec3(0.30, 0.26, 0.24), clamp(swScorch * 0.85, 0.0, 1.0));
+    }
+    // 群落偏色（按星球种子）：只微调色相/饱和/明度，不改变纹理结构。
+    swSurfaceAlbedo = swSaturate(swSurfaceAlbedo * swBiomeTint, swBiomeSaturation) * swBiomeBrightness;
+  }
+  // 远景宏观色：像素覆盖过大时纹理已退回图集色，仍保持原有的土壤色差。
+  vec3 swSoilTint = mix(vec3(0.82, 0.91, 0.91), vec3(1.03, 1.03, 0.94), swContinental);
+  swSurfaceAlbedo *= mix(swSoilTint * (0.94 + swGrain * 0.08 + swFine * 0.04), vec3(0.95 + swContinental * 0.1), swWater);
+  swSurfaceAlbedo *= 1.0 - swRock * smoothstep(0.64, 0.95, swRidges) * 0.25;
+  if (swWaterMask > 0.001) {
+    vec3 swPerturbed = normalize(swP - swWaterNormalXY.x * 0.30 * swEastW - swWaterNormalXY.y * 0.30 * swSouthW);
+    vec3 swRefl = reflect(-normalize(swCameraObject - swSurfacePosition), swPerturbed);
+    float swUp = clamp(swRefl.y * 0.5 + 0.5, 0.0, 1.0);
+    vec3 swSkyHorizon = vec3(0.022, 0.042, 0.058);
+    vec3 swSkyZenith = vec3(0.004, 0.012, 0.026);
+    vec3 swSky = mix(swSkyHorizon, swSkyZenith, pow(swUp, 1.2));
+    vec3 swSunDir = normalize(swSunObject);
+    float swGlint = pow(max(dot(swRefl, swSunDir), 0.0), 140.0) * 0.55;
+    float swGlintWide = pow(max(dot(swRefl, swSunDir), 0.0), 24.0) * 0.02;
+    // 反射只取半球以上的天空（法线朝下时反射看到的是「地面」，不该发亮）。
+    // 只有反射方向朝上（看到天空）才有反射；朝下（看到岸/自己）不发光。
+    float swSkyAbove = smoothstep(0.0, 0.5, swRefl.y);
+    swWaterSky = (swSky + vec3(1.0, 0.86, 0.68) * (swGlint + swGlintWide)) * (0.10 + swWaterFresnel * 0.7) * swSkyAbove;
+  }
+  // 未探索面纱：深石板 + 细测绘网格 + 淡等高线式程序纹理（与真实地形无关）。
+  float swVeilPatch = swFbm(swP * 6.5 + 3.1);
+  float swVeilGrain = mix(0.5, swFbm(swSurfacePosition * 1.6 + 11.0), swMicroDetail);
+  float swVeilRelief = mix(0.5, swNoise(swSurfacePosition * 24.0 + 5.0), 1.0 - smoothstep(0.03, 0.14, swPixelFootprint));
+  // Tile-scale grid: one line per map cell, only legible while a cell spans a
+  // reasonable pixel footprint (close range); fades out well before the globe view.
+  float swGridCell = max(1.0, swMapWidth * 0.02);
+  vec2 swGridUV = swCellUV * max(1.0, 1.0 / swGridCell);
+  vec2 swGridWidth = fwidth(swGridUV);
+  vec2 swGridLine = 1.0 - smoothstep(vec2(0.0), swGridWidth * 1.6, abs(fract(swGridUV + 0.5) - 0.5));
+  float swGridFade = 1.0 - smoothstep(0.02, 0.10, swPixelFootprint);
+  float swSurveyGrid = max(swGridLine.x, swGridLine.y) * swGridFade;
+  // 等高线式程序纹理：与真实地形无关的缓慢条带，只用来读「这是未知测绘区」。
+  float swContour = abs(fract(swFbm(swP * 9.0 + 4.7) * 6.0) - 0.5);
+  float swContourLine = (1.0 - smoothstep(0.02, 0.10, swContour)) * swGridFade;
+  vec3 swVeil = vec3(0.046, 0.062, 0.088) * (0.82 + swContinental * 0.08 + swVeilPatch * 0.10 + swVeilGrain * 0.10 + swVeilRelief * 0.07);
+  swVeil += vec3(0.030, 0.052, 0.062) * swSurveyGrid * 0.75;
+  swVeil += vec3(0.012, 0.026, 0.030) * swContourLine * 0.6;
+  // Fog frontier edge light: a soft band where the unknown region meets explored
+  // land, so the boundary reads as a scan frontier instead of a hard cut.
+  swVeil += vec3(0.050, 0.115, 0.130) * swKnownEdge * (0.25 + 0.75 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
+  // layers.fog = off：不盖测绘面纱。未探索格没有地形数据（未知格），仍用面纱的不透明
+  // 填充当底色，只是去掉网格/前沿光/浮雕——否则会露出球体背面的天体，画面读成「星球消失」。
+  vec3 swUnknownBase = vec3(0.046, 0.062, 0.088);
+  swAlbedo = swSurfaceAlbedo;
+  swAlbedo = mix(mix(swAlbedo, mix(swUnknownBase, swVeil, swFog), swFog), swAlbedo, swKnown);
+  // 水色偏深：水体反照率不能压过天空反射，否则近景一大片青绿。
+  swAlbedo = mix(swAlbedo, swAlbedo * vec3(0.72, 0.86, 0.92), swWaterMask * 0.55);
+  swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
+  diffuseColor.rgb *= swAlbedo;
+  swHeightField = mix(swSurfaceHeight + swGrain * 0.004 + swFine * 0.001 + swRidges * swRock * 0.010, swSurfaceHeight, swWater) * swKnown;
+  // Unknown cells keep a shallow tile-scale relief so the close ground view has
+  // horizon/relief cues (gated by (1 - swKnown), never leaks explored terrain).
+  swHeightField += swVeilRelief * 0.010 * (1.0 - swKnown) * swFog;
+`;
