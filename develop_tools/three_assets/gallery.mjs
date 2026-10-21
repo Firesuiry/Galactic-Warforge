@@ -20,7 +20,7 @@ const require = createRequire(resolve(root, 'client-web/package.json'));
 const { chromium } = require('@playwright/test');
 const output = resolve(process.argv[2] ?? '/tmp/kenney-gallery');
 const viteArg = process.argv.slice(3).find((arg) => arg.startsWith('http')) ?? 'http://127.0.0.1:4173';
-const units = process.argv.includes('--units');
+const withUnits = process.argv.includes('--units');
 await mkdir(output, { recursive: true });
 
 const BUILDINGS = [
@@ -41,24 +41,22 @@ try {
     const THREE = await import('/@id/three');
     const { RoomEnvironment } = await import('/@id/three/examples/jsm/environments/RoomEnvironment.js');
     const { IndustrialModels } = await import('/src/features/planet-map/three/industrial-models.ts');
-    const gltf = await import('/src/features/planet-map/three/industrial-gltf.ts');
-    await gltf.preloadIndustrialGltf();
     const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(1200, 1000); renderer.setPixelRatio(1);
     renderer.setClearColor(0x1b2b35); renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const scene = new THREE.Scene(), models = new IndustrialModels();
     const pmrem = new THREE.PMREMGenerator(renderer);
     const room = new RoomEnvironment(); const environment = pmrem.fromScene(room, 0.05);
-    scene.environment = environment.texture; scene.environmentIntensity = 0.5;
-    scene.add(new THREE.HemisphereLight(0xc6e8ff, 0x526370, 0.8));
-    const sun = new THREE.DirectionalLight(0xffe6cb, 3.2); sun.position.set(-4, 7, 5); sun.castShadow = true;
+    scene.environment = environment.texture; scene.environmentIntensity = 0.32;
+    scene.add(new THREE.HemisphereLight(0xb6dafa, 0x384044, 0.75));
+    const sun = new THREE.DirectionalLight(0xffe5c1, 3.5); sun.position.set(-4, 7, 5); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 0.1, far: 40 });
     sun.shadow.normalBias = 0.02; scene.add(sun);
-    const rim = new THREE.DirectionalLight(0x78c4ff, 1.6); rim.position.set(4, 3, -5); scene.add(rim);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x2b3a44, roughness: 0.9, metalness: 0.05 }));
+    const rim = new THREE.DirectionalLight(0x719dc7, 0.75); rim.position.set(4, 3, -5); scene.add(rim);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x1d2a33, roughness: 0.95, metalness: 0.05 }));
     ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
     // 1 cell = 1 单位：地面棋盘就是比例尺。
     const grid = new THREE.GridHelper(60, 60, 0x54707e, 0x3a4d57);
@@ -67,6 +65,7 @@ try {
     const DIRECTION = new THREE.Vector3(0.75, 0.85, 1.15).normalize();
 
     const shoot = (root, span) => {
+      // 同一建筑同机位：镜头只由占地（span）决定，不看模型自身高度。
       scene.add(root);
       camera.left = -span * 0.6; camera.right = span * 0.6;
       camera.top = span * 0.5; camera.bottom = -span * 0.5;
@@ -79,28 +78,29 @@ try {
       return image;
     };
 
+    /**
+     * 「修前」= GLB 还没加载时的真实回退路径（场景首帧就是这样画的）；
+     * 「修后」= `preloadIndustrialGltf()` 完成 + `reloadTemplates()` 之后。
+     * 两遍走的是同一套 `IndustrialModels.building()/unit()`，不是手搓的对比模型。
+     */
     window.gallery = async ({ buildings, units }) => {
       const out = [];
-      for (const [type, w, d] of buildings) {
-        // 占地 .86 内缩，和场景里 `building(w*.86, d*.86)` 完全一致。
-        const width = w * 0.86, depth = d * 0.86;
-        const span = Math.max(width, depth) * 2.6 + 0.6;
-        out.push({ file: `${type}-before`, image: shoot(models.building(type, width, depth, true), span) });
-        const gltfModel = gltf.instantiateBuilding(type, width, depth, true);
-        out.push({ file: `${type}-after`, image: shoot(gltfModel ?? models.building(type, width, depth, true), span) });
-      }
-      if (units) {
-        for (const type of units) {
-          const span = 2.4;
-          out.push({ file: `unit-${type}-before`, image: shoot(models.unit(type, 'own'), span) });
-          const gltfModel = gltf.instantiateUnit(type, 'own');
-          out.push({ file: `unit-${type}-after`, image: shoot(gltfModel ?? models.unit(type, 'own'), span) });
+      const spans = new Map();
+      for (const [type, w, d] of buildings) spans.set(type, Math.max(w * 0.86, d * 0.86) * 2.6 + 0.6);
+      const shootAll = async (suffix) => {
+        for (const [type, w, d] of buildings) {
+          out.push({ file: `${type}-${suffix}`, image: shoot(models.building(type, w * 0.86, d * 0.86, true), spans.get(type)) });
         }
-      }
+        for (const type of units) out.push({ file: `unit-${type}-${suffix}`, image: shoot(models.unit(type, 'own'), 2.4) });
+      };
+      await shootAll('before');
+      await IndustrialModels.preload();
+      models.reloadTemplates();
+      await shootAll('after');
       return out;
     };
   });
-  const shots = await page.evaluate(({ buildings, units }) => window.gallery({ buildings, units }), { buildings: BUILDINGS, units });
+  const shots = await page.evaluate(({ buildings, units }) => window.gallery({ buildings, units }), { buildings: BUILDINGS, units: withUnits ? UNITS : [] });
   for (const shot of shots) {
     await writeFile(resolve(output, `${shot.file}.png`), Buffer.from(shot.image.split(',')[1], 'base64'));
   }

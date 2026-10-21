@@ -300,6 +300,11 @@ export class PlanetThreeScene {
     this.observer.observe(host);
     this.resize();
     this.animate(0);
+    // 现成 GLB 异步加载：加载完丢掉程序化模板缓存并重建实体，换成 GLB 模型。
+    // 首帧渲染不等它（模型可能还没下载完），期间继续用程序化模型，不会出现空建筑。
+    void IndustrialModels.preload().then(() => {
+      if (!this.destroyed) this.reloadModels();
+    }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
   }
 
   getQuality() { return this.quality; }
@@ -612,6 +617,17 @@ export class PlanetThreeScene {
     this.syncLinks('logistics', '#7dc5d2', logisticsLinks);
     this.syncLinks('power', '#ffd37c', (networks?.power_links ?? []).map(link => ({ from: link.from_position, to: link.to_position })));
     this.syncLinks('pipelines', '#76baef', (networks?.pipeline_segments ?? []).map(link => ({ from: link.from_position, to: link.to_position })));
+  }
+
+  /** 现成 GLB 就绪后重建实体：模型签名不变，所以必须显式丢掉程序化模板与已建实例，
+   * 否则 `retain` 会认为「外观没变」而不重建。血条/标签 sprite 挂在实例组上，随组一起换。 */
+  private reloadModels() {
+    this.industrial.reloadTemplates();
+    for (const entry of this.staticEntities.values()) this.removeModel(entry.group);
+    this.staticEntities.clear();
+    for (const entry of this.moving.values()) this.removeModel(entry.group);
+    this.moving.clear();
+    this.buildEntities();
   }
 
   private removeModel(group: THREE.Group) {

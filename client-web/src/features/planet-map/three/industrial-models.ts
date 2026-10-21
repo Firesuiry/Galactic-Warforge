@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createIndustrialFinishes } from './industrial-finishes';
+import { instantiateBuilding, instantiateUnit, preloadIndustrialGltf } from './industrial-gltf';
 import type { UnitFaction } from '../rts-commands';
 
 type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
@@ -455,6 +456,9 @@ export class IndustrialModels {
   building(type: string, width: number, depth: number, own: boolean): THREE.Group {
     const key = `building:${type}:${width}:${depth}:${own}`;
     const cached = this.cached(key); if (cached) return cached;
+    // 现成 GLB（异步加载完才有）：直接用它，比例在 instantiateBuilding 里按占地归一化。
+    const ready = instantiateBuilding(type, width, depth, own);
+    if (ready) { this.batchStatic(ready); return this.remember(key, ready); }
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
     // 分拣器（sorter-rig）与带子一样直接贴地，不铺方形地基。
@@ -493,6 +497,8 @@ export class IndustrialModels {
   unit(type: string, faction: UnitFaction): THREE.Group {
     const key = `unit:${type}:${faction}`;
     const cached = this.cached(key); if (cached) return cached;
+    const ready = instantiateUnit(type, faction);
+    if (ready) { this.batchStatic(ready); return this.remember(key, ready); }
     const group = new THREE.Group(); group.name = `industrial-unit-${type}`;
     const { armor, light } = UNIT_FINISH[faction];
     if (type === 'logistics_bot') {
@@ -576,6 +582,18 @@ export class IndustrialModels {
       cargo.visible = false;
     }
     return this.remember(key, group);
+  }
+
+  /** 预加载现成 GLB（异步）。与 `building()/unit()` 走同一个模块实例，所以加载结果对它们可见。
+   * 场景在构造后调用一次，完成后调 `reloadTemplates()` 让已建实体换成 GLB。 */
+  static preload(): Promise<void> {
+    return preloadIndustrialGltf();
+  }
+
+  /** 现成 GLB 加载完成后调用：丢掉旧的模板缓存，让下一次 `building()/unit()` 用 GLB 重建。
+   * 已经发出去的实例继续持有自己的几何/材质（dispose() 统一释放），这里只清模板表。 */
+  reloadTemplates(): void {
+    this.templates.clear();
   }
 
   resource(kind: string): THREE.Group {
