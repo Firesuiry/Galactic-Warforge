@@ -81,7 +81,7 @@ const pageReady = (extra = '') =>
   `await L.open3d(page, 'high', ${JSON.stringify(extra)});\n` +
   'await L.sleep(3000);\n';
 
-/** 3D 机位：focus（含 close）、zoom、tilt、绕 Z 轴转（侧视/斜视）。 */
+/** 3D 机位：focus（含 close）、zoom、tilt、绕 Z 轴转（侧视/斜视）、altitude（绝对高度）、orbit（全球视角）。 */
 export async function shoot3d(driver, shot, outDir) {
   const body = `
 ${pageReady(shot.query ?? '')}
@@ -91,11 +91,20 @@ await L.focus(page, { x: ${shot.focus.x}, y: ${shot.focus.y} }, true);
 ${shot.tilt != null ? `await page.evaluate(() => window.__planetThree.setTilt(${shot.tilt}));` : ''}
 ${shot.zoom != null ? `await page.evaluate(() => window.__planetThree.zoom(${shot.zoom}));` : ''}
 ${shot.rotateZ ? `await page.evaluate((a) => window.__planetThree.rotateView(a), ${shot.rotateZ});` : ''}
+${shot.altitude != null ? `await page.evaluate((a) => window.__planetThree.setAltitude(a), ${shot.altitude});` : ''}
+${shot.orbit ? 'await page.evaluate(() => window.__planetThree.orbit());' : ''}
 await L.sleep(${shot.settleMs ?? 2200});
-const stats = await page.evaluate(() => {
+const stats = await page.evaluate(async () => {
   const scene = window.__planetThree;
   const get = (name) => { const value = scene?.[name]; return typeof value === 'function' ? value() : value; };
-  return { stats: get('renderStats'), calls: get('renderCalls') };
+  // 帧率：数 2 秒内的 requestAnimationFrame 回调（headless 真实显卡，口径只用于修前修后对照）。
+  const fps = await new Promise((resolve) => {
+    let frames = 0;
+    const t0 = performance.now();
+    const step = (now) => { frames += 1; if (now - t0 < 2000) requestAnimationFrame(step); else resolve(Math.round(frames * 1000 / (now - t0))); };
+    requestAnimationFrame(step);
+  });
+  return { stats: get('renderStats'), calls: get('renderCalls'), fps };
 });
 await page.screenshot({ path: ${JSON.stringify(path.join(outDir, shot.name + '.png'))}, timeout: 120000 });
 return { errors: S.errors.slice(-5), stats };
