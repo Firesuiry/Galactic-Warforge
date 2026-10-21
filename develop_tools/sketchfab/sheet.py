@@ -25,6 +25,7 @@ import math
 import re
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -146,15 +147,42 @@ def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, size)
 
 
+def _thumb_path(url: str) -> Path:
+    return THUMB_CACHE / (re.sub(r"[^A-Za-z0-9]", "_", url[-80:]) + ".jpg")
+
+
+def prefetch_thumbs(urls: list[str], workers: int = 16) -> None:
+    """并发预取缩略图（media.sketchfab.com 单张可能排队到 60s+，串行会卡死）。"""
+    THUMB_CACHE.mkdir(parents=True, exist_ok=True)
+    todo = list(dict.fromkeys(u for u in urls if u and not _thumb_path(u).is_file()))
+
+    def one(u: str) -> bool:
+        for attempt in range(4):
+            try:
+                req = urllib.request.Request(u, headers={"User-Agent": "siliconworld-3a-models/1.0"})
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    _thumb_path(u).write_bytes(r.read())
+                return True
+            except Exception as e:  # noqa: BLE001
+                if attempt == 3:
+                    print(f"  ! 缩略图失败 {u[:60]}: {e}", file=sys.stderr)
+        return False
+
+    if todo:
+        print(f"  预取缩略图 {len(todo)} 张…")
+        with ThreadPoolExecutor(workers) as ex:
+            list(ex.map(one, todo))
+
+
 def _thumb(url: str) -> Image.Image | None:
     if not url:
         return None
     THUMB_CACHE.mkdir(parents=True, exist_ok=True)
-    cp = THUMB_CACHE / (re.sub(r"[^A-Za-z0-9]", "_", url[-80:]) + ".jpg")
+    cp = _thumb_path(url)
     try:
         if not cp.is_file():
             req = urllib.request.Request(url, headers={"User-Agent": "siliconworld-3a-models/1.0"})
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=180) as r:
                 cp.write_bytes(r.read())
         im = Image.open(cp).convert("RGB")
         # contain 到 300×225
@@ -188,6 +216,7 @@ def render_sheet(
     f_sub = _font(FONT_REG, 15)
     f_line = _font(FONT_REG, 13)
     f_badge = _font(FONT_BOLD, 15)
+    rows = max(1, min(rows, math.ceil(len(entries) / cols)))
     width = PAD + cols * (CELL_W + PAD)
     cell_block = CELL_H + TEXT_H
     height = HEADER_H + rows * (cell_block + PAD) + PAD
@@ -245,6 +274,14 @@ def entry(idx: int, m: dict) -> dict:
     }
 
 
+def _reason_histogram(rejected: list[tuple[dict, str]]) -> dict[str, int]:
+    hist: dict[str, int] = {}
+    for _, r in rejected:
+        key = r.split(" ")[0] if r.split(" ")[0] in {"面数", "许可", "类目"} else "内容排除"
+        hist[key] = hist.get(key, 0) + 1
+    return hist
+
+
 def _best_thumb(m: dict) -> str:
     imgs = (m.get("thumbnails") or {}).get("images") or []
     if not imgs:
@@ -266,6 +303,8 @@ def main() -> None:
     candidates: dict[str, list[dict]] = {}
     summary: dict[str, dict] = {}
 
+    # 先算完所有槽位的入选名单，再并发预取缩略图，最后统一出图
+    jobs: list[tuple[Path, str, str, list[dict], int, int]] = []
     for num, slot, purpose, kws in S.SLOTS:
         if args.only and slot not in args.only:
             continue
@@ -284,14 +323,15 @@ def main() -> None:
             "ok_licensed": ok_count,
             "nc_used": len(entries) - ok_count,
             "sheet": f"sheets/{num:02d}-{slot}.png",
+            "rejected_reasons": _reason_histogram(rejected),
         }
         print(f"[{num:02d}] {slot}: 原始 {len(models)}，剔除 {len(rejected)}，入选 {len(entries)}（NC {len(entries) - ok_count}）")
-        render_sheet(
+        jobs.append((
             sheets_dir / f"{num:02d}-{slot}.png",
             f"{num:02d} {slot} — {purpose}",
-            " | ".join(kws) + "   ·   4×2，取「点赞^0.5 × 相关度」前 8；红框 NC = 非商用许可",
-            entries,
-        )
+            " | ".join(kws) + "   ·   取「点赞^0.5 × 相关度」前 8；红框 NC = 非商用许可（本槽合格候选不足才补入）",
+            entries, COLS, ROWS,
+        ))
 
     # 套装表：按作者聚合，同一作者多件作品优先
     for i, (key, label, kws) in enumerate(S.PACK_GROUPS, start=1):
@@ -319,14 +359,16 @@ def main() -> None:
             entries.append(entry(len(entries) + 1, ms[0]))
         candidates[f"packs/{key}"] = entries
         print(f"[packs/{key}] 作者 {len(by_author)}，候选 {len(entries)}")
-        render_sheet(
+        jobs.append((
             sheets_dir / f"00-packs-{i}-{key}.png",
             f"套装候选 {i}：{label}",
             " | ".join(kws) + "   ·   按作者聚合（同作者一套覆盖多槽位，风格统一价值最高）",
-            entries,
-            cols=5,
-            rows=3,
-        )
+            entries, 5, 3,
+        ))
+
+    prefetch_thumbs([e["thumbnail"] for _, _, _, es, _, _ in jobs for e in es])
+    for path, title, subtitle, entries, cols, rows in jobs:
+        render_sheet(path, title, subtitle, entries, cols=cols, rows=rows)
 
     (out_dir / "candidates.json").write_text(
         json.dumps(candidates, ensure_ascii=False, indent=1) + "\n"
