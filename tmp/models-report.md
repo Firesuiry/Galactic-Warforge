@@ -113,7 +113,7 @@
   `node develop_tools/three_assets/gallery.mjs <输出目录> --units`。
 - 建造栏缩略图（重新生成，68 张）：`client-web/public/assets/buildings/*.png`。
 
-## 6. 本轮返工记录（主代理提的三条）
+## 6. 返工记录（主代理提的四条）
 
 1. **barracks / supply_station 太像灰盒子**：`barracks` 从 `building-s`（长条仓库）换成 `building-a`
    （两层营房、屋顶设备），`supply_station` 从 `building-p`（长条）换成 `building-g`（带屋顶设备的仓储楼）；
@@ -122,6 +122,10 @@
 3. **worker / soldier 区分度**：两个 astronaut 只差配色，远处确实分不清。给 `soldier` 挂了一把
    程序化步枪（枪身/枪管/弹匣三个方块，全场共用一份几何与材质，合批后只多 1 个绘制调用），
    端在身前、枪管伸出轮廓外。`unit-soldier-after.png` 里能看出与 `unit-worker-after.png` 的区别。
+4. **俯视时兵营/补给站读成深灰色块**：Kenney 的屋顶是 colormap 里最深的一档灰，光乘底色系数压不住。
+   改成给**己方建筑**的模板材质叠一层很弱的常量自发光（`OWN_LIFT = 0x565e68`，`emissiveIntensity = 1`）：
+   最暗的一档抬到中灰，白墙不变；敌方/黑雾/单位不设这层。实测兵营俯视区域平均亮度
+   123 → 150（程序化基准 150），补给站 93 → 122。
 
 ## 7. 测试
 
@@ -142,14 +146,20 @@
 | `go vet ./internal/model/ ./internal/gamecore/` | 通过 |
 | `go test ./internal/model/ -count=1` | ok（1.434s） |
 
-**没跑的**：`npx playwright test tests/planet-three.spec.ts`（本轮只改了模型来源与统计钩子，未改交互；
-真机验收用固定机位截图做的）、`gamecore -short`、长测试组（归主代理合并前统一跑）。
+浏览器用例（`client-web/` 下）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npx playwright test tests/planet-three.spec.ts --workers=2` | **3 passed (21.4s)**（`[war]` project 全部 3 条：旋转缩放/查看建筑/真实建造移动、单位选中与移动、未探索区聚焦） |
+
+**没跑的**：`gamecore -short` 与长测试组（未改平衡/逻辑，归主代理合并前统一跑）。
 
 ## 8. 遗留问题（按严重度）
 
 1. **`barracks` / `supply_station` 的辨识度仍偏弱**：现在换成两层营房 / 带屋顶设备的仓储楼，
-   比长条灰盒子好，但和「兵营」「补给站」的语义关联还是靠体量，不像程序化模型那样有明确功能件。
-   若要更强辨识度，需要给这两类各做 1 个专属附挂件（例如兵营门口旗杆、补给站顶棚吊钩）。
+   亮度已经跟白陶瓷对齐（俯视平均亮度 150 / 122，程序化基准 150），但和「兵营」「补给站」的语义关联
+   还是靠体量，不像程序化模型那样有明确功能件。若要更强辨识度，需要给这两类各做 1 个专属附挂件
+   （例如兵营门口旗杆、补给站顶棚吊钩）。
 2. **机甲/火炮/导弹车/维修车/补给车仍是程序化方块**：Kenney 没有机甲素材，Car Kit 车辆与阵营涂装冲突。
    要提升只能引入 Quaternius/poly.pizza 的 CC-BY 素材（需署名、风格不统一）或自建模型。
 3. **单位尺寸靠手工 `scale` 微调**：`worker/soldier 0.8`、`scout 1.05`、`drone 1.5`、`ship 1.6` 是按

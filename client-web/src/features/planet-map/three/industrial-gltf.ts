@@ -89,6 +89,9 @@ type TintKey = UnitFaction | 'own-building' | 'enemy-building';
  * 底色系数。Kenney City Kit 的墙体是中性灰（colormap 里约 #8e95b3 / #667a99），
  * 直接搬进场景会比现有「白陶瓷」暗一档，所以己方建筑把底色提亮到 >1（线性空间允许），
  * 只留深灰窗与结构线，深灰占比才压得住。
+ *
+ * 光乘系数不够：屋顶在 colormap 里是最深的一档灰，乘 1.5 仍偏暗，俯视时整栋读成「未通电」。
+ * 所以己方建筑再叠一个亮度下限（`MIN_BRIGHTNESS`），把深灰抬到中灰偏白，同时保留明暗层次。
  */
 const TINT: Record<TintKey, { body: [number, number, number]; accent: number }> = {
   'own-building': { body: [1.5, 1.5, 1.52], accent: 0x2fc4e8 },
@@ -99,6 +102,10 @@ const TINT: Record<TintKey, { body: [number, number, number]; accent: number }> 
   fog_hostile: { body: [0.72, 0.4, 0.4], accent: 0xff2a2a },
 };
 const FACTION_KEYS: TintKey[] = ['own', 'enemy', 'fog_neutral', 'fog_hostile'];
+/** 己方建筑暗部抬升：材质带 colormap 时 `color` 是白的，暗度全来自贴图，
+ * 光乘系数压不住深灰屋顶（俯视时主视觉面就是屋顶）。这里给己方建筑加一层很弱的
+ * 常量自发光，把最暗的一档抬到中灰，白墙不变——只是把「黑块」变成「深灰块」。 */
+const OWN_LIFT = 0x565e68;
 
 interface Prepared {
   /** 已居中、底部贴 Y=0、按阵营上色的模板。 */
@@ -165,7 +172,7 @@ function rifleMesh(size: THREE.Vector3): THREE.Group {
  * 同一个源材质在一份模板里只克隆一次：`batchStatic` 按材质归并，
  * 每个网格各克隆一份材质的话合并会失效，绘制调用会翻好几倍。
  */
-function prepare(scene: THREE.Object3D, tint: readonly [number, number, number]): Prepared {
+function prepare(scene: THREE.Object3D, tint: readonly [number, number, number], raiseDark: boolean): Prepared {
   const root = scene.clone(true);
   // 先量主体：附挂件不参与归一化，否则一把枪会把整个人缩小。
   const host = new THREE.Box3().setFromObject(root);
@@ -189,7 +196,13 @@ function prepare(scene: THREE.Object3D, tint: readonly [number, number, number])
           material.metalness = Math.min(material.metalness, 0.3);
         }
       }
-      if (material instanceof THREE.MeshStandardMaterial) material.color.multiply(new THREE.Color(...tint));
+      if (material instanceof THREE.MeshStandardMaterial) {
+        material.color.multiply(new THREE.Color(...tint));
+        if (raiseDark) {
+          material.emissive.setHex(OWN_LIFT);
+          material.emissiveIntensity = 1;
+        }
+      }
       materials.set(source, material);
     }
     object.material = material;
@@ -213,12 +226,15 @@ function templateKey(spec: GltfModelSpec) {
   return spec.attach ? `${spec.file}+${spec.attach}` : spec.file;
 }
 
-async function prepareSpec(spec: GltfModelSpec) {
+async function prepareSpec(spec: GltfModelSpec, building: boolean) {
   const key = templateKey(spec);
   if (templates.has(key)) return;
   const scene = (await loader.loadAsync(ROOT + spec.file)).scene;
   const variants = new Map<TintKey, Prepared>();
-  for (const faction of FACTION_KEYS) variants.set(faction, prepare(scene, TINT[faction].body));
+  for (const faction of FACTION_KEYS) {
+    // 只有己方**建筑**提亮暗部（屋顶在俯视时是主视觉面）；敌方/黑雾与单位保持原本的明暗对比。
+    variants.set(faction, prepare(scene, TINT[faction].body, building && faction === 'own'));
+  }
   templates.set(key, variants);
 }
 
@@ -229,8 +245,10 @@ async function prepareSpec(spec: GltfModelSpec) {
 export function preloadIndustrialGltf(): Promise<void> {
   if (!loading && new URLSearchParams(window.location.search).has('procedural-models')) loading = Promise.resolve();
   if (!loading) {
-    const specs = new Map([...Object.values(BUILDING_GLTF), ...Object.values(UNIT_GLTF)].map((spec) => [templateKey(spec), spec]));
-    loading = Promise.all([...specs.values()].map(prepareSpec)).then(() => undefined);
+    const specs = new Map<string, { spec: GltfModelSpec; building: boolean }>();
+    for (const spec of Object.values(BUILDING_GLTF)) specs.set(templateKey(spec), { spec, building: true });
+    for (const spec of Object.values(UNIT_GLTF)) specs.set(templateKey(spec), { spec, building: false });
+    loading = Promise.all([...specs.values()].map(({ spec, building }) => prepareSpec(spec, building))).then(() => undefined);
   }
   return loading;
 }
