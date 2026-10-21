@@ -7,13 +7,13 @@ import { instantiateBuilding, instantiateUnit, preloadIndustrialGltf } from './i
 import type { UnitFaction } from '../rts-commands';
 import type { SurfaceKey } from './industrial-surfaces';
 
-type Finish = 'ceramic' | 'alloy' | 'graphite' | 'plate' | 'plastic' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow' | 'warning';
+type Finish = 'ceramic' | 'alloy' | 'graphite' | 'plate' | 'plastic' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow' | 'warning' | 'hazard';
 /** 材质池键：程序化模型用到的 finish 名映射到 `industrial-surfaces.ts` 的表面族。 */
 const SURFACE_KEY: Record<Finish, SurfaceKey> = {
   ceramic: 'ceramic', alloy: 'alloy', graphite: 'graphite', plate: 'plate', plastic: 'plastic',
   copper: 'copper', copperDark: 'copperDark', blue: 'blue', orange: 'orange', glass: 'glass',
   rubber: 'rubber', hostile: 'enemyCeramic', fog: 'fogCeramic', fogGlow: 'fogGlow',
-  fogHostile: 'fogCeramic', fogHostileGlow: 'fogHostileGlow', warning: 'warning',
+  fogHostile: 'fogCeramic', fogHostileGlow: 'fogHostileGlow', warning: 'warning', hazard: 'hazard',
 };
 /** 单位涂装：己方白蓝、敌方玩家橙、黑雾中立暗紫灰、黑雾敌对暗红。 */
 const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
@@ -43,6 +43,10 @@ export class IndustrialModels {
     this.geometry.set('box', new RoundedBoxGeometry(1, 1, 1, 1, 0.06));
     this.geometry.set('slab', new THREE.BoxGeometry(1, 1, 1));
     this.geometry.set('cylinder', new THREE.CylinderGeometry(0.5, 0.5, 1, 16));
+    // 细管/细杆：8 段够圆（半径 ≤ 0.02 格），16 段是纯浪费（塔架每栋几十根）。
+    this.geometry.set('tube', new THREE.CylinderGeometry(0.5, 0.5, 1, 8));
+    // 薄板/贴花：平面单位方块，用 scale 贴到面（警示条、面板缝、格栅叶片），1 个三角面组。
+    this.geometry.set('panel', new THREE.PlaneGeometry(1, 1));
     this.geometry.set('cone', new THREE.CylinderGeometry(0.06, 0.5, 1, 12));
     this.geometry.set('hex', new THREE.CylinderGeometry(0.5, 0.5, 1, 6));
     this.geometry.set('dome', new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2));
@@ -117,9 +121,44 @@ export class IndustrialModels {
 
   private pipe(parent: THREE.Object3D, finish: Finish, a: [number, number, number], b: [number, number, number], radius = 0.018) {
     const from = new THREE.Vector3(...a), to = new THREE.Vector3(...b), d = to.clone().sub(from);
-    const mesh = this.part(parent, 'cylinder', finish, [radius * 2, d.length(), radius * 2], [0, 0, 0]);
+    const mesh = this.part(parent, 'tube', finish, [radius * 2, d.length(), radius * 2], [0, 0, 0]);
     mesh.position.copy(from.add(to).multiplyScalar(0.5)); mesh.quaternion.setFromUnitVectors(UP, d.normalize());
     return mesh;
+  }
+
+  /**
+   * 薄贴花（警示条纹、面板缝、铭牌）：一个双面平面片，贴在建筑表面外 2mm。
+   * `face` 是朝向（+z 默认）；不投影阴影，静态合批后按材质并入 1 个绘制调用。
+   */
+  private decal(parent: THREE.Object3D, finish: Finish, size: [number, number], position: [number, number, number], rotation?: [number, number, number]) {
+    const mesh = new THREE.Mesh(this.geometry.get('panel')!, this.material.get(finish)!);
+    mesh.scale.set(size[0], size[1], 1); mesh.position.set(...position);
+    if (rotation) mesh.rotation.set(...rotation);
+    mesh.castShadow = false; mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  /** 外露管线：贴着一面墙走一段，再拐个弯（用两段 tube，读成工业管道而不是装饰线）。 */
+  private conduit(parent: THREE.Object3D, finish: Finish, start: [number, number, number], corner: [number, number, number], end: [number, number, number], radius = 0.012) {
+    this.pipe(parent, finish, start, corner, radius);
+    this.pipe(parent, finish, corner, end, radius);
+    this.box(parent, 'graphite', [radius * 4.2, radius * 4.2, radius * 4.2], corner);
+  }
+
+  /** 螺栓圈：沿半径均布的 6 个小六角头（每个 12 面，6 个 = 72 面）。 */
+  private bolts(parent: THREE.Object3D, radius: number, y: number, count = 6, finish: Finish = 'alloy', scale = 0.016) {
+    for (let i = 0; i < count; i++) {
+      const a = i * Math.PI * 2 / count;
+      this.part(parent, 'hex', finish, [scale, scale * .6, scale], [Math.cos(a) * radius, y, Math.sin(a) * radius]);
+    }
+  }
+
+  /** 顶部设备：短天线 + 小碟（基站/研究站的识别件，俯视也有轮廓层次）。 */
+  private antenna(group: THREE.Group, x: number, z: number, height: number, light: Finish) {
+    this.pipe(group, 'alloy', [x, 0.1, z], [x, height, z], 0.01);
+    this.part(group, 'cone', 'alloy', [0.16, 0.06, 0.16], [x, height, z], [Math.PI * 0.12, 0, 0]);
+    this.box(group, light, [0.026, 0.026, 0.026], [x, height + 0.05, z]);
   }
 
   private ring(parent: THREE.Object3D, finish: Finish, radius: number, y: number, x = 0, z = 0) {
@@ -167,15 +206,23 @@ export class IndustrialModels {
     this.pipe(group, 'copper', [0.06, 0.13, 0], [0.24, 0.13, -0.2], 0.019);
   }
 
+  /** 采矿机：双塔架 + 横梁 + 钻头，加上外露液压管、警示条与尾部料斗。 */
   private miner(group: THREE.Group, light: Finish) {
     this.box(group, 'graphite', [0.58, 0.16, 0.6], [0, 0.19, 0]);
+    this.box(group, 'plate', [0.5, 0.02, 0.52], [0, 0.276, 0.01]);
     for (const x of [-0.27, 0.27]) {
       this.box(group, 'ceramic', [0.14, 0.4, 0.45], [x, 0.35, -0.05]);
       this.box(group, 'copper', [0.16, 0.075, 0.3], [x, 0.44, -0.05]);
-      this.pipe(group, 'alloy', [x, 0.32, 0.08], [x, 0.77, -0.14], 0.025);
+      // 液压杆：两根细管沿塔架外侧斜拉。
+      this.pipe(group, 'alloy', [x, 0.3, 0.08], [x, 0.77, -0.14], 0.025);
+      this.pipe(group, 'copper', [x + Math.sign(x) * 0.08, 0.22, -0.12], [x + Math.sign(x) * 0.08, 0.52, -0.12], 0.009);
       this.box(group, light, [0.025, 0.13, 0.025], [x + Math.sign(x) * 0.074, 0.37, 0.05]);
+      for (let i = 0; i < 3; i++) this.part(group, 'hex', 'alloy', [0.016, 0.012, 0.016], [x, 0.55, -0.2 + i * 0.16]);
     }
+    // 横梁：警示条纹贴花 + 顶面散热片。
     this.box(group, 'ceramic', [0.69, 0.15, 0.24], [0, 0.8, -0.15]);
+    this.decal(group, 'hazard', [0.5, 0.055], [0, 0.8, -0.028]);
+    for (let i = 0; i < 5; i++) this.box(group, 'alloy', [0.5, 0.03, 0.012], [0, 0.882, -0.23 + i * 0.04]);
     this.part(group, 'cylinder', 'copper', [0.27, 0.16, 0.27], [0, 0.77, 0.03], [Math.PI / 2, 0, 0]);
     const drill = new THREE.Group(); drill.position.set(0, 0.39, 0.2); group.add(drill);
     this.part(drill, 'cone', 'alloy', [0.23, 0.43, 0.23], [0, 0, 0], [Math.PI, 0, 0]);
@@ -185,24 +232,40 @@ export class IndustrialModels {
     }
     this.registerRotation(drill, 'y', 2.2);
     this.vents(group, 0, 0.53, -0.2);
+    // 尾部料斗：石墨箱 + 合金边框 + 琥珀料位灯。
+    this.box(group, 'graphite', [0.22, 0.16, 0.16], [0, 0.33, -0.28]);
+    this.box(group, 'alloy', [0.24, 0.02, 0.18], [0, 0.41, -0.28]);
+    this.box(group, light, [0.1, 0.018, 0.012], [0, 0.3, -0.2]);
   }
 
+  /** 电弧熔炉：六角炉体 + 铜芯 + 外露炉排 + 排气烟囱，正面炉门带警示条。 */
   private furnace(group: THREE.Group, light: Finish) {
     this.part(group, 'hex', 'graphite', [0.7, 0.45, 0.65], [0, 0.34, 0]);
+    this.part(group, 'hex', 'alloy', [0.72, 0.04, 0.67], [0, 0.17, 0]);
     this.part(group, 'cylinder', 'copper', [0.4, 0.5, 0.4], [0, 0.49, -0.04]);
     for (let i = 0; i < 8; i++) {
       const a = i * Math.PI / 4;
       this.box(group, 'ceramic', [0.075, 0.37, 0.1], [Math.cos(a) * 0.255, 0.46, Math.sin(a) * 0.255 - 0.04], [0, -a, 0]);
       this.box(group, 'orange', [0.032, 0.25, 0.025], [Math.cos(a) * 0.208, 0.47, Math.sin(a) * 0.208 - 0.04], [0, -a, 0]);
+      // 每根炉排外侧一圈螺栓。
+      this.part(group, 'hex', 'alloy', [0.014, 0.01, 0.014], [Math.cos(a) * 0.3, 0.62, Math.sin(a) * 0.3 - 0.04]);
     }
     this.ring(group, 'alloy', 0.245, 0.7, 0, -0.04);
+    this.bolts(group, 0.2, 0.72, 6);
     this.part(group, 'cylinder', 'graphite', [0.3, 0.16, 0.3], [0, 0.78, -0.04]);
     this.ring(group, 'orange', 0.11, 0.865, 0, -0.04);
+    // 炉门：石墨框 + 琥珀熔口 + 两侧警示条 + 门闩。
     this.box(group, 'graphite', [0.25, 0.18, 0.23], [0, 0.19, 0.3]);
     this.box(group, 'orange', [0.16, 0.08, 0.017], [0, 0.235, 0.42]);
+    for (const x of [-0.135, 0.135]) this.decal(group, 'hazard', [0.035, 0.15], [x, 0.2, 0.42]);
+    this.box(group, 'alloy', [0.19, 0.02, 0.02], [0, 0.31, 0.42]);
+    // 排气烟囱：合金筒 + 两道箍 + 顶部黑烟口。
     this.tank(group, 0.29, -0.27, 0.1, 0.36, 0.068, 'alloy');
     this.pipe(group, 'copper', [0.29, 0.46, -0.27], [0.12, 0.46, -0.15], 0.017);
     this.box(group, light, [0.06, 0.025, 0.04], [-0.3, 0.22, 0.31]);
+    this.pipe(group, 'alloy', [-0.24, 0.6, -0.2], [-0.24, 1.02, -0.2], 0.035);
+    this.ring(group, 'graphite', 0.04, 0.86, -0.24, -0.2);
+    this.ring(group, 'copper', 0.04, 0.96, -0.24, -0.2);
   }
 
   private factory(group: THREE.Group, light: Finish) {
@@ -226,12 +289,15 @@ export class IndustrialModels {
     this.pipe(group, 'copper', [-0.37, 0.13, -0.16], [-0.37, 0.44, -0.16], 0.022);
   }
 
+  /** 矩阵研究站：合金底座 + 玻璃反应柱 + 四层陶瓷环 + 顶部扫描臂，外加数据塔与散热管。 */
   private laboratory(group: THREE.Group, light: Finish) {
     this.part(group, 'hex', 'alloy', [0.75, 0.12, 0.75], [0, 0.17, 0]);
+    this.part(group, 'hex', 'graphite', [0.78, 0.05, 0.78], [0, 0.1, 0]);
     this.part(group, 'cylinder', 'glass', [0.4, 0.76, 0.4], [0, 0.59, 0]);
     for (const y of [0.3, 0.52, 0.74, 0.96]) {
       this.part(group, 'hex', 'ceramic', [0.63, 0.055, 0.63], [0, y, 0]);
       this.ring(group, light, 0.245, y - 0.038);
+      this.bolts(group, 0.29, y + 0.03, 4, 'alloy', 0.014);
     }
     for (let i = 0; i < 3; i++) {
       const a = i * Math.PI * 2 / 3;
@@ -243,20 +309,35 @@ export class IndustrialModels {
     this.box(scanner, light, [0.07, 0.04, 0.07], [0.23, 0.08, 0]);
     this.pipe(scanner, 'alloy', [0, -0.03, 0], [0, 0.13, 0], 0.015);
     this.registerRotation(scanner, 'y', 0.6);
+    // 侧挂数据塔：石墨机柜 + 发光屏幕 + 线槽；对角再挂一组散热管。
+    this.box(group, 'graphite', [0.12, 0.34, 0.16], [0.3, 0.37, 0.24]);
+    this.decal(group, light, [0.08, 0.16], [0.361, 0.4, 0.24], [0, Math.PI / 2, 0]);
+    this.conduit(group, 'alloy', [0.3, 0.2, 0.16], [0.3, 0.2, 0.1], [0.24, 0.24, 0.05], 0.01);
+    for (let i = 0; i < 3; i++) this.pipe(group, 'copper', [-0.3 - i * 0.02, 0.2, -0.22], [-0.3 - i * 0.02, 0.86, -0.22], 0.009);
+    this.decal(group, 'hazard', [0.18, 0.04], [0, 0.135, 0.34], [0, 0, 0]);
   }
 
+  /** 物流站：六棱塔身 + 六面装卸口 + 顶部停机坪，加检修梯、线缆槽与警示环。 */
   private logistics(group: THREE.Group, light: Finish) {
     this.part(group, 'hex', 'graphite', [0.7, 1.03, 0.65], [0, 0.62, 0]);
     this.part(group, 'hex', 'ceramic', [0.73, 0.12, 0.68], [0, 1.17, 0]);
     this.part(group, 'hex', 'alloy', [0.73, 0.1, 0.68], [0, 0.21, 0]);
+    this.part(group, 'hex', 'plate', [0.6, 0.02, 0.55], [0, 1.235, 0]);
     for (let i = 0; i < 6; i++) {
       const a = i * Math.PI / 3;
       this.box(group, 'ceramic', [0.12, 0.8, 0.095], [Math.cos(a) * 0.295, 0.66, Math.sin(a) * 0.295], [0, -a, 0]);
       this.box(group, light, [0.025, 0.6, 0.1], [Math.cos(a) * 0.3, 0.66, Math.sin(a) * 0.3], [0, -a, 0]);
+      // 装卸口：每面一块石墨挡板 + 一条警示条。
+      this.box(group, 'graphite', [0.1, 0.16, 0.02], [Math.cos(a) * 0.34, 0.42, Math.sin(a) * 0.34], [0, -a, 0]);
+      this.decal(group, 'hazard', [0.08, 0.025], [Math.cos(a) * 0.352, 0.52, Math.sin(a) * 0.352], [0, -a + Math.PI / 2, 0]);
     }
     for (const y of [0.39, 0.68, 0.95]) this.ring(group, 'copper', 0.35, y);
+    // 检修梯：两根竖管 + 六根横档（贴在 +X 面）。
+    for (const z of [-0.04, 0.04]) this.pipe(group, 'alloy', [0.35, 0.25, z], [0.35, 1.1, z], 0.007);
+    for (let i = 0; i < 6; i++) this.box(group, 'alloy', [0.01, 0.008, 0.09], [0.35, 0.3 + i * 0.14, 0]);
     this.part(group, 'cylinder', 'graphite', [0.46, 0.06, 0.46], [0, 1.26, 0]);
     this.ring(group, light, 0.18, 1.295);
+    this.bolts(group, 0.21, 1.29, 6, 'alloy', 0.013);
     for (const side of [-1, 1]) {
       this.box(group, 'ceramic', [0.25, 0.05, 0.27], [side * 0.35, 0.42, 0.16]);
       this.box(group, light, [0.17, 0.012, 0.015], [side * 0.35, 0.455, 0.28]);
@@ -265,18 +346,31 @@ export class IndustrialModels {
     this.box(group, 'orange', [0.027, 0.035, 0.027], [0.15, 1.67, 0.1]);
   }
 
+  /** 仓储：箱体堆叠 + 门板缝 + 铜导轨；液体罐：双罐 + 连通管 + 液位灯 + 顶部人孔。 */
   private storage(group: THREE.Group, light: Finish, liquid: boolean) {
     if (liquid) {
-      for (const x of [-0.2, 0.2]) this.tank(group, x, 0, 0.11, 0.55, 0.17);
+      for (const x of [-0.2, 0.2]) {
+        this.tank(group, x, 0, 0.11, 0.55, 0.17);
+        this.part(group, 'cylinder', 'graphite', [0.06, 0.03, 0.06], [x, 0.69, 0]);
+        this.bolts(group, 0.19, 0.13, 6, 'alloy', 0.013);
+      }
       this.pipe(group, 'copper', [-0.2, 0.16, 0.2], [0.2, 0.16, 0.2], 0.024);
+      this.pipe(group, 'alloy', [-0.2, 0.5, 0.18], [0, 0.62, 0.18], 0.014);
+      this.pipe(group, 'alloy', [0, 0.62, 0.18], [0.2, 0.5, 0.18], 0.014);
       this.box(group, light, [0.035, 0.22, 0.016], [0.2, 0.4, 0.174]);
+      this.decal(group, 'hazard', [0.16, 0.03], [0, 0.12, 0.2]);
     } else {
       for (let level = 0; level < 2; level++) for (const x of [-0.19, 0.19]) {
         this.box(group, level ? 'ceramic' : 'alloy', [0.34, 0.21, 0.58], [x, 0.24 + level * 0.23, 0]);
         for (const z of [-0.2, 0.2]) this.box(group, 'graphite', [0.355, 0.235, 0.032], [x, 0.24 + level * 0.23, z]);
+        // 门板：正面一条面板缝 + 把手 + 铜导轨。
+        this.decal(group, 'graphite', [0.02, 0.16], [x + 0.06, 0.24 + level * 0.23, 0.292]);
+        this.box(group, 'alloy', [0.06, 0.012, 0.012], [x + 0.06, 0.2 + level * 0.23, 0.3]);
         this.box(group, 'copper', [0.19, 0.04, 0.018], [x, 0.26 + level * 0.23, 0.3]);
       }
+      this.box(group, 'graphite', [0.78, 0.04, 0.03], [0, 0.46, -0.295]);
       this.box(group, light, [0.09, 0.04, 0.025], [0, 0.14, 0.34]);
+      this.decal(group, 'hazard', [0.22, 0.03], [0, 0.36, 0.3]);
     }
   }
 
@@ -294,24 +388,40 @@ export class IndustrialModels {
     this.box(group, light, [0.035, 0.04, 0.035], [0.22, 0.56, -0.26]);
   }
 
+  /**
+   * 发电（solar = 光伏板 / 否则电塔、火电、蓄电共用塔形）。
+   * 塔形加底座检修门、警示条、四向绝缘子与顶部电晕环——俯视时能一眼和「蓄电罐」分开。
+   */
   private power(group: THREE.Group, light: Finish, solar: boolean) {
     if (solar) {
       this.pipe(group, 'alloy', [0, 0.09, 0], [0, 0.42, 0], 0.05);
+      this.part(group, 'hex', 'graphite', [0.24, 0.06, 0.24], [0, 0.1, 0]);
       const array = new THREE.Group(); array.position.y = 0.45; array.rotation.x = -0.24; group.add(array);
       this.box(array, 'alloy', [0.83, 0.035, 0.73], [0, 0, 0]);
       for (let x = 0; x < 4; x++) for (let z = 0; z < 4; z++) {
         this.box(array, 'glass', [0.185, 0.012, 0.157], [-0.3 + x * 0.2, 0.024, -0.255 + z * 0.17]);
         this.box(array, 'alloy', [0.002, 0.014, 0.15], [-0.3 + x * 0.2, 0.033, -0.255 + z * 0.17]);
       }
+      this.decal(array, 'hazard', [0.7, 0.03], [0, 0.03, 0.34]);
+      this.pipe(group, 'copper', [0.34, 0.24, -0.3], [0.34, 0.12, -0.34], 0.012);
       return;
     }
+    this.part(group, 'hex', 'graphite', [0.46, 0.07, 0.46], [0, 0.1, 0]);
     this.part(group, 'hex', 'ceramic', [0.42, 0.19, 0.42], [0, 0.21, 0]);
-    this.part(group, 'cone', 'alloy', [0.2, 0.74, 0.2], [0, 0.63, 0]);
-    for (const y of [0.56, 0.66, 0.76, 0.86]) this.part(group, 'cylinder', 'copper', [0.28, 0.035, 0.28], [0, y, 0]);
-    this.part(group, 'cylinder', 'ceramic', [0.34, 0.08, 0.34], [0, 0.96, 0]);
-    this.ring(group, light, 0.16, 1.015);
-    this.pipe(group, 'alloy', [0, 1, 0], [0, 1.18, 0], 0.016);
-    this.part(group, 'hex', light, [0.07, 0.07, 0.07], [0, 1.19, 0]);
+    this.part(group, 'cone', 'alloy', [0.2, 0.74, 0.2], [0, 0.63, 0.1]);
+    for (const y of [0.56, 0.66, 0.76, 0.86]) this.part(group, 'cylinder', 'copper', [0.28, 0.035, 0.28], [0, y, 0.1]);
+    this.part(group, 'cylinder', 'ceramic', [0.34, 0.08, 0.34], [0, 0.96, 0.1]);
+    this.ring(group, light, 0.16, 1.015, 0, 0.1);
+    this.pipe(group, 'alloy', [0, 1, 0.1], [0, 1.18, 0.1], 0.016);
+    this.part(group, 'hex', light, [0.07, 0.07, 0.07], [0, 1.19, 0.1]);
+    // 底座检修门 + 警示条 + 四向绝缘子串。
+    this.box(group, 'graphite', [0.16, 0.13, 0.03], [0, 0.22, 0.32]);
+    this.decal(group, 'hazard', [0.3, 0.035], [0, 0.14, 0.335]);
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2;
+      this.pipe(group, 'alloy', [Math.cos(a) * 0.2, 0.3, Math.sin(a) * 0.2], [Math.cos(a) * 0.34, 0.36, Math.sin(a) * 0.34], 0.008);
+      this.ring(group, 'graphite', 0.022, 0.36, Math.cos(a) * 0.34, Math.sin(a) * 0.34);
+    }
   }
 
   private conveyor(group: THREE.Group, light: Finish) {
@@ -398,28 +508,61 @@ export class IndustrialModels {
     this.box(group, light, [.12, .035, .012], [0, .67, .312]);
   }
 
+  /** 战场分析基站：六边形指挥基座 + 穹顶雷达 + 两侧设备翼 + 天线阵，俯视中远景读得出「指挥中枢」。 */
   private headquarters(group: THREE.Group, light: Finish, armor: Finish) {
-    this.part(group, 'hex', 'graphite', [0.81, 0.32, 0.77], [0, 0.28, 0]);
-    this.part(group, 'hex', armor, [0.78, 0.12, 0.74], [0, 0.48, 0]);
-    this.part(group, 'cylinder', 'glass', [0.43, 0.21, 0.43], [0, 0.61, -0.045]);
-    this.part(group, 'dome', armor, [0.49, 0.27, 0.49], [0, 0.72, -0.045]);
-    this.ring(group, light, 0.22, 0.69, 0, -0.045);
-    for (const x of [-0.29, 0.29]) {
-      this.box(group, armor, [0.17, 0.27, 0.47], [x, 0.28, 0.025]);
-      this.vents(group, x, 0.43, -0.035, 5);
+    // 基座：深色承重裙 + 陶瓷主甲板 + 一圈合金收边（三层轮廓，不再是一块白饼）。
+    this.part(group, 'hex', 'graphite', [0.83, 0.24, 0.79], [0, 0.22, 0]);
+    this.part(group, 'hex', 'alloy', [0.8, 0.05, 0.76], [0, 0.36, 0]);
+    this.part(group, 'hex', armor, [0.76, 0.12, 0.72], [0, 0.44, 0]);
+    this.part(group, 'hex', 'plate', [0.62, 0.03, 0.58], [0, 0.51, 0]);
+    // 甲板面板缝：三条细贴花把大白面切开（每块 2 个三角面）。
+    for (const z of [-0.2, 0, 0.2]) this.decal(group, 'graphite', [0.52, 0.012], [0, 0.527, z], [-Math.PI / 2, 0, 0]);
+    // 警示条纹：正面楼梯口两侧各一条（琥珀点缀，只占很小面积）。
+    for (const x of [-0.12, 0.12]) this.decal(group, 'hazard', [0.06, 0.16], [x, 0.2, 0.395], [-0.28, 0, 0]);
+    // 中央指挥舱：玻璃环 + 穹顶 + 穹顶肋条 + 顶部灯环。
+    this.part(group, 'cylinder', 'glass', [0.43, 0.23, 0.43], [0, 0.63, -0.045]);
+    this.ring(group, 'alloy', 0.235, 0.56, 0, -0.045);
+    this.part(group, 'dome', armor, [0.49, 0.28, 0.49], [0, 0.745, -0.045]);
+    this.ring(group, light, 0.22, 0.72, 0, -0.045);
+    // 穹顶肋条：从穹顶基部到顶心各 1 根细管，贴着球面走（俯视是放射状，侧面是拱肋）。
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      this.pipe(group, 'alloy', [Math.cos(a) * 0.235, 0.755, Math.sin(a) * 0.235 - 0.045], [Math.cos(a) * 0.075, 0.995, Math.sin(a) * 0.075 - 0.045], 0.007);
     }
-    this.box(group, 'graphite', [0.25, 0.22, 0.1], [0, 0.24, 0.36]);
-    this.box(group, light, [0.2, 0.02, 0.03], [0, 0.365, 0.419]);
-    for (let i = 0; i < 3; i++) this.box(group, 'alloy', [0.26, 0.025, 0.055], [0, 0.115 - i * 0.021, 0.38 + i * 0.045]);
-    this.pipe(group, 'alloy', [0.21, 0.5, -0.24], [0.21, 1.08, -0.24], 0.012);
-    this.box(group, 'orange', [0.03, 0.04, 0.03], [0.21, 1.1, -0.24]);
+    this.part(group, 'cylinder', 'graphite', [0.07, 0.05, 0.07], [0, 1.0, -0.045]);
+    // 两侧设备翼：装甲壳 + 通风格栅 + 螺栓排。
+    for (const x of [-0.29, 0.29]) {
+      this.box(group, armor, [0.17, 0.27, 0.47], [x, 0.36, 0.025]);
+      this.box(group, 'alloy', [0.18, 0.02, 0.48], [x, 0.5, 0.025]);
+      this.vents(group, x, 0.45, -0.035, 5);
+      for (let i = 0; i < 4; i++) this.part(group, 'hex', 'alloy', [0.018, 0.012, 0.018], [x, 0.512, -0.15 + i * 0.1]);
+      this.box(group, light, [0.02, 0.09, 0.02], [x + Math.sign(x) * 0.09, 0.4, 0.24]);
+    }
+    // 正面入口：门框 + 发光门缝 + 台阶。
+    this.box(group, 'graphite', [0.25, 0.22, 0.1], [0, 0.28, 0.36]);
+    this.box(group, light, [0.2, 0.02, 0.03], [0, 0.405, 0.419]);
+    for (let i = 0; i < 3; i++) this.box(group, 'alloy', [0.26, 0.025, 0.055], [0, 0.16 - i * 0.021, 0.38 + i * 0.045]);
+    // 后侧天线桅：管 + 横臂 + 三根振子。
+    this.pipe(group, 'alloy', [0.21, 0.5, -0.24], [0.21, 1.12, -0.24], 0.012);
     this.box(group, 'alloy', [0.2, 0.023, 0.025], [0.21, 0.98, -0.24]);
+    for (const dx of [-0.08, 0, 0.08]) this.pipe(group, 'alloy', [0.21 + dx, 0.9, -0.24], [0.21 + dx, 1.02, -0.24], 0.005);
+    this.box(group, 'orange', [0.03, 0.04, 0.03], [0.21, 1.15, -0.24]);
+    // 顶部设备：一台短天线 + 散热片，打破穹顶的纯圆轮廓。
+    this.antenna(group, -0.2, -0.24, 0.95, light);
+    for (let i = 0; i < 4; i++) this.box(group, 'alloy', [0.03, 0.09, 0.14], [-0.06 + i * 0.04, 0.55, -0.3], [0, 0, 0.06]);
   }
 
   private turret(group: THREE.Group, light: Finish, armor: Finish) {
     this.part(group, 'hex', 'alloy', [0.68, 0.17, 0.68], [0, 0.18, 0]);
+    this.part(group, 'hex', 'plate', [0.7, 0.03, 0.7], [0, 0.095, 0]);
     this.part(group, 'cylinder', 'graphite', [0.4, 0.24, 0.4], [0, 0.36, 0]);
+    this.bolts(group, 0.27, 0.28, 6, 'alloy', 0.014);
     this.box(group, armor, [0.43, 0.24, 0.4], [0, 0.52, 0]);
+    // 炮塔侧裙：两条合金护板 + 警示条（俯视时把圆形塔身读成「武器站」）。
+    for (const x of [-0.23, 0.23]) {
+      this.box(group, 'alloy', [0.03, 0.16, 0.34], [x, 0.5, -0.02]);
+      this.decal(group, 'hazard', [0.03, 0.3], [x * 1.08, 0.5, -0.02], [0, Math.PI / 2, 0]);
+    }
     // 独立炮管组（C2 炮塔转向）：registerRotation 标记后 batchStatic 跳过整棵子树，
     // DynamicBatches 逐帧复制姿态；场景侧按最近敌对目标写 rotation.y（speed=0 不自动转）。
     const barrel = new THREE.Group();
@@ -434,7 +577,9 @@ export class IndustrialModels {
     this.box(group, light, [0.13, 0.03, 0.035], [0, 0.55, -0.215]);
   }
 
+  /** 炼油厂：双精馏塔 + 连通管 + 检修平台，塔身加箍带、爬梯与警示环。 */
   private refinery(group: THREE.Group, light: Finish) {
+    this.part(group, 'hex', 'graphite', [0.72, 0.08, 0.6], [0, 0.1, -0.04]);
     for (const [x, height] of [[-0.21, 0.85], [0.19, 0.6]]) {
       this.part(group, 'cylinder', 'alloy', [0.25, height, 0.25], [x, height / 2 + 0.13, -0.06]);
       for (let i = 0; i < 4; i++) {
@@ -443,10 +588,15 @@ export class IndustrialModels {
       this.part(group, 'cone', 'ceramic', [0.25, 0.12, 0.25], [x, height + 0.19, -0.06]);
       this.pipe(group, 'copper', [x, 0.18, -0.06], [x, 0.18, 0.32], 0.028);
       this.box(group, light, [0.045, 0.025, 0.045], [x, height + 0.27, -0.06]);
+      // 爬梯 + 平台护栏（每塔一侧，俯视是两条细线，侧面读得出「可检修」）。
+      this.pipe(group, 'alloy', [x + 0.13, 0.18, -0.06], [x + 0.13, height + 0.1, -0.06], 0.006);
+      for (let i = 0; i < 4; i++) this.box(group, 'alloy', [0.012, 0.006, 0.08], [x + 0.13, 0.28 + i * height / 5, -0.06]);
+      this.box(group, 'graphite', [0.3, 0.018, 0.1], [x, 0.13 + height * 0.55, 0.06]);
     }
     this.pipe(group, 'alloy', [-0.21, 0.53, -0.06], [0.19, 0.53, -0.06], 0.04);
     this.box(group, 'graphite', [0.27, 0.19, 0.16], [0, 0.22, 0.24]);
     this.box(group, light, [0.14, 0.06, 0.012], [0, 0.26, 0.326]);
+    this.decal(group, 'hazard', [0.2, 0.03], [0, 0.15, 0.32]);
   }
 
   building(type: string, width: number, depth: number, own: boolean): THREE.Group {

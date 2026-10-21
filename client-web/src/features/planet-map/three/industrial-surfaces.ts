@@ -23,7 +23,7 @@ export type SurfaceKey =
   | 'enemyCeramic' | 'enemyGraphite' | 'enemyAlloy' | 'enemyPlate'
   | 'fogCeramic' | 'fogGraphite' | 'fogAlloy'
   | 'copper' | 'copperDark' | 'glass'
-  | 'blue' | 'orange' | 'fogGlow' | 'fogHostileGlow' | 'warning';
+  | 'blue' | 'orange' | 'fogGlow' | 'fogHostileGlow' | 'warning' | 'hazard';
 
 interface SurfaceSpec {
   family?: PbrFamily;
@@ -62,7 +62,37 @@ const SPEC: Record<SurfaceKey, SurfaceSpec> = {
   fogGlow: { color: '#b9a6ff', roughness: .3, metalness: .2, emissive: '#7d5cff', emissiveIntensity: 3.2 },
   fogHostileGlow: { color: '#ff8a8a', roughness: .3, metalness: .2, emissive: GLOW.fog, emissiveIntensity: 5 },
   warning: { color: STATUS_LIGHT.idle, roughness: .5, metalness: .25, emissive: GLOW.warning, emissiveIntensity: 2.4 },
+  hazard: { color: '#ffffff', roughness: .55, metalness: .2, emissive: GLOW.warning, emissiveIntensity: .35 },
 };
+
+/**
+ * 警示条纹贴图（斜向琥珀/石墨条带，64² DataTexture）：几何上的薄片贴花，
+ * 所有建筑的警示条共用同一材质（合批后 1 个绘制调用）。不用 canvas，测试环境也能生成。
+ */
+function hazardTexture(): THREE.DataTexture {
+  const size = 64, data = new Uint8Array(size * size * 4);
+  const amber = [255, 176, 74], dark = [26, 30, 34];
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const band = ((x + y) % 32) < 16;
+    const color = band ? amber : dark;
+    // 轻微磨损：固定种子的细噪声，避免条纹像纯色贴纸。
+    const wear = ((Math.imul(x * 73856093 ^ y * 19349663, 0x45d9f3b) >>> 16) & 15) / 15 * 0.12;
+    const offset = (y * size + x) * 4;
+    data[offset] = Math.round(color[0] * (1 - wear));
+    data[offset + 1] = Math.round(color[1] * (1 - wear));
+    data[offset + 2] = Math.round(color[2] * (1 - wear));
+    data[offset + 3] = 255;
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
+  texture.name = 'industrial-hazard';
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
 
 /**
  * 一个 `IndustrialModels` 实例的表面材质池。贴图就绪前后都可以构造：
@@ -73,6 +103,7 @@ export class IndustrialSurfaces {
   private readonly materials = new Map<SurfaceKey, THREE.MeshStandardMaterial>();
   private readonly finishes: IndustrialFinishes;
   private readonly procedural = new Set<THREE.MeshStandardMaterial>();
+  private readonly owned: THREE.Texture[] = [];
   private pbr = false;
   private disposed = false;
 
@@ -107,6 +138,15 @@ export class IndustrialSurfaces {
 
   private build(key: SurfaceKey): THREE.MeshStandardMaterial {
     const spec = SPEC[key];
+    if (key === 'hazard') {
+      const texture = hazardTexture();
+      this.owned.push(texture);
+      const material = new THREE.MeshStandardMaterial({ map: texture, roughness: spec.roughness, metalness: spec.metalness,
+        emissive: GLOW.warning, emissiveIntensity: spec.emissiveIntensity, emissiveMap: texture });
+      material.name = 'industrial-hazard';
+      this.procedural.add(material);
+      return material;
+    }
     const base: THREE.MeshStandardMaterialParameters = {
       color: spec.color,
       roughness: spec.roughness,
@@ -141,6 +181,8 @@ export class IndustrialSurfaces {
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
     this.procedural.clear();
+    for (const texture of this.owned) texture.dispose();
+    this.owned.length = 0;
     this.finishes.dispose();
   }
 }
