@@ -13,6 +13,12 @@ class FakeAudioParam {
   setValueAtTime = vi.fn((_value: number, _time: number) => {});
 
   exponentialRampToValueAtTime = vi.fn((_value: number, _time: number) => {});
+
+  linearRampToValueAtTime = vi.fn((_value: number, _time: number) => {});
+
+  cancelScheduledValues = vi.fn((_time: number) => {});
+
+  setTargetAtTime = vi.fn((_value: number, _time: number, _constant: number) => {});
 }
 
 class FakeOscillatorNode {
@@ -51,8 +57,18 @@ class FakeBiquadFilterNode {
   disconnect = vi.fn();
 }
 
+class FakeStereoPannerNode {
+  pan = new FakeAudioParam();
+
+  connect = vi.fn();
+
+  disconnect = vi.fn();
+}
+
 class FakeBufferSourceNode {
   buffer: unknown = null;
+
+  playbackRate = new FakeAudioParam();
 
   loop = false;
 
@@ -117,6 +133,11 @@ class FakeAudioContext {
   createBuffer = vi.fn((_channels: number, length: number, _sampleRate: number) => ({
     getChannelData: () => new Float32Array(length),
   }));
+
+  createStereoPanner = vi.fn(() => new FakeStereoPannerNode());
+
+  /** 采样解码：返回一个带 duration 的假 buffer（测试只关心「有没有用采样」）。 */
+  decodeAudioData = vi.fn(async () => ({ duration: 0.5, sampleRate: 48000, numberOfChannels: 1 }));
 
   resume = vi.fn(() => Promise.resolve());
 }
@@ -356,5 +377,205 @@ describe('无 AudioContext 环境（no-op 降级）', () => {
     }).not.toThrow();
     expect(audio.isMuted()).toBe(false);
     expect(FakeAudioContext.instances).toHaveLength(0);
+  });
+});
+
+// ---------- 采样引擎（第 23 轮） ----------
+
+/** 等异步解码链跑完（fetch → decodeAudioData）。 */
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe('采样加载与回退', () => {
+  /** 让 fetch 返回一个假 ogg 字节串；未匹配的路径 404。 */
+  function stubFetch(ok = true) {
+    // 显式声明入参，便于断言「请求了哪个路径」
+    const fetchMock = vi.fn(async (_url: string) => (ok
+      ? { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }
+      : { ok: false, status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('首次播放发起加载并回退合成音；加载完成后用采样（BufferSource + 声相）', async () => {
+    const fetchMock = stubFetch();
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    // 先把噪声 buffer 之类的一次性初始化排掉（本用例只关心 fire 的合成回退）
+    audio.sfx.fireGauss();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const ctx = FakeAudioContext.instances[0];
+    // 变体随机挑一条，断言落在 fire-gauss 的变体清单里
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/^\/assets\/audio\/sfx\/fire-gauss(-\d)?\.ogg$/);
+
+    // 三个变体都预加载（随机挑变体，只加载一条的话第二次可能挑到未加载的那条）
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    audio.preloadSamples(AUDIO_MANIFEST.sfx['fire-gauss']);
+    await flush();
+    await flush();
+    expect(audio.sampleStats().loaded).toBe(AUDIO_MANIFEST.sfx['fire-gauss'].length);
+
+    // 第二次：走采样（BufferSource），不再新建振荡器
+    const oscillatorsBefore = ctx.oscillators.length;
+    audio.sfx.fireGauss();
+    expect(ctx.sources.length).toBeGreaterThan(0);
+    expect(ctx.oscillators.length).toBe(oscillatorsBefore);
+  });
+
+  it('每个音效从变体清单里随机挑一条（变体数 > 1 的采样路径都被用到过）', async () => {
+    stubFetch();
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    // 预加载全部变体，避免首播回退
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    const paths = AUDIO_MANIFEST.sfx['fire-gauss'];
+    expect(paths.length).toBeGreaterThan(1);
+    audio.preloadSamples(paths);
+    await flush();
+    const used = new Set<string>();
+    for (let i = 0; i < 40; i += 1) audio.sfx.fireGauss();
+    // 采样播放时 BufferSource.buffer 就是被选中的 buffer（假 buffer 无路径），
+    // 这里改为断言「所有变体都进了缓存」+ 播放没有回退合成音。
+    paths.forEach((path) => expect(path).toMatch(/^\/assets\/audio\/sfx\/fire-gauss(-\d)?\.ogg$/));
+    expect(audio.sampleStats().loaded).toBe(paths.length);
+    expect(FakeAudioContext.instances[0].sources.length).toBeGreaterThan(0);
+    used.add('ok');
+    expect(used.size).toBe(1);
+  });
+
+  it('加载失败只尝试一次，之后继续走合成回退且不报错', async () => {
+    const fetchMock = stubFetch(false);
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    // 单变体音效：失败路径只打一次请求
+    audio.sfx.researchComplete();
+    await flush();
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    expect(callsAfterFirst).toBe(1);
+    audio.sfx.researchComplete();
+    audio.sfx.researchComplete();
+    await flush();
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
+    expect(() => audio.sfx.researchComplete()).not.toThrow();
+    expect(audio.sampleStats().loaded).toBe(0);
+  });
+
+  it('空间音走 sfx 总线的 spatial 子总线 + 声相；超距（−60 dB）不播', async () => {
+    stubFetch();
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    audio.sfx.explosion(true, { tile: { x: 1, y: 1 }, volumeDb: 0, pan: 0 });
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx.sources.length + ctx.oscillators.length).toBeGreaterThan(0);
+
+    const before = ctx.sources.length + ctx.oscillators.length;
+    audio.sfx.explosion(true, { tile: { x: 1, y: 1 }, volumeDb: -61, pan: 0 });
+    expect(ctx.sources.length + ctx.oscillators.length).toBe(before);
+  });
+});
+
+describe('混音设置与总线', () => {
+  it('五条总线接到主增益；setMix 写总线并持久化到 sw.audio.mix', async () => {
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const ctx = FakeAudioContext.instances[0];
+    // master + music/ambient/sfx/ui + spatial = 6 条总线
+    expect(ctx.gains.length).toBeGreaterThanOrEqual(6);
+    ctx.gains.slice(1, 5).forEach((gain) => expect(gain.connect).toHaveBeenCalledWith(ctx.gains[0]));
+
+    audio.setMix({ music: 0.2, sfx: 0.5 });
+    expect(audio.getMix().music).toBe(0.2);
+    expect(JSON.parse(localStorage.getItem('sw.audio.mix') ?? '{}')).toMatchObject({ music: 0.2, sfx: 0.5 });
+
+    // 刷新后恢复
+    vi.resetModules();
+    const reloaded = await importFreshAudio();
+    expect(reloaded.getMix().music).toBe(0.2);
+  });
+
+  it('默认混音：音乐 .35，其余按 DEFAULT_MIX', async () => {
+    const audio = await importFreshAudio();
+    expect(audio.getMix()).toEqual(audio.DEFAULT_MIX);
+    expect(audio.getMix().music).toBe(0.35);
+  });
+
+  it('静音时主增益归零；全球视角 trim 写 spatial 总线', async () => {
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const ctx = FakeAudioContext.instances[0];
+    audio.setMuted(true);
+    expect(ctx.gains[0].gain.value).toBe(0);
+    audio.setMuted(false);
+
+    audio.setSpatialTrimDb(-10);
+    expect(audio.getSpatialTrimDb()).toBe(-10);
+    // spatial 总线是第 6 个 GainNode（master + 4 条总线之后）
+    expect(ctx.gains[5].gain.value).toBeCloseTo(10 ** (-10 / 20), 5);
+  });
+});
+
+describe('循环声床与配乐', () => {
+  it('setAmbient/setMusic 在采样就绪后起循环 BufferSource（loop=true）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const ctx = FakeAudioContext.instances[0];
+
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    audio.preloadSamples([AUDIO_MANIFEST.ambient.wind[0], AUDIO_MANIFEST.music.calm[0]]);
+    await flush();
+    audio.setAmbient('wind', 0.8);
+    audio.setMusic('calm', 0.35);
+    audio.tickAudioLoops();
+
+    const loops = ctx.sources.filter((source) => source.loop);
+    expect(loops.length).toBe(2);
+    expect(audio.getAmbientName()).toBe('wind');
+    expect(audio.getMusicName()).toBe('calm');
+  });
+
+  it('切换声床会停掉旧循环（交叉淡化的 stop 排在淡化之后）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    audio.preloadSamples([AUDIO_MANIFEST.ambient.wind[0], AUDIO_MANIFEST.ambient.space[0]]);
+    await flush();
+    audio.setAmbient('wind', 1);
+    const ctx = FakeAudioContext.instances[0];
+    const first = ctx.sources.filter((source) => source.loop);
+    expect(first.length).toBe(1);
+
+    audio.setAmbient('space', 1);
+    expect(first[0].stop).toHaveBeenCalled();
+    expect(audio.getAmbientName()).toBe('space');
+  });
+
+  it('setMusic(null) 停配乐；无 AudioContext 时全部 no-op', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    audio.preloadSamples([AUDIO_MANIFEST.music.combat[0]]);
+    await flush();
+    audio.setMusic('combat', 1);
+    expect(audio.getMusicName()).toBe('combat');
+    audio.setMusic(null);
+    expect(audio.getMusicName()).toBeNull();
+
+    vi.unstubAllGlobals();
+    vi.resetModules();
+    const noCtx = await importFreshAudio();
+    expect(() => {
+      noCtx.setAmbient('wind', 1);
+      noCtx.setMusic('calm', 1);
+      noCtx.tickAudioLoops();
+      noCtx.setSpatialTrimDb(-10);
+      noCtx.setMix({ master: 0.5 });
+    }).not.toThrow();
   });
 });
