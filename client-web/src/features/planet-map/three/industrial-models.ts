@@ -1,11 +1,20 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createIndustrialFinishes } from './industrial-finishes';
+import { IndustrialSurfaces } from './industrial-surfaces';
+import { preloadIndustrialMaterials } from './industrial-materials';
 import { instantiateBuilding, instantiateUnit, preloadIndustrialGltf } from './industrial-gltf';
 import type { UnitFaction } from '../rts-commands';
+import type { SurfaceKey } from './industrial-surfaces';
 
-type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
+type Finish = 'ceramic' | 'alloy' | 'graphite' | 'plate' | 'plastic' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow' | 'warning';
+/** 材质池键：程序化模型用到的 finish 名映射到 `industrial-surfaces.ts` 的表面族。 */
+const SURFACE_KEY: Record<Finish, SurfaceKey> = {
+  ceramic: 'ceramic', alloy: 'alloy', graphite: 'graphite', plate: 'plate', plastic: 'plastic',
+  copper: 'copper', copperDark: 'copperDark', blue: 'blue', orange: 'orange', glass: 'glass',
+  rubber: 'rubber', hostile: 'enemyCeramic', fog: 'fogCeramic', fogGlow: 'fogGlow',
+  fogHostile: 'fogCeramic', fogHostileGlow: 'fogHostileGlow', warning: 'warning',
+};
 /** 单位涂装：己方白蓝、敌方玩家橙、黑雾中立暗紫灰、黑雾敌对暗红。 */
 const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
   own: { armor: 'ceramic', light: 'blue' },
@@ -24,31 +33,13 @@ export class IndustrialModels {
   private readonly material = new Map<string, THREE.MeshStandardMaterial>();
   private readonly rotations: Rotation[] = [];
   private readonly merged = new Set<THREE.BufferGeometry>();
+  private disposed = false;
   private readonly templates = new Map<string, THREE.Group>();
-  private readonly finishes = createIndustrialFinishes();
+  /** 表面材质池（PBR 贴图就绪前用程序纹理，就绪后 `upgradeSurfaces()` 换掉并重建模板）。 */
+  private readonly surfaces = new IndustrialSurfaces();
 
   constructor() {
-    const palette: Record<Finish, THREE.MeshStandardMaterialParameters> = {
-      ceramic: { color: 0xe3e8df, roughness: 0.5, metalness: 0.12 },
-      alloy: { color: 0x798c94, roughness: 0.35, metalness: 0.78 },
-      graphite: { color: 0x26363e, roughness: 0.47, metalness: 0.64 },
-      copper: { color: 0xbb7842, roughness: 0.34, metalness: 0.78 },
-      // 嵌在深色底座里的窄铜环：比高光铜暗一档，避免在近景里读成 LED 亮圈。
-      copperDark: { color: 0x7d4a24, roughness: 0.55, metalness: 0.62 },
-      blue: { color: 0x8befff, emissive: 0x24b7dc, emissiveIntensity: 6, roughness: 0.25, metalness: 0.3 },
-      orange: { color: 0xffc97c, emissive: 0xff720d, emissiveIntensity: 6, roughness: 0.38, metalness: 0.3 },
-      glass: { color: 0x153c4f, roughness: 0.17, metalness: 0.72, emissive: 0x073341, emissiveIntensity: 0.5 },
-      rubber: { color: 0x18242a, roughness: 0.88, metalness: 0.05 },
-      hostile: { color: 0xb9634b, roughness: 0.45, metalness: 0.5 },
-      fog: { color: 0x4d4560, roughness: 0.62, metalness: 0.42 },
-      fogGlow: { color: 0xb9a6ff, emissive: 0x7d5cff, emissiveIntensity: 3.2, roughness: 0.3, metalness: 0.2 },
-      fogHostile: { color: 0x6e2228, roughness: 0.5, metalness: 0.45 },
-      fogHostileGlow: { color: 0xff8a8a, emissive: 0xff2a2a, emissiveIntensity: 5, roughness: 0.3, metalness: 0.2 },
-    };
-    for (const [key, parameters] of Object.entries(palette)) {
-      const finish = key === 'ceramic' || key === 'alloy' || key === 'graphite' ? this.finishes[key] : {};
-      this.material.set(key, new THREE.MeshStandardMaterial({ ...parameters, ...finish }));
-    }
+    this.bindSurfaces();
     this.geometry.set('box', new RoundedBoxGeometry(1, 1, 1, 1, 0.06));
     this.geometry.set('slab', new THREE.BoxGeometry(1, 1, 1));
     this.geometry.set('cylinder', new THREE.CylinderGeometry(0.5, 0.5, 1, 16));
@@ -63,6 +54,11 @@ export class IndustrialModels {
     blade.lineTo(0.009, 0.56); blade.lineTo(0.026, 0.21); blade.lineTo(0.026, 0); blade.closePath();
     const bladeGeometry = new THREE.ExtrudeGeometry(blade, { depth: 0.018, bevelEnabled: true, bevelSize: 0.005, bevelThickness: 0.004, bevelSegments: 1, steps: 1 });
     this.geometry.set('blade', bladeGeometry);
+  }
+
+  /** 材质池键 → 共享材质。所有 finish 都从 `IndustrialSurfaces` 取，不在模型里写色值。 */
+  private bindSurfaces() {
+    for (const finish of Object.keys(SURFACE_KEY) as Finish[]) this.material.set(finish, this.surfaces.get(SURFACE_KEY[finish]));
   }
 
   private registerRotation(object: THREE.Object3D, axis: Rotation['axis'], speed: number) {
@@ -584,10 +580,19 @@ export class IndustrialModels {
     return this.remember(key, group);
   }
 
-  /** 预加载现成 GLB（异步）。与 `building()/unit()` 走同一个模块实例，所以加载结果对它们可见。
-   * 场景在构造后调用一次，完成后调 `reloadTemplates()` 让已建实体换成 GLB。 */
+  /** 预加载现成 GLB 与 PBR 材质贴图（异步）。场景在构造后调用一次，
+   * 完成后调 `reloadTemplates()` 让已建实体换成 GLB / PBR 材质。 */
   static preload(): Promise<void> {
-    return preloadIndustrialGltf();
+    return Promise.all([preloadIndustrialGltf(), preloadIndustrialMaterials()]).then(() => undefined);
+  }
+
+  /** PBR 贴图就绪后调用（场景在 `preload()` 完成后统一调用）：换材质并丢模板缓存。 */
+  upgradeSurfaces(): boolean {
+    if (this.disposed || !this.surfaces.upgrade()) return false;
+    this.material.clear();
+    this.bindSurfaces();
+    this.templates.clear();
+    return true;
   }
 
   /** 现成 GLB 加载完成后调用：丢掉旧的模板缓存，让下一次 `building()/unit()` 用 GLB 重建。
@@ -670,12 +675,12 @@ export class IndustrialModels {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.clearAnimations();
     for (const geometry of this.merged) geometry.dispose();
     this.merged.clear(); this.templates.clear();
     for (const geometry of this.geometry.values()) geometry.dispose();
-    for (const material of this.material.values()) material.dispose();
-    this.finishes.dispose();
+    this.surfaces.dispose();
     this.geometry.clear(); this.material.clear();
   }
 }

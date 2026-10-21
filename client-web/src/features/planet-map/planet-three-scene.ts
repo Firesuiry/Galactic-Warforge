@@ -305,8 +305,11 @@ export class PlanetThreeScene {
     // 现成 GLB 异步加载：加载完丢掉程序化模板缓存并重建实体，换成 GLB 模型。
     // 首帧渲染不等它（模型可能还没下载完），期间继续用程序化模型，不会出现空建筑。
     void IndustrialModels.preload().then(() => {
-      if (!this.destroyed) this.reloadModels();
-    }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
+      if (this.destroyed) return;
+      // PBR 材质贴图就绪：换共享材质（程序纹理回退时返回 false，不动已建实体）。
+      this.industrial.upgradeSurfaces();
+      this.reloadModels();
+    }).catch((error: unknown) => console.warn('现成 3D 模型 / PBR 材质加载失败，继续使用程序化模型', error));
   }
 
   getQuality() { return this.quality; }
