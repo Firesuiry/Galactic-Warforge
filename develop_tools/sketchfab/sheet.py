@@ -50,6 +50,14 @@ BAN_WORDS = [
     "voxel", "low poly asset pack", "street scene", "city block", "museum",
     "church", "cathedral", "restaurant", "kitchen", "bedroom", "living room",
     "toilet", "skibidi", "nft", "college", "school",
+    # 与科幻工业无关的「同词不同义」：家具/日用/装饰/生物/武器/历史
+    "furniture", "sofa", "couch", "chair", "table", "lamp", "chandelier", "candle",
+    "wood shingle", "shingle", "roof tile", "fireplace", "oven", "stove", "cook",
+    "game asset", "anime", "fan art", "fanart", "concept art", "sword", "shield ",
+    "helmet", "armor set", "armour", "rifle", "pistol", "gun model", "knife", "dagger",
+    "medieval", "roman", "greek", "ww1", "ww2", "world war", "historic", "historical",
+    "animal", "rat ", "rat_", "insect", "plant", "tree", "flower", "fish", "bird",
+    "horror", "backrooms", "creepy", "zombie", "skull", "skeleton",
 ]
 # 士兵槽（写实人形允许）以外，命中这些 tag 的重罚
 HUMAN_WORDS = ["human", "people", "person", "girl", "boy", "woman", "man ", "portrait", "head"]
@@ -113,13 +121,29 @@ def reject_reason(m: dict, slot: str) -> str | None:
     return None
 
 
+STOPWORDS = {
+    "sci-fi", "sci", "fi", "the", "a", "of", "and", "pack", "model", "3d",
+    "low", "poly", "game", "asset", "free", "downloadable",
+}
+
+
+def _tokens(kws: list[str]) -> set[str]:
+    return {t for kw in kws for t in re.split(r"[^a-z0-9-]+", kw.lower()) if t and t not in STOPWORDS}
+
+
 def score(m: dict, slot_kws: list[str]) -> float:
-    """点赞数^0.5 × 相关度；相关度 = 命中该槽位关键词数 + 名称/标签命中加分。"""
+    """log10(点赞+10)^2 × 相关度。
+
+    相关度 = 1 + 0.6×(命中该槽位关键词数−1) + 0.25×(名称命中实词数) + 0.06×(tag 命中实词数)；
+    名称命中权重最高，因为 Sketchfab 的 tag 很杂（「Furnace」会被打上 minecraft 之类）。
+    """
     hits = len(set(m.get("_queries") or []))
-    blob = _text_blob(m)
-    tokens = {t for kw in slot_kws for t in kw.lower().split()}
-    name_hits = sum(1 for t in tokens if t in blob)
-    rel = 1.0 + 0.6 * (hits - 1) + 0.12 * name_hits
+    name = (m.get("name") or "").lower()
+    tags = " ".join(t.get("name", "") for t in m.get("tags") or []).lower()
+    tokens = _tokens(slot_kws)
+    name_hits = sum(1 for t in tokens if t in name)
+    tag_hits = sum(1 for t in tokens if t in tags)
+    rel = 1.0 + 0.6 * (hits - 1) + 0.25 * name_hits + 0.06 * min(tag_hits, 6)
     likes = m.get("likeCount") or 0
     base = math.log10(likes + 10) ** 2
     staff = 1.15 if m.get("staffpickedAt") else 1.0
