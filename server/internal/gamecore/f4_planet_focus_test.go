@@ -22,6 +22,22 @@ import (
 // 返回 (core, planetA, planetB)。
 func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *model.WorldState, *model.WorldState) {
 	t.Helper()
+	core, planetA, planetB := newF4RawDualPlanetCore(t, enemyDifficulty)
+	// 非出生星球：测试夹具补据点（生产路径靠 dispatch_mecha 投送机甲）。
+	anchors := []model.Position{
+		{X: planetA.MapWidth / 4, Y: planetA.MapHeight / 4},
+		{X: planetA.MapWidth * 3 / 4, Y: planetA.MapHeight * 3 / 4},
+	}
+	for i, pc := range core.cfg.Players {
+		f4SeedOutpost(t, planetA, pc.PlayerID, anchors[i%len(anchors)])
+	}
+	return core, planetA, planetB
+}
+
+// newF4RawDualPlanetCore 构建双行星对局但**不**补夹具据点：还原「开局只有出生
+// 星球有机甲」的真实状态（契约 §1 的断言用）。
+func newF4RawDualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *model.WorldState, *model.WorldState) {
+	t.Helper()
 	cfg := &config.Config{
 		Battlefield: config.BattlefieldConfig{
 			MapSeed:               "f4-test-seed",
@@ -46,14 +62,6 @@ func newF4DualPlanetCore(t *testing.T, enemyDifficulty string) (*GameCore, *mode
 	planetB := core.WorldForPlanet("planet-1-2")
 	if planetA == nil || planetB == nil {
 		t.Fatalf("expected both planet runtimes loaded, got A=%v B=%v", planetA != nil, planetB != nil)
-	}
-	// 非出生星球：测试夹具补据点（生产路径靠 dispatch_mecha 投送机甲）。
-	anchors := []model.Position{
-		{X: planetA.MapWidth / 4, Y: planetA.MapHeight / 4},
-		{X: planetA.MapWidth * 3 / 4, Y: planetA.MapHeight * 3 / 4},
-	}
-	for i, pc := range cfg.Players {
-		f4SeedOutpost(t, planetA, pc.PlayerID, anchors[i%len(anchors)])
 	}
 	return core, planetA, planetB
 }

@@ -514,6 +514,9 @@ type PlanetSceneView struct {
 	Explored       [][]bool                    `json:"explored,omitempty"`
 	Buildings      map[string]*model.Building  `json:"buildings,omitempty"`
 	Units          map[string]*model.Unit      `json:"units,omitempty"`
+	// MechaOperators 是本玩家机甲单位的操作者（unit ID → operator，仅非空项）：
+	// 3D 行星场景据此在机甲头顶画 operator 名牌（第 22 轮契约 §5）。
+	MechaOperators map[string]string           `json:"mecha_operators,omitempty"`
 	Resources      []*model.ResourceNodeState  `json:"resources,omitempty"`
 	BuildingCount  int                         `json:"building_count,omitempty"`
 	UnitCount      int                         `json:"unit_count,omitempty"`
@@ -858,6 +861,26 @@ func filterUnitsInBounds(units map[string]*model.Unit, bounds SceneBounds) map[s
 	return out
 }
 
+// mechaOperatorsIn 返回可见机甲单位 → 操作者（operator 为空的不进表）。
+// 只看请求玩家自己的机甲档案：别人的机甲绑定关系不对外暴露。
+func mechaOperatorsIn(units map[string]*model.Unit, player *model.PlayerState) map[string]string {
+	if player == nil || len(units) == 0 || len(player.Mechas) == 0 {
+		return nil
+	}
+	out := make(map[string]string)
+	for id := range units {
+		record := player.Mechas[id]
+		if record == nil || record.Operator == "" {
+			continue
+		}
+		out[id] = record.Operator
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func filterResourcesInBounds(resources []*model.ResourceNodeState, bounds SceneBounds) []*model.ResourceNodeState {
 	if len(resources) == 0 {
 		return []*model.ResourceNodeState{}
@@ -1008,6 +1031,7 @@ func (ql *Layer) planetSceneWindow(ws *model.WorldState, playerID, planetID stri
 		view.ResourceCount = len(ws.Resources)
 		view.Buildings = filterBuildingsInBounds(visibleBuildings, bounds)
 		view.Units = filterUnitsInBounds(visibleUnits, bounds)
+		view.MechaOperators = mechaOperatorsIn(view.Units, ws.Players[playerID])
 		view.Resources = filterDynamicResourcesInBounds(ws.Resources, bounds)
 		return view, true
 	}
