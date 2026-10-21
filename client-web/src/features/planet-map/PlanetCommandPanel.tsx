@@ -397,6 +397,11 @@ export function PlanetCommandPanel({
     ),
     [system?.planets],
   );
+  /** 可投送的行星：服务端会拒绝未发现星球，这里先滤掉，别让玩家点了才发现。 */
+  const dispatchablePlanets = useMemo(
+    () => switchablePlanets.filter((planet) => planet.discovered !== false),
+    [switchablePlanets],
+  );
   /**
    * 可装料建筑（试玩 1014 问题 2）：只列服务端真能接收物品的建筑。旧实现几乎
    * 原样返回全部自有建筑，风机这种没有存储的会被默认选中，第一次点「装入建筑」
@@ -1969,7 +1974,7 @@ export function PlanetCommandPanel({
               value={dispatchPlanetId}
             >
               <option value="">选择要投送到的行星</option>
-              {switchablePlanets.map((targetPlanet) => (
+              {dispatchablePlanets.map((targetPlanet) => (
                 <option key={targetPlanet.planet_id} value={targetPlanet.planet_id}>
                   {targetPlanet.name ?? targetPlanet.planet_id} ·{" "}
                   {targetPlanet.planet_id}

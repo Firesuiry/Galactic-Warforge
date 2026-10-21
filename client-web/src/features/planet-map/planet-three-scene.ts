@@ -775,7 +775,9 @@ export class PlanetThreeScene {
       const sprite = new THREE.Sprite(this.operatorTagMaterial(text));
       sprite.renderOrder = 23;
       sprite.center.set(0.5, 0.5);
-      sprite.position.set(0, 1.5, 0);
+      // 尺寸与「中立」标签（0.6×0.25）同量级，宽高比跟画布 128:44 一致。
+      sprite.scale.set(0.82, 0.28, 1);
+      sprite.position.set(0, 1.3, 0);
       entry.group.add(sprite);
       entry.operatorTag = { sprite, text };
       return;
