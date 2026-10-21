@@ -373,7 +373,7 @@ func TestMechaCoop_04_BuildFollowsIssuerMechaNotFocus(t *testing.T) {
 	}
 }
 
-// 契约 §8-5：assign_mecha 的四种情况（抢占自动解绑 / 解绑 / 别人的机甲 / 非法 operator）。
+// 契约 §8-5（第 22 轮 §3 改口径）：assign_mecha 的四种情况（多绑不抢占 / 解绑 / 别人的机甲 / 非法 operator）。
 func TestMechaCoop_05_AssignMechaCases(t *testing.T) {
 	core := newMechaCoopCore(t)
 	ws := core.World()

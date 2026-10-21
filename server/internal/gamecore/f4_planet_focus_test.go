@@ -136,9 +136,10 @@ func f4ConstructionTaskCount(ws *model.WorldState, playerID string) int {
 // 三条命令各自命中目标行星。
 func TestF4DualPlanetIndependentBuild(t *testing.T) {
 	core, planetA, planetB := newF4DualPlanetCore(t, "off")
-	// 第 21 轮起一个发令者只绑一台机甲、命令落在机甲所在行星：玩家身份的
-	// 机甲在出生星球 planet-1-2；planet-1-1 的开局机甲空闲，改绑给独立
-	// 发令者才能验证「行星路由第 3 条」与「显式 planet_id」。
+	// 命令落在发令者机甲所在行星：玩家身份的机甲在出生星球 planet-1-2；
+	// planet-1-1 上夹具补的机甲空闲，改绑给独立发令者才能验证「行星路由第 3
+	// 条」与「显式 planet_id」（第 22 轮起一个发令者可以绑多台，但这里仍用
+	// 两个发令者，让两条命令各自有明确的机甲归属）。
 	grantAllItems(planetB, "p2", 100)
 	grantAllItemsToMecha(bindMechaToIssuer(t, planetA, "p1", "p1-agent-a"), 100)
 	grantAllItemsToMecha(bindMechaToIssuer(t, planetB, "p1", "p1-agent-b"), 100)
