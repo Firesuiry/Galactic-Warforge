@@ -34,6 +34,8 @@ interface SurfaceSpec {
   emissiveIntensity?: number;
   /** 旧程序纹理族（贴图未就绪时的细节来源）。 */
   procedural?: 'ceramic' | 'alloy' | 'graphite';
+  /** 三平面重复密度（对象空间 1 单位 = 几次重复）：小件用更细的纹理。 */
+  repeat?: number;
 }
 
 const OWN = BUILDING_MATERIALS.own, ENEMY = BUILDING_MATERIALS.enemy, FOG = BUILDING_MATERIALS.fog;
@@ -51,8 +53,9 @@ const SPEC: Record<SurfaceKey, SurfaceSpec> = {
   fogCeramic: { family: 'ceramic', color: FOG.ceramic.color, roughness: .5, metalness: .3, procedural: 'ceramic' },
   fogGraphite: { family: 'graphite', color: FOG.graphite.color, roughness: .55, metalness: .35, procedural: 'graphite' },
   fogAlloy: { family: 'alloy', color: FOG.alloy.color, roughness: .42, metalness: .7, procedural: 'alloy' },
-  copper: { family: 'alloy', color: ACCENT_METAL.copper, roughness: .34, metalness: .78 },
-  copperDark: { family: 'alloy', color: ACCENT_METAL.copperDark, roughness: .55, metalness: .62 },
+  // 铜/黄铜小件在 1 格里是细管细环：贴图重复 3 次才读得出金属拉丝，否则整根管是均匀色。
+  copper: { family: 'alloy', color: ACCENT_METAL.copper, roughness: .34, metalness: .78, repeat: 3 },
+  copperDark: { family: 'alloy', color: ACCENT_METAL.copperDark, roughness: .55, metalness: .62, repeat: 3 },
   glass: { color: '#153c4f', roughness: .17, metalness: .72, emissive: '#073341', emissiveIntensity: .5 },
   blue: { color: '#8befff', roughness: .25, metalness: .3, emissive: GLOW.own, emissiveIntensity: 6 },
   orange: { color: '#ffc97c', roughness: .38, metalness: .3, emissive: GLOW.enemy, emissiveIntensity: 6 },
@@ -75,6 +78,8 @@ export class IndustrialSurfaces {
 
   constructor(private readonly anisotropy = 4) {
     this.finishes = createIndustrialFinishes({ anisotropy });
+    // 贴图可能已经加载完（后续场景/画廊）：直接建 PBR 材质，否则先用程序纹理回退。
+    this.pbr = industrialMaterialsReady();
     this.rebuild();
   }
 
@@ -110,7 +115,7 @@ export class IndustrialSurfaces {
       emissiveIntensity: spec.emissiveIntensity ?? 0,
     };
     if (this.pbr && spec.family) {
-      const material = createPbrMaterial(spec.family, spec.color, base);
+      const material = createPbrMaterial(spec.family, spec.color, base, spec.repeat);
       if (material) {
         material.name = `industrial-${key}`;
         return material;

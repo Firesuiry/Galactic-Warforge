@@ -121,8 +121,9 @@ export function applyTriplanar(material: THREE.MeshStandardMaterial, set: Loaded
       .replace('#include <common>', `#include <common>
         varying vec3 vTriPosition;
         varying vec3 vTriNormal;
-        varying vec3 vTriTangent;
-        varying vec3 vTriBitangent;`)
+        varying vec3 vTriViewNormal;
+        varying vec3 vTriViewTangent;
+        varying vec3 vTriViewBitangent;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         // 对象坐标（含实例矩阵）：三平面映射的采样空间，保证同类实例纹理相位一致。
         vTriPosition = transformed;
@@ -132,9 +133,14 @@ export function applyTriplanar(material: THREE.MeshStandardMaterial, set: Loaded
         vTriNormal = objectNormal;
         // 解析切线基：主法线轴决定另外两轴（不依赖 UV/tangent 属性）。
         vec3 an = abs(objectNormal);
-        if (an.x > an.y && an.x > an.z) { vTriTangent = vec3(0.0, 1.0, 0.0); vTriBitangent = vec3(0.0, 0.0, 1.0); }
-        else if (an.y > an.z) { vTriTangent = vec3(1.0, 0.0, 0.0); vTriBitangent = vec3(0.0, 0.0, 1.0); }
-        else { vTriTangent = vec3(1.0, 0.0, 0.0); vTriBitangent = vec3(0.0, 1.0, 0.0); }`);
+        vec3 triTangent, triBitangent;
+        if (an.x > an.y && an.x > an.z) { triTangent = vec3(0.0, 1.0, 0.0); triBitangent = vec3(0.0, 0.0, 1.0); }
+        else if (an.y > an.z) { triTangent = vec3(1.0, 0.0, 0.0); triBitangent = vec3(0.0, 0.0, 1.0); }
+        else { triTangent = vec3(1.0, 0.0, 0.0); triBitangent = vec3(0.0, 1.0, 0.0); }
+        // 法线贴图在视图空间求解：normalMatrix 只在顶点着色器可用。
+        vTriViewNormal = normalize(normalMatrix * objectNormal);
+        vTriViewTangent = normalize(normalMatrix * triTangent);
+        vTriViewBitangent = normalize(normalMatrix * triBitangent);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform sampler2D uTriAlbedo;
@@ -144,8 +150,9 @@ export function applyTriplanar(material: THREE.MeshStandardMaterial, set: Loaded
         uniform vec3 uTriTint;
         varying vec3 vTriPosition;
         varying vec3 vTriNormal;
-        varying vec3 vTriTangent;
-        varying vec3 vTriBitangent;
+        varying vec3 vTriViewNormal;
+        varying vec3 vTriViewTangent;
+        varying vec3 vTriViewBitangent;
         vec4 triplanarSample(sampler2D tex, vec3 weights) {
           vec3 p = vTriPosition * uTriScale;
           vec4 x = texture2D(tex, p.zy);
@@ -165,11 +172,11 @@ export function applyTriplanar(material: THREE.MeshStandardMaterial, set: Loaded
         float metalnessFactor = metalness * triOrm.b;`)
       .replace('#include <normal_fragment_maps>', `
         vec3 triN = triplanarSample(uTriNormal, triWeights).xyz * 2.0 - 1.0;
-        vec3 triMapped = normalize(vTriTangent * triN.x + vTriBitangent * triN.y + normalize(vTriNormal) * triN.z);
+        vec3 triMapped = normalize(vTriViewTangent * triN.x + vTriViewBitangent * triN.y + vTriViewNormal * triN.z);
         #ifdef DOUBLE_SIDED
           triMapped *= faceDirection;
         #endif
-        normal = normalize(normalMatrix * triMapped);`);
+        normal = triMapped;`);
   };
   material.customProgramCacheKey = () => 'industrial-triplanar';
 }
@@ -182,11 +189,12 @@ export function createPbrMaterial(
   family: PbrFamily,
   color: string,
   parameters: Omit<THREE.MeshStandardMaterialParameters, 'color' | 'map' | 'roughnessMap' | 'metalnessMap' | 'normalMap'> = {},
+  scale = TILE_WORLD,
 ): THREE.MeshStandardMaterial | null {
   const set = textures.get(family);
   if (!set) return null;
   const material = new THREE.MeshStandardMaterial({ ...parameters, color: 0xffffff });
-  applyTriplanar(material, set);
+  applyTriplanar(material, set, scale);
   const uniforms = material.userData.triplanar as { uTriTint: { value: THREE.Color } };
   const target = new THREE.Color(color).convertSRGBToLinear();
   const mean = new THREE.Color(MEAN_ALBEDO[family]).convertSRGBToLinear();
