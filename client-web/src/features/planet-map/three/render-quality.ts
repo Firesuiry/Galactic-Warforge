@@ -42,8 +42,8 @@ export function renderQualitySettings(quality: PlanetRenderQuality, width: numbe
     ao: quality === 'low' ? 'off' : quality === 'high' ? 'full' : 'half',
     grade: true,
     flare: quality === 'high',
-    // 三档都开软阴影：PCFSoft 在低档也只是阴影贴图采样，开销可忽略（阴影贴图尺寸已按档位降）。
-    softShadows: true,
+    // low 用硬阴影（PCF）；balanced/high 用 PCFSoft（接触处柔和、无 VSM 的漏光与粉刺）。
+    softShadows: quality !== 'low',
     envSize: quality === 'high' ? 512 : quality === 'low' ? 128 : 256,
   };
 }

@@ -768,6 +768,8 @@ export function PlanetMapThree(props: Props) {
       },
       // 绘制调用统计（模型素材验收用）：getter 不会被 bindSceneMethods 绑上，这里显式取一次。
       renderStats: () => target.renderStats,
+      // 画面调试探针（3A 画质迭代用，只读）：天空 / 雾 / 环境光的当前取值。
+      lightingDebug: () => target.lightingDebug(),
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);

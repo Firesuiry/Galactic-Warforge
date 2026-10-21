@@ -24,7 +24,7 @@ describe('planet rendering budget', () => {
     expect(renderQualitySettings('high', 1920, 1, 0).samples).toBe(0);
     expect(renderQualitySettings('low', 1920, 3, 4)).toEqual({
       pixelRatio: 1, samples: 0, shadowMapSize: 1024, bloom: false,
-      ao: 'off', grade: true, flare: false, softShadows: true, envSize: 128,
+      ao: 'off', grade: true, flare: false, softShadows: false, envSize: 128,
     });
   });
 
@@ -32,7 +32,6 @@ describe('planet rendering budget', () => {
     for (const quality of ['low', 'balanced', 'high'] as const) {
       const settings = renderQualitySettings(quality, 1200, 1, 4);
       expect(settings.grade).toBe(true);
-      expect(settings.softShadows).toBe(true);
     }
     // 贵的效果按档位递进。
     expect(renderQualitySettings('low', 1200, 1, 4).ao).toBe('off');
