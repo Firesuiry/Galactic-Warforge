@@ -34,7 +34,7 @@ interface SurfaceSpec {
   emissiveIntensity?: number;
   /** 旧程序纹理族（贴图未就绪时的细节来源）。 */
   procedural?: 'ceramic' | 'alloy' | 'graphite';
-  /** 三平面重复密度（对象空间 1 单位 = 几次重复）：小件用更细的纹理。 */
+  /** 三平面重复密度（每格几次重复；1 = 默认）：小件用更细的纹理。 */
   repeat?: number;
 }
 
@@ -53,9 +53,9 @@ const SPEC: Record<SurfaceKey, SurfaceSpec> = {
   fogCeramic: { family: 'ceramic', color: FOG.ceramic.color, roughness: .5, metalness: .3, procedural: 'ceramic' },
   fogGraphite: { family: 'graphite', color: FOG.graphite.color, roughness: .55, metalness: .35, procedural: 'graphite' },
   fogAlloy: { family: 'alloy', color: FOG.alloy.color, roughness: .42, metalness: .7, procedural: 'alloy' },
-  // 铜/黄铜小件在 1 格里是细管细环：贴图重复 3 次才读得出金属拉丝，否则整根管是均匀色。
-  copper: { family: 'alloy', color: ACCENT_METAL.copper, roughness: .34, metalness: .78, repeat: 3 },
-  copperDark: { family: 'alloy', color: ACCENT_METAL.copperDark, roughness: .55, metalness: .62, repeat: 3 },
+  // 铜/黄铜小件在 1 格里是细管细环：每格 1.2 次重复才读得出金属拉丝，否则整根管是均匀色。
+  copper: { family: 'alloy', color: ACCENT_METAL.copper, roughness: .34, metalness: .78, repeat: 1.2 },
+  copperDark: { family: 'alloy', color: ACCENT_METAL.copperDark, roughness: .55, metalness: .62, repeat: 1.2 },
   glass: { color: '#153c4f', roughness: .17, metalness: .72, emissive: '#073341', emissiveIntensity: .5 },
   blue: { color: '#8befff', roughness: .25, metalness: .3, emissive: GLOW.own, emissiveIntensity: 6 },
   orange: { color: '#ffc97c', roughness: .38, metalness: .3, emissive: GLOW.enemy, emissiveIntensity: 6 },
@@ -100,12 +100,13 @@ function hazardTexture(): THREE.DataTexture {
  * 场景随后会重建实体，旧实例随 `dispose()` 释放）。
  */
 export class IndustrialSurfaces {
-  private readonly materials = new Map<SurfaceKey, THREE.MeshStandardMaterial>();
+  private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
   private readonly finishes: IndustrialFinishes;
   private readonly procedural = new Set<THREE.MeshStandardMaterial>();
   private readonly owned: THREE.Texture[] = [];
   private pbr = false;
   private disposed = false;
+  private hazard?: THREE.Texture;
 
   constructor(private readonly anisotropy = 4) {
     this.finishes = createIndustrialFinishes({ anisotropy });
@@ -117,9 +118,14 @@ export class IndustrialSurfaces {
   /** 当前是否用 PBR 贴图（false = 程序纹理回退）。 */
   get usingPbr() { return this.pbr; }
 
-  get(key: SurfaceKey): THREE.MeshStandardMaterial {
-    let material = this.materials.get(key);
-    if (!material) { material = this.build(key); this.materials.set(key, material); }
+  /**
+   * 取材质。`variant` = 逐建筑调亮度用的副本（M5：停机建筑的发光件要单独调暗，不能改共享材质）；
+   * 变体按 `key:variant` 缓存，每栋建筑仍只建一份（合批不受影响）。
+   */
+  get(key: SurfaceKey, variant?: string): THREE.MeshStandardMaterial {
+    const cacheKey = variant ? `${key}:${variant}` : key;
+    let material = this.materials.get(cacheKey);
+    if (!material) { material = this.build(key); this.materials.set(cacheKey, material); }
     return material;
   }
 
@@ -134,16 +140,21 @@ export class IndustrialSurfaces {
 
   private rebuild() {
     for (const key of Object.keys(SPEC) as SurfaceKey[]) this.materials.set(key, this.build(key));
+    // 逐建筑变体（停机发光件）跟着重建：先清掉旧变体再按需懒建。
+    for (const cacheKey of [...this.materials.keys()]) {
+      if (!(cacheKey in SPEC)) { this.materials.get(cacheKey)?.dispose(); this.materials.delete(cacheKey); }
+    }
   }
 
   private build(key: SurfaceKey): THREE.MeshStandardMaterial {
     const spec = SPEC[key];
     if (key === 'hazard') {
-      const texture = hazardTexture();
-      this.owned.push(texture);
-      const material = new THREE.MeshStandardMaterial({ map: texture, roughness: spec.roughness, metalness: spec.metalness,
-        emissive: GLOW.warning, emissiveIntensity: spec.emissiveIntensity, emissiveMap: texture });
+      // 贴图只建一次：每次 rebuild 新建一张 64² 贴图会让旧的永不回收（审查 L4）。
+      if (!this.hazard) { this.hazard = hazardTexture(); this.owned.push(this.hazard); }
+      const material = new THREE.MeshStandardMaterial({ map: this.hazard, roughness: spec.roughness, metalness: spec.metalness,
+        emissive: GLOW.warning, emissiveIntensity: spec.emissiveIntensity, emissiveMap: this.hazard });
       material.name = 'industrial-hazard';
+      this.applyEmissiveTint(material);
       this.procedural.add(material);
       return material;
     }
@@ -158,6 +169,7 @@ export class IndustrialSurfaces {
       const material = createPbrMaterial(spec.family, spec.color, base, spec.repeat);
       if (material) {
         material.name = `industrial-${key}`;
+        this.applyEmissiveTint(material);
         return material;
       }
     }
@@ -165,13 +177,38 @@ export class IndustrialSurfaces {
     const finish = spec.procedural ? this.finishes[spec.procedural] : undefined;
     const material = new THREE.MeshStandardMaterial({ ...base, ...(finish ?? {}) });
     material.name = `industrial-${key}`;
+    this.applyEmissiveTint(material);
     this.procedural.add(material);
     return material;
+  }
+
+  /**
+   * 发光件（M5）：材质颜色乘实例色（`instanceColor`）时，自发光默认不跟着变，
+   * 停机建筑没法逐栋调暗。这里给发光材质注入一行：`totalEmissiveRadiance *= vColor.rgb`，
+   * 于是合批时把该建筑灯珠的实例色写成 0.3 灰，就得到「停机降到 30%」。
+   * 只对自发光材质（emissiveIntensity > 0）注入，普通件不受影响。
+   */
+  private applyEmissiveTint(material: THREE.MeshStandardMaterial) {
+    if (!(material.emissiveIntensity > 0)) return;
+    // 保留已有注入（三平面材质），在其后追加自发光乘法。
+    const previous = material.onBeforeCompile;
+    const previousKey = material.customProgramCacheKey?.bind(material);
+    material.onBeforeCompile = (shader, renderer) => {
+      previous.call(material, shader, renderer);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        // 只在有顶点/实例色时乘：运行中的建筑没有 instanceColor，着色器里就没有 vColor。
+        '#include <emissivemap_fragment>\n#if defined( USE_COLOR )\n\ttotalEmissiveRadiance *= vColor.rgb;\n#endif',
+      );
+    };
+    material.customProgramCacheKey = () => `${previousKey?.() ?? ''}:emissive-tint`;
   }
 
   private releaseMaterials() {
     for (const material of this.procedural) material.dispose();
     this.procedural.clear();
+    // PBR 材质没有进 procedural 集合，单独释放，避免换材质时泄漏。
+    for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
   }
 

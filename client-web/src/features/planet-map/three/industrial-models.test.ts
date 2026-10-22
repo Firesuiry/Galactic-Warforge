@@ -66,12 +66,14 @@ it('gives every transport robot its own cargo material so per-unit item colour n
   assets.dispose();
 });
 
-it('breathes running glow pieces only when the scene has active industry, freezing at a fixed phase', () => {
+it('breathes running glow pieces and freezes at a fixed phase', () => {
   const assets = new IndustrialModels();
+  const materials = (assets as unknown as { material: Map<string, THREE.MeshStandardMaterial> }).material;
   assets.building('arc_smelter', .86, .86, true);
-  const glow = (assets as unknown as { material: Map<string, THREE.MeshStandardMaterial> }).material.get('blue')!;
+  const glow = materials.get('blue')!;
+  // 发光件材质带标记：合批时据此把停机建筑的实例色乘进自发光（M5）。
+  expect(glow.userData.glowFinish).toBe('blue');
   const base = glow.emissiveIntensity;
-  assets.setActivity(true);
   assets.pulseGlow(0.3); const a = glow.emissiveIntensity;
   assets.pulseGlow(0.9); const b = glow.emissiveIntensity;
   expect(a).not.toBe(b);
@@ -80,9 +82,31 @@ it('breathes running glow pieces only when the scene has active industry, freezi
   assets.pulseGlow(1.2, true); const frozenA = glow.emissiveIntensity;
   assets.pulseGlow(5.7, true); const frozenB = glow.emissiveIntensity;
   expect(frozenA).toBe(frozenB);
-  // 停摆：降到 30%。
-  assets.setActivity(false);
-  assets.pulseGlow(0.3);
-  expect(glow.emissiveIntensity).toBeCloseTo(base * 0.3 * (0.82 + 0.18 * Math.sin(0.3 * 2.2)), 5);
+  // 发光材质的自发光会乘实例色（逐栋调暗的前提）。
+  const shader = { uniforms: {}, vertexShader: '#include <common>', fragmentShader: '#include <emissivemap_fragment>' };
+  glow.onBeforeCompile(shader as never, {} as never);
+  expect(shader.fragmentShader).toContain('totalEmissiveRadiance *= vColor.rgb');
+  assets.dispose();
+});
+
+it('keeps every procedural building inside the 6k triangle budget', () => {
+  const assets = new IndustrialModels();
+  const types = ['headquarters', 'battlefield_analysis_base', 'mining_machine', 'arc_smelter', 'matrix_laboratory',
+    'wind_turbine', 'tesla_tower', 'solar_panel', 'accumulator', 'logistics_station', 'storage', 'liquid_storage_tank',
+    'gun_turret', 'oil_refinery', 'assembling_machine_mk1', 'spray_coater', 'fractionator', 'miniature_particle_collider',
+    'traffic_monitor', 'splitter', 'conveyor_belt_mk1', 'logistics_distributor'];
+  const triangles = (group: THREE.Group) => {
+    let total = 0;
+    group.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      const geometry = object.geometry as THREE.BufferGeometry;
+      total += (geometry.index ? geometry.index.count : geometry.getAttribute('position').count) / 3;
+    });
+    return total;
+  };
+  for (const type of types) {
+    const group = assets.building(type, 3, 3, true);
+    expect(triangles(group), type).toBeLessThanOrEqual(6000);
+  }
   assets.dispose();
 });

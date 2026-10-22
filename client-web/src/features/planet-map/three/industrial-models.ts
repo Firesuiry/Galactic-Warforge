@@ -24,6 +24,8 @@ const UNIT_FINISH: Record<UnitFaction, { armor: Finish; light: Finish }> = {
 };
 type Rotation = { object: THREE.Object3D; axis: 'x' | 'y' | 'z'; speed: number };
 const UP = new THREE.Vector3(0, 1, 0);
+/** 停机建筑的发光件亮度系数（plan 步骤 6：停机降到 30%）。 */
+export const STOPPED_GLOW = 0.3;
 
 /** Original, shared industrial assets. Coordinates: +Y up, X/Z footprint, ground at Y=0.
  * All motion is cosmetic; no resource production or unit simulation happens here.
@@ -51,8 +53,8 @@ export class IndustrialModels {
     this.geometry.set('panel', new THREE.PlaneGeometry(1, 1));
     this.geometry.set('cone', new THREE.CylinderGeometry(0.06, 0.5, 1, 12));
     this.geometry.set('hex', new THREE.CylinderGeometry(0.5, 0.5, 1, 6));
-    this.geometry.set('dome', new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2));
-    this.geometry.set('ring', new THREE.TorusGeometry(0.5, 0.025, 6, 32));
+    this.geometry.set('dome', new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2));
+    this.geometry.set('ring', new THREE.TorusGeometry(0.5, 0.025, 4, 20));
     this.geometry.set('rock', new THREE.IcosahedronGeometry(0.5, 0));
     this.geometry.set('crystal', new THREE.CylinderGeometry(0, 0.5, 1, 5));
     const blade = new THREE.Shape();
@@ -64,19 +66,23 @@ export class IndustrialModels {
 
   /** 材质池键 → 共享材质。所有 finish 都从 `IndustrialSurfaces` 取，不在模型里写色值。 */
   private bindSurfaces() {
-    for (const finish of Object.keys(SURFACE_KEY) as Finish[]) this.material.set(finish, this.surfaces.get(SURFACE_KEY[finish]));
-    for (const finish of this.glowing) this.registerPulse(finish);
+    for (const finish of Object.keys(SURFACE_KEY) as Finish[]) {
+      if (this.glowing.includes(finish)) continue;
+      this.material.set(finish, this.surfaces.get(SURFACE_KEY[finish]));
+    }
+    // 发光件（M5）：全场一份共享材质（呼吸只写这一份）；停机建筑的 30% 亮度靠
+    // `StaticBatches` 的实例色逐栋乘进自发光（材质注入见 `IndustrialSurfaces`），
+    // 不重建模型、不改共享材质。
+    for (const finish of this.glowing) {
+      const material = this.surfaces.get(SURFACE_KEY[finish]);
+      material.userData.glowFinish = finish;
+      this.material.set(finish, material);
+      this.pulseMaterials.add(material);
+    }
   }
 
   /** 运行发光件登记：`industryActive` 时缓慢呼吸，停机时降到 30%（冻结时定格在固定相位）。 */
   private pulseMaterials = new Set<THREE.MeshStandardMaterial>();
-  private activePulse = true;
-
-  /** 标记某材质为「运行发光件」（同一材质只登记一次）。 */
-  private registerPulse(finish: Finish) {
-    const material = this.material.get(finish);
-    if (material instanceof THREE.MeshStandardMaterial) this.pulseMaterials.add(material);
-  }
 
   private registerRotation(object: THREE.Object3D, axis: Rotation['axis'], speed: number) {
     object.userData.industrialRotation = { axis, speed };
@@ -129,7 +135,18 @@ export class IndustrialModels {
   }
 
   private box(parent: THREE.Object3D, finish: Finish, size: [number, number, number], position: [number, number, number], rotation?: [number, number, number]) {
-    return this.part(parent, 'box', finish, size, position, rotation);
+    // 薄件（板、条、叶片）用 12 三角的直角盒：圆角在这个厚度上读不出来，
+    // 108 三角的圆角盒会让每栋建筑的三角面翻倍（HQ / 熔炉原本超 6k 预算）。
+    const thin = Math.min(...size) <= Math.max(...size) * 0.3;
+    return this.part(parent, thin ? 'slab' : 'box', finish, size, position, rotation);
+  }
+
+  /**
+   * 方角薄件（贴脚、格栅叶片、细条）：用 12 三角的直角盒，而不是 108 三角的圆角盒。
+   * 这类零件在 1 格里只有几毫米厚，圆角读不出来，却占了模型一半的三角面。
+   */
+  private slab(parent: THREE.Object3D, finish: Finish, size: [number, number, number], position: [number, number, number], rotation?: [number, number, number]) {
+    return this.part(parent, 'slab', finish, size, position, rotation);
   }
 
   private pipe(parent: THREE.Object3D, finish: Finish, a: [number, number, number], b: [number, number, number], radius = 0.018) {
@@ -183,15 +200,15 @@ export class IndustrialModels {
     this.box(group, 'alloy', [0.86, 0.055, 0.82], [0, 0.045, 0]);
     this.box(group, 'graphite', [0.72, 0.035, 0.7], [0, 0.087, 0]);
     for (const x of [-0.36, 0.36]) for (const z of [-0.34, 0.34]) {
-      this.box(group, 'ceramic', [0.15, 0.105, 0.15], [x, 0.065, z]);
-      this.box(group, finish, [0.07, 0.012, 0.018], [x, 0.122, z + 0.038]);
+      this.slab(group, 'ceramic', [0.15, 0.105, 0.15], [x, 0.065, z]);
+      this.slab(group, finish, [0.07, 0.012, 0.018], [x, 0.122, z + 0.038]);
     }
-    for (const x of [-0.4, 0.4]) this.box(group, 'copper', [0.014, 0.012, 0.38], [x, 0.079, 0]);
+    for (const x of [-0.4, 0.4]) this.slab(group, 'copper', [0.014, 0.012, 0.38], [x, 0.079, 0]);
   }
 
   private vents(group: THREE.Group, x: number, y: number, z: number, count = 6) {
     this.box(group, 'graphite', [0.21, 0.025, 0.3], [x, y, z]);
-    for (let i = 0; i < count; i++) this.box(group, 'alloy', [0.19, 0.035, 0.016], [x, y + 0.014, z - 0.12 + i * 0.24 / (count - 1)]);
+    for (let i = 0; i < count; i++) this.slab(group, 'alloy', [0.19, 0.035, 0.016], [x, y + 0.014, z - 0.12 + i * 0.24 / (count - 1)]);
   }
 
   private tank(group: THREE.Group, x: number, z: number, y: number, height: number, radius: number, finish: Finish = 'ceramic') {
@@ -625,11 +642,12 @@ export class IndustrialModels {
   building(type: string, width: number, depth: number, own: boolean): THREE.Group {
     const key = `building:${type}:${width}:${depth}:${own}`;
     const cached = this.cached(key); if (cached) return cached;
+    const light: Finish = own ? 'blue' : 'orange';
     // 现成 GLB（异步加载完才有）：直接用它，比例在 instantiateBuilding 里按占地归一化。
     const ready = instantiateBuilding(type, width, depth, own);
     if (ready) { this.batchStatic(ready); return this.remember(key, ready); }
     const group = new THREE.Group(); group.name = `industrial-${type}`;
-    const light: Finish = own ? 'blue' : 'orange', armor: Finish = own ? 'ceramic' : 'hostile';
+    const armor: Finish = own ? 'ceramic' : 'hostile';
     // 分拣器（sorter-rig）与带子一样直接贴地，不铺方形地基。
     if (type !== 'foundation' && type !== 'splitter' && type !== 'logistics_distributor' && !/conveyor/.test(type) && !/sorter/.test(type)) this.foundation(group, light);
     if (type === 'foundation') {
@@ -850,24 +868,18 @@ export class IndustrialModels {
   }
 
   /**
-   * 运行发光件呼吸（第 23 轮 3A §6）：只在有建筑 `industryActive` 时推进；
+   * 运行发光件呼吸（第 23 轮 3A §6）：只呼吸「运行」那一套材质；
    * 冻结/减弱动效时传 `frozen`，相位固定在 0（最亮），画面是时间的纯函数。
-   * 停机（`industryActive === false`）的发光件亮度降到 30%——这一项由场景逐建筑写
-   * `emissiveIntensity` 做不到（材质共享），所以按「全场是否有设备在运行」统一处理：
-   * 只要场景里有一台在跑，呼吸照常；整场停摆（无运行设备）时降到 30%。
+   * 停机建筑（`industryActive === false`）的发光件由场景在合批里逐栋乘 0.3（见
+   * `StaticBatches.refresh(..., stopped)`），共享材质只负责呼吸。
    */
   pulseGlow(time: number, frozen = false) {
     if (!this.pulseMaterials.size) return;
     const breathe = frozen ? 1 : 0.82 + 0.18 * Math.sin(time * 2.2);
     for (const material of this.pulseMaterials) {
       const base = material.userData.baseEmissive ?? (material.userData.baseEmissive = material.emissiveIntensity);
-      material.emissiveIntensity = base * breathe * (this.activePulse ? 1 : 0.3);
+      material.emissiveIntensity = base * breathe;
     }
-  }
-
-  /** 场景在同步建筑状态时写入：场上有任意一台设备在运行。 */
-  setActivity(active: boolean) {
-    this.activePulse = active;
   }
 
   releaseAnimations(group: THREE.Object3D): void {

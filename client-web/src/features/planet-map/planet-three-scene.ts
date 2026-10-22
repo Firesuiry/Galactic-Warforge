@@ -21,6 +21,7 @@ import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { StatusLights } from './three/status-lights';
+import { setIndustrialTileScale } from './three/industrial-materials';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
@@ -356,6 +357,8 @@ export class PlanetThreeScene {
 
   setData(data: PlanetThreeData) {
     this.data = data;
+    // 三平面材质的纹素密度按格（M1）：换了 face_size 的地图就重算 uniform（不重编译着色器）。
+    setIndustrialTileScale(this.tileScale());
     // 大行星的局部曲面与全球球面共用 surface.material（同一个 swFog uniform），
     // 这里把图层开关一起喂进去，重建局部曲面后迷雾开关同样生效。
     updatePlanetSurface(this.surface, { ...data, fogLayer: this.interaction?.layers.fog });
@@ -520,14 +523,10 @@ export class PlanetThreeScene {
         return group;
       });
     }
-    let anyRunning = false;
     for (const building of Object.values(planet.buildings ?? {})) {
       const model = this.staticEntities.get(`building:${building.id}`)?.group;
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
-      if (building.runtime?.state === 'running') anyRunning = true;
     }
-    // 发光件呼吸：整场没有任何设备在运行（停摆）时降到 30%，否则正常呼吸。
-    this.industrial.setActivity(anyRunning);
     this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
     this.sorterRigs.refresh(sorters, this.groundMap, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
     this.layer('buildings').add(this.sorterRigs.group);
@@ -569,18 +568,12 @@ export class PlanetThreeScene {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
     this.syncPowerAlertMarks(visibleBuildings);
-    // 状态灯只挂己方建筑（不暴露敌方产线状态），灯位按建筑类型偏移；状态只取权威 runtime.state。
-    this.layer('buildings').add(this.statusLights.group);
-    this.statusLights.refresh(visibleBuildings.flatMap((building) => {
-      const group = building.owner_id === playerId ? this.staticEntities.get(`building:${building.id}`)?.group : undefined;
-      if (!group) return [];
-      const footprint = getBuildingFootprint(building);
-      return [{ id: building.id, type: building.type, state: building.runtime?.state, root: group, width: footprint.width, height: footprint.height }];
-    }));
+    // 状态灯只挂己方建筑（不暴露敌方产线状态），状态只取权威 runtime.state。
+    this.statusLights.sync(visibleBuildings, playerId, id => this.staticEntities.get(`building:${id}`)?.group, this.layer('buildings'));
     const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
     }));
-    this.staticBatches.refresh(batchEntries);
+    this.staticBatches.refresh(batchEntries, group => group.userData.industryActive === false);
     this.dynamicBatches.refresh(batchEntries);
 
     const movingKeys = new Set<string>();

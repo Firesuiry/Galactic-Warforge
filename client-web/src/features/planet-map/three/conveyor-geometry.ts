@@ -5,7 +5,7 @@ import type { TilePoint } from '../model';
 import { getBuildingFootprint } from '../model';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation, beltVisualSpeed, logisticsTier, occupiesGround } from '../logistics-tier';
 import { beltDeckTexture } from './logistics-marks';
-import { createPbrMaterial, materialTextures } from './industrial-materials';
+import { createPbrMaterial, industrialMaterialsReady, materialTextures, onIndustrialMaterialsReady } from './industrial-materials';
 import { surfaceTileSize, tileFrame, tileNormal } from './projection';
 
 const directions: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
@@ -294,40 +294,56 @@ export const CONVEYOR_GHOST_COLOR = '#7df7b0';
 export class ConveyorGeometry {
   readonly group = new THREE.Group();
   private signature = '';
+  /** 最近一次布局（换材质时用它原地重建，不用等场景下一次 setData）。 */
+  private layout?: { buildings: readonly Building[]; faceSize: number; radius: number };
   private tiles: TilePoint[] = [];
   private ids: string[] = [];
   // 金属度压低：metalness 高的竖面背离太阳时会黑成一条缝（1018 反馈），结构件要颜色稳定可读。
-  private readonly materials: THREE.MeshStandardMaterial[];
+  private materials: THREE.MeshStandardMaterial[];
   /** 带面：深色底 + 档位色 chevron（贴图同时作 emissiveMap，箭头微微自发光）。 */
-  private readonly deckMaterials: THREE.MeshStandardMaterial[];
+  private deckMaterials: THREE.MeshStandardMaterial[];
+  /** 当前是否已经用上 PBR 贴图（构造时贴图未就绪则为 false，加载完成后 `upgradeMaterials()` 原地换）。 */
+  private pbr = false;
 
   /** `ghost`：建造预览用的半透明绿色带体（拖拽铺带时整条路径按将要建成的样子画，含坡道/桥墩）。 */
   constructor(private readonly options: { ghost?: boolean } = {}) {
     this.group.name = options.ghost ? 'conveyor-ghost' : 'continuous-conveyors';
-    const ghost = (opacity: number) => ({ color: CONVEYOR_GHOST_COLOR, transparent: true, opacity, depthWrite: false, roughness: .5, metalness: .1 });
-    if (options.ghost) {
-      this.materials = [.28, .36, .55].map(opacity => new THREE.MeshStandardMaterial({ ...ghost(opacity), side: THREE.DoubleSide }));
-    } else {
-      // PBR 贴图就绪时用真实材质（橡胶带面 + 拉丝金属边框）；没就绪就退回纯色。
-      const pbr = (family: 'graphite' | 'alloy', color: string, parameters: THREE.MeshStandardMaterialParameters) =>
-        createPbrMaterial(family, color, { ...parameters, side: THREE.DoubleSide }, 2.4)
-        ?? new THREE.MeshStandardMaterial({ ...parameters, color, side: THREE.DoubleSide });
-      this.materials = [
-        // 机身/内斜面/底面/端盖：深石墨。
-        pbr('graphite', '#2a3338', { roughness: .6, metalness: .25 }),
-        // 侧壁 + 支撑柱：中灰金属。
-        pbr('alloy', '#6f7d84', { roughness: .58, metalness: .28 }),
-        // 侧栏顶边：亮色哑光（远景的识别线）。不能太光滑：太阳镜面高光会冲过 bloom 阈值，
-        // 屏幕一侧（背着太阳的那半边视线）的整段带栏会糊成一片白光。
-        pbr('alloy', '#b9c4c8', { roughness: .62, metalness: .12 }),
-      ];
+    this.pbr = !options.ghost && industrialMaterialsReady();
+    this.materials = [];
+    this.deckMaterials = [];
+    this.buildMaterials();
+    // 贴图异步就绪：原地换材质并重建带体（不用等场景下一次 setData）。
+    if (!this.pbr) onIndustrialMaterialsReady(() => this.upgradeMaterials());
+  }
+
+  /** 结构件材质（PBR 就绪时拉丝金属 + 石墨，否则纯色）。 */
+  private buildStructureMaterials(): THREE.MeshStandardMaterial[] {
+    if (this.options.ghost) {
+      const ghost = (opacity: number) => ({ color: CONVEYOR_GHOST_COLOR, transparent: true, opacity, depthWrite: false, roughness: .5, metalness: .1 });
+      return [.28, .36, .55].map(opacity => new THREE.MeshStandardMaterial({ ...ghost(opacity), side: THREE.DoubleSide }));
     }
-    // 带面：橡胶底纹（PBR 就绪时用 Rubber001 的胎纹法线 + 粗糙度，重复 2 次/格）叠档位色箭头。
-    // 箭头贴图同时作 emissiveMap，只有箭头微微自发光；橡胶底几乎不自发光。
-    const rubber = materialTextures('rubber');
-    this.deckMaterials = DECK_TIERS.map(tier => {
+    // PBR 贴图就绪时用真实材质（橡胶带面 + 拉丝金属边框）；没就绪就退回纯色。
+    const pbr = (family: 'graphite' | 'alloy', color: string, parameters: THREE.MeshStandardMaterialParameters) =>
+      createPbrMaterial(family, color, { ...parameters, side: THREE.DoubleSide }, 1)
+      ?? new THREE.MeshStandardMaterial({ ...parameters, color, side: THREE.DoubleSide });
+    return [
+      // 机身/内斜面/底面/端盖：深石墨。
+      pbr('graphite', '#2a3338', { roughness: .6, metalness: .25 }),
+      // 侧壁 + 支撑柱：中灰金属。
+      pbr('alloy', '#6f7d84', { roughness: .58, metalness: .28 }),
+      // 侧栏顶边：亮色哑光（远景的识别线）。不能太光滑：太阳镜面高光会冲过 bloom 阈值，
+      // 屏幕一侧（背着太阳的那半边视线）的整段带栏会糊成一片白光。
+      pbr('alloy', '#b9c4c8', { roughness: .62, metalness: .12 }),
+    ];
+  }
+
+  /** 带面材质：橡胶底纹（PBR 就绪时用 Rubber001 的胎纹法线 + 粗糙度）叠档位色箭头。 */
+  private buildDeckMaterials(): THREE.MeshStandardMaterial[] {
+    const ghost = (opacity: number) => ({ color: CONVEYOR_GHOST_COLOR, transparent: true, opacity, depthWrite: false, roughness: .5, metalness: .1 });
+    const rubber = this.options.ghost ? undefined : materialTextures('rubber');
+    return DECK_TIERS.map(tier => {
       const map = beltDeckTexture(tier);
-      const material = options.ghost
+      const material = this.options.ghost
         ? new THREE.MeshStandardMaterial({ ...ghost(.6), map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .35 })
         : new THREE.MeshStandardMaterial({
           map, emissiveMap: map, emissive: '#ffffff', emissiveIntensity: .42,
@@ -336,16 +352,42 @@ export class ConveyorGeometry {
         });
       if (rubber) {
         // 带面几何自带 UV（u 沿流向、v 横跨带面），直接用 UV 采样而不是三平面：
-        // 带面是一张薄片，三平面会在侧面退化；这里把橡胶纹按 2 次/格重复。
-        for (const key of ['normalMap', 'roughnessMap'] as const) {
-          const texture = material[key];
-          if (texture) { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(2, 1); texture.anisotropy = 4; }
+        // 带面是一张薄片，三平面会在侧面退化；这里把橡胶纹按 1 次/格重复。
+        // 贴图是模块级共享的：克隆一份再改 repeat，避免跨使用者的隐式状态（审查 L8）。
+        const normal = rubber.normal.clone(); normal.needsUpdate = true;
+        const orm = rubber.orm.clone(); orm.needsUpdate = true;
+        for (const texture of [normal, orm]) {
+          texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(1, 1); texture.anisotropy = 4;
         }
+        material.normalMap = normal; material.roughnessMap = orm;
       }
       material.polygonOffset = true;
       material.polygonOffsetFactor = -2;
       return material;
     });
+  }
+
+  private buildMaterials() {
+    this.materials = this.buildStructureMaterials();
+    this.deckMaterials = this.buildDeckMaterials();
+  }
+
+  /**
+   * PBR 贴图加载完成后调用（场景 `reloadModels()` 时机）：原地换成带贴图的材质并重建带体网格。
+   * 返回是否切换（贴图未就绪/已切换过/ghost 返回 false）。
+   */
+  upgradeMaterials(): boolean {
+    if (this.options.ghost || this.pbr || !industrialMaterialsReady()) return false;
+    const previous = [...this.materials, ...this.deckMaterials];
+    this.pbr = true;
+    this.buildMaterials();
+    previous.forEach(material => material.dispose());
+    const layout = this.layout;
+    if (layout) {
+      this.signature = '';
+      this.refresh(layout.buildings, layout.faceSize, layout.radius);
+    }
+    return true;
   }
 
   /**
@@ -368,6 +410,7 @@ export class ConveyorGeometry {
       b.fractionation && [b.fractionation.input_direction, b.fractionation.hydrogen_direction, b.fractionation.deuterium_direction],
       b.spray_coater && [b.spray_coater.input_direction, b.spray_coater.output_direction, b.spray_coater.reagent_direction],
       Boolean(b.storage), b.runtime?.params?.io_ports])]);
+    this.layout = { buildings, faceSize, radius };
     if (signature === this.signature) return false;
     this.signature = signature;
     this.clear();

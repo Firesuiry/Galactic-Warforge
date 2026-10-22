@@ -50,3 +50,44 @@ describe('100 identical buildings keep a constant static batch count', () => {
     models.dispose();
   });
 });
+
+describe('stopped buildings dim their glow per building (M5)', () => {
+  it('splits only the glow batch and writes 30% instance colours for stopped roots', () => {
+    const models = new IndustrialModels();
+    const layer = new THREE.Group();
+    const roots = [0, 1].map(index => {
+      const root = models.building('arc_smelter', 1, 1, true);
+      root.position.set(index * 2, 0, 0);
+      root.userData.industryActive = index === 0;
+      layer.add(root);
+      return root;
+    });
+    const entries = roots.map((root, index) => ({ root, layer, tile: { x: index, y: 0 } }));
+    const batches = new StaticBatches();
+    batches.refresh(entries, root => root.userData.industryActive === false);
+    const meshes = layer.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
+    const dimmed = meshes.filter(mesh => mesh.instanceColor);
+    expect(dimmed.length).toBeGreaterThan(0);
+    // 只有发光件批有实例色（停机 0.3 灰）；非发光件批不带 instanceColor。
+    for (const mesh of dimmed) {
+      expect(mesh.count).toBe(1);
+      const color = new THREE.Color(); mesh.getColorAt(0, color);
+      expect(color.r).toBeCloseTo(0.3, 6);
+      expect(color.g).toBeCloseTo(0.3, 6);
+      expect(color.b).toBeCloseTo(0.3, 6);
+    }
+    // 运行中的建筑没有额外实例色批（共享材质照常呼吸）。
+    const before = batches.stats;
+    const runningOnly = new StaticBatches();
+    runningOnly.refresh(entries.slice(0, 1), () => false);
+    expect(runningOnly.stats.batches).toBeLessThan(before.batches);
+    // 状态切换（运行 → 停机）会重建批并写实例色；同一状态重复同步不重建。
+    expect(batches.refresh(entries, root => root.userData.industryActive === false)).toBe(false);
+    roots[1].userData.industryActive = true;
+    expect(batches.refresh(entries, root => root.userData.industryActive === false)).toBe(true);
+    const nowDimmed = (layer.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[])
+      .filter(mesh => mesh.instanceColor);
+    expect(nowDimmed).toHaveLength(0);
+    batches.dispose(); runningOnly.dispose(); models.dispose();
+  });
+});

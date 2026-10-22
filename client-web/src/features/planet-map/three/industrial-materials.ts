@@ -17,7 +17,7 @@ const ROOT = '/assets/textures/materials/';
  * 材质把 `albedo * tint` 画出来，tint = 目标色 / 均值，于是平均色正好等于调色板的阵营色，
  * 换贴图只需要改这张表（assets 改动时重算一次）。
  */
-const MEAN_ALBEDO: Record<PbrFamily, string> = {
+export const MEAN_ALBEDO: Record<PbrFamily, string> = {
   ceramic: '#c2e3e8',
   alloy: '#848b92',
   graphite: '#80858c',
@@ -25,8 +25,26 @@ const MEAN_ALBEDO: Record<PbrFamily, string> = {
   rubber: '#1a1c1d',
   plastic: '#eeeae9',
 };
-/** 纹素密度：世界坐标 1 格 = 1 次贴图重复（三平面映射在 `applyTriplanar` 里）。 */
-const TILE_WORLD = 1;
+/**
+ * 纹素密度（M1）：**每格 1 次重复**，与 `face_size` 无关。
+ *
+ * 三平面映射的采样坐标是着色器里的 `transformed`（含实例矩阵）。静态/动态合批的实例矩阵是
+ * **图层空间**（`inverse(layer.matrixWorld) × root.matrixWorld`），1 格 = `tileScale` 个图层单位
+ * （face 288 约 0.386，face 816 约 0.153）。所以 uniform = `repeat / tileScale` 才是「每格 1 次」；
+ * 场景在 `setData` 时用 `setIndustrialTileScale()` 把当前地图的 `tileScale` 写进来。
+ */
+let tileScale = 1;
+/** 已建的三平面材质：地图换 face_size 时统一改 uniform（不重编译着色器）。 */
+const triplanarScales = new Set<{ uniform: { value: number }; repeat: number }>();
+
+/** 场景同步地图尺寸时调用：所有三平面材质的重复密度按当前格边长换算。 */
+export function setIndustrialTileScale(value: number) {
+  tileScale = value > 0 ? value : 1;
+  for (const entry of triplanarScales) entry.uniform.value = entry.repeat / tileScale;
+}
+
+/** 当前每格对应的重复次数（测试钩子：材质 `uTriScale × tileScale` 应恒为 repeat）。 */
+export function industrialTileScale() { return tileScale; }
 
 interface LoadedSet {
   albedo: THREE.Texture;
@@ -35,9 +53,8 @@ interface LoadedSet {
 }
 
 const textures = new Map<PbrFamily, LoadedSet>();
-const failed = new Set<PbrFamily>();
 let loading: Promise<boolean> | undefined;
-let listeners: (() => void)[] = [];
+const readyCallbacks: (() => void)[] = [];
 
 function textureOf(image: THREE.Texture, colorSpace: THREE.ColorSpace) {
   image.wrapS = image.wrapT = THREE.RepeatWrapping;
@@ -75,15 +92,23 @@ export function preloadIndustrialMaterials(): Promise<boolean> {
       ]);
       textures.set(family, { albedo, orm, normal });
     } catch {
-      failed.add(family);
+      // 单套失败：该族回退程序纹理（`materialTextures()` 返回 undefined）。
     }
   })).then(() => {
-    const ready = textures.size > 0;
-    const callbacks = listeners; listeners = [];
+    const callbacks = readyCallbacks.splice(0);
     for (const callback of callbacks) callback();
-    return ready;
+    return textures.size > 0;
   });
   return loading;
+}
+
+/**
+ * 贴图加载完成回调（传送带 / 分拣器用：它们在场景构造时先建了纯色材质，
+ * 贴图就绪后自己换掉，不必让场景再记一处调用）。已就绪时同步执行。
+ */
+export function onIndustrialMaterialsReady(callback: () => void) {
+  if (textures.size > 0) callback();
+  else readyCallbacks.push(callback);
 }
 
 /** 某材质族的贴图组（未就绪返回 undefined；调用方回退程序纹理）。 */
@@ -96,12 +121,6 @@ export function industrialMaterialsReady(): boolean {
   return textures.size > 0;
 }
 
-/** 场景在构造时注册：贴图加载完成后重建实体（与 GLB 预加载的 reload 合并调用）。 */
-export function onIndustrialMaterialsLoaded(callback: () => void) {
-  if (loading && textures.size === 0 && !failed.size) listeners.push(callback);
-  else if (textures.size > 0) callback();
-}
-
 /**
  * 三平面映射注入：不依赖几何 UV，按对象空间位置采样三张贴图并按法线混合，
  * 所以任意几何体（RoundedBox、圆柱、挤出刀片、GLB）的纹素密度一致（1 格 = 1 次重复）。
@@ -111,15 +130,18 @@ export function onIndustrialMaterialsLoaded(callback: () => void) {
  * `instanceMatrix` 在 `begin_vertex` 之前已乘进 `transformed`（three 的 project_vertex 之前），
  * 所以这里拿到的对象坐标已含实例矩阵，同类实例的纹理相位一致。
  */
-export function applyTriplanar(material: THREE.MeshStandardMaterial, set: LoadedSet, scale = TILE_WORLD) {
+export function applyTriplanar(material: THREE.MeshStandardMaterial, set: LoadedSet, repeat = 1) {
   const uniforms = {
     uTriAlbedo: { value: set.albedo },
     uTriOrm: { value: set.orm },
     uTriNormal: { value: set.normal },
-    uTriScale: { value: scale },
+    uTriScale: { value: repeat / tileScale },
     uTriTint: { value: new THREE.Color(1, 1, 1) },
   };
   material.userData.triplanar = uniforms;
+  const entry = { uniform: uniforms.uTriScale, repeat };
+  triplanarScales.add(entry);
+  material.addEventListener('dispose', () => triplanarScales.delete(entry));
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -190,32 +212,32 @@ export function applyTriplanar(material: THREE.MeshStandardMaterial, set: Loaded
  * 构造一个带 PBR 贴图的工业材质（同一材质族只建一次，所有建筑/单位共享）。
  * 贴图未就绪或该族加载失败时返回 null，调用方回退程序纹理（`industrial-finishes.ts`）。
  */
-export function createPbrMaterial(
-  family: PbrFamily,
-  color: string,
-  parameters: Omit<THREE.MeshStandardMaterialParameters, 'color' | 'map' | 'roughnessMap' | 'metalnessMap' | 'normalMap'> = {},
-  scale = TILE_WORLD,
-): THREE.MeshStandardMaterial | null {
-  const set = textures.get(family);
-  if (!set) return null;
-  const material = new THREE.MeshStandardMaterial({ ...parameters, color: 0xffffff });
-  applyTriplanar(material, set, scale);
-  const uniforms = material.userData.triplanar as { uTriTint: { value: THREE.Color } };
-  const target = new THREE.Color(color).convertSRGBToLinear();
-  const mean = new THREE.Color(MEAN_ALBEDO[family]).convertSRGBToLinear();
-  uniforms.uTriTint.value.setRGB(
+/**
+ * 阵营色 tint = 目标色 / 贴图均值（线性空间，各算一次）。
+ * `new THREE.Color(hex)` 在 three r152+ 已按 sRGB 解析到工作色彩空间（`ColorManagement` 默认开启），
+ * 不能再 `convertSRGBToLinear()`：二次压缩会把白陶瓷推成过曝暖白（审查 M2）。
+ */
+export function pbrTint(family: PbrFamily, color: string): THREE.Color {
+  const target = new THREE.Color(color);
+  const mean = new THREE.Color(MEAN_ALBEDO[family]);
+  return new THREE.Color(
     target.r / Math.max(mean.r, 1e-3),
     target.g / Math.max(mean.g, 1e-3),
     target.b / Math.max(mean.b, 1e-3),
   );
-  return material;
 }
 
-/** 释放共享贴图（场景销毁时调用；重复调用安全）。 */
-export function disposeIndustrialMaterials() {
-  for (const set of textures.values()) { set.albedo.dispose(); set.orm.dispose(); set.normal.dispose(); }
-  textures.clear();
-  listeners = [];
-  loading = undefined;
-  failed.clear();
+export function createPbrMaterial(
+  family: PbrFamily,
+  color: string,
+  parameters: Omit<THREE.MeshStandardMaterialParameters, 'color' | 'map' | 'roughnessMap' | 'metalnessMap' | 'normalMap'> = {},
+  repeat = 1,
+): THREE.MeshStandardMaterial | null {
+  const set = textures.get(family);
+  if (!set) return null;
+  const material = new THREE.MeshStandardMaterial({ ...parameters, color: 0xffffff });
+  applyTriplanar(material, set, repeat);
+  const uniforms = material.userData.triplanar as { uTriTint: { value: THREE.Color } };
+  uniforms.uTriTint.value.copy(pbrTint(family, color));
+  return material;
 }
