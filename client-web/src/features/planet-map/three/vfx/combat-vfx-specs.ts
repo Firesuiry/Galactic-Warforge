@@ -137,7 +137,7 @@ export function combatVfxFromEvent(
       specs.tracers.push({
         from: add(attacker, muzzleNormal, 0.1), to: add(target, normal, 0.1),
         color: tone === 'darkfog' ? 0xff5d5d : tone === 'defense' ? 0xffd37c : 0x8befff,
-        life: 0.22, width: 0.05,
+        life: 0.22, width: 0.14,
       });
     }
     // 命中火花：沿目标法线喷出，向四周飞散。
@@ -174,20 +174,33 @@ export function combatVfxFromEvent(
   // entity_destroyed：火球 + 烟 + 碎片 + 冲击波 + 闪光 + 残骸冒烟。
   const scale = target.kind === 'building' ? 1.6 : 1;
   const specs: CombatVfxSpecs = { bursts: [], decals: [], lights: [], shockwaves: [], tracers: [] };
+  // 火球：多层尺寸（内焰小而亮、外焰大而淡），叠出来才有层次而不是一个发光球。
   specs.bursts.push({
     style: PARTICLE_STYLES.fire, at: add(target, normal, 0.12), normal,
     velocity: { x: normal.x * 0.5, y: normal.y * 0.5, z: normal.z * 0.5 },
-    count: Math.round(44 * scale), life: 0.9, scale: scale, spread: 2.4, seed, tint: [1, 1, 1],
+    count: Math.round(52 * scale), life: 0.9, scale: scale * 0.62, spread: 2.6, seed, tint: [1, 1, 1],
   });
+  specs.bursts.push({
+    style: PARTICLE_STYLES.flash, at: add(target, normal, 0.14), normal,
+    velocity: { x: 0, y: 0, z: 0 },
+    count: Math.round(4 * scale), life: 0.5, scale: scale * 1.5, spread: 0.2, seed: seed + 5, tint: [1, 0.62, 0.24],
+  });
+  // 烟：先浓后淡（两层不同寿命），冷却的烟柱压在火球上方。
   specs.bursts.push({
     style: PARTICLE_STYLES.smoke, at: add(target, normal, 0.2), normal,
     velocity: { x: normal.x * 0.4, y: normal.y * 0.4, z: normal.z * 0.4 },
-    count: Math.round(20 * scale), life: 2.4, scale: scale, spread: 1.3, seed: seed + 1, tint: [0.72, 0.72, 0.72],
+    count: Math.round(26 * scale), life: 2.4, scale: scale, spread: 1.3, seed: seed + 1, tint: [0.72, 0.72, 0.72],
   });
+  specs.bursts.push({
+    style: PARTICLE_STYLES.smoke, at: add(target, normal, 0.24), normal,
+    velocity: { x: normal.x * 0.5, y: normal.y * 0.5, z: normal.z * 0.5 },
+    count: Math.round(10 * scale), life: 3.4, scale: scale * 1.7, spread: 0.9, seed: seed + 6, tint: [0.5, 0.5, 0.52],
+  });
+  // 碎片：硬颗粒抛物线飞出。
   specs.bursts.push({
     style: PARTICLE_STYLES.debris, at: add(target, normal, 0.16), normal,
     velocity: { x: normal.x * 1.5, y: normal.y * 1.5, z: normal.z * 1.5 },
-    count: Math.round(12 * scale), life: 1.2, scale: scale * 1.6, spread: 4.0, seed: seed + 2, tint: [1, 1, 1],
+    count: Math.round(20 * scale), life: 1.2, scale: scale * 1.6, spread: 4.6, seed: seed + 2, tint: [1, 1, 1],
   });
   // 中心闪光只留一点：爆炸的层次靠火球/烟/碎片，一个大白球会把它们全糊掉。
   specs.bursts.push({

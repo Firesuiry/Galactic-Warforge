@@ -53,7 +53,7 @@ function data(overrides: Partial<PlanetThreeData> = {}): PlanetThreeData {
 describe('VFX 场景桥接（纯函数）', () => {
   it('选中建筑：括号只画在占地四角格，光晕只挂一次', () => {
     const items = buildSelectionItems(data(), {
-      selected: { kind: 'building', id: 'b-base' }, hoveredTile: null,
+      selected: { kind: 'building', id: 'b-base', position: { x: 10, y: 10, z: 0 } }, hoveredTile: null,
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
     }, true);
     expect(items).toHaveLength(4);
@@ -65,7 +65,7 @@ describe('VFX 场景桥接（纯函数）', () => {
 
   it('选中单位：细环 + 方向三角（朝向取 rotation）', () => {
     const items = buildSelectionItems(data(), {
-      selected: { kind: 'unit', id: 'u-1' }, selectedUnits: ['u-1'], hoveredTile: { x: 3, y: 3 },
+      selected: { kind: 'unit', id: 'u-1', position: { x: 11, y: 10, z: 0 } }, selectedUnits: ['u-1'], hoveredTile: { x: 3, y: 3 },
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
     }, true);
     const unit = items.find((item) => item.kind === 'unit');
@@ -77,7 +77,7 @@ describe('VFX 场景桥接（纯函数）', () => {
     const base = { selected: null, hoveredTile: { x: 3, y: 3 }, layers: { selection: true, logistics: true, buildings: true } };
     expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'build' } }, true)).toHaveLength(0);
     expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'attack' } }, true)).toHaveLength(0);
-    expect(buildSelectionItems(data(), { ...base, selected: { kind: 'unit', id: 'u-1' }, interactionMode: { kind: 'inspect' }, layers: { ...base.layers, selection: false } }, true)).toHaveLength(0);
+    expect(buildSelectionItems(data(), { ...base, selected: { kind: 'unit', id: 'u-1', position: { x: 11, y: 10, z: 0 } }, interactionMode: { kind: 'inspect' }, layers: { ...base.layers, selection: false } }, true)).toHaveLength(0);
   });
 
   it('施工全息：进度取 remaining/total，带子/分拣器不画，未探索格过滤', () => {

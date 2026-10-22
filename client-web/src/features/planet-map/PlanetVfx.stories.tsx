@@ -49,7 +49,7 @@ function storyWith(view: CameraView): Story {
 export const Explosion: Story = storyWith({ focus: { x: 58, y: 136 }, tilt: 0.8, zoom: 3.4, vfxPhase: 'Explosion' });
 
 /** 枪口焰 + 曳光：(54,144) → (60,132)，定格在相位 .4。 */
-export const TurretFire: Story = storyWith({ focus: { x: 57, y: 138 }, tilt: 0.55, zoom: 1.0, vfxPhase: 'TurretFire' });
+export const TurretFire: Story = storyWith({ focus: { x: 56.5, y: 139.5 }, tilt: 0.55, zoom: 0.72, vfxPhase: 'TurretFire' });
 
 /** 施工全息：(46,132) 3×3 装配台，进度 .55。 */
 export const Construction: Story = storyWith({ focus: { x: 46, y: 132 }, tilt: 0.85, zoom: 2.2, vfxPhase: 'Construction' });

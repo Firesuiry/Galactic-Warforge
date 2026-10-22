@@ -19,6 +19,7 @@ import type { PlanetRenderQuality } from '../render-quality';
 import { CameraShake, shakeFromExplosion } from '../camera-shake';
 import { collectActivity, type ActivitySource } from '../industrial-activity';
 import type { PlanetThreeData } from '../../planet-three-scene';
+import { getBuildingFootprint } from '../../model';
 import { surfaceTileSize } from '../projection';
 import { VFX_QUALITY, type VfxQualitySettings } from './common';
 import { ParticleSystem } from './particles';
@@ -65,6 +66,8 @@ export class VfxLayer {
   private time = 0;
   /** 冻结相位（夹具可覆盖；每帧 update 都用它，避免被 animate 循环重置）。 */
   private frozenPhase = FROZEN_TIME;
+  /** 上一帧的相机高度（夹具推进短命对象时沿用，避免淡出距离跳变）。 */
+  private lastCameraHeight = 1;
 
   constructor(private readonly parent: THREE.Object3D, options: VfxLayerOptions) {
     this.settings = VFX_QUALITY[options.quality];
@@ -74,7 +77,7 @@ export class VfxLayer {
     this.particles = new ParticleSystem(parent, this.settings, this.frozen);
     this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights, options.scale);
     this.shake = new CameraShake(options.shakeEnabled ?? (() => !options.frozen && !options.reducedMotion));
-    this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius);
+    this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius, options.normalOf);
     this.constructionFlash = new ConstructionFlash(parent, options.radius, options.scale);
     this.construction = new ConstructionHolo(parent, options.models, this.holo, options.radius, options.scale, this.constructionFlash, options.normalOf);
     this.selection = new SelectionOverlay(parent, options.radius, options.scale);
@@ -104,7 +107,7 @@ export class VfxLayer {
    * `enabled` 是场景当前的图层开关（建筑层关掉时不冒烟）。
    */
   setActivity(data: PlanetThreeData, enabled: { buildings?: boolean; power?: boolean } = {}): ActivitySource[] {
-    for (const building of Object.values(data.planet.buildings ?? {})) registerBuildingType(building.id, building.type);
+    for (const building of Object.values(data.planet.buildings ?? {})) registerBuildingType(building.id, building.type, getBuildingFootprint(building));
     this.sources = collectActivity(data).filter((source) => {
       if (source.kind === 'energy') return enabled.power !== false;
       if (source.kind === 'cargo' || source.kind === 'flight') return false;
@@ -144,9 +147,10 @@ export class VfxLayer {
     } else if (!this.reducedMotion) {
       this.time += Math.max(0, dt);
     }
-    // 冻结下也用传入的 dt 推进「已存在对象」的寿命（夹具按相位注入时需要它停在爆发后若干毫秒）；
-    // 粒子本身按 uTime 解析求值，dt 只影响曳光/焦痕/冲击波/点光源。
-    this.combat.update(dt, this.time, cameraHeight);
+    // 冻结下**不推进**曳光/焦痕/冲击波/点光源的寿命：画面必须停在固定相位（硬约束 §2.3）。
+    // 夹具按相位注入时先显式 `update(AGE)` 推进到目标相位，之后每帧 dt=0 保持不变。
+    this.lastCameraHeight = cameraHeight;
+    this.combat.update(this.frozen ? 0 : dt, this.time, cameraHeight);
     this.shake.update(dt);
     this.holo.setTime(this.time);
     this.constructionFlash.update(this.frozen ? 0 : dt);
@@ -155,6 +159,15 @@ export class VfxLayer {
     this.selection.animate(this.time, this.frozen);
     this.auras.animate(this.time, this.frozen);
     this.emitters.update(this.sources, dt, this.time, faceSize, this.frozen);
+  }
+
+  /**
+   * 夹具定格：把**短命对象**（曳光/焦痕/冲击波/点光源）推进指定秒数。
+   * 冻结时 `update()` 的 dt 恒为 0（画面必须是时间的纯函数），只有夹具需要把它们
+   * 停在「爆发后 N 秒」的样子。
+   */
+  advanceTimed(dt: number): void {
+    this.combat.update(Math.max(0, dt), this.time, this.lastCameraHeight);
   }
 
   /**
@@ -179,7 +192,7 @@ export class VfxLayer {
 
   /** 诊断：粒子/战斗对象计数。 */
   stats() {
-    return { time: this.time, particles: this.particles.counts(), combat: this.combat.counts(), emitters: this.emitters.activeEmitters, debug: this.particles.debugInfo() };
+    return { time: this.time, particles: this.particles.counts(), combat: this.combat.counts(), emitters: this.emitters.activeEmitters, sources: this.sources.length, debug: this.particles.debugInfo() };
   }
 
   dispose(): void {

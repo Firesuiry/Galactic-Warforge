@@ -64,7 +64,8 @@ export class CombatVfx {
   private readonly lights: LightFx[] = [];
   private readonly tracerGeometry = new THREE.PlaneGeometry(1, 1);
   private readonly decalGeometry = new THREE.CircleGeometry(1, 28);
-  private readonly shockGeometry = new THREE.RingGeometry(0.86, 1, 56);
+  // 冲击波是**细环**：0.86→1 的厚度在半屏大的半径下会变成一条宽带，抢掉火球/碎片的层次。
+  private readonly shockGeometry = new THREE.RingGeometry(0.94, 1, 72);
   private readonly decalTexture: THREE.CanvasTexture;
   private readonly decalMaterial: THREE.MeshBasicMaterial;
   private readonly shockMaterial: THREE.MeshBasicMaterial;
@@ -88,7 +89,7 @@ export class CombatVfx {
       depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
     });
     this.shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffc78a, transparent: true, opacity: 0.9, depthWrite: false,
+      color: 0xffc78a, transparent: true, opacity: 0.45, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
     });
   }
@@ -266,7 +267,7 @@ export class CombatVfx {
     });
     this.advance(this.shockwaves, step, (fx) => { fx.mesh.removeFromParent(); this.freeShockwaves.push(fx); }, (fx, t) => {
       fx.mesh.scale.setScalar(fx.size * (0.25 + t * 1.15));
-      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - t) ** 1.6;
+      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.6;
     });
     for (const fx of this.lights) {
       if (!fx.active) continue;

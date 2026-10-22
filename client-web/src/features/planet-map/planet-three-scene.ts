@@ -189,8 +189,6 @@ export class PlanetThreeScene {
   private haulRouteSignature = '';
   /** 阶段胶囊标签：随机器人移动每帧重贴位置（只重建于路线签名变化时）。 */
   private haulLabels: { sprite: THREE.Sprite; unitId: string }[] = [];
-  /** 补给光环材质：动画循环里做缓慢呼吸。 */
-  private readonly auraMaterials = new Set<THREE.MeshBasicMaterial>();
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
   private readonly commandMarkers = new CommandMarkerMeshes(this.world, tile => this.data ? this.normal(tile.x, tile.y) : null, RADIUS, () => this.tileScale());
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
@@ -1024,15 +1022,13 @@ export class PlanetThreeScene {
   }
 
   /** 地表标记共享材质（userData.shared：清理标记时只释放几何）。 */
-  private markMaterial(color: string, opacity: number, aura = false) {
-    const key = `${color}:${opacity}:${aura}`;
+  private markMaterial(color: string, opacity: number) {
+    const key = `${color}:${opacity}`;
     let material = this.markMaterials.get(key);
     if (!material) {
       material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
       material.userData.shared = true;
-      material.userData.baseOpacity = opacity;
       this.markMaterials.set(key, material);
-      if (aura) this.auraMaterials.add(material);
     }
     return material;
   }
@@ -1175,6 +1171,8 @@ export class PlanetThreeScene {
   private syncTacticalOverlays() {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
+    // 补给光环不参与下面的签名短路：图层/数据变化（运行/停机）必须立刻反映到环上。
+    this.vfx.syncAuras(interaction.layers.logistics ? buildSupplyAuras(data) : [], data.planet.surface.face_size);
     const faceSize = data.planet.surface.face_size;
     const mode = interaction.interactionMode;
     const hovered = interaction.hoveredTile;
@@ -1234,8 +1232,6 @@ export class PlanetThreeScene {
         : [],
       faceSize,
     );
-    // 补给光环（细虚线 + 极淡渐变）：只在物流层打开时画，颜色语义不变。
-    this.vfx.syncAuras(interaction.layers.logistics ? buildSupplyAuras(data) : [], faceSize);
   }
 
   /** 选中/悬停反馈（VFX 层）：括号/细环/方向三角，颜色沿用旧语义。 */
@@ -1724,9 +1720,6 @@ export class PlanetThreeScene {
       this.vfx.update(dt, this.altitude, this.data?.planet.surface.face_size ?? 16);
       this.rangeCircles.animate(time / 1000, this.frozen || reducedMotion);
       this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);
-      // 补给光环缓慢呼吸（2.4s 周期），减弱运动时保持常亮。
-      const breath = this.frozen || reducedMotion ? 1 : .78 + .22 * Math.sin(time / 1000 * 2.6);
-      for (const material of this.auraMaterials) material.opacity = material.userData.baseOpacity * breath;
       // 单位沿球面平滑趋近目标位置（复用临时向量，交战时几百个单位每帧不产生垃圾对象）。
       const amount = 1 - Math.exp(-dt * 12);
       const { from, to, up, rotation, identity } = this.motionScratch;

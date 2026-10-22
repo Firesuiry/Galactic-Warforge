@@ -17,7 +17,6 @@ import * as THREE from 'three';
 import type { Building, CatalogView } from '@shared/types';
 import type { BattleEvent } from '@/engine/battle-events';
 import { combatVfxFromEvent, type CombatPointLike } from './combat-vfx-specs';
-import { PARTICLE_STYLES } from './particles';
 import type { VfxLayer } from './index';
 import type { HoloTask } from './construction-holo';
 import type { SelectionItem } from './selection';
@@ -84,8 +83,9 @@ export function applyFixturePhase(layer: VfxLayer, phase: string, seconds: numbe
       layer.combat.spawn(specs);
       layer.shake.add(0.6, 380);
       // 粒子在冻结模式下自动把发射时刻前移（见 ParticleSystem.emit）；
-      // 曳光/冲击波/点光源按 dt 推进，这里给 AGE 让它们停在爆发中段。
-      layer.update(EXPLOSION_AGE, ctx.radius * 0.16, ctx.faceSize);
+      // 短命对象（冲击波/点光源/焦痕）由 `advanceTimed` 推到爆发中段，之后冻结不动。
+      layer.update(0, ctx.radius * 0.16, ctx.faceSize);
+      layer.advanceTimed(EXPLOSION_AGE);
       return specs.bursts.length + specs.shockwaves.length;
     }
     case 'turretfire': {
@@ -98,7 +98,8 @@ export function applyFixturePhase(layer: VfxLayer, phase: string, seconds: numbe
       const specs = combatVfxFromEvent(fixtureBattleEvent(9002, 'fx-gun', 'fx-victim', 18), resolve);
       layer.setFrozenPhase(time);
       layer.combat.spawn(specs);
-      layer.update(TRACER_AGE, ctx.radius * 0.16, ctx.faceSize);
+      layer.update(0, ctx.radius * 0.16, ctx.faceSize);
+      layer.advanceTimed(TRACER_AGE);
       return specs.bursts.length + specs.tracers.length;
     }
     case 'construction': {
@@ -113,24 +114,12 @@ export function applyFixturePhase(layer: VfxLayer, phase: string, seconds: numbe
       return 1;
     }
     case 'industry': {
-      // 熔炉 (62,140)：火 + 火花 + 烟（权威活动源由夹具数据提供；这里按固定相位预发射一轮，
-      // 保证冻结截图里能看见正在运转的样子）。
-      const at = ctx.normal(62, 140).multiplyScalar(ctx.radius + ctx.scale * 0.62);
-      const normal = ctx.normal(62, 140);
-      const styles = [
-        { style: PARTICLE_STYLES.fire, count: 10, life: 0.45, scale: 0.9 },
-        { style: PARTICLE_STYLES.spark, count: 8, life: 0.5, scale: 0.8 },
-        { style: PARTICLE_STYLES.smoke, count: 6, life: 1.4, scale: 0.7 },
-      ];
+      // 熔炉 (62,140)：不注入合成粒子——场景的工业发射器只认权威活动源
+      // （夹具数据里 b-55/b-67 的 `production.remaining_ticks > 0` → heat 源），
+      // 冻结下按固定相位预发射一轮。这里只把时钟拨到固定相位并推一帧。
       layer.setFrozenPhase(time);
-      for (const [index, entry] of styles.entries()) {
-        layer.particles.emit(entry.style, {
-          position: at, normal, velocity: normal.clone().multiplyScalar(ctx.scale * 0.9),
-          count: entry.count, life: entry.life, scale: entry.scale, spread: 0.7, seed: 4400 + index * 131,
-        });
-      }
       layer.update(0, ctx.radius * 0.16, ctx.faceSize);
-      return styles.length;
+      return 0;
     }
     case 'selection': {
       // 选中基站 (54,144) + 士兵 2 个（细环 + 方向三角）。与真机同一套输入：

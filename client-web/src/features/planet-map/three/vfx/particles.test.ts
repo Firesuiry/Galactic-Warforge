@@ -51,12 +51,12 @@ describe('GPU 粒子系统（ParticleSystem）', () => {
     const frozen = new ParticleSystem(parent, VFX_QUALITY.high, true);
     frozen.setTime(2);
     frozen.emit(PARTICLE_STYLES.fire, burst(5, 7));
-    const attribute = frozen.group.children[0].geometry.getAttribute('emitTime') as THREE.BufferAttribute;
+    const attribute = (frozen.group.children[0] as THREE.Points).geometry.getAttribute('emitTime') as THREE.BufferAttribute;
     expect(attribute.getX(0)).toBeCloseTo(2 - 1 * 0.35, 6);
     const second = new ParticleSystem(new THREE.Group(), VFX_QUALITY.high, true);
     second.setTime(2);
     second.emit(PARTICLE_STYLES.fire, burst(5, 7));
-    const other = second.group.children[0].geometry.getAttribute('emitTime') as THREE.BufferAttribute;
+    const other = (second.group.children[0] as THREE.Points).geometry.getAttribute('emitTime') as THREE.BufferAttribute;
     expect(other.getX(0)).toBeCloseTo(attribute.getX(0), 6);
     frozen.dispose();
     second.dispose();
@@ -67,7 +67,7 @@ describe('GPU 粒子系统（ParticleSystem）', () => {
       const system = new ParticleSystem(new THREE.Group(), VFX_QUALITY.high);
       system.setWorldScale(650, tileSize);
       system.emit(PARTICLE_STYLES.spark, { ...burst(1), velocity: new THREE.Vector3(0, 0, 2), spread: 0 });
-      const velocity = system.group.children[0].geometry.getAttribute('velocity') as THREE.BufferAttribute;
+      const velocity = (system.group.children[0] as THREE.Points).geometry.getAttribute('velocity') as THREE.BufferAttribute;
       const value = velocity.getZ(0);
       system.dispose();
       return value;

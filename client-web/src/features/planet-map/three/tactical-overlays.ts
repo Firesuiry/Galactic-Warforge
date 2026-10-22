@@ -128,10 +128,13 @@ export class RangeCircleOverlay {
     const ts = surfaceTileSize(this.radius, this.faceSize);
     const angle = rangeCircleAngle(spec.radiusTiles, this.faceSize, this.radius);
     // 规范系：圆心 +Z、东 +X、南 −Y（与 circleQuaternion 的基底一致）。
-    const loop = circleLoop(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0), angle, 128);
+    const center = new THREE.Vector3(0, 0, 1);
+    const east = new THREE.Vector3(1, 0, 0);
+    const south = new THREE.Vector3(0, -1, 0);
+    const loop = circleLoop(center, east, south, angle, 128);
     cached = {
-      edge: dashedRingGeometry(loop, this.radius + ts * .07, Math.max(ts * RANGE_CIRCLE_WIDTH_TILES / 2, .012), ts, spec.radiusTiles),
-      fill: radialDiscGeometry(loop, new THREE.Vector3(0, 0, 1), this.radius + ts * .045, RANGE_CIRCLE_FILL_OPACITY),
+      edge: dashedRingGeometry(center, east, south, angle, this.radius + ts * .07, Math.max(ts * RANGE_CIRCLE_WIDTH_TILES / 2, .012), spec.radiusTiles),
+      fill: radialDiscGeometry(loop, center, this.radius + ts * .045, RANGE_CIRCLE_FILL_OPACITY),
     };
     this.geometries.set(key, cached);
     return cached;

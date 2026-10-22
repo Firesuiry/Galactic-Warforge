@@ -30,22 +30,34 @@ export const DASH_RING = {
 } as const;
 
 /**
- * 虚线环几何：把单位法线环按「弧长 ≈ 格数 × 每格段数」切成若干段，每段单独一条细带。
- * `loop` 为闭合环（首尾不重复），`tileSize` 用于把格换算成弧长。
+ * 虚线环几何（贴球面）：按弧长把环切成「dash + gap」的周期，每段虚线单独一条细带。
+ *
+ * 采样密度由**虚线段数**决定（每段至少 5 个点），不能固定 128 点：
+ * 30 格半径的环周长约 188 格、周期 0.68 格 → 277 段虚线，128 个采样点连一段都放不下。
+ * 参数用「圆心 + 东/南基底 + 角半径」的规范系（圆心 +Z、东 +X、南 −Y），与 `circleQuaternion` 一致。
  */
-export function dashedRingGeometry(loop: THREE.Vector3[], radius: number, halfWidth: number, tileSize: number, radiusTiles: number): THREE.BufferGeometry {
-  const count = loop.length;
+export function dashedRingGeometry(
+  center: THREE.Vector3, east: THREE.Vector3, south: THREE.Vector3, angle: number,
+  radius: number, halfWidth: number, radiusTiles: number,
+): THREE.BufferGeometry {
   const circumference = Math.max(0.001, 2 * Math.PI * radiusTiles);
-  const periodTiles = DASH_RING.dash + DASH_RING.gap;
-  const periods = Math.max(3, Math.round(circumference / periodTiles));
-  const pointsPerPeriod = count / periods;
-  const dashPoints = Math.max(2, Math.round(pointsPerPeriod * (DASH_RING.dash / periodTiles)));
+  const periods = Math.max(3, Math.round(circumference / (DASH_RING.dash + DASH_RING.gap)));
+  const segments = Math.min(2048, Math.max(96, periods * 6));
+  const loop = Array.from({ length: segments }, (_, i) => {
+    const a = (i / segments) * Math.PI * 2;
+    return center.clone().multiplyScalar(Math.cos(angle))
+      .addScaledVector(east, Math.sin(angle) * Math.cos(a))
+      .addScaledVector(south, Math.sin(angle) * Math.sin(a))
+      .normalize();
+  });
+  const pointsPerPeriod = segments / periods;
+  const dashPoints = Math.max(3, Math.round(pointsPerPeriod * (DASH_RING.dash / (DASH_RING.dash + DASH_RING.gap))));
   const positions: number[] = [];
   const indices: number[] = [];
   let base = 0;
-  for (let start = 0; start < count; start += pointsPerPeriod) {
-    const from = Math.round(start);
-    const to = Math.min(count - 1, from + dashPoints);
+  for (let period = 0; period < periods; period++) {
+    const from = Math.round(period * pointsPerPeriod);
+    const to = Math.min(segments - 1, from + dashPoints);
     if (to - from < 1) continue;
     const segment = loop.slice(from, to + 1);
     const ribbon = ribbonGeometry(segment, radius, halfWidth);
@@ -62,7 +74,6 @@ export function dashedRingGeometry(loop: THREE.Vector3[], radius: number, halfWi
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
-  void tileSize;
   return geometry;
 }
 

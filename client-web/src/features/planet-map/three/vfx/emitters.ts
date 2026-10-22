@@ -10,35 +10,41 @@
 
 import * as THREE from 'three';
 
+import { surfaceOffset } from '@shared/surface';
 import type { ActivitySource } from '../industrial-activity';
+import { tileFrame, tileNormal } from '../projection';
 import { rand, smoothstep, type VfxQualitySettings } from './common';
 import { PARTICLE_STYLES, type ParticleBurst, type ParticleStyle, type ParticleSystem } from './particles';
 
-/** 局部发射口（格）：x/z 为格内偏移，y 为离地高度。 */
+/**
+ * 局部发射口：x/z 为格内偏移（格），y 为离地高度（**世界单位**）。
+ * 建筑模型按占地归一化，3×3 熔炉实测高 1.35 世界单位；用「格」当高度（×0.386）
+ * 会把发射口埋进模型内部，粒子全被自身挡住（vfx 分支实测「熔炉不冒烟」就是这个）。
+ */
 export interface EmitterOffset { x: number; y: number; z: number }
 
 /** 类型 → 发射口偏移表（按 `collectActivity` 的 kind 分组）。 */
 export const EMITTER_OFFSETS: Record<string, EmitterOffset> = {
-  // 熔炉：炉口在正面偏上，火从炉口喷出。
-  arc_smelter: { x: 0, y: 0.62, z: 0.34 },
-  plane_smelter: { x: 0, y: 0.58, z: 0.32 },
-  smelter: { x: 0, y: 0.6, z: 0.32 },
-  // 火电：烟囱在顶部后侧。
-  thermal_power_plant: { x: 0.18, y: 1.05, z: -0.22 },
-  mini_fusion_power_plant: { x: 0, y: 0.9, z: -0.2 },
+  // 发射口在模型顶面（世界单位；实测 3×3 熔炉模型顶面离地约 0.64）。
+  arc_smelter: { x: 0, y: 0.64, z: 0 },
+  plane_smelter: { x: 0, y: 0.62, z: 0 },
+  smelter: { x: 0, y: 0.62, z: 0 },
+  // 火电：烟囱在顶部。
+  thermal_power_plant: { x: 0.1, y: 0.85, z: -0.1 },
+  mini_fusion_power_plant: { x: 0, y: 0.7, z: -0.1 },
   // 化工 / 炼油：塔顶白色蒸汽。
-  chemical_plant: { x: 0, y: 0.95, z: 0 },
-  oil_refinery: { x: 0.12, y: 1.0, z: -0.1 },
-  // 采矿机：钻头下方扬尘。
-  mining_machine: { x: 0, y: 0.28, z: 0.1 },
-  advanced_mining_machine: { x: 0, y: 0.3, z: 0.1 },
-  // 装配台：焊接点偏前侧。
-  assembling_machine_mk1: { x: 0.24, y: 0.5, z: 0.28 },
-  assembling_machine_mk2: { x: 0.24, y: 0.5, z: 0.28 },
-  assembling_machine_mk3: { x: 0.24, y: 0.5, z: 0.28 },
+  chemical_plant: { x: 0, y: 0.8, z: 0 },
+  oil_refinery: { x: 0.1, y: 0.85, z: -0.05 },
+  // 采矿机：钻头下方扬尘（贴地）。
+  mining_machine: { x: 0, y: 0.18, z: 0.1 },
+  advanced_mining_machine: { x: 0, y: 0.22, z: 0.1 },
+  // 装配台：焊接点在顶面偏前侧。
+  assembling_machine_mk1: { x: 0.2, y: 0.52, z: 0.2 },
+  assembling_machine_mk2: { x: 0.2, y: 0.52, z: 0.2 },
+  assembling_machine_mk3: { x: 0.2, y: 0.52, z: 0.2 },
   // 研究站：全息塔顶。
-  matrix_lab: { x: 0, y: 0.92, z: 0 },
-  research_station: { x: 0, y: 0.92, z: 0 },
+  matrix_lab: { x: 0, y: 0.6, z: 0 },
+  research_station: { x: 0, y: 0.6, z: 0 },
 };
 
 /** 建筑类型 → 工业活动表现（kind 来自权威活动源）。 */
@@ -54,19 +60,21 @@ function profile(...styles: IndustryProfile['styles']): IndustryProfile {
 
 export const INDUSTRY_PROFILES: Record<string, IndustryProfile> = {
   // 熔炉运行：炉口火光 + 火花 + 轻烟。
+  // 尺寸按「远景也要读得出在运转」定：industry-overview 机位（高度约 10 格）下
+  // 一格 ≈ 12 px，烟团要 1–2 格宽才看得见（0.55 格的基础烟 × 2.6 ≈ 1.4 格）。
   heat: profile(
-    { style: PARTICLE_STYLES.fire, count: 3, life: 0.45, scale: 0.8, speed: 0.9, tint: [1, 1, 1] },
-    { style: PARTICLE_STYLES.spark, count: 2, life: 0.5, scale: 0.8, speed: 1.8, tint: [1, 0.9, 0.7] },
-    { style: PARTICLE_STYLES.smoke, count: 1, life: 1.4, scale: 0.6, speed: 0.5, tint: [0.42, 0.42, 0.42] },
+    { style: PARTICLE_STYLES.fire, count: 4, life: 0.5, scale: 2.0, speed: 1.1, tint: [1, 1, 1] },
+    { style: PARTICLE_STYLES.spark, count: 3, life: 0.6, scale: 1.6, speed: 2.0, tint: [1, 0.9, 0.7] },
+    { style: PARTICLE_STYLES.smoke, count: 2, life: 1.8, scale: 2.6, speed: 0.55, tint: [0.62, 0.62, 0.62] },
   ),
   // 发电：烟柱。
   energy: profile(
-    { style: PARTICLE_STYLES.smoke, count: 2, life: 2.2, scale: 0.9, speed: 0.8, tint: [0.5, 0.52, 0.54] },
+    { style: PARTICLE_STYLES.smoke, count: 3, life: 2.6, scale: 2.8, speed: 0.8, tint: [0.72, 0.74, 0.76] },
   ),
   // 采矿：尘土 + 碎屑。
   mining: profile(
-    { style: PARTICLE_STYLES.dust, count: 2, life: 1.0, scale: 0.8, speed: 0.45, tint: [1, 1, 1] },
-    { style: PARTICLE_STYLES.debris, count: 1, life: 0.5, scale: 0.7, speed: 1.2, tint: [1, 1, 1] },
+    { style: PARTICLE_STYLES.dust, count: 3, life: 1.1, scale: 2.2, speed: 0.45, tint: [1, 1, 1] },
+    { style: PARTICLE_STYLES.debris, count: 2, life: 0.5, scale: 1.4, speed: 1.2, tint: [1, 1, 1] },
   ),
 };
 
@@ -79,6 +87,9 @@ const RESEARCH_TYPES = /matrix_lab|research_station/;
 
 /** 一次发射的时间窗（秒）：同一活动源在窗口内只发一次，相位由 seed 决定（冻结可复现）。 */
 export const INDUSTRY_INTERVAL = 0.28;
+
+/** 冻结预发射补的轮数（稳态截面的长度 ≈ PRIME_ROUNDS × interval）。 */
+export const PRIME_ROUNDS = 6;
 
 interface EmitterState {
   /** 上次发射的相位（0..1，按 interval 计）。 */
@@ -94,6 +105,12 @@ interface EmitterState {
  */
 export class IndustryEmitters {
   private readonly states = new Map<string, EmitterState>();
+  /**
+   * 冻结模式下的预发射：画面停在「正在运转」的固定相位。
+   * 存的是已预发射的**活动源签名**（不是 bool）——场景构造时数据还没到，第一帧 `sources` 为空；
+   * 用 bool 会把「空集合」当成已预发射，之后数据到了也永远不发射（夹具里熔炉不冒烟）。
+   */
+  private primed = '';
   private readonly scale: () => number;
   private readonly radius: number;
 
@@ -102,6 +119,8 @@ export class IndustryEmitters {
     private readonly settings: VfxQualitySettings,
     scale: () => number,
     radius: number,
+    /** 格 → 场景 world 组局部单位法线（与建筑模型同一套投影）。 */
+    private readonly normalOf: (tile: { x: number; y: number }) => THREE.Vector3 = (tile) => tileNormal(tile, 1),
   ) {
     this.scale = scale;
     this.radius = radius;
@@ -116,17 +135,17 @@ export class IndustryEmitters {
   static profileFor(kind: ActivitySource['kind'], buildingType: string): IndustryProfile | null {
     if (kind === 'heat') {
       if (STEAM_TYPES.test(buildingType)) {
-        return profile({ style: PARTICLE_STYLES.steam, count: 2, life: 1.8, scale: 0.8, speed: 0.7, tint: [1, 1, 1] });
+        return profile({ style: PARTICLE_STYLES.steam, count: 3, life: 2.0, scale: 2.4, speed: 0.7, tint: [1, 1, 1] });
       }
       return INDUSTRY_PROFILES.heat;
     }
     if (kind === 'energy') return INDUSTRY_PROFILES.energy;
     if (kind === 'mining') return INDUSTRY_PROFILES.mining;
     if (ASSEMBLER_TYPES.test(buildingType)) {
-      return { rate: 1.1, styles: [{ style: PARTICLE_STYLES.weld, count: 2, life: 0.4, scale: 0.8, speed: 1.4, tint: [1, 1, 1] }] };
+      return { rate: 1.1, styles: [{ style: PARTICLE_STYLES.weld, count: 3, life: 0.45, scale: 1.6, speed: 1.4, tint: [1, 1, 1] }] };
     }
     if (RESEARCH_TYPES.test(buildingType)) {
-      return { rate: 1.4, styles: [{ style: PARTICLE_STYLES.holo, count: 1, life: 1.6, scale: 0.9, speed: 0.5, tint: [1, 1, 1] }] };
+      return { rate: 1.4, styles: [{ style: PARTICLE_STYLES.holo, count: 2, life: 1.6, scale: 1.8, speed: 0.5, tint: [1, 1, 1] }] };
     }
     return null;
   }
@@ -137,15 +156,20 @@ export class IndustryEmitters {
    */
   update(sources: readonly ActivitySource[], dt: number, time: number, faceSize: number, frozen: boolean): void {
     if (!this.settings.industry) return;
-    if (frozen) return;
+    if (frozen) {
+      // 冻结：每个活动源集合只预发射一次（确定性相位），让夹具截图能看到「在运转」的烟/火；
+      // 之后不再发射，画面保持静止。集合变化（数据晚到 / 运行状态变化）时按新集合再预发射一次。
+      const signature = sources.map((source) => source.id).join('|');
+      if (signature !== this.primed) {
+        this.primed = signature;
+        this.emitFor(sources, time, faceSize, 1.0);
+      }
+      return;
+    }
+    this.primed = '';
     const tileSize = this.scale();
     for (const source of sources) {
-      if (source.kind === 'cargo' || source.kind === 'flight') continue;
-      if (!source.active || !source.buildingId) continue;
-      const type = buildingTypeOf(source);
-      const offset = IndustryEmitters.offsetFor(type);
-      if (!offset) continue;
-      const profile = IndustryEmitters.profileFor(source.kind, type);
+      const profile = this.profileOf(source);
       if (!profile) continue;
       const key = source.id;
       let state = this.states.get(key);
@@ -157,27 +181,7 @@ export class IndustryEmitters {
       const phase = time / interval;
       if (phase - state.lastPhase < 1) continue;
       state.lastPhase = phase;
-      const seed = state.seed + Math.floor(time * 1000);
-      const normal = source.normal ?? surfaceNormalOf(source, faceSize);
-      const base = new THREE.Vector3(normal.x, normal.y, normal.z).multiplyScalar(this.radius + tileSize * offset.y);
-      // 格内偏移：用源位置的法线附近的切向近似（场景侧只给法线/位置，偏移在小尺度上足够）。
-      const [t1, t2] = tangentBasis(normal);
-      base.addScaledVector(t1, offset.x * tileSize).addScaledVector(t2, offset.z * tileSize);
-      for (const [index, style] of profile.styles.entries()) {
-        const jitter = rand(seed, index) * 0.6 + 0.7;
-        const burst: ParticleBurst = {
-          position: base,
-          normal: new THREE.Vector3(normal.x, normal.y, normal.z),
-          velocity: new THREE.Vector3(normal.x, normal.y, normal.z).multiplyScalar(style.speed * tileSize),
-          count: Math.max(1, Math.round(style.count * jitter)),
-          life: style.life,
-          scale: style.scale,
-          spread: 0.7,
-          seed: seed + index * 131,
-          tint: style.tint,
-        };
-        this.particles.emit(style.style, burst);
-      }
+      this.emitSource(source, profile, state.seed + Math.floor(time * 1000), faceSize, tileSize);
     }
     // 清掉已消失的设备（暂停/拆除/枯竭）：状态表不能无限增长。
     if (this.states.size > sources.length) {
@@ -186,31 +190,85 @@ export class IndustryEmitters {
     }
   }
 
+  /**
+   * 一次性的冻结预发射：按发射间隔往回补 `PRIME_ROUNDS` 轮（相位确定）。
+   * 只补一轮的话画面上只有 6 个粒子，看不出「稳定运转」；补几轮才是烟柱的稳态截面，
+   * 且发射时刻固定 → 冻结截图逐帧一致。
+   */
+  private emitFor(sources: readonly ActivitySource[], time: number, faceSize: number, factor: number): void {
+    const tileSize = this.scale();
+    for (const source of sources) {
+      const profile = this.profileOf(source);
+      if (!profile) continue;
+      if (!this.states.has(source.id)) this.states.set(source.id, { lastPhase: 0, seed: hashString(source.id) });
+      const interval = INDUSTRY_INTERVAL / Math.max(0.1, profile.rate / 3.2);
+      for (let round = 0; round < PRIME_ROUNDS; round++) {
+        const at = time - round * interval;
+        if (at <= 0) break;
+        this.emitSource(source, profile, hashString(source.id) + round * 7919, faceSize, tileSize * factor, at);
+      }
+    }
+  }
+
+  /** 某个活动源的发射口与样式（类型未登记 / 无表现时返回 null）。 */
+  private profileOf(source: ActivitySource): IndustryProfile | null {
+    if (source.kind === 'cargo' || source.kind === 'flight') return null;
+    if (!source.active || !source.buildingId) return null;
+    const type = buildingTypeOf(source);
+    if (!IndustryEmitters.offsetFor(type)) return null;
+    return IndustryEmitters.profileFor(source.kind, type);
+  }
+
+  private emitSource(source: ActivitySource, profile: IndustryProfile, seed: number, faceSize: number, tileSize: number, at?: number): void {
+    const type = buildingTypeOf(source);
+    const offset = IndustryEmitters.offsetFor(type);
+    if (!offset) return;
+    // 发射点必须落在**该建筑所占格**上：活动源给的是锚点格，多格建筑的炉口在占地中心，
+    // 直接用锚点法线会把烟柱甩到隔壁格（vfx 分支实测）。
+    const footprint = buildingFootprints.get(source.buildingId ?? '');
+    const center = footprint && (footprint.width > 1 || footprint.height > 1)
+      ? surfaceOffset(source.position, (footprint.width - 1) / 2, (footprint.height - 1) / 2, faceSize)
+      : source.position;
+    // 发射口的世界坐标必须用**场景的 `normal(x, y)`**（含局部曲面/图集偏移），
+    // 不能用 `tileNormal` 的原始球面法线——后者与场景里模型的位置差几格，
+    // 烟柱会飘到建筑旁边（vfx 分支实测）。
+    // 高度是世界单位：直接加在球半径上（乘格宽会把发射口压回模型里）。
+    const base = this.normalOf(center).clone().multiplyScalar(this.radius + offset.y);
+    // 格内偏移：用该格的东西/南向基底（不是任意切向），建筑的「正面」才是 +Z 方向。
+    const { east, south } = tileFrame(center, faceSize);
+    base.addScaledVector(east, offset.x * tileSize).addScaledVector(south, offset.z * tileSize);
+    const normal = base.clone().normalize();
+    for (const [index, style] of profile.styles.entries()) {
+      const jitter = rand(seed, index) * 0.6 + 0.7;
+      const burst: ParticleBurst = {
+        position: base,
+        normal: new THREE.Vector3(normal.x, normal.y, normal.z),
+        velocity: new THREE.Vector3(normal.x, normal.y, normal.z).multiplyScalar(style.speed * tileSize),
+        count: Math.max(1, Math.round(style.count * jitter)),
+        life: style.life,
+        scale: style.scale,
+        spread: 0.7,
+        seed: seed + index * 131,
+        tint: style.tint,
+      };
+      this.particles.emit(style.style, burst, at);
+    }
+  }
+
   /** 当前登记的发射器数量（测试/诊断）。 */
   get activeEmitters(): number { return this.states.size; }
+
 }
 
-/** 场景侧给活动源带上建筑类型（`collectActivity` 的 source 没有类型字段，id 里带 buildingId）。 */
+/** 场景侧给活动源带上建筑类型与占地（`collectActivity` 的 source 不带这两项）。 */
 const buildingTypes = new Map<string, string>();
-export function registerBuildingType(buildingId: string, type: string): void {
+const buildingFootprints = new Map<string, { width: number; height: number }>();
+export function registerBuildingType(buildingId: string, type: string, footprint?: { width: number; height: number }): void {
   buildingTypes.set(buildingId, type);
+  if (footprint) buildingFootprints.set(buildingId, footprint);
 }
 function buildingTypeOf(source: ActivitySource): string {
   return buildingTypes.get(source.buildingId ?? '') ?? '';
-}
-
-/** 无 normal 的源（cargo/flight 以外基本都有）：用位置方向。 */
-function surfaceNormalOf(source: ActivitySource, _faceSize: number): { x: number; y: number; z: number } {
-  void _faceSize;
-  return { x: source.position.x, y: 0, z: source.position.y };
-}
-
-function tangentBasis(normal: { x: number; y: number; z: number }): [THREE.Vector3, THREE.Vector3] {
-  const n = new THREE.Vector3(normal.x, normal.y, normal.z).normalize();
-  const helper = Math.abs(n.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const t1 = new THREE.Vector3().crossVectors(n, helper).normalize();
-  const t2 = new THREE.Vector3().crossVectors(n, t1).normalize();
-  return [t1, t2];
 }
 
 function hashString(value: string): number {

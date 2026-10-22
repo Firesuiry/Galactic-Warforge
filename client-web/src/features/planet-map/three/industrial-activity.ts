@@ -68,7 +68,9 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   for (const building of Object.values(data.planet.buildings ?? {})) {
     if (!visible(building.position)) continue;
     const running = building.runtime?.state === 'running';
-    const base = { position: building.position, active: running };
+    // 表面法线随源一起给：工业氛围发射器要沿法线抬高发射口；缺了它只能拿图集坐标猜，
+    // 位置会偏到别的格（vfx 分支实测熔炉的烟飘到了隔壁）。
+    const base = { position: building.position, active: running, buildingId: building.id, normal: tileNormal(building.position, data.planet.surface.face_size) };
     // One cube per authoritative nonempty stack (quantity is retained, not multiplied into invented items).
     // Splitter buffers are enclosed; no authoritative per-item route is exposed,
     // so do not show their stock moving along an arbitrary branch.

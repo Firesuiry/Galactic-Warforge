@@ -388,14 +388,16 @@ export class ParticleSystem {
    * 每帧发射预算（`MAX_BURSTS_PER_FRAME`）只限制**批次数**，防同一帧上千条战斗事件
    * 把 CPU 时间全花在写缓冲上；超出部分直接丢弃（下一帧继续）。
    */
-  emit(style: ParticleStyle, burst: ParticleBurst): number {
+  emit(style: ParticleStyle, burst: ParticleBurst, at?: number): number {
     if (this.pending >= MAX_BURSTS_PER_FRAME) return 0;
     this.pending += 1;
     const batch = style.blend === 'additive' ? this.additive : this.alpha;
     const count = Math.max(1, Math.round(burst.count * this.settings.emissionScale));
     // 冻结：粒子按 uTime 解析求值，若在「当前时间」发射会处于 t=0（淡入 0、不可见）。
     // 冻结下统一把发射时刻往前推一个寿命的 35%（画面停在爆发中段），且**不消耗**发射预算。
-    const emitTime = this.frozen ? this.time - burst.life * 0.35 : this.time;
+    // `at` 显式给出时直接用（冻结预发射按间隔补几轮，画面上才是「稳定运转」的烟柱，
+    // 而不是一轮 6 个粒子）。
+    const emitTime = at ?? (this.frozen ? this.time - burst.life * 0.35 : this.time);
     return batch.emit(burst, style, count, emitTime, this.tileSize);
   }
 
@@ -420,10 +422,18 @@ export class ParticleSystem {
     for (const batch of [this.additive, this.alpha]) batch.setPixelScale(scale);
   }
 
-  /** 相机高度（世界单位）：近处/远处淡出。 */
+  /**
+   * 相机高度（世界单位）：近处/远处淡出。
+   *
+   * 注意淡出距离是**到相机的直线距离**，不是高度：贴地视角下 40 格外的建筑只偏离视线中心
+   * 二十几格，直线距离就有 40+（球半径 100）。旧的 `max(40, height×2.6)` 会把半径 30 格内
+   * 的熔炉烟柱整体淡成 0（vfx 分支实测「熔炉不冒烟」就是这条）。远景淡出按球半径量级给。
+   */
   setCamera(height: number): void {
-    this.additive.setFade(Math.max(0.4, height * 0.02), Math.max(40, height * 2.6));
-    this.alpha.setFade(Math.max(0.4, height * 0.02), Math.max(40, height * 2.6));
+    const near = Math.max(0.4, height * 0.02);
+    const far = Math.max(180, height * 6);
+    this.additive.setFade(near, far);
+    this.alpha.setFade(near, far);
   }
 
   /** 存活粒子数（测试/诊断）。 */

@@ -63,10 +63,13 @@ export class SupplyAuraLayer {
     if (cached) return cached;
     const ts = surfaceTileSize(this.radius, this.faceSize);
     const angle = (item.radiusTiles * ts) / this.radius;
-    const loop = circleLoop(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0), angle, SEGMENTS);
+    const center = new THREE.Vector3(0, 0, 1);
+    const east = new THREE.Vector3(1, 0, 0);
+    const south = new THREE.Vector3(0, -1, 0);
+    const loop = circleLoop(center, east, south, angle, SEGMENTS);
     cached = {
-      edge: dashedRingGeometry(loop, this.radius + ts * 0.07, Math.max(ts * DASH_RING.width / 2, 0.012), ts, item.radiusTiles),
-      fill: radialDiscGeometry(loop, new THREE.Vector3(0, 0, 1), this.radius + ts * 0.045, DASH_RING.fillEdge),
+      edge: dashedRingGeometry(center, east, south, angle, this.radius + ts * 0.07, Math.max(ts * DASH_RING.width / 2, 0.012), item.radiusTiles),
+      fill: radialDiscGeometry(loop, center, this.radius + ts * 0.045, DASH_RING.fillEdge),
     };
     this.geometries.set(key, cached);
     return cached;
@@ -87,6 +90,7 @@ export class SupplyAuraLayer {
     const live = new Set<string>();
     for (const item of items) {
       const key = `${item.x}:${item.y}:${item.radiusTiles}:${item.color}`;
+      // 同一格多个光环（补给站 + 补给车）不能互相覆盖：key 已含半径与颜色。
       live.add(key);
       let entry = this.entries.get(key);
       if (!entry) {
@@ -99,7 +103,8 @@ export class SupplyAuraLayer {
         edge.renderOrder = 11;
         holder.add(fill, edge);
         const { normal, east, south } = tileFrame({ x: item.x, y: item.y }, faceSize);
-        holder.position.copy(normal).multiplyScalar(this.radius);
+        // 几何已经在世界组局部坐标里（点长 = 球半径），holder 只负责朝向，不再平移。
+        holder.position.set(0, 0, 0);
         const base = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, south.clone().negate(), normal));
         holder.quaternion.copy(base);
         this.group.add(holder);
