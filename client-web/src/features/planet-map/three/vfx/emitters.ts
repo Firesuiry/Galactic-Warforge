@@ -188,7 +188,9 @@ export class IndustryEmitters {
       // `lastPhase = 0` 会让第一次发射晚一个窗口，这里统一从「上一个窗口」开始。
       const windows = Math.floor(phase - state.lastPhase);
       if (windows < 1) continue;
-      state.lastPhase += Math.min(windows, MAX_CATCHUP_WINDOWS);
+      // 补发有上限；超出上限的窗口直接丢弃并**对齐到当前相位**——只加不减会让
+      // `lastPhase` 永远追不上（每帧都补满上限，粒子池瞬间灌满，实测真机）。
+      state.lastPhase = windows > MAX_CATCHUP_WINDOWS ? phase : state.lastPhase + windows;
       this.emitSource(source, profile, state.seed + Math.floor(time * 1000), faceSize, tileSize);
     }
     // 清掉已消失的设备（暂停/拆除/枯竭）：状态表不能无限增长。
