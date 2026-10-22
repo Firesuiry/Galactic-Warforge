@@ -10,6 +10,7 @@ import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, upda
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
+import { createClouds, disposeClouds, updateClouds } from './three/clouds';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { groundViewAtAltitude } from './planet-three-status';
@@ -146,6 +147,7 @@ export class PlanetThreeScene {
   private readonly logisticsMarks = new LogisticsDirectionMarks();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
+  private clouds!: ReturnType<typeof createClouds>;
   private dressing?: THREE.Group;
   private dressingSignature = '';
   private dressingRocks: RockMeshAsset[] = [];
@@ -283,6 +285,9 @@ export class PlanetThreeScene {
     this.scene.add(rim);
     const { sky, atmosphere } = createSpace(RADIUS, this.sunlight.position.clone().sub(this.sunlight.target.position).normalize());
     this.scene.add(sky); this.world.add(atmosphere);
+    // 云壳：大气壳（≈102.5）之内、地表之上；随世界一起转，覆盖率与探索无关。
+    this.clouds = createClouds(RADIUS, { sun: this.sunlight.position.clone().sub(this.sunlight.target.position) });
+    this.world.add(this.clouds);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       if (!tap) return;
@@ -1710,6 +1715,12 @@ export class PlanetThreeScene {
         .applyQuaternion(this.surfaceViewScratch.inverse.copy(this.world.quaternion).invert());
       this.surfaceViewScratch.camera.copy(this.camera.position).applyQuaternion(this.surfaceViewScratch.inverse);
       updatePlanetSurfaceView(this.surface, this.surfaceViewScratch.sun, this.surfaceViewScratch.camera);
+      // 云层：缓慢旋转；冻结/减弱动效时固定相位。高度决定云层淡入（贴地全透明）。
+      updateClouds(this.clouds, {
+        seconds: this.frozen || reducedMotion ? 0 : time / 1000,
+        altitude: this.altitude,
+        sun: this.surfaceViewScratch.sun,
+      });
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
       this.conveyors.update(this.frozen || reducedMotion ? 0 : dt);
@@ -1778,6 +1789,6 @@ export class PlanetThreeScene {
     this.materials.forEach((m) => materials.add(m));
     this.markMaterials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.activity.destroy(); this.industrial.dispose(); disposeOreDeposits(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
+    this.activity.destroy(); this.industrial.dispose(); disposeOreDeposits(); disposeClouds(this.clouds); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }
