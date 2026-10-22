@@ -40,6 +40,8 @@ export interface VfxLayerOptions {
   scale: () => number;
   /** 建筑模型工厂（`IndustrialModels`，与实物共享几何）。 */
   models: { building(type: string, width: number, depth: number, own: boolean): THREE.Object3D };
+  /** 建筑**占地**（格）：模型按占地归一化，发射口高度要按同一份占地算（1×1 与 3×3 模型高度差 3 倍）。 */
+  footprintOf?: (buildingId: string) => { width: number; height: number } | undefined;
   /** 格 → 世界组局部单位法线。 */
   normalOf: (tile: { x: number; y: number }) => THREE.Vector3;
   quality: PlanetRenderQuality;
@@ -77,7 +79,7 @@ export class VfxLayer {
     this.particles = new ParticleSystem(parent, this.settings, this.frozen);
     this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights, options.scale);
     this.shake = new CameraShake(options.shakeEnabled ?? (() => !options.frozen && !options.reducedMotion));
-    this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius, options.normalOf);
+    this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius, options.normalOf, options.footprintOf);
     this.constructionFlash = new ConstructionFlash(parent, options.radius, options.scale);
     this.construction = new ConstructionHolo(parent, options.models, this.holo, options.radius, options.scale, this.constructionFlash, options.normalOf);
     this.selection = new SelectionOverlay(parent, options.radius, options.scale);

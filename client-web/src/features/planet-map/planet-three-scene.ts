@@ -287,6 +287,10 @@ export class PlanetThreeScene {
       scale: () => this.tileScale(),
       models: this.industrial,
       normalOf: (tile) => this.data ? this.normal(tile.x, tile.y) : new THREE.Vector3(0, 0, 1),
+      footprintOf: (buildingId) => {
+        const building = this.data?.planet.buildings?.[buildingId];
+        return building ? getBuildingFootprint(building) : undefined;
+      },
       quality: this.quality,
       frozen: this.frozen,
       reducedMotion: this.reducedMotion.matches,

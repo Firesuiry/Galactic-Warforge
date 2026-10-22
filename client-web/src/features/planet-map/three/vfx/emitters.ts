@@ -17,34 +17,36 @@ import { rand, smoothstep, type VfxQualitySettings } from './common';
 import { PARTICLE_STYLES, type ParticleBurst, type ParticleStyle, type ParticleSystem } from './particles';
 
 /**
- * 局部发射口：x/z 为格内偏移（格），y 为离地高度（**世界单位**）。
- * 建筑模型按占地归一化，3×3 熔炉实测高 1.35 世界单位；用「格」当高度（×0.386）
- * 会把发射口埋进模型内部，粒子全被自身挡住（vfx 分支实测「熔炉不冒烟」就是这个）。
+ * 局部发射口：x/z 为格内偏移（格），y 为离地高度（**格**，按建筑占地缩放）。
+ *
+ * 建筑模型按占地归一化（`industrial.building(type, w*0.86, d*0.86)`）：3×3 的熔炉
+ * 模型顶面约 1.6 格、1×1 的火电约 0.9 格。表里的高度以「1×1 占地」为基准写，
+ * 实际乘占地系数（`footprintScale`），否则 3×3 的炉口会埋进模型、1×1 的烟囱口会飘在半空。
  */
 export interface EmitterOffset { x: number; y: number; z: number }
 
 /** 类型 → 发射口偏移表（按 `collectActivity` 的 kind 分组）。 */
 export const EMITTER_OFFSETS: Record<string, EmitterOffset> = {
-  // 发射口在模型顶面（世界单位；实测 3×3 熔炉模型顶面离地约 0.64）。
-  arc_smelter: { x: 0, y: 0.64, z: 0 },
-  plane_smelter: { x: 0, y: 0.62, z: 0 },
-  smelter: { x: 0, y: 0.62, z: 0 },
+  // 发射口高度按「1×1 占地」写（格），实际乘占地系数。
+  arc_smelter: { x: 0, y: 0.9, z: 0 },
+  plane_smelter: { x: 0, y: 0.85, z: 0 },
+  smelter: { x: 0, y: 0.85, z: 0 },
   // 火电：烟囱在顶部。
-  thermal_power_plant: { x: 0.1, y: 0.85, z: -0.1 },
-  mini_fusion_power_plant: { x: 0, y: 0.7, z: -0.1 },
+  thermal_power_plant: { x: 0.1, y: 0.95, z: -0.1 },
+  mini_fusion_power_plant: { x: 0, y: 0.9, z: -0.1 },
   // 化工 / 炼油：塔顶白色蒸汽。
-  chemical_plant: { x: 0, y: 0.8, z: 0 },
-  oil_refinery: { x: 0.1, y: 0.85, z: -0.05 },
+  chemical_plant: { x: 0, y: 0.95, z: 0 },
+  oil_refinery: { x: 0.1, y: 1.0, z: -0.05 },
   // 采矿机：钻头下方扬尘（贴地）。
-  mining_machine: { x: 0, y: 0.18, z: 0.1 },
-  advanced_mining_machine: { x: 0, y: 0.22, z: 0.1 },
+  mining_machine: { x: 0, y: 0.45, z: 0.1 },
+  advanced_mining_machine: { x: 0, y: 0.45, z: 0.1 },
   // 装配台：焊接点在顶面偏前侧。
-  assembling_machine_mk1: { x: 0.2, y: 0.52, z: 0.2 },
-  assembling_machine_mk2: { x: 0.2, y: 0.52, z: 0.2 },
-  assembling_machine_mk3: { x: 0.2, y: 0.52, z: 0.2 },
+  assembling_machine_mk1: { x: 0.2, y: 0.9, z: 0.2 },
+  assembling_machine_mk2: { x: 0.2, y: 0.9, z: 0.2 },
+  assembling_machine_mk3: { x: 0.2, y: 0.9, z: 0.2 },
   // 研究站：全息塔顶。
-  matrix_lab: { x: 0, y: 0.6, z: 0 },
-  research_station: { x: 0, y: 0.6, z: 0 },
+  matrix_lab: { x: 0, y: 0.9, z: 0 },
+  research_station: { x: 0, y: 0.9, z: 0 },
 };
 
 /** 建筑类型 → 工业活动表现（kind 来自权威活动源）。 */
@@ -65,7 +67,7 @@ export const INDUSTRY_PROFILES: Record<string, IndustryProfile> = {
   heat: profile(
     { style: PARTICLE_STYLES.fire, count: 4, life: 0.5, scale: 2.0, speed: 1.1, tint: [1, 1, 1] },
     { style: PARTICLE_STYLES.spark, count: 3, life: 0.6, scale: 1.6, speed: 2.0, tint: [1, 0.9, 0.7] },
-    { style: PARTICLE_STYLES.smoke, count: 2, life: 1.8, scale: 2.6, speed: 0.55, tint: [0.62, 0.62, 0.62] },
+    { style: PARTICLE_STYLES.smoke, count: 3, life: 2.2, scale: 3.4, speed: 0.6, tint: [0.42, 0.42, 0.44] },
   ),
   // 发电：烟柱。
   energy: profile(
@@ -124,6 +126,8 @@ export class IndustryEmitters {
     radius: number,
     /** 格 → 场景 world 组局部单位法线（与建筑模型同一套投影）。 */
     private readonly normalOf: (tile: { x: number; y: number }) => THREE.Vector3 = (tile) => tileNormal(tile, 1),
+    /** 建筑占地（格）：模型按占地归一化，发射口高度随之缩放。 */
+    private readonly footprintOf: (buildingId: string) => { width: number; height: number } | undefined = () => undefined,
   ) {
     this.scale = scale;
     this.radius = radius;
@@ -235,15 +239,16 @@ export class IndustryEmitters {
     if (!offset) return;
     // 发射点必须落在**该建筑所占格**上：活动源给的是锚点格，多格建筑的炉口在占地中心，
     // 直接用锚点法线会把烟柱甩到隔壁格（vfx 分支实测）。
-    const footprint = buildingFootprints.get(source.buildingId ?? '');
+    const footprint = this.footprintOf(source.buildingId ?? '') ?? buildingFootprints.get(source.buildingId ?? '');
     const center = footprint && (footprint.width > 1 || footprint.height > 1)
       ? surfaceOffset(source.position, (footprint.width - 1) / 2, (footprint.height - 1) / 2, faceSize)
       : source.position;
     // 发射口的世界坐标必须用**场景的 `normal(x, y)`**（含局部曲面/图集偏移），
     // 不能用 `tileNormal` 的原始球面法线——后者与场景里模型的位置差几格，
     // 烟柱会飘到建筑旁边（vfx 分支实测）。
-    // 高度是世界单位：直接加在球半径上（乘格宽会把发射口压回模型里）。
-    const base = this.normalOf(center).clone().multiplyScalar(this.radius + offset.y);
+    // 高度 = 基准高度 × 占地系数 × 格宽（模型按占地归一化）。
+    const footprintScale = 0.5 + 0.5 * Math.max(1, footprint?.width ?? 1, footprint?.height ?? 1);
+    const base = this.normalOf(center).clone().multiplyScalar(this.radius + tileSize * offset.y * footprintScale);
     // 格内偏移：用该格的东西/南向基底（不是任意切向），建筑的「正面」才是 +Z 方向。
     const { east, south } = tileFrame(center, faceSize);
     base.addScaledVector(east, offset.x * tileSize).addScaledVector(south, offset.z * tileSize);
