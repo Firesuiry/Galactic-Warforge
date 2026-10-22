@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createIndustrialFinishes } from './industrial-finishes';
 import { instantiateBuilding, instantiateUnit, preloadIndustrialGltf } from './industrial-gltf';
+import { createOreDeposit } from './ore-deposits';
 import type { UnitFaction } from '../rts-commands';
 
 type Finish = 'ceramic' | 'alloy' | 'graphite' | 'copper' | 'copperDark' | 'blue' | 'orange' | 'glass' | 'rubber' | 'hostile' | 'fog' | 'fogGlow' | 'fogHostile' | 'fogHostileGlow';
@@ -596,23 +597,12 @@ export class IndustrialModels {
     this.templates.clear();
   }
 
+  /**
+   * 矿脉露头：实现已迁到 `ore-deposits.ts`（第 23 轮 3A 画质地表分支）。
+   * 保留这个入口让系统视图等调用点不必改；新场景直接调 `createOreDeposit()`。
+   */
   resource(kind: string): THREE.Group {
-    const assetKey = `resource:${kind}`;
-    const cached = this.cached(assetKey); if (cached) return cached;
-    const group = new THREE.Group(); group.name = `industrial-resource-${kind}`;
-    const crystal = /crystal|silicon|titan|rare|optical|diamond/.test(kind);
-    const color = /copper/.test(kind) ? 0xb16c40 : /coal|oil/.test(kind) ? 0x343f43 : /silicon|crystal/.test(kind) ? 0x82c6cf : /titan/.test(kind) ? 0xc4c3b5 : /stone/.test(kind) ? 0x8c9185 : 0x72949f;
-    const key = `ore-${color}`;
-    if (!this.material.has(key)) this.material.set(key, new THREE.MeshStandardMaterial({ color, roughness: crystal ? 0.28 : 0.84, metalness: crystal ? 0.42 : 0.27, flatShading: true }));
-    // A deterministic irregular outcrop, with low rubble and faceted tilted mineral seams.
-    for (let i = 0; i < 9; i++) {
-      const a = i * 2.399963, spread = i === 0 ? 0 : 0.1 + (i % 3) * 0.09;
-      const height = i === 0 ? 0.42 : 0.12 + ((i * 7) % 5) * 0.055;
-      const width = i === 0 ? 0.3 : 0.12 + (i % 3) * 0.046;
-      this.part(group, crystal ? 'crystal' : 'rock', key, [width, height, width * (0.7 + (i % 2) * 0.45)], [Math.cos(a) * spread, height * (crystal ? 0.43 : 0.31), Math.sin(a) * spread], [Math.sin(a) * 0.3, a, Math.cos(a) * 0.28]);
-    }
-    this.batchStatic(group);
-    return this.remember(assetKey, group);
+    return createOreDeposit(kind);
   }
 
   /** Merge static pieces by finish: detailed models cost a handful of draws, not one per bolt.

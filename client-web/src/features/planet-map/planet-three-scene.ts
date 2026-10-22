@@ -15,6 +15,7 @@ import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './
 import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
+import { createOreDeposit, disposeOreDeposits, setOreDepositTime } from './three/ore-deposits';
 import { createSurfaceDressing, disposeSurfaceDressing, dressingVisibleAt, preloadDressingRocks } from './three/surface-dressing';
 import type { RockMeshAsset } from './three/terrain/rock-meshes';
 import { createLocalSurface } from './three/local-surface';
@@ -558,11 +559,11 @@ export class PlanetThreeScene {
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
       const covered = occupiedTiles.has(`${resource.position.x}:${resource.position.y}`);
-      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y, covered], () => {
-        const group = this.industrial.resource(resource.kind);
-        // Keep the deposit visible at ground level without hiding the belt deck
-        // or moving sorter arm. Removing the building restores the outcrop.
-        if (covered) group.scale.y *= .1;
+      // 造型按 kind + 位置变体 + 枯竭/被占地状态重建；剩余量只影响枯竭标志，不逐帧换模型。
+      const depleted = Boolean(resource.depleted) || (resource.behavior === 'finite' && resource.remaining === 0);
+      const variant = (Math.abs(Math.round(resource.position.x)) * 7 + Math.abs(Math.round(resource.position.y)) * 13) % 3;
+      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y, covered, depleted, variant], () => {
+        const group = createOreDeposit(resource.kind, { variant, covered, depleted });
         this.place(group, resource.position, 'resources');
         return group;
       });
@@ -1702,6 +1703,8 @@ export class PlanetThreeScene {
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       // 草摆：冻结/减弱动效时固定相位（截图可复现）。
       this.dressingTime.value = this.frozen || reducedMotion ? 0 : time / 1000;
+      // 矿脉液面虹彩/酸液微光：与草摆同一个时间源，冻结时固定相位。
+      setOreDepositTime(this.frozen || reducedMotion ? 0 : time / 1000);
       // 水面反射/高光：太阳方向与相机位置换算到对象空间（世界旋转时高光跟着转）。
       this.surfaceViewScratch.sun.copy(this.sunlight.position).sub(this.sunlight.target.position).normalize()
         .applyQuaternion(this.surfaceViewScratch.inverse.copy(this.world.quaternion).invert());
@@ -1775,6 +1778,6 @@ export class PlanetThreeScene {
     this.materials.forEach((m) => materials.add(m));
     this.markMaterials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
+    this.activity.destroy(); this.industrial.dispose(); disposeOreDeposits(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }
