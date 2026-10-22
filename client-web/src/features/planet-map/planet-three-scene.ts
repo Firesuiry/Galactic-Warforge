@@ -281,7 +281,11 @@ export class PlanetThreeScene {
     // Default-canvas antialiasing does not reach postprocessing render targets.
     // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
     // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
-    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0 });
+    // 深度纹理给 GTAO 直接复用 RenderPass 的那一份：省掉 GTAO 自己再渲染一遍整棵树
+    // （贴地机位约 280 次绘制）。composer 目标不开 MSAA 正是为了让深度能解析回纹理。
+    const depthTexture = new THREE.DepthTexture(1, 1);
+    depthTexture.type = THREE.UnsignedIntType;
+    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0, depthTexture });
     this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // 后处理链（3A §5）：AO → Bloom → Output（ACES + sRGB）→ 调色 →（samples==0）SMAA。
@@ -297,6 +301,18 @@ export class PlanetThreeScene {
     };
     gtao.updateGtaoMaterial({ radius: .55, distanceExponent: 1.2, thickness: 1.0, distanceFallOff: 1.0, scale: 1.0 });
     gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    // 法线从深度重建（NORMAL_VECTOR_TYPE=0，同 three 自带 SSAOPass 的做法）：GTAO 不再需要
+    // 自己那趟「法线 + 深度」预渲染，直接吃 RenderPass 的深度纹理。平直地表上重建法线足够，
+    // 且与深度缓冲严格一致、不会漏 AO 缝。GTAOPass 没有公开参数，直接改它内部材质。
+    this.gtao.setGBuffer(depthTexture, undefined);
+    const gtaoInternals = this.gtao as unknown as {
+      gtaoMaterial: { defines: Record<string, number>; needsUpdate: boolean };
+      pdMaterial: { defines: Record<string, number>; needsUpdate: boolean };
+    };
+    gtaoInternals.gtaoMaterial.defines.NORMAL_VECTOR_TYPE = 0;
+    gtaoInternals.gtaoMaterial.needsUpdate = true;
+    gtaoInternals.pdMaterial.defines.NORMAL_VECTOR_TYPE = 0;
+    gtaoInternals.pdMaterial.needsUpdate = true;
     gtao.output = GTAOPass.OUTPUT.Default;
     gtao.blendIntensity = .85;
     this.gtao.enabled = quality.ao !== 'off';
@@ -1793,7 +1809,9 @@ export class PlanetThreeScene {
     const width = Math.max(this.host.clientWidth, 1), height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
-    // GTAO 的深度/法线缓冲按档位降采样（balanced 半分辨率）：setSize 后要重新按分辨率设置一次。
+    // GTAO 按档位降采样（balanced 半分辨率）：setSize 后要重新按分辨率设置一次。
+    // 深度纹理来自 composer 目标（全分辨率），降采样时 GTAO 的 tDepth 采样仍按全分辨率 UV，
+    // 所以半分辨率只影响 AO 与降噪缓冲，深度保持全分辨率、不会错位。
     const aoScale = this.settings.ao === 'full' ? 1 : .5;
     this.gtao.setSize(Math.max(1, Math.round(width * this.renderer.getPixelRatio() * aoScale)), Math.max(1, Math.round(height * this.renderer.getPixelRatio() * aoScale)));
     this.camera.aspect = width / height;
