@@ -119,6 +119,9 @@ export class VfxLayer {
   /** 战斗事件 → 视觉（保持 `specsFromCombatEvent` 的事件口径）。 */
   combatEvent(event: BattleEvent, resolve: (id: string | undefined | null) => CombatPointLike | null, camera: THREE.Camera, center: THREE.Vector3): void {
     const specs = combatVfxFromEvent(event, resolve);
+    // 冻结（`?freeze=1` / 截图夹具）下战斗事件不演出：画面必须是时间的纯函数，
+    // 否则每来一条事件就多一批永久存在的粒子（实测冻结夹具里粒子池被灌满）。
+    if (this.frozen || this.reducedMotion) return;
     this.combat.spawn(specs);
     // 爆炸按距画面中心的距离与规模触发震动。
     for (const wave of specs.shockwaves) {

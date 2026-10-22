@@ -91,6 +91,9 @@ export const INDUSTRY_INTERVAL = 0.28;
 /** 冻结预发射补的轮数（稳态截面的长度 ≈ PRIME_ROUNDS × interval）。 */
 export const PRIME_ROUNDS = 6;
 
+/** 单帧最多补发的窗口数（掉帧/暂停恢复时防止一次写几千个粒子）。 */
+export const MAX_CATCHUP_WINDOWS = 4;
+
 interface EmitterState {
   /** 上次发射的相位（0..1，按 interval 计）。 */
   lastPhase: number;
@@ -179,8 +182,13 @@ export class IndustryEmitters {
       }
       const interval = INDUSTRY_INTERVAL / Math.max(0.1, profile.rate / 3.2);
       const phase = time / interval;
-      if (phase - state.lastPhase < 1) continue;
-      state.lastPhase = phase;
+      // 窗口不是 1：慢刷新/掉帧时 `phase - lastPhase` 可能是 7.3，按窗口逐轮补发，
+      // 且单帧补发上限（防暂停后恢复时一次写几千个）。旧写法 `lastPhase = phase` 会丢掉
+      // 中间窗口，但相位对齐没问题——真正的坑在冻结预发射之外：`time` 从 0 起跳时
+      // `lastPhase = 0` 会让第一次发射晚一个窗口，这里统一从「上一个窗口」开始。
+      const windows = Math.floor(phase - state.lastPhase);
+      if (windows < 1) continue;
+      state.lastPhase += Math.min(windows, MAX_CATCHUP_WINDOWS);
       this.emitSource(source, profile, state.seed + Math.floor(time * 1000), faceSize, tileSize);
     }
     // 清掉已消失的设备（暂停/拆除/枯竭）：状态表不能无限增长。
