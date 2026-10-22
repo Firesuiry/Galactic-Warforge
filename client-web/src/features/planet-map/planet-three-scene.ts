@@ -262,7 +262,8 @@ export class PlanetThreeScene {
     // 曝光与太阳强度一起配（第 23 轮 3A §8）：陶瓷白高光 ≤ .95，暗部靠天光 IBL 抬起来。
     this.renderer.toneMappingExposure = .92;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = quality.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    // r186 起 PCFSoftShadowMap 已移除（会退化成 PCF 并打警告）；软阴影靠 PCF 的 shadowRadius。
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // 空气透视雾：自定义 chunk（按视线方向着色），scene.fog 只作 USE_FOG 编译开关。
     this.fog = new AtmosphericFog(this.quality);
     this.scene.fog = this.fog.sceneFog;
@@ -321,6 +322,8 @@ export class PlanetThreeScene {
     this.sunlight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
     this.sunlight.shadow.bias = -.00015;
     this.sunlight.shadow.normalBias = .035;
+    // 软阴影（3A §7）：PCF 的 Vogel 盘采样半径，按档位给（low 硬阴影）。
+    this.sunlight.shadow.radius = quality.softShadows ? 2.6 : 1;
     this.sunlight.shadow.camera.near = 1;
     this.sunlight.shadow.camera.far = 500;
     this.scene.add(this.sunlight, this.sunlight.target);
@@ -337,7 +340,7 @@ export class PlanetThreeScene {
     sky.mesh.onBeforeRender = () => sky.followCamera(this.camera);
     this.scene.add(sky.mesh); this.world.add(shell.mesh);
     this.fog.setSunDirection(sunDirection);
-    this.fog.setHorizon(sky.uniforms.horizon);
+    this.fog.setHorizon(sky.uniforms.horizonColor);
     sky.setPlanet(PLANET_CENTER, RADIUS);
     this.rebuildEnvironment();
     this.flare = new SunFlare(this.camera, sunDirection);
@@ -428,9 +431,25 @@ export class PlanetThreeScene {
           });
           return { meshes, fogged, missing };
         })(),
-        strength: this.fog.uniforms.strength,
-        density: this.fog.uniforms.density,
+        strength: this.fog.uniforms.strength.value,
+        density: this.fog.uniforms.density.value,
         color: `#${this.fog.uniforms.color.getHexString()}`,
+        // 编译审计：材质是否真的拿到了注入后的 shader（onBeforeCompile 是否跑到）。
+        compiled: (() => {
+          let withVarying = 0; let total = 0;
+          const materials = new Set<THREE.Material>();
+          this.world.traverse((o) => {
+            if (!(o instanceof THREE.Mesh)) return;
+            for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+          });
+          for (const m of materials) {
+            const program = (this.renderer.properties.get(m) as { currentProgram?: { fragmentShader?: string } | null }).currentProgram;
+            if (!program) continue;
+            total += 1;
+            if (program.fragmentShader?.source?.includes?.("swFogDensity") ?? false) withVarying += 1;
+          }
+          return { total, withVarying };
+        })(),
       },
       sun: { color: `#${this.sunlight.color.getHexString()}`, intensity: this.sunlight.intensity },
       exposure: this.renderer.toneMappingExposure,
@@ -473,7 +492,7 @@ export class PlanetThreeScene {
       this.sunlight.shadow.needsUpdate = true;
     }
     this.bloom.enabled = settings.bloom;
-    this.renderer.shadowMap.type = settings.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.sunlight.shadow.radius = settings.softShadows ? 2.6 : 1;
     this.renderer.shadowMap.needsUpdate = true;
     this.gtao.enabled = settings.ao !== 'off';
     this.grade.enabled = settings.grade;
@@ -1644,9 +1663,10 @@ export class PlanetThreeScene {
     this.camera.position.set(0, -Math.sin(tilt) * this.altitude, RADIUS + Math.cos(tilt) * this.altitude);
     this.camera.lookAt(0, 0, this.groundView ? RADIUS : 0);
     // 阴影视锥（3A §7）：按相机高度取范围；地平线机位（tilt 大）视线更远，按 tilt 放大，
-    // 避免远处建筑缺阴影、画面里出现视锥边界的硬切线。上限 260 让 4096 贴图仍有足够分辨率。
-    const tiltBoost = 1 + tilt * .45;
-    const range = Math.min(260, Math.max(2, this.altitude * .75 * tiltBoost));
+    // 避免远处建筑缺阴影。边缘 15% 在 shader 里渐隐（atmospheric-fog 的 swShadowFade），
+    // 视锥边界不会出现硬切线，所以上限可以放宽到覆盖地平线机位的可见地表（切点 ≈ 39 单位）。
+    const tiltBoost = 1 + tilt * 1.1;
+    const range = Math.min(320, Math.max(2, this.altitude * .75 * tiltBoost));
     this.sunlight.shadow.normalBias = Math.min(.035, this.tileScale() * .015);
     const shadowCamera = this.sunlight.shadow.camera;
     shadowCamera.left = -range; shadowCamera.right = range;

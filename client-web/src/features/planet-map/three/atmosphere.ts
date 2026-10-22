@@ -21,7 +21,13 @@ const SKY_RADIUS = 1800;
 export interface SkyUniforms {
   sunDirection: THREE.Vector3;
   zenith: THREE.Color;
+  /** 地平线附近的天空色（HDR，穹顶自身用）。 */
   horizon: THREE.Color;
+  /**
+   * 地平线雾霾的「显示空间」色（sRGB 分量，不经 ACES）：雾 chunk 在 tonemapping 之后执行，
+   * 贴地远景的地面要与地平线处的天空同色，所以雾色取这一份，而不是 HDR 的 `horizon`。
+   */
+  horizonColor: THREE.Color;
   sunColor: THREE.Color;
   /**
    * 0 = 纯太空（只有星），1 = 完整大气（贴地）。
@@ -72,15 +78,18 @@ const SKY_FRAGMENT = /* glsl */ `
   void main() {
     vec3 d = normalize(vDirection);
     float sunDot = dot(d, sunDirection);
-    // 高出地平线的角度：视线与「指向地心」方向夹角超过掠射角 acos(R/D) 才看得到天空。
+    // 高出地平线的角度：视线与「指向地心」方向的夹角超过掠射角才看得到天空。
+    // 掠射角在相机处是 asin(R/D)（不是 acos(R/D)——那是地心处的张角；用错会把整个
+    // 天空往上平移 50°+，贴地时看到的天顶就永远是纯蓝，地平线雾霾永远进不了画面）。
     vec3 toCenter = normalize(planetCenter - cameraPosition);
     float fromCenter = acos(clamp(dot(d, toCenter), -1.0, 1.0));
-    float grazing = acos(clamp(planetRadius / max(length(cameraPosition - planetCenter), planetRadius + 0.001), 0.0, 1.0));
+    float distanceToCenter = max(length(cameraPosition - planetCenter), planetRadius + 0.001);
+    float grazing = asin(clamp(planetRadius / distanceToCenter, 0.0, 1.0));
     float aboveHorizon = max(fromCenter - grazing, 0.0);
-    // 地平线雾霾白 → 抬头 12° 已是天顶深青蓝（贴地机位画面顶部约 8°，再高就看不到渐变）。
-    // 贴地机位（tilt 1.1，高度 7.7，FOV 43°）可见的天空带是地平线上约 2°–34°：
-    // 贴着星球轮廓的下缘是雾霾白，画面上缘是天顶深青蓝；两者之间是窄窄的一条渐变。
-    float t = 1.0 - smoothstep(0.035, 0.60, aboveHorizon);
+    // 地平线雾霾白 → 抬头渐变为天顶深青蓝。用指数衰减（真实天空的雾霾也是贴着地平线
+    // 压缩的）：贴地机位（tilt 1.1、高度 7.7、FOV 43°）可见的天空带只有地平线以上 0–6°，
+    // 画面下缘是雾霾白、上缘仍是偏亮的天蓝；高度 60 的中空机位才看得到完整渐变到天顶。
+    float t = exp(-aboveHorizon / 0.055);
     vec3 sky = mix(zenith, horizon, t);
     // 天空（全屏背景）是场景里唯一「不受雾影响」的物体：它本身就在雾的尽头，
     // 所以贴地时地平线附近的雾色必须与天空同一取色，否则地面边缘会有一道色差。
@@ -121,6 +130,9 @@ export function createSkyUniforms(quality: PlanetRenderQuality): SkyUniforms {
     sunDirection: new THREE.Vector3(-0.36, 0.5, 0.82).normalize(),
     zenith: new THREE.Color().setRGB(...SKY_ZENITH_LINEAR, THREE.LinearSRGBColorSpace),
     horizon: new THREE.Color().setRGB(...SKY_HORIZON_LINEAR, THREE.LinearSRGBColorSpace),
+    // 目标显示色 #b9d3e6（与 3A画质.md 的地平线雾霾同口径）；用 LinearSRGBColorSpace
+    // 只是为了跳过 three 的 sRGB→线性转换，雾 shader 拿到的是显示空间分量。
+    horizonColor: new THREE.Color().setRGB(0.7255, 0.8275, 0.902, THREE.LinearSRGBColorSpace),
     sunColor: new THREE.Color('#ffe2bd'),
     atmosphere: { value: 1 },
     stars: { value: 0.5 },

@@ -24,12 +24,15 @@ export interface FogUniforms {
   sunColor: THREE.Color;
   /** 太阳方向（世界空间）。 */
   sunDirection: THREE.Vector3;
-  /** 距离浓度（1/世界单位）。 */
-  density: number;
+  /**
+   * 数值型参数一律是 uniform 对象（材质持有引用，场景改这里就改材质）。
+   * 裸数字在注入时会被包成新对象，之后改 FogUniforms 就再也传不到 shader。
+   */
+  density: { value: number };
   /** 高度衰减（0 = 关闭）。 */
-  strength: number;
+  strength: { value: number };
   /** 视线方向偏暖量。 */
-  sunScatter: number;
+  sunScatter: { value: number };
 }
 
 /**
@@ -40,7 +43,7 @@ export interface FogUniforms {
  * 所以浓度按这个量级取：d=39 → 1-exp(-(0.0245·39)²) ≈ 0.60；d=8（中心建筑）→ 3.8%。
  */
 export const FOG_TUNING = {
-  density: 0.0245,
+  density: 0.03,
   /** 太阳方向内散射强度（0–1）。 */
   sunScatter: 0.55,
 };
@@ -52,9 +55,9 @@ export function createFogUniforms(): FogUniforms {
     color: new THREE.Color().setRGB(0.7255, 0.8275, 0.902, THREE.LinearSRGBColorSpace),
     sunColor: new THREE.Color().setRGB(1, 0.886, 0.741, THREE.LinearSRGBColorSpace),
     sunDirection: new THREE.Vector3(-0.36, 0.5, 0.82).normalize(),
-    density: FOG_TUNING.density,
-    strength: 1,
-    sunScatter: FOG_TUNING.sunScatter,
+    density: { value: FOG_TUNING.density },
+    strength: { value: 1 },
+    sunScatter: { value: FOG_TUNING.sunScatter },
   };
 }
 
@@ -115,10 +118,21 @@ const SHADOW_FADE = /* glsl */ `
 
 const SHADOW_LINE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
 
+/**
+ * 打好补丁的 `lights_fragment_begin`。
+ *
+ * 注意时机：`onBeforeCompile` 拿到的 shader 仍是「带 #include 的模板」（three 在之后才
+ * 展开 include），`getShadow(...)` 那一行并不在 `shader.fragmentShader` 里——直接对模板
+ * 做字符串替换是无效的。这里把 chunk 自己展开、改好后整段替换 include；辅助函数
+ * `swShadowFade` 放在前置声明区（shadowmap_pars_fragment 之后），因为 main 里的
+ * lights_fragment_begin 要调用它。
+ */
 const SHADOW_LINE_FADED = `{
       float swShadow = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
       directLight.color *= mix(1.0, swShadow, swShadowFade(vDirectionalShadowCoord[ i ]));
     }`;
+
+const LIGHTS_BEGIN_PATCHED = THREE.ShaderChunk.lights_fragment_begin.replace(SHADOW_LINE, SHADOW_LINE_FADED);
 
 /**
  * 把雾注入一个材质。返回的 dispose 只解绑回调，不销毁材质本身。
@@ -140,9 +154,9 @@ export function applyAtmosphericFog(material: THREE.Material, uniforms: FogUnifo
     shader.uniforms.swFogColor = { value: uniforms.color };
     shader.uniforms.swFogSunColor = { value: uniforms.sunColor };
     shader.uniforms.swFogSunDirection = { value: uniforms.sunDirection };
-    shader.uniforms.swFogDensity = { value: uniforms.density };
-    shader.uniforms.swFogStrength = { value: uniforms.strength };
-    shader.uniforms.swFogSunScatter = { value: uniforms.sunScatter };
+    shader.uniforms.swFogDensity = uniforms.density;
+    shader.uniforms.swFogStrength = uniforms.strength;
+    shader.uniforms.swFogSunScatter = uniforms.sunScatter;
     shader.vertexShader = shader.vertexShader
       .replace('#include <fog_pars_vertex>', FOG_VERTEX_PARS)
       .replace('#include <fog_vertex>', FOG_VERTEX);
@@ -150,10 +164,10 @@ export function applyAtmosphericFog(material: THREE.Material, uniforms: FogUnifo
       .replace('#include <fog_pars_fragment>', FOG_PARS)
       .replace('#include <fog_fragment>', FOG_FRAGMENT)
       .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${SHADOW_FADE}`)
-      .replace(SHADOW_LINE, SHADOW_LINE_FADED);
+      .replace('#include <lights_fragment_begin>', LIGHTS_BEGIN_PATCHED);
   };
   const previousKey = target.customProgramCacheKey.bind(target);
-  target.customProgramCacheKey = () => `${previousKey()}|sw-atmosphere-fog-v1`;
+  target.customProgramCacheKey = () => `${previousKey()}|sw-atmosphere-fog-v2`;
   target.needsUpdate = true;
 }
 
@@ -206,7 +220,7 @@ export class AtmosphericFog {
   /** 相机高度：≤ 25 全强度，≥ 60 关闭（中空 / 全球视角没有贴地雾）。 */
   setAltitude(altitude: number) {
     const t = 1 - THREE.MathUtils.smoothstep(altitude, 25, 60);
-    this.uniforms.strength = t;
+    this.uniforms.strength.value = t;
     this.sceneFog.near = 1;
     this.sceneFog.far = 2000;
   }
