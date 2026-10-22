@@ -161,3 +161,39 @@ describe('3D player-visible terrain', () => {
   });
 
 });
+
+describe('3A terrain shader contract', () => {
+  it('采样球面三平面而不是立方体面 UV，接缝处纹理连续', () => {
+    // 三平面权重由对象空间位置计算，六面接缝两侧坐标连续 → 没有硬缝。
+    expect(SHADER_HEADER).toContain('swTriplanarWeights');
+    expect(SHADER_HEADER).toContain('texture2D(swAlbedoArray, vec3(p.zy, layer))');
+    expect(SHADER_HEADER).toContain('texture2D(swAlbedoArray, vec3(p.xz, layer))');
+    expect(SHADER_HEADER).toContain('texture2D(swAlbedoArray, vec3(p.xy, layer))');
+  });
+
+  it('岩浆：板块硬壳 + 裂缝自发光，且不用世界轴向 UV（避免纵向拉伸）', () => {
+    const lava = SHADER_COLOR.slice(SHADER_COLOR.indexOf('} else if (swLava > 0.5)'), SHADER_COLOR.indexOf('} else {\n      // 陆地'));
+    expect(lava).toContain('swCrustMask');
+    expect(lava).toContain('swSeam');
+    expect(lava).toContain('swLavaEmissive');
+    // 自发光只由时间 uniform 推进（冻结 = 固定相位）。
+    expect(lava).toContain('swTime');
+    expect(lava).not.toContain('swSurfacePosition.xz *');
+  });
+
+  it('岩浆与水相邻、岩浆与建筑相邻不穿帮：焦土圈来自已探索邻格的距离场', () => {
+    expect(SHADER_COLOR).toContain('swLavaNear');
+    expect(SHADER_COLOR).toContain('swScorch');
+    // 焦土只在陆地上生效（岩石不叠焦土），水体按 swWater 分支独立着色。
+    expect(SHADER_COLOR).toContain('swLavaNear * (1.0 - swRock)');
+  });
+
+  it('未探索格没有草/岩石/矿脉几何（装饰只按 explored 生成）', () => {
+    const mesh = createPlanetSurface(100);
+    updatePlanetSurface(mesh, { planet: { ...scene(), explored: [[false, false], [false, false]] } });
+    const bytes = (uniforms(mesh).swLocalProperties.value as THREE.DataTexture).image.data!;
+    // 全部未探索：properties 的 B（已探索）通道全为 0。
+    for (let i = 0; i < bytes.length; i += 4) expect(bytes[i + 2]).toBe(0);
+    disposePlanetSurface(mesh);
+  });
+});
