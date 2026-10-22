@@ -94,7 +94,7 @@ describe('3D player-visible terrain', () => {
     expect(SHADER_COLOR).toContain('* swKnown;');
     expect(SHADER_COLOR).toContain('swVeilRelief * 0.010 * (1.0 - swKnown) * swFog');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v8');
     disposePlanetSurface(mesh);
   });
 
@@ -137,7 +137,7 @@ describe('3D player-visible terrain', () => {
     expect(edgeBlock).not.toContain('swLocalColor');
     expect(SHADER_COLOR).toContain('swKnownEdge *');
     const mesh = createPlanetSurface(100);
-    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v7');
+    expect(mesh.material.customProgramCacheKey()).toBe('siliconworld-planet-surface-v8');
     disposePlanetSurface(mesh);
   });
 

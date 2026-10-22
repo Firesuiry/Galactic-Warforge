@@ -237,6 +237,8 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
       const visible = patch.visible ? Boolean(patch.visible[row]?.[x - patch.bounds.x]) : terrain !== 'unknown';
       return { terrain, explored, visible, height: patch.height?.[row]?.[x - patch.bounds.x] ?? sampleLocal(x, y).height };
     },
+    // 海岸标志要看到补片之外的邻格（例如北缝对面的补片），用全星取样器。
+    neighborSample: sampleLocal,
   }));
   const localAtlas = combineAtlases(localAtlases, packed, localWidth, localHeight);
   for (const atlas of localAtlases) disposeAtlas(atlas);

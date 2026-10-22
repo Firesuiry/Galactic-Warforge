@@ -6,7 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, updatePlanetSurfaceView, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
@@ -15,7 +15,8 @@ import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './
 import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
-import { createSurfaceDressing } from './three/surface-dressing';
+import { createSurfaceDressing, disposeSurfaceDressing, dressingVisibleAt, preloadDressingRocks } from './three/surface-dressing';
+import type { RockMeshAsset } from './three/terrain/rock-meshes';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
@@ -146,6 +147,8 @@ export class PlanetThreeScene {
   private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
   private dressing?: THREE.Group;
   private dressingSignature = '';
+  private dressingRocks: RockMeshAsset[] = [];
+  private readonly dressingTime = { value: 0 };
   private localSurface: ReturnType<typeof createLocalSurface> = null;
   private localSurfaceKey = '';
   /** 战术叠加层输入签名（悬停/选中/图层/数据未变时跳过重建）。 */
@@ -213,6 +216,7 @@ export class PlanetThreeScene {
   private lastHover: TilePoint | null = null;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly motionScratch = { from: new THREE.Vector3(), to: new THREE.Vector3(), up: new THREE.Vector3(), rotation: new THREE.Quaternion(), identity: new THREE.Quaternion() };
+  private readonly surfaceViewScratch = { sun: new THREE.Vector3(), camera: new THREE.Vector3(), inverse: new THREE.Quaternion() };
 
 
   constructor(
@@ -307,6 +311,26 @@ export class PlanetThreeScene {
     void IndustrialModels.preload().then(() => {
       if (!this.destroyed) this.reloadModels();
     }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
+    // 扫描岩石异步加载：就绪后把程序化碎石换成 Poly Haven 网格（重建装饰组）。
+    void preloadDressingRocks().then((rocks) => {
+      if (this.destroyed || !rocks.length) return;
+      this.dressingRocks = rocks;
+      this.rebuildDressing();
+    });
+  }
+
+  /** 重建地表装饰（草/岩石/卵石）；岩石资源就绪与数据签名变化都走这里。 */
+  private rebuildDressing() {
+    if (!this.data) return;
+    if (this.dressing) {
+      const shared = new Set<THREE.Material | THREE.BufferGeometry>();
+      for (const rock of this.dressingRocks) { shared.add(rock.geometry); shared.add(rock.material); }
+      disposeSurfaceDressing(this.dressing, shared);
+      this.world.remove(this.dressing);
+    }
+    this.dressing = createSurfaceDressing(this.data, RADIUS, { quality: this.quality, time: this.dressingTime, rocks: this.dressingRocks });
+    this.dressing.visible = this.groundView && dressingVisibleAt(this.altitude);
+    this.world.add(this.dressing);
   }
 
   getQuality() { return this.quality; }
@@ -323,7 +347,10 @@ export class PlanetThreeScene {
   }
 
   setQuality(quality: PlanetRenderQuality) {
+    const changed = this.quality !== quality;
     this.quality = quality;
+    // 档位变了：植被/岩石实例预算跟着变，清签名让下一次数据刷新重建装饰组。
+    if (changed) this.dressingSignature = '';
     this.resize();
   }
 
@@ -364,11 +391,7 @@ export class PlanetThreeScene {
     const dressingSignature = JSON.stringify([refId(data.planet.terrain), 'bounds' in data.planet ? [data.planet.bounds, refId(data.planet.surface_patches)] : null,
       Object.values(data.planet.buildings ?? {}).map(b => [b.position, getBuildingFootprint(b)]), refId(data.fog?.visible)]);
     if (dressingSignature !== this.dressingSignature) {
-      this.dressing?.traverse(o => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
-      if (this.dressing) this.world.remove(this.dressing);
-      this.dressing = createSurfaceDressing(data, RADIUS);
-      this.dressing.visible = this.groundView;
-      this.world.add(this.dressing);
+      this.rebuildDressing();
       this.dressingSignature = dressingSignature;
     }
     this.buildEntities();
@@ -1486,7 +1509,7 @@ export class PlanetThreeScene {
   private updateCamera() {
     this.camera.near = Math.max(0.0001, this.altitude * 0.05);
     this.camera.updateProjectionMatrix();
-    if (this.dressing) this.dressing.visible = this.groundView;
+    if (this.dressing) this.dressing.visible = this.groundView && dressingVisibleAt(this.altitude);
     const tilt = this.groundView ? this.tilt : 0;
     this.camera.position.set(0, -Math.sin(tilt) * this.altitude, RADIUS + Math.cos(tilt) * this.altitude);
     this.camera.lookAt(0, 0, this.groundView ? RADIUS : 0);
@@ -1677,6 +1700,13 @@ export class PlanetThreeScene {
     if (!document.hidden) {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
+      // 草摆：冻结/减弱动效时固定相位（截图可复现）。
+      this.dressingTime.value = this.frozen || reducedMotion ? 0 : time / 1000;
+      // 水面反射/高光：太阳方向与相机位置换算到对象空间（世界旋转时高光跟着转）。
+      this.surfaceViewScratch.sun.copy(this.sunlight.position).sub(this.sunlight.target.position).normalize()
+        .applyQuaternion(this.surfaceViewScratch.inverse.copy(this.world.quaternion).invert());
+      this.surfaceViewScratch.camera.copy(this.camera.position).applyQuaternion(this.surfaceViewScratch.inverse);
+      updatePlanetSurfaceView(this.surface, this.surfaceViewScratch.sun, this.surfaceViewScratch.camera);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
       this.conveyors.update(this.frozen || reducedMotion ? 0 : dt);

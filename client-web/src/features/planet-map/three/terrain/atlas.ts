@@ -37,13 +37,22 @@ export const FINISH_COLORS: Record<string, [number, number, number]> = {
 };
 export const UNKNOWN_COLOR: [number, number, number] = [0.21, 0.27, 0.33];
 
-/** 属性位：水 = 1、岩 = 1（与旧 FINISHES 的语义一致）。 */
+/**
+ * 属性位：水 = 1；岩 = 0..1 的「岩性占比」（着色器按 > 0.5 选玄武岩，其余当土壤）。
+ * 只对已探索格写入：未探索格的两个通道恒为 0，否则水/岩位会泄露隐藏地形。
+ */
 export function finishFlags(terrain: string): { water: number; rock: number } {
   if (WATER_TERRAINS.has(terrain)) return { water: 1, rock: 0 };
   if (ROCK_TERRAINS.has(terrain)) return { water: 0, rock: 1 };
   if (terrain === 'lava') return { water: 0, rock: 1 };
-  return { water: 0, rock: 0 };
+  return { water: 0, rock: SOIL_ROCK_FRACTION[terrain] ?? 0 };
 }
+
+/** 土壤类地形的岩性占比（与旧版 FINISHES 的数值一致，供临水沙泥/焦土与岩脊细节按比例混合）。 */
+const SOIL_ROCK_FRACTION: Record<string, number> = {
+  buildable: 0.15, plains: 0.15, plain: 0.15, grass: 0.1, grassland: 0.1, forest: 0.2,
+  desert: 0.3, sand: 0.2, ice: 0.3, snow: 0.3, swamp: 0.1,
+};
 
 function srgbByte(value: number) {
   const linear = Math.min(1, Math.max(0, value));
@@ -115,9 +124,11 @@ export interface AtlasOptions {
   boundsX: number; boundsY: number;
   faceSize: number;
   sample: SampleAt;
+  /** 跨补片/跨窗口的邻格取样（海岸标志用）：默认与 `sample` 相同。 */
+  neighborSample?: SampleAt;
 }
 
-export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample }: AtlasOptions): AtlasSet {
+export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, neighborSample = sample }: AtlasOptions): AtlasSet {
   const colors = new Uint8Array(width * height * 4);
   const properties = new Uint8Array(width * height * 4);
   const coast = new Uint8Array(width * height * 4);
@@ -136,15 +147,15 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample }
       const flags = finishFlags(cell.terrain);
       const i = (y * width + x) * 4;
       colors[i] = srgbByte(color[0]); colors[i + 1] = srgbByte(color[1]); colors[i + 2] = srgbByte(color[2]); colors[i + 3] = 255;
-      properties[i] = Math.round(flags.water * 255);
-      properties[i + 1] = Math.round(flags.rock * 255);
+      properties[i] = known ? Math.round(flags.water * 255) : 0;
+      properties[i + 1] = known ? Math.round(flags.rock * 255) : 0;
       properties[i + 2] = known ? 255 : 0;
       properties[i + 3] = known && cell.visible ? 255 : 0;
       if (known && flags.water === 1) {
         // Cardinal shore flags use real cube-sphere neighbors, including rotated face seams.
         const flags4 = directionOrder.map((direction) => {
           const { tile } = surfaceStep({ x: boundsX + x, y: boundsY + y }, direction, faceSize);
-          const neighbor = sample(tile.x, tile.y);
+          const neighbor = neighborSample(tile.x, tile.y);
           return neighbor.explored && neighbor.terrain !== 'unknown' && !WATER_TERRAINS.has(neighbor.terrain) ? 255 : 0;
         });
         coast.set(flags4, i);
@@ -169,6 +180,15 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample }
 export function localSampler(planet: PlanetRenderView, fog?: FogMapView | PlanetSceneView) {
   return (x: number, y: number): SurfaceSample => {
     const terrain = getTerrainTile(planet, x, y);
+    // 补片（surface_patches）自带 explored/visible：北缝的补片不在窗口图集里，
+    // 必须从补片自己的迷雾数据读，不能拿窗口矩形坐标去查。
+    const patch = 'bounds' in planet
+      ? planet.surface_patches?.find(p => x >= p.bounds.x && y >= p.bounds.y && x < p.bounds.x + p.bounds.width && y < p.bounds.y + p.bounds.height)
+      : undefined;
+    if (patch) {
+      const state = getFogState(patch as PlanetSceneView, x, y);
+      return { terrain, explored: state.explored, visible: state.visible, height: terrainHeight(planet, x, y) };
+    }
     const state = fog ? getFogState(fog, x, y) : { explored: terrain !== 'unknown', visible: terrain !== 'unknown' };
     return { terrain, explored: state.explored, visible: state.visible, height: terrainHeight(planet, x, y) };
   };
