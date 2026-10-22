@@ -261,22 +261,22 @@ function convert(spec) {
   //   超了就把限幅阈值再压同样的量；
   // - 响度误差按「目标 − 成品实测」直接修正增益，限幅器削峰造成的响度损失会在下一轮被补回。
   // 不用 loudnorm：它的 dynamic 模式在短促音上会把电平压到目标以下 2–8 LU。
-  // 成品时长（trim 之后）：码率档位按它选。
+  // 成品时长（trim 之后）：码率初值按它选。
   const duration = probeDuration(input) - (spec.trim ? spec.trim[1] - spec.trim[0] : 0);
+  /** 码率目标（bps）：Opus 短音的实测码率会被最小帧填充抬高，收敛循环里按实测回调。 */
+  // <0.1s 的极短音用固定码率（constrained VBR 在这类素材上会翻倍超调）。
+  const tiny = duration < 0.1;
+  let bitrate = tiny ? 52_000 : spec.bus === 'ui' ? 56_000 : duration < 0.3 ? 58_000 : 64_000;
   const encode = (gainDb, limiterDb) => {
     ffmpeg([
       ...inputs,
       '-af', [...filters, `volume=${gainDb.toFixed(2)}dB`, `alimiter=limit=${(10 ** (limiterDb / 20)).toFixed(4)}:level=false`].join(','),
-      // 单声道 SFX 64–96 kbps（契约 §2）。Opus 短音的实测码率由「目标码率 + 最小帧
-      // 填充」共同决定（0.05s 素材在 56k 目标下仍报 132k），所以按成品时长分档：
-      // 极短音（<0.1s）填充占比最高、0.1–0.3s 会略低于目标，其余按 constrained VBR：
-      // 成品实测 56–101 kbps（0.05–0.15s 的极短音两端各差 2–8k，见构建日志）。
+      // 单声道 SFX 64–96 kbps（契约 §2）。Opus 短音的实测码率 = 目标 + 最小帧填充，
+      // 填充占比随时长变化（0.05s 素材在 56k 目标下实测 132k），所以码率也进收敛循环：
+      // 实测超上限就调低目标、低于下限就调高，见下面的 for 循环。
       '-ar', '48000', '-ac', '1', '-c:a', 'libopus',
-      ...(spec.bus === 'ui'
-        ? ['-b:a', '48k', '-vbr', 'constrained']
-        : duration < 0.1 ? ['-b:a', '48k', '-vbr', 'off']
-          : duration < 0.3 ? ['-b:a', '64k', '-vbr', 'off']
-            : ['-b:a', '72k', '-vbr', 'constrained']),
+      '-b:a', `${Math.round(bitrate / 1000)}k`,
+      '-vbr', tiny || (spec.bus !== 'ui' && duration < 0.3) ? 'off' : 'constrained',
       outFile,
     ]);
   };
@@ -290,10 +290,19 @@ function convert(spec) {
     if (process.env.AUDIO_DEBUG) {
       console.error(`[debug] ${spec.out} iter${attempt} gain=${gain.toFixed(2)} lim=${limiterDb.toFixed(2)} -> I=${result.lufs} peak=${result.peak} err=${loudnessError.toFixed(2)} over=${peakOver.toFixed(2)}`);
     }
-    if (Math.abs(loudnessError) <= 0.5 && peakOver <= 0.1) break;
+    // 码率：实测落在 66–94 kbps（契约 64–96 留 2k 余量），否则按比例回调目标。
+    const actualBitrate = Number(run('ffprobe', ['-v', 'error', '-show_entries', 'format=bit_rate', '-of', 'csv=p=0', outFile]).trim());
+    const bitrateOk = !Number.isFinite(actualBitrate) || (actualBitrate >= 65_000 && actualBitrate <= 94_000);
+    if (process.env.AUDIO_DEBUG) {
+      console.error(`[debug] ${spec.out} bitrate ${Math.round(actualBitrate / 1000)}k target ${Math.round(bitrate / 1000)}k`);
+    }
+    if (Math.abs(loudnessError) <= 0.5 && peakOver <= 0.1 && bitrateOk && attempt > 0) break;
     // 超调系数 1.3：限幅器削峰会把响度增量吃掉一部分，等量修正收敛太慢（实测 ~0.3 LU/轮）。
     gain += Math.sign(loudnessError) * Math.max(0.5, Math.abs(loudnessError) * 1.3);
     if (peakOver > 0.1) limiterDb -= peakOver + 0.3;
+    if (!bitrateOk && Number.isFinite(actualBitrate) && actualBitrate > 0) {
+      bitrate = Math.max(16_000, Math.min(112_000, bitrate * (80_000 / actualBitrate)));
+    }
   }
   return outFile;
 }

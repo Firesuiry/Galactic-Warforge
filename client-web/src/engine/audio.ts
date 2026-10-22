@@ -465,10 +465,14 @@ export function unlockAudio() {
   if (!ctx) {
     return;
   }
+  const wasUnlocked = unlocked;
   unlocked = true;
   if (ctx.state === 'suspended') {
     void ctx.resume().catch(() => {});
   }
+  // 首次解锁后补起已经「想要」的声床/配乐：离开行星页时 hook 已经 setAmbientLayers 过
+  // （用户在银河/恒星系页第一次点击才解锁），reconcile 在解锁前是 no-op，这里要补一次。
+  if (!wasUnlocked) tickAudioLoops();
 }
 
 export function isUnlocked() {

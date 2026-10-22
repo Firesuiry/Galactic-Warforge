@@ -627,3 +627,18 @@ describe('循环声床与配乐', () => {
     }).not.toThrow();
   });
 });
+
+describe('首次解锁补起已想要的声床', () => {
+  it('解锁前 setAmbientLayers 只记目标；unlockAudio 后立刻起播（不用等下一次轮询）', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })));
+    const audio = await importFreshAudio();
+    const { AUDIO_MANIFEST } = await import('@/engine/audio-manifest');
+    // 解锁前预载 + 设目标（银河/恒星系页第一次点击才解锁的真实顺序）
+    audio.preloadSamples([AUDIO_MANIFEST.ambient.space[0]]);
+    audio.setAmbientLayers([{ name: 'space', level: 1 }]);
+    expect(audio.getAmbientNames()).toEqual([]);
+    await flush();
+    audio.unlockAudio();
+    expect(audio.getAmbientNames()).toEqual(['space']);
+  });
+});
