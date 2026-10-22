@@ -59,9 +59,11 @@ function pushFeedback(
   section: FeedbackSection,
   hint: WarCommandHint,
 ) {
-  // 指令反馈音：成功双音上行 / 失败低音下行（无 AudioContext 环境自动 no-op）
+  // 指令反馈音：成功双音上行 / 失败低音下行 / 提示（warning）轻点（无 AudioContext 自动 no-op）
   if (hint.tone === 'success') {
     sfx.commandOk();
+  } else if (hint.tone === 'warning') {
+    sfx.notify();
   } else {
     sfx.commandFail();
   }

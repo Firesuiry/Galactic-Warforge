@@ -20,6 +20,8 @@ import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
+import { StatusLights } from './three/status-lights';
+import { setIndustrialTileScale } from './three/industrial-materials';
 import { ConveyorGeometry } from './three/conveyor-geometry';
 import { BELT_LEVEL_HEIGHT, MAX_BELT_ELEVATION, beltElevation } from './logistics-tier';
 import { LogisticsDirectionMarks, disposeLogisticsTextures } from './three/logistics-marks';
@@ -197,6 +199,8 @@ export class PlanetThreeScene {
   private readonly rangeCircles = new RangeCircleOverlay(RADIUS);
   private readonly detectionMarks = new DetectionOverlay(RADIUS);
   private readonly constructionBars = new ConstructionProgressOverlay(RADIUS);
+  /** 建筑状态灯（3A）：全场 2 个 InstancedMesh。 */
+  private readonly statusLights = new StatusLights(() => this.tileScale());
   /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
   private beltDragPath: BeltDragCell[] = [];
 
@@ -350,6 +354,8 @@ export class PlanetThreeScene {
 
   setData(data: PlanetThreeData) {
     this.data = data;
+    // 三平面纹素密度按格（M1）：换 face_size 的地图就更新 uniform。
+    setIndustrialTileScale(this.tileScale());
     // 大行星的局部曲面与全球球面共用 surface.material（同一个 swFog uniform），
     // 这里把图层开关一起喂进去，重建局部曲面后迷雾开关同样生效。
     updatePlanetSurface(this.surface, { ...data, fogLayer: this.interaction?.layers.fog });
@@ -559,10 +565,12 @@ export class PlanetThreeScene {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
     this.syncPowerAlertMarks(visibleBuildings);
+    // 状态灯只挂己方建筑（不暴露对方产线），状态只取权威 runtime.state。
+    this.statusLights.sync(visibleBuildings, playerId, id => this.staticEntities.get(`building:${id}`)?.group, this.layer('buildings'));
     const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
     }));
-    this.staticBatches.refresh(batchEntries);
+    this.staticBatches.refresh(batchEntries, group => group.userData.industryActive === false);
     this.dynamicBatches.refresh(batchEntries);
 
     const movingKeys = new Set<string>();
@@ -637,6 +645,8 @@ export class PlanetThreeScene {
   /** 现成 GLB 就绪后重建实体：模型签名不变，所以必须显式丢掉程序化模板与已建实例，
    * 否则 `retain` 会认为「外观没变」而不重建。血条/标签 sprite 挂在实例组上，随组一起换。 */
   private reloadModels() {
+    // PBR 贴图与 GLB 同一时机就绪：先换共享材质，再丢模板缓存重建实体。
+    this.industrial.upgradeSurfaces();
     this.industrial.reloadTemplates();
     for (const entry of this.staticEntities.values()) this.removeModel(entry.group);
     this.staticEntities.clear();
@@ -1674,8 +1684,12 @@ export class PlanetThreeScene {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
     const reducedMotion = this.reducedMotion.matches;
     if (!document.hidden && !this.frozen && !reducedMotion) this.industrial.animate(time / 1000, dt);
+    // 运行发光件呼吸；冻结定格在最亮相位。
+    if (!document.hidden) this.industrial.pulseGlow(time / 1000, this.frozen || reducedMotion);
     if (!document.hidden) {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
+      // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格。
+      this.statusLights.update(time / 1000, this.frozen || reducedMotion);
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
@@ -1724,6 +1738,7 @@ export class PlanetThreeScene {
     canvas.removeEventListener('wheel', this.wheel);
     this.staticBatches.dispose();
     this.dynamicBatches.dispose();
+    this.statusLights.dispose();
     this.conveyors.dispose();
     this.conveyorGhost.dispose();
     this.sorterRigs.dispose();

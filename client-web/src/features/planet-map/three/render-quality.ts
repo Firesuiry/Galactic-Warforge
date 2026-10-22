@@ -1,7 +1,27 @@
 export type PlanetRenderQuality = 'low' | 'balanced' | 'high';
 
+/** 画质档位的持久化键（PlanetMapThree 的下拉与音频预载共用）。 */
+export const RENDER_QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+
 export function parseRenderQuality(value: string | null): PlanetRenderQuality {
   return value === 'low' || value === 'high' ? value : 'balanced';
+}
+
+/**
+ * 当前画质档位：URL `?quality=`（深链截图）优先，其次 localStorage，缺省 balanced。
+ * 唯一定义处（PlanetMapThree 与 features/audio/quality 都读这里）。
+ */
+export function readPlanetRenderQuality(): PlanetRenderQuality {
+  if (typeof window === 'undefined') return 'balanced';
+  const query = new URLSearchParams(window.location.search).get('quality');
+  if (query === 'low' || query === 'balanced' || query === 'high') return query;
+  try {
+    const saved = window.localStorage.getItem(RENDER_QUALITY_STORAGE_KEY);
+    if (saved === 'low' || saved === 'balanced' || saved === 'high') return saved;
+  } catch {
+    // 隐私模式下 localStorage 不可用：按缺省档
+  }
+  return 'balanced';
 }
 
 /** Bound offscreen color/depth memory on dense displays, especially mobile. */
