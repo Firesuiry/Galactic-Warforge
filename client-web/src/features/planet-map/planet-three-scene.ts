@@ -269,10 +269,14 @@ export class PlanetThreeScene {
     // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空。
     this.scene.environmentIntensity = .8;
     // Default-canvas antialiasing does not reach postprocessing render targets.
-    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: quality.samples });
+    // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
+    // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
+    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0 });
     this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // 后处理链（3A §5）：AO → Bloom → Output（ACES + sRGB）→ 调色 →（samples==0）SMAA。
+    // GTAO 用自带的深度/法线 GBuffer（构造时不传 depthTexture 即自动建）：
+    // composer 目标的深度纹理在带 MSAA 时不解析，自带 GBuffer 与 MSAA 设置无关。
     this.gtao = new GTAOPass(this.scene, this.camera, 1, 1);
     // @types/three 的 GTAOPass 声明落后于 r186 实现（少了 ao/pd 参数），这里用实现里的方法配参。
     const gtao = this.gtao as unknown as {
@@ -403,8 +407,8 @@ export class PlanetThreeScene {
       altitude: this.altitude,
       quality: this.quality,
       sky: {
-        atmosphere: this.sky.uniforms.atmosphere,
-        stars: this.sky.uniforms.stars,
+        atmosphere: this.sky.uniforms.atmosphere.value,
+        stars: this.sky.uniforms.stars.value,
         zenith: `#${this.sky.uniforms.zenith.getHexString()}`,
         horizon: `#${this.sky.uniforms.horizon.getHexString()}`,
         sunDirection: this.sky.uniforms.sunDirection.toArray().map(v => Number(v.toFixed(3))),
@@ -433,6 +437,7 @@ export class PlanetThreeScene {
       environmentIntensity: this.scene.environmentIntensity,
       passes: {
         gtao: this.gtao.enabled,
+        aoBlend: (this.gtao as unknown as { blendIntensity: number }).blendIntensity,
         bloom: this.bloom.enabled,
         grade: this.grade.enabled,
         smaa: this.smaa.enabled,

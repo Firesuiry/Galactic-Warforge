@@ -23,12 +23,15 @@ export interface SkyUniforms {
   zenith: THREE.Color;
   horizon: THREE.Color;
   sunColor: THREE.Color;
-  /** 0 = 纯太空（只有星），1 = 完整大气（贴地）。 */
-  atmosphere: number;
+  /**
+   * 0 = 纯太空（只有星），1 = 完整大气（贴地）。
+   * 用 uniform 对象而不是裸数字：材质持有同一份引用，改这里就改材质（裸数字是构造时的快照）。
+   */
+  atmosphere: { value: number };
   /** 星空可见度（0–1，随大气浓度衰减）。 */
-  stars: number;
+  stars: { value: number };
   /** 大气浓度：控制地平线雾霾与太阳光晕的厚度。 */
-  haze: number;
+  haze: { value: number };
 }
 
 const SKY_VERTEX = /* glsl */ `
@@ -119,9 +122,9 @@ export function createSkyUniforms(quality: PlanetRenderQuality): SkyUniforms {
     zenith: new THREE.Color().setRGB(...SKY_ZENITH_LINEAR, THREE.LinearSRGBColorSpace),
     horizon: new THREE.Color().setRGB(...SKY_HORIZON_LINEAR, THREE.LinearSRGBColorSpace),
     sunColor: new THREE.Color('#ffe2bd'),
-    atmosphere: 1,
-    stars: 0.5,
-    haze: 1,
+    atmosphere: { value: 1 },
+    stars: { value: 0.5 },
+    haze: { value: 1 },
   };
 }
 
@@ -143,9 +146,9 @@ export class SkyDome {
         sunColor: { value: this.uniforms.sunColor },
         planetCenter: { value: this.planetCenter },
         planetRadius: { value: this.planetRadius },
-        atmosphere: { value: this.uniforms.atmosphere },
-        stars: { value: this.uniforms.stars },
-        haze: { value: this.uniforms.haze },
+        atmosphere: this.uniforms.atmosphere,
+        stars: this.uniforms.stars,
+        haze: this.uniforms.haze,
       },
       vertexShader: SKY_VERTEX,
       fragmentShader: SKY_FRAGMENT,
@@ -184,9 +187,9 @@ export class SkyDome {
    */
   setAltitude(altitude: number) {
     const t = 1 - THREE.MathUtils.smoothstep(altitude, 25, 60);
-    this.uniforms.atmosphere = t;
+    this.uniforms.atmosphere.value = t;
     // 星点：天空里被大气洗淡，太空中恢复。
-    this.uniforms.stars = THREE.MathUtils.lerp(0.22, 0.55, 1 - t);
+    this.uniforms.stars.value = THREE.MathUtils.lerp(0.22, 0.55, 1 - t);
   }
 
   dispose() {
@@ -274,8 +277,8 @@ export function createSkyEnvironment(renderer: THREE.WebGLRenderer, sunDirection
   const dome = new SkyDome('high');
   dome.setSunDirection(sunDirection);
   // 环境贴图要的是「全天空」的亮度：贴地机位的高度过渡在这里不适用。
-  dome.uniforms.atmosphere = 1;
-  dome.uniforms.stars = 0.3;
+  dome.uniforms.atmosphere.value = 1;
+  dome.uniforms.stars.value = 0.3;
   scene.add(dome.mesh);
   const target = pmrem.fromScene(scene, 0.02, 0.1, 4000, { size: envSize });
   dome.dispose();

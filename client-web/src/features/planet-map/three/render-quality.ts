@@ -33,7 +33,10 @@ export interface PlanetRenderSettings {
 export function renderQualitySettings(quality: PlanetRenderQuality, width: number, devicePixelRatio: number, maxSamples: number): PlanetRenderSettings {
   const compact = width < 768;
   const pixelRatioCap = quality === 'high' ? 2 : quality === 'low' ? 1 : compact ? 1.25 : 1.75;
-  const samples = quality === 'low' ? 0 : compact && quality === 'balanced' ? 2 : 4;
+  // GTAO 需要 RenderPass 的深度纹理；MSAA 目标在 three 里同时挂 depthTexture 时，深度不会
+  // 解析回纹理（r186 的限制），AO 会整屏失效。这里让 composer 目标不开 MSAA，抗锯齿交给
+  // SMAAPass（samples == 0 时启用），代价是约 1 个全屏 pass，换来 AO 与像素比解耦。
+  const samples = 0;
   return {
     pixelRatio: Math.min(Math.max(1, devicePixelRatio || 1), pixelRatioCap),
     samples: Math.max(0, Math.min(samples, maxSamples)),

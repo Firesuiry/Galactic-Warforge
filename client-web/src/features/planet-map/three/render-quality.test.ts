@@ -7,18 +7,19 @@ describe('planet rendering budget', () => {
     expect(parseRenderQuality('high')).toBe('high');
   });
 
-  it('caps mobile offscreen pixel count while preserving multisample antialiasing', () => {
+  it('caps mobile offscreen pixel count and keeps multisample off (GTAO 需要可解析的深度)', () => {
     const mobile = renderQualitySettings('balanced', 390, 3, 4);
     expect(mobile).toEqual({
-      pixelRatio: 1.25, samples: 2, shadowMapSize: 1024, bloom: true,
+      pixelRatio: 1.25, samples: 0, shadowMapSize: 1024, bloom: true,
       ao: 'half', grade: true, flare: false, softShadows: true, envSize: 256,
     });
-    expect(renderQualitySettings('balanced', 1920, 3, 4).samples).toBe(4);
+    // 三档都走 SMAA：composer 目标不开 MSAA，抗锯齿由后处理链的 SMAA 负责。
+    expect(renderQualitySettings('balanced', 1920, 3, 4).samples).toBe(0);
   });
 
-  it('respects hardware sample limits and keeps high resolution explicitly opt-in', () => {
+  it('respects hardware limits and keeps high resolution explicitly opt-in', () => {
     expect(renderQualitySettings('high', 390, 3, 2)).toEqual({
-      pixelRatio: 2, samples: 2, shadowMapSize: 4096, bloom: true,
+      pixelRatio: 2, samples: 0, shadowMapSize: 4096, bloom: true,
       ao: 'full', grade: true, flare: true, softShadows: true, envSize: 512,
     });
     expect(renderQualitySettings('high', 1920, 1, 0).samples).toBe(0);

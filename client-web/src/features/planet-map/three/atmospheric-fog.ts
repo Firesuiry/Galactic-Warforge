@@ -100,6 +100,27 @@ const FOG_VERTEX = /* glsl */ `
 `;
 
 /**
+ * 阴影视锥边缘渐隐（3A §7）：把方向光的 `getShadow(...)` 包一层，在阴影坐标靠近视锥边缘的
+ * 15% 内把遮蔽度渐变回 1（受光），避免画面里出现一条视锥边界的硬切线。
+ *
+ * 只作用于方向光（太阳）：阴影坐标的 x/y 在 [0,1] 内是视锥内，靠近 0/1 即边缘。
+ */
+const SHADOW_FADE = /* glsl */ `
+  float swShadowFade(vec4 coord) {
+    vec2 c = coord.xy / max(coord.w, 1e-5);
+    float edge = min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y));
+    return smoothstep(0.0, 0.15, edge);
+  }
+`;
+
+const SHADOW_LINE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
+
+const SHADOW_LINE_FADED = `{
+      float swShadow = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+      directLight.color *= mix(1.0, swShadow, swShadowFade(vDirectionalShadowCoord[ i ]));
+    }`;
+
+/**
  * 把雾注入一个材质。返回的 dispose 只解绑回调，不销毁材质本身。
  *
  * 所有材质共享同一份 `FogUniforms`（对象引用），场景里改一次密度/颜色全部生效。
@@ -127,7 +148,9 @@ export function applyAtmosphericFog(material: THREE.Material, uniforms: FogUnifo
       .replace('#include <fog_vertex>', FOG_VERTEX);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <fog_pars_fragment>', FOG_PARS)
-      .replace('#include <fog_fragment>', FOG_FRAGMENT);
+      .replace('#include <fog_fragment>', FOG_FRAGMENT)
+      .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${SHADOW_FADE}`)
+      .replace(SHADOW_LINE, SHADOW_LINE_FADED);
   };
   const previousKey = target.customProgramCacheKey.bind(target);
   target.customProgramCacheKey = () => `${previousKey()}|sw-atmosphere-fog-v1`;
