@@ -244,21 +244,23 @@ export function buildSoundSpecs(name: SoundName, options: BuildSoundOptions = {}
 // ---------- 限流（纯逻辑，便于测试） ----------
 
 export interface SoundRateLimiter {
-  /** nowMs 时刻 key 类音效是否允许播放（窗口内计数 +1）。 */
-  allow(key: string, nowMs: number): boolean;
+  /** nowMs 时刻 key 类音效是否允许播放（窗口内计数 +1）；可覆盖窗口/次数。 */
+  allow(key: string, nowMs: number, windowMs?: number, maxPlays?: number): boolean;
 }
 
 /** 同类音效 windowMs 毫秒内最多播 maxPlays 次，超出的直接丢弃。 */
 export function createRateLimiter(windowMs = 50, maxPlays = 3): SoundRateLimiter {
   const buckets = new Map<string, { windowStart: number; count: number }>();
   return {
-    allow(key, nowMs) {
+    allow(key, nowMs, customWindowMs, customMaxPlays) {
+      const window = customWindowMs ?? windowMs;
+      const max = customMaxPlays ?? maxPlays;
       const bucket = buckets.get(key);
-      if (!bucket || nowMs - bucket.windowStart >= windowMs) {
+      if (!bucket || nowMs - bucket.windowStart >= window) {
         buckets.set(key, { windowStart: nowMs, count: 1 });
         return true;
       }
-      if (bucket.count >= maxPlays) {
+      if (bucket.count >= max) {
         return false;
       }
       bucket.count += 1;
@@ -369,6 +371,7 @@ const diag = {
   skippedSuspended: 0,
   samplePlays: 0,
   sampleMisses: 0,
+  skippedInaudible: 0,
 };
 /** 采样缓存：路径 → 已解码 AudioBuffer；解码中 / 失败的路径记在下面两张表里。 */
 const sampleCache = new Map<string, AudioBuffer>();
@@ -430,15 +433,6 @@ export function isMuted(): boolean {
   return muted;
 }
 
-/** 兼容旧 API：等同于 master 总线音量。 */
-export function setVolume(next: number) {
-  setMix({ master: next });
-}
-
-export function getVolume(): number {
-  return mix.master;
-}
-
 export function getMix(): MixSettings {
   return { ...mix };
 }
@@ -460,10 +454,6 @@ export function setMix(patch: Partial<MixSettings>) {
 export function setSpatialTrimDb(db: number) {
   spatialTrimDb = db;
   if (spatialGain) spatialGain.gain.value = dbToGain(spatialTrimDb);
-}
-
-export function getSpatialTrimDb() {
-  return spatialTrimDb;
 }
 
 /**
@@ -607,10 +597,6 @@ export function preloadSamples(paths: readonly string[]) {
   for (const path of paths) getSample(ctx, path);
 }
 
-export function sampleStats() {
-  return { loaded: samplesLoaded, requested: samplesRequested };
-}
-
 /**
  * 调试探针（E2E/真机排查用）：`window.__swAudio` 暴露解锁/采样/循环/空间状态。
  * 只读；生产构建也在（几十字节，试玩驱动依赖它核对「音频真的在跑」）。
@@ -659,13 +645,29 @@ function manifestPaths(bus: 'sfx' | 'ui', key: string): readonly string[] {
 
 export interface PlayOptions {
   /**
-   * 空间位置（格坐标）——仅 sfx 用；缺省为非空间音。
+   * 空间参数（由 features/audio/spatial.ts 算好）——仅 sfx 用；缺省为非空间音。
+   * `audible: false` = 超过 60 格，引擎直接丢弃（不占限流窗口以外的资源）。
    * 没有 tile（实体反查不到、按画面外处理）时只套用 volumeDb / pan。
    */
-  spatial?: { tile?: { x: number; y: number }; volumeDb: number; pan: number } | null;
+  spatial?: {
+    audible?: boolean;
+    tile?: { x: number; y: number };
+    volumeDb: number;
+    pan: number;
+    distance?: number;
+  } | null;
   /** 覆盖总线（默认按 SAMPLE_KEY）。 */
   bus?: 'sfx' | 'ui';
 }
+
+/** 走 spatial 子总线（受全球视角 −10 dB）的战斗音效。 */
+const COMBAT_SOUNDS: ReadonlySet<SoundName> = new Set<SoundName>([
+  'fire', 'fireGauss', 'fireLaser', 'fireMissile', 'firePlasma', 'fireGeneric',
+  'explosion', 'explosionNear', 'explosionFar', 'intercept', 'hit',
+]);
+
+/** 爆炸近/远分档的距离阈值（格，距画面中心）。 */
+export const EXPLOSION_NEAR_TILES = 12;
 
 /** 随机扰动幅度（契约：音高 ±4%，音量 ±2 dB）。 */
 const PITCH_JITTER = 0.04;
@@ -686,8 +688,9 @@ function playSample(
   const gain = ctx.createGain();
   gain.gain.value = dbToGain(volumeDb + (random() - 0.5) * 2 * VOLUME_JITTER_DB);
   source.connect(gain);
+  let panner: StereoPannerNode | null = null;
   if (typeof ctx.createStereoPanner === 'function') {
-    const panner = ctx.createStereoPanner();
+    panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan));
     gain.connect(panner);
     panner.connect(destination);
@@ -698,6 +701,7 @@ function playSample(
   source.onended = () => {
     source.disconnect();
     gain.disconnect();
+    panner?.disconnect();
   };
 }
 
@@ -722,12 +726,18 @@ function play(name: SoundName, options?: { big?: boolean; spatial?: PlayOptions[
     return;
   }
   const target = SAMPLE_KEY[name];
-  const destination = target.bus === 'ui' ? busGains.ui : spatialGain ?? busGains.sfx;
   const spatial = options?.spatial ?? null;
-  // 空间音：距离衰减 + 左右声相（distance 与 pan 由 features/audio/spatial.ts 算好）。
-  if (spatial && target.bus === 'sfx') {
-    const attenuation = spatial.volumeDb;
-    if (attenuation <= -60) return; // > 60 格不播
+  // 全球视角的 −10 dB 只作用于**战斗音**（引擎内的 combat 音效）：这些走 spatial 子总线；
+  // 建造 chime / 指令音 / 通知等直接走 sfx 总线，不被压低。
+  const destination = target.bus === 'ui'
+    ? busGains.ui
+    : COMBAT_SOUNDS.has(name)
+      ? spatialGain ?? busGains.sfx
+      : busGains.sfx;
+  // 超过 60 格：spatial.ts 给 audible=false，这里直接丢弃（不是「压低到听不见」）。
+  if (spatial && target.bus === 'sfx' && spatial.audible === false) {
+    diag.skippedInaudible += 1;
+    return;
   }
   const paths = manifestPaths(target.bus, target.key);
   if (paths.length > 0) {
@@ -783,9 +793,9 @@ export const sfx = {
   explosionFar(spatial?: PlayOptions['spatial']) {
     play('explosionFar', { spatial });
   },
-  /** 按距离分档的爆炸（近/远）。 */
-  explosionAt(distance: number, spatial?: PlayOptions['spatial']) {
-    play(distance > 18 ? 'explosionFar' : 'explosionNear', { big: distance <= 6, spatial });
+  /** 按距画面中心格距分档的爆炸：≤ 12 格近、更远用闷响远档；big 只影响合成回退。 */
+  explosionAt(distance: number, spatial?: PlayOptions['spatial'], big = false) {
+    play(distance <= EXPLOSION_NEAR_TILES ? 'explosionNear' : 'explosionFar', { big, spatial });
   },
   /** 点防拦截：高频咔哒。 */
   intercept(spatial?: PlayOptions['spatial']) {
@@ -857,6 +867,8 @@ export const sfx = {
   },
   /** UI 悬停。 */
   uiHover() {
+    // 悬停是高频事件：限流窗口更宽（同 50ms 3 次对扫过按钮列太密）。
+    if (!limiter.allow('uiHover-slow', now(), 120, 1)) return;
     play('uiHover');
   },
   /** 打开面板。 */
@@ -935,6 +947,11 @@ function fadeOutLoop(ctx: AudioContext, voice: LoopVoice, seconds: number) {
   voice.gain.gain.setValueAtTime(voice.gain.gain.value, ctx.currentTime);
   voice.gain.gain.linearRampToValueAtTime(0, ctx.currentTime + seconds);
   voice.source.stop(ctx.currentTime + seconds + 0.05);
+  // 循环节点停止后断开：每次切声床/配乐/页面都会换一对节点，不断开会一直挂在总线上。
+  voice.source.onended = () => {
+    voice.source.disconnect();
+    voice.gain.disconnect();
+  };
 }
 
 function applyMusicLevel() {

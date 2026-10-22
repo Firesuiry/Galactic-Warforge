@@ -16,7 +16,6 @@ import { useEffect, useRef } from 'react';
 import type { PlanetRuntimeView } from '@shared/types';
 
 import {
-  getSpatialTrimDb,
   noteSceneTick,
   preloadSamples,
   setAmbientLayers,
@@ -45,6 +44,8 @@ export interface AudioSceneHandle {
     groundView: boolean;
   };
   project: (tile: { x: number; y: number }) => { x: number; y: number; visible: boolean } | null;
+  /** 画布 CSS 尺寸（声相归一化口径与 project 一致）；缺省时退回 window 尺寸。 */
+  getViewport?: () => { width: number; height: number } | null;
 }
 
 export interface PlanetAudioSceneInput {
@@ -69,6 +70,8 @@ export function countRunningBuildings(planet: PlanetRenderView | undefined, play
 
 export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, frozen = false }: PlanetAudioSceneInput): void {
   const lastCombatAt = useRef<number | null>(null);
+  // 配乐状态只在实际变化时调 setMusic（setMix 等也会读它）；值本身仍是模块级状态。
+  const musicRef = useRef<string | null>(null);
   const latest = useRef({ planet, runtime, playerId });
   latest.current = { planet, runtime, playerId };
 
@@ -90,6 +93,7 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
     if (frozen) {
       setAmbientLayers([]);
       setMusic(null);
+      musicRef.current = null;
       return undefined;
     }
     const quality = readAudioQuality();
@@ -107,12 +111,14 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
       // 场景没起来就整个静音（真机排查：句柄为 null 时声床永远不起）。
       const state = sceneHandle?.getCameraState() ?? { center: null, altitude: 10, tilt: 0.65, groundView: true };
       if (sceneHandle) {
+        // 声相归一化用画布 CSS 尺寸（与 scene.project 的坐标系一致），不是 window 尺寸。
+        const viewport = sceneHandle.getViewport?.() ?? null;
         const snapshot: AudioListenerSnapshot = {
           center: state.center,
           altitude: state.altitude,
           globalView: state.altitude > 190,
-          width: typeof window !== 'undefined' ? window.innerWidth : 0,
-          height: typeof window !== 'undefined' ? window.innerHeight : 0,
+          width: viewport?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 0),
+          height: viewport?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 0),
           faceSize,
           project: (tile) => sceneHandle.project(tile),
         };
@@ -133,7 +139,10 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
         lastCombatAt: lastCombatAt.current,
         now: typeof performance !== 'undefined' ? performance.now() : Date.now(),
       });
-      setMusic(music);
+      if (musicRef.current !== music) {
+        musicRef.current = music;
+        setMusic(music);
+      }
       // 采样加载完成后补起目标声床 / 配乐。
       tickAudioLoops();
     };
@@ -145,13 +154,9 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
       setSpatialTrimDb(0);
       setAmbientLayers([]);
       setMusic(null);
+      musicRef.current = null;
     };
   }, [frozen]);
-}
-
-/** 当前空间化整体衰减（测试/调试用）。 */
-export function currentSpatialTrimDb() {
-  return getSpatialTrimDb();
 }
 
 /**
@@ -176,7 +181,10 @@ export function tenseSignalFromEvent(
   return null;
 }
 
-/** 模块级「紧张窗口」：SSE 回调（use-planet-realtime）写，音频场景 hook 读。 */
+/**
+ * 模块级「紧张窗口」：SSE 回调（use-planet-realtime）写，音频场景 hook 读。
+ * 换局必须由页面调 resetTenseWindow()——until_tick 是全局 tick，会跨局残留。
+ */
 let tenseUntilTick = 0;
 
 export function noteTenseEvent(event: GameEventDetail, nowTick: number) {
@@ -184,11 +192,12 @@ export function noteTenseEvent(event: GameEventDetail, nowTick: number) {
   if (next) tenseUntilTick = next.hostileUntilTick;
 }
 
-export function getTenseUntilTick() {
-  return tenseUntilTick;
+/** 换局时清空紧张窗口（上一局的 until_tick 不能残留到新局）。 */
+export function resetTenseWindow() {
+  tenseUntilTick = 0;
 }
 
 /** 测试用：清空紧张窗口。 */
 export function resetTenseWindowForTests() {
-  tenseUntilTick = 0;
+  resetTenseWindow();
 }

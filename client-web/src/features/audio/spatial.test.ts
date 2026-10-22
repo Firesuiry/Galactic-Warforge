@@ -5,8 +5,11 @@ import {
   globalViewTrimDb,
   GLOBAL_VIEW_ALTITUDE,
   GLOBAL_VIEW_TRIM_DB,
+  OFFSCREEN_SPATIAL,
+  OFFSCREEN_VOLUME_DB,
   resetAudioListenerForTests,
   setAudioListener,
+  SILENT_SPATIAL,
   spatialForTile,
   spatializeTile,
   type AudioListenerSnapshot,
@@ -81,6 +84,12 @@ describe('spatializeTile', () => {
     expect(result).toEqual({ distance: 0, volumeDb: 0, pan: 0, audible: true });
   });
 
+  it('背面格（visible=false）不声相', () => {
+    const result = spatializeTile(listener({ project: () => ({ x: 900, y: 400, visible: false }) }), { x: 25, y: 20 });
+    expect(result.pan).toBe(0);
+    expect(result.volumeDb).toBeCloseTo(-3, 5);
+  });
+
   it('不可投影（项目 null）时只衰减不声相', () => {
     const result = spatializeTile(listener({ project: null }), { x: 23, y: 20 });
     expect(result.pan).toBe(0);
@@ -97,12 +106,18 @@ describe('globalViewTrimDb 全球视角整体衰减', () => {
 });
 
 describe('spatialForTile 播放参数', () => {
-  it('监听器就绪时返回 volumeDb/pan；没有监听器或超距返回 undefined', () => {
+  it('监听器就绪时返回 volumeDb/pan；没有监听器返回 undefined', () => {
     expect(spatialForTile({ x: 20, y: 20 })).toBeUndefined();
     setAudioListener(listener());
-    expect(spatialForTile({ x: 20, y: 20 })).toMatchObject({ volumeDb: 0, pan: 0 });
+    expect(spatialForTile({ x: 20, y: 20 })).toMatchObject({ audible: true, volumeDb: 0, pan: 0, distance: 0 });
     expect(spatialForTile(null)).toBeUndefined();
-    // 对面面（球面距离 > 60 格）不返回播放参数
-    expect(spatialForTile({ x: 5, y: 90 })).toBeUndefined();
+  });
+
+  it('超过 60 格返回 audible=false（与「反查不到坐标」分开）', () => {
+    setAudioListener(listener());
+    // 对面面（球面距离 > 60 格）：确定太远 → 静默结果，调用方/引擎都不播
+    expect(spatialForTile({ x: 5, y: 90 })).toMatchObject({ audible: false });
+    expect(SILENT_SPATIAL.audible).toBe(false);
+    expect(OFFSCREEN_SPATIAL).toMatchObject({ audible: true, volumeDb: OFFSCREEN_VOLUME_DB, pan: 0 });
   });
 });

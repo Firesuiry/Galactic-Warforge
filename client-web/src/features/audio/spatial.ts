@@ -91,7 +91,8 @@ export function spatializeTile(
   let pan = 0;
   if (listener.project && listener.width > 0) {
     const screen = listener.project(tile);
-    if (screen) {
+    // 球背面（相机看不到的半球）不声相：投影点虽然算得出来，但屏幕 x 没有意义。
+    if (screen && screen.visible) {
       pan = Math.max(-1, Math.min(1, (screen.x / listener.width) * 2 - 1));
     }
   }
@@ -111,6 +112,7 @@ export function setAudioListener(next: AudioListenerSnapshot | null) {
   listener = next;
 }
 
+/** 当前监听器快照（调试/诊断用；生产逻辑只通过 spatialForTile 读）。 */
 export function getAudioListener(): AudioListenerSnapshot | null {
   return listener;
 }
@@ -120,16 +122,28 @@ export function resetAudioListenerForTests() {
   listener = null;
 }
 
+/** 一次播放的空间参数；`audible === false` 表示引擎应直接丢弃（超距）。 */
+export interface SpatialPlayback {
+  audible: boolean;
+  tile?: TilePoint;
+  volumeDb: number;
+  pan: number;
+  /** 球面格距（反查不到坐标时没有）。 */
+  distance?: number;
+}
+
 /**
  * 当前监听器快照下的播放参数（给 sfx.* 直接吃）。
- * 没有监听器 / 没有中心格 / 超距 → 返回 undefined（= 非空间音，按原样播）；
+ * - 没有监听器 / 没有中心格 → undefined（= 非空间音，按原样播）；
+ * - 超距（> 60 格）→ `SILENT_SPATIAL`（调用方透传给 play，引擎直接丢弃）；
+ * - 否则 → 距离衰减 + 声相。
  * 全球视角由 engine 的 setSpatialTrimDb 统一 −10 dB，不在这里叠。
  */
-export function spatialForTile(tile: TilePoint | null | undefined): { tile: TilePoint; volumeDb: number; pan: number } | undefined {
+export function spatialForTile(tile: TilePoint | null | undefined): SpatialPlayback | undefined {
   if (!tile || !listener || !listener.center) return undefined;
   const result = spatializeTile(listener, tile, listener.faceSize);
-  if (!result.audible) return undefined;
-  return { tile, volumeDb: result.volumeDb, pan: result.pan };
+  if (!result.audible) return SILENT_SPATIAL;
+  return { audible: true, tile, volumeDb: result.volumeDb, pan: result.pan, distance: result.distance };
 }
 
 /**
@@ -137,4 +151,10 @@ export function spatialForTile(tile: TilePoint | null | undefined): { tile: Tile
  * 按「画面外」处理——固定 −12 dB、不做声相；没有监听器（非行星页）时同样返回这组参数，
  * 避免画面外的战斗和贴脸的战斗一样响。
  */
-export const OFFSCREEN_SPATIAL = { volumeDb: OFFSCREEN_VOLUME_DB, pan: 0 } as const;
+export const OFFSCREEN_SPATIAL: SpatialPlayback = { audible: true, volumeDb: OFFSCREEN_VOLUME_DB, pan: 0 };
+
+/**
+ * 超过 60 格（球面距离）的事件：不播。与「反查不到坐标」的 OFFSCREEN_SPATIAL 是两回事——
+ * 前者是「确定太远」，后者是「不知道在哪但可能在画面外」。
+ */
+export const SILENT_SPATIAL: SpatialPlayback = { audible: false, volumeDb: Number.NEGATIVE_INFINITY, pan: 0 };

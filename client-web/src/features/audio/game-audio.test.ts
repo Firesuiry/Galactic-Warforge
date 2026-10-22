@@ -7,13 +7,13 @@ import { sfx } from '@/engine/audio';
 import { resetBattleEntityIndexForTests, setBattleEntityIndex } from '@/features/audio/battle-context';
 import { OFFSCREEN_SPATIAL, resetAudioListenerForTests, setAudioListener } from '@/features/audio/spatial';
 import { isBuildingCompletionEvent, playPlanetEventAudio } from '@/features/audio/planet-audio';
-import { playBattleEventAudio, resetBattleAudioResolversForTests, setBattleAudioResolvers } from '@/features/audio/use-game-audio';
+import { playBattleEventAudio } from '@/features/audio/use-game-audio';
 
 /** 全部 sfx 方法的 mock（新增音效必须在这里登记，否则映射调用会直接 TypeError）。 */
 vi.mock('@/engine/audio', () => {
   const names = [
     'fire', 'fireGauss', 'fireLaser', 'fireMissile', 'firePlasma', 'fireGeneric',
-    'explosion', 'explosionNear', 'explosionFar', 'intercept', 'hit',
+    'explosion', 'explosionNear', 'explosionFar', 'explosionAt', 'intercept', 'hit',
     'commandOk', 'commandFail', 'buildComplete', 'constructionComplete', 'researchComplete',
     'alert', 'notify', 'buildPlace', 'demolish', 'beltPlace',
     'unitSelect', 'unitAck', 'orderMove', 'orderAttack',
@@ -42,7 +42,7 @@ function gameEvent(eventType: string, payload: Record<string, unknown> = {}, eve
 beforeEach(() => {
   vi.clearAllMocks();
   resetAudioListenerForTests();
-  resetBattleAudioResolversForTests();
+  resetBattleEntityIndexForTests();
 });
 
 describe('playBattleEventAudio 战斗事件 → 音效', () => {
@@ -175,6 +175,20 @@ describe('playPlanetEventAudio 行星事件 → 音效', () => {
     expect(sfx.fireMissile).not.toHaveBeenCalled();
   });
 
+  it('超过 60 格的行星事件不播（与战斗总线同口径）', () => {
+    setAudioListener({
+      center: { x: 10, y: 10 },
+      altitude: 10,
+      globalView: false,
+      width: 1000,
+      height: 800,
+      faceSize: 32,
+      project: null,
+    });
+    playPlanetEventAudio(gameEvent('rocket_launched', { rocket_id: 'r1', position: { x: 300, y: 10 } }));
+    expect(sfx.fireMissile).not.toHaveBeenCalled();
+  });
+
   it('同一 event_id 重复到达只响一次', () => {
     const event = gameEvent('production_alert', { alert: { alert_id: 'a2', alert_type: 'power_shortage' } }, 'evt-dup-1');
     playPlanetEventAudio(event);
@@ -197,11 +211,15 @@ describe('战斗音效空间化', () => {
       project: () => ({ x: 750, y: 400, visible: true }),
     });
     playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1', position: { x: 12, y: 10, z: 0 } }));
-    // 距离 2 格 → −1.2 dB；屏幕 x 750/1000 → pan 0.5
-    expect(sfx.explosion).toHaveBeenCalledWith(true, expect.objectContaining({ volumeDb: -1.2, pan: 0.5 }));
+    // 距离 2 格 → −1.2 dB；屏幕 x 750/1000 → pan 0.5；距离已知 → 交给 explosionAt 分近/远档
+    expect(sfx.explosionAt).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ volumeDb: -1.2, pan: 0.5 }),
+      true,
+    );
   });
 
-  it('超过 60 格不播（spatial 为 undefined，按画面外 −12 dB 播放）', async () => {
+  it('超过 60 格不播（与「反查不到坐标」的 −12 dB 分开）', async () => {
     const { setAudioListener } = await import('@/features/audio/spatial');
     setAudioListener({
       center: { x: 10, y: 10 },
@@ -212,14 +230,38 @@ describe('战斗音效空间化', () => {
       faceSize: 32,
       project: null,
     });
-    // 同面 60 格内没有该点：距离查询失败 → audible=false → 按画面外处理
+    // 球面距离 > 60 格：确定太远 → 一声都不响（不是回落成画面外 −12 dB）
     playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1', position: { x: 300, y: 10 } }));
+    expect(sfx.explosion).not.toHaveBeenCalled();
+    expect(sfx.explosionNear).not.toHaveBeenCalled();
+    expect(sfx.explosionFar).not.toHaveBeenCalled();
+    // 反查不到坐标仍是「画面外」：−12 dB 照播
+    playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'ghost' }));
     expect(sfx.explosion).toHaveBeenCalledWith(true, OFFSCREEN_SPATIAL);
   });
 
-  it('攻击方 id 由场景反查（resolveType 钩子）', () => {
-    setBattleAudioResolvers({ type: (id) => (id === 'b1' ? 'laser_turret' : undefined) });
-    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'b1', target_id: 'u1' }));
+  it('爆炸近/远两档：距离已知时按格距交给 explosionAt（12 格阈值在引擎里）', () => {
+    setAudioListener({
+      center: { x: 10, y: 10 },
+      altitude: 10,
+      globalView: false,
+      width: 1000,
+      height: 800,
+      faceSize: 32,
+      project: null,
+    });
+    playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1', position: { x: 22, y: 10 } }));
+    expect(sfx.explosionAt).toHaveBeenLastCalledWith(12, expect.objectContaining({ distance: 12 }), true);
+    playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'e1', position: { x: 30, y: 10 } }));
+    expect(sfx.explosionAt).toHaveBeenLastCalledWith(20, expect.objectContaining({ distance: 20 }), true);
+    // 没有距离（画面外/反查不到）时才退回通用爆炸
+    expect(sfx.explosion).not.toHaveBeenCalled();
+    playBattleEventAudio(battleEvent('entity_destroyed', { entity_id: 'ghost' }));
+    expect(sfx.explosion).toHaveBeenCalledWith(true, OFFSCREEN_SPATIAL);
+  });
+
+  it('攻击方类型可由调用方传入反查函数（测试注入点）', () => {
+    playBattleEventAudio(battleEvent('damage_applied', { attacker_id: 'b1', target_id: 'u1' }), () => null, (id) => (id === 'b1' ? 'laser_turret' : undefined));
     expect(sfx.fireLaser).toHaveBeenCalledTimes(1);
   });
 });

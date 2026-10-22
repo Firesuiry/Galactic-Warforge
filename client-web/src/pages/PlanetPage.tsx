@@ -60,7 +60,7 @@ import {
   getTechDisplayName,
 } from "@/features/planet-map/model";
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
-import { usePlanetAudioScene, type AudioSceneHandle } from "@/features/audio/use-planet-audio-scene";
+import { resetTenseWindow, usePlanetAudioScene, type AudioSceneHandle } from "@/features/audio/use-planet-audio-scene";
 import { sfx } from "@/engine/audio";
 import { useShellAlerts } from "@/features/production-alerts-query";
 import { accumulateOwnEntities, createOwnEntityCache, ownEntitySnapshot } from "@/features/planet-map/own-entity-cache";
@@ -160,6 +160,11 @@ export function PlanetPage() {
             return { center: next.center, altitude: next.altitude, tilt: next.tilt, groundView: next.altitude < 190 };
           },
           project: (tile) => capture.projectTile?.(tile) ?? null,
+          // 声相归一化口径与 project 一致（画布 CSS 尺寸，不是 window 尺寸）。
+          getViewport: () => {
+            const next = capture.getViewport?.() ?? null;
+            return next ? { width: next.width, height: next.height } : null;
+          },
         }
         : null;
     }, 500);
@@ -525,6 +530,8 @@ export function PlanetPage() {
     resetCommandStore(planetId);
     setActiveDetailPanel("workbench");
     toggleDrawer(false);
+    // 配乐「紧张」窗口按 tick 记，上一局的 until_tick 会一直压着新局，换局必须清。
+    resetTenseWindow();
   }, [gameIdentity, planetId, resetCommandStore, resetForPlanet]);
   const knownOwnUnits = useMemo(() => indexUnitsById(guideEntities.units), [guideEntities.units]);
   // 「家」按累积的己方实体算（不随镜头窗口丢失），供聚焦基地/回到基地共用。

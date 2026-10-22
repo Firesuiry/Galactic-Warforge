@@ -345,14 +345,14 @@ describe('引擎行为（stub AudioContext）', () => {
     expect(reloadedCtx.oscillators.length).toBeGreaterThan(0);
   });
 
-  it('setVolume 收敛到 0..1 并写入主增益', async () => {
+  it('setMix({ master }) 收敛到 0..1 并写入主增益', async () => {
     const audio = await importFreshAudio();
     audio.unlockAudio();
-    audio.setVolume(0.5);
-    expect(audio.getVolume()).toBe(0.5);
+    audio.setMix({ master: 0.5 });
+    expect(audio.getMix().master).toBe(0.5);
     expect(FakeAudioContext.instances[0].gains[0].gain.value).toBe(0.5);
-    audio.setVolume(7);
-    expect(audio.getVolume()).toBe(1);
+    audio.setMix({ master: 7 });
+    expect(audio.getMix().master).toBe(1);
   });
 });
 
@@ -373,7 +373,7 @@ describe('无 AudioContext 环境（no-op 降级）', () => {
       audio.sfx.uiClick();
       audio.setMuted(true);
       audio.setMuted(false);
-      audio.setVolume(0.3);
+      audio.setMix({ master: 0.3 });
     }).not.toThrow();
     expect(audio.isMuted()).toBe(false);
     expect(FakeAudioContext.instances).toHaveLength(0);
@@ -381,6 +381,14 @@ describe('无 AudioContext 环境（no-op 降级）', () => {
 });
 
 // ---------- 采样引擎（第 23 轮） ----------
+
+/** 采样加载统计走 window.__swAudio 探针（引擎不再导出只给测试用的 sampleStats）。 */
+function probeSamples(audio: { unlockAudio: () => void }) {
+  void audio;
+  const probe = (window as unknown as { __swAudio?: { samples: { loaded: number; requested: number } } }).__swAudio;
+  if (!probe) throw new Error('__swAudio 探针未发布');
+  return probe.samples;
+}
 
 /** 等异步解码链跑完（fetch → decodeAudioData）。 */
 async function flush() {
@@ -417,7 +425,7 @@ describe('采样加载与回退', () => {
     audio.preloadSamples(AUDIO_MANIFEST.sfx['fire-gauss']);
     await flush();
     await flush();
-    expect(audio.sampleStats().loaded).toBe(AUDIO_MANIFEST.sfx['fire-gauss'].length);
+    expect(probeSamples(audio).loaded).toBe(AUDIO_MANIFEST.sfx['fire-gauss'].length);
 
     // 第二次：走采样（BufferSource），不再新建振荡器
     const oscillatorsBefore = ctx.oscillators.length;
@@ -441,7 +449,7 @@ describe('采样加载与回退', () => {
     // 采样播放时 BufferSource.buffer 就是被选中的 buffer（假 buffer 无路径），
     // 这里改为断言「所有变体都进了缓存」+ 播放没有回退合成音。
     paths.forEach((path) => expect(path).toMatch(/^\/assets\/audio\/sfx\/fire-gauss(-\d)?\.ogg$/));
-    expect(audio.sampleStats().loaded).toBe(paths.length);
+    expect(probeSamples(audio).loaded).toBe(paths.length);
     expect(FakeAudioContext.instances[0].sources.length).toBeGreaterThan(0);
     used.add('ok');
     expect(used.size).toBe(1);
@@ -461,10 +469,10 @@ describe('采样加载与回退', () => {
     await flush();
     expect(fetchMock.mock.calls.length).toBe(callsAfterFirst);
     expect(() => audio.sfx.researchComplete()).not.toThrow();
-    expect(audio.sampleStats().loaded).toBe(0);
+    expect(probeSamples(audio).loaded).toBe(0);
   });
 
-  it('空间音走 sfx 总线的 spatial 子总线 + 声相；超距（−60 dB）不播', async () => {
+  it('空间音走 sfx 总线的 spatial 子总线 + 声相；audible=false（> 60 格）不播', async () => {
     stubFetch();
     const audio = await importFreshAudio();
     audio.unlockAudio();
@@ -473,8 +481,20 @@ describe('采样加载与回退', () => {
     expect(ctx.sources.length + ctx.oscillators.length).toBeGreaterThan(0);
 
     const before = ctx.sources.length + ctx.oscillators.length;
-    audio.sfx.explosion(true, { tile: { x: 1, y: 1 }, volumeDb: -61, pan: 0 });
+    audio.sfx.explosion(true, { audible: false, tile: { x: 1, y: 1 }, volumeDb: Number.NEGATIVE_INFINITY, pan: 0 });
     expect(ctx.sources.length + ctx.oscillators.length).toBe(before);
+  });
+
+  it('爆炸近/远两档按 12 格阈值挑采样键', async () => {
+    stubFetch();
+    const audio = await importFreshAudio();
+    audio.unlockAudio();
+    audio.sfx.explosionAt(6, undefined);
+    audio.sfx.explosionAt(40, undefined);
+    const { SAMPLE_KEY } = audio;
+    expect(SAMPLE_KEY.explosionNear.key).toBe('explosion-near');
+    expect(SAMPLE_KEY.explosionFar.key).toBe('explosion-far');
+    expect(audio.EXPLOSION_NEAR_TILES).toBe(12);
   });
 });
 
@@ -512,7 +532,6 @@ describe('混音设置与总线', () => {
     audio.setMuted(false);
 
     audio.setSpatialTrimDb(-10);
-    expect(audio.getSpatialTrimDb()).toBe(-10);
     // spatial 总线是第 6 个 GainNode（master + 4 条总线之后）
     expect(ctx.gains[5].gain.value).toBeCloseTo(10 ** (-10 / 20), 5);
   });

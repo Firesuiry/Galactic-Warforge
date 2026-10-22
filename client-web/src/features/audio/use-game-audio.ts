@@ -13,7 +13,7 @@
 import { useEffect } from 'react';
 
 import { sfx } from '@/engine/audio';
-import { payloadTile, subscribeBattleEvents, type BattleEvent } from '@/engine/battle-events';
+import { payloadAnchor, subscribeBattleEvents, type BattleEvent } from '@/engine/battle-events';
 import { fireSoundForTurret } from '@/features/audio/ambient-music';
 import {
   battleAttackerId,
@@ -22,7 +22,7 @@ import {
   resolveEntityTile,
   resolveEntityType,
 } from '@/features/audio/battle-context';
-import { OFFSCREEN_SPATIAL, spatialForTile, type TilePoint } from '@/features/audio/spatial';
+import { OFFSCREEN_SPATIAL, spatialForTile, type SpatialPlayback, type TilePoint } from '@/features/audio/spatial';
 
 /**
  * 事件里能拿到的格坐标：总线锚点（emitBattleEvent 从 payload 提取）→ payload 原样
@@ -31,9 +31,7 @@ import { OFFSCREEN_SPATIAL, spatialForTile, type TilePoint } from '@/features/au
  */
 function eventTile(event: BattleEvent, resolveTile: (id: string | undefined) => TilePoint | null): TilePoint | null {
   if (event.tile) return event.tile;
-  const fromPayload = payloadTile(event.payload.position)
-    ?? payloadTile(event.payload.target_pos)
-    ?? payloadTile(event.payload.from);
+  const fromPayload = payloadAnchor(event.payload);
   if (fromPayload) return fromPayload;
   // 攻击方优先，其次目标（damage_applied 两侧都可能是画面内实体）。
   return resolveTile(battleAttackerId(event)) ?? resolveTile(battleTargetId(event));
@@ -54,8 +52,10 @@ export function playBattleEventAudio(
   resolveType?: (id: string | undefined) => string | undefined,
 ): void {
   const tile = eventTile(event, resolveTile ?? resolveTileHook);
-  // 有坐标按距离/声相；反查不到（实体不在相机窗口）按画面外 −12 dB、无声相。
+  // 有坐标按距离/声相；反查不到（实体不在相机窗口）按画面外 −12 dB、无声相；
+  // 球面距离 > 60 格是「确定太远」——直接不播（引擎对 audible=false 也会丢弃）。
   const spatial = spatialForTile(tile) ?? OFFSCREEN_SPATIAL;
+  if (!spatial.audible) return;
   switch (event.type) {
     case 'missile_salvo_fired':
       sfx.fireMissile(spatial);
@@ -65,11 +65,11 @@ export function playBattleEventAudio(
       break;
     case 'battle_report_generated': {
       const report = event.payload.report as { target_destroyed?: boolean } | undefined;
-      sfx.explosion(report?.target_destroyed === true, spatial);
+      playExplosion(report?.target_destroyed === true, spatial);
       break;
     }
     case 'entity_destroyed':
-      sfx.explosion(true, spatial);
+      playExplosion(true, spatial);
       break;
     case 'damage_applied': {
       // 开火音按攻击方炮塔类型（总线字段 → payload → 场景反查）；黑雾/舰队用通用开火音。
@@ -86,24 +86,26 @@ export function playBattleEventAudio(
   }
 }
 
-/** 场景反查钩子：AppShell 注入（当前行星场景快照里的实体位置/类型）。 */
-let resolveTileHook: (id: string | undefined) => TilePoint | null = (id) => resolveEntityTile(id, getBattleEntityIndex());
-let resolveTypeHook: (id: string | undefined) => string | undefined = (id) => resolveEntityType(id, getBattleEntityIndex());
-
-export function setBattleAudioResolvers(hooks: {
-  tile?: (id: string | undefined) => TilePoint | null;
-  type?: (id: string | undefined) => string | undefined;
-}) {
-  if (hooks.tile) resolveTileHook = hooks.tile;
-  if (hooks.type) resolveTypeHook = hooks.type;
+/**
+ * 爆炸近/远两档：知道距画面中心格距时按距离挑采样（≤ 12 格近、否则远），
+ * 不知道距离（画面外/无监听器）时退回通用爆炸（big 只影响合成回退）。
+ */
+function playExplosion(big: boolean, spatial: SpatialPlayback) {
+  if (spatial.distance !== undefined) {
+    sfx.explosionAt(spatial.distance, spatial, big);
+    return;
+  }
+  sfx.explosion(big, spatial);
 }
 
-export function resetBattleAudioResolversForTests() {
-  resolveTileHook = (id) => resolveEntityTile(id, getBattleEntityIndex());
-  resolveTypeHook = (id) => resolveEntityType(id, getBattleEntityIndex());
-}
+/**
+ * 场景反查钩子：默认读当前行星索引（行星页 / 战争工作台挂载时写入，卸载清空），
+ * 不需要页面再注入一层 resolver。
+ */
+const resolveTileHook = (id: string | undefined) => resolveEntityTile(id, getBattleEntityIndex());
+const resolveTypeHook = (id: string | undefined) => resolveEntityType(id, getBattleEntityIndex());
 
 /** App 级游戏音效 hook：订阅战斗事件总线，卸载时退订。 */
 export function useGameAudio(): void {
-  useEffect(() => subscribeBattleEvents((event) => playBattleEventAudio(event, resolveTileHook, resolveTypeHook)), []);
+  useEffect(() => subscribeBattleEvents((event) => playBattleEventAudio(event)), []);
 }

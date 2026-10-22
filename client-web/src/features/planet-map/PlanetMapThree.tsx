@@ -22,25 +22,15 @@ import { projectTheaterZoneRing, theaterZoneContainsTile } from './planet-three-
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
-import type { PlanetRenderQuality } from './three/render-quality';
+import { RENDER_QUALITY_STORAGE_KEY, readPlanetRenderQuality, type PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { exposeTestHook } from '@/test-hooks';
 
-const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+const QUALITY_STORAGE_KEY = RENDER_QUALITY_STORAGE_KEY;
 /** 点选落空提示的停留时长（ms）：一次点击的回执，不是常驻状态。 */
 const PICK_NOTICE_TTL_MS = 2400;
-
-function readQuality(): PlanetRenderQuality {
-  const query = new URLSearchParams(window.location.search).get('quality');
-  if (query === 'low' || query === 'balanced' || query === 'high') return query;
-  try {
-    const saved = localStorage.getItem(QUALITY_STORAGE_KEY);
-    if (saved === 'low' || saved === 'balanced' || saved === 'high') return saved;
-  } catch { /* Storage can be disabled; rendering still works. */ }
-  return 'balanced';
-}
 
 interface Props {
   planet: PlanetRenderView;
@@ -94,7 +84,7 @@ export function PlanetMapThree(props: Props) {
   initialZoomRef.current = props.initialZoom;
   /** 最近一次读到的相机高度（R20-A ⑥）：场景就绪前为 null，状态行省略缩放档。 */
   const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
-  const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
+  const [quality, setQuality] = useState<PlanetRenderQuality>(readPlanetRenderQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
   // 点选落空提示（试玩 1016 B4）：目标格不在视野内（已聚焦过去）/ 点击处不在星球表面，

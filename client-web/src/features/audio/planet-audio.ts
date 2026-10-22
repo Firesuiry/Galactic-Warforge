@@ -8,8 +8,9 @@
 import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
+import { payloadAnchor } from '@/engine/battle-events';
 import { isPowerAlertType } from '@/features/notifications/event-toasts';
-import { spatialForTile, type TilePoint } from '@/features/audio/spatial';
+import { spatialForTile } from '@/features/audio/spatial';
 
 /**
  * 建筑「完成态」判定：状态进入 running 且原因属于建成/恢复运转
@@ -45,18 +46,6 @@ function isDuplicateEvent(eventId: string): boolean {
   return false;
 }
 
-/** payload 里的格坐标（position / target_pos / from），与 battle-events 同口径。 */
-function payloadTile(payload: Record<string, unknown>): TilePoint | null {
-  for (const key of ['position', 'target_pos', 'from']) {
-    const value = payload[key];
-    if (typeof value === 'object' && value !== null) {
-      const point = value as { x?: unknown; y?: unknown };
-      if (typeof point.x === 'number' && typeof point.y === 'number') return { x: point.x, y: point.y };
-    }
-  }
-  return null;
-}
-
 /**
  * 行星游戏事件 → 音效映射（在 SSE 回调线程内同步调用）：
  * - building_state_changed（完成态）→ 建造完成 chime
@@ -72,7 +61,9 @@ export function playPlanetEventAudio(event: GameEventDetail): void {
     return;
   }
   const payload = event.payload ?? {};
-  const spatial = spatialForTile(payloadTile(payload));
+  const spatial = spatialForTile(payloadAnchor(payload) ?? null);
+  // 超过 60 格（球面距离）的事件不播；没有坐标时按非空间音照播。
+  if (spatial && !spatial.audible) return;
   switch (event.event_type) {
     case 'building_state_changed':
       if (isBuildingCompletionEvent(payload)) {

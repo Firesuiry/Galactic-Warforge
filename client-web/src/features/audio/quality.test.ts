@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AUDIO_QUALITY_STORAGE_KEY, readAudioQuality, shouldPreloadMusic } from '@/features/audio/quality';
+import { RENDER_QUALITY_STORAGE_KEY } from '@/features/planet-map/three/render-quality';
 
 describe('readAudioQuality 画质档位', () => {
+  it('与行星 3D 共用同一个存储键（只此一处定义）', () => {
+    expect(AUDIO_QUALITY_STORAGE_KEY).toBe(RENDER_QUALITY_STORAGE_KEY);
+  });
+
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState({}, '', '/');

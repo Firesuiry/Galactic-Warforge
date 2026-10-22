@@ -37,8 +37,6 @@ export interface BattleEvent {
   tick: number;
   /** 事件锚点格坐标（服务端 payload.position / target_pos / from 之一；无则 undefined）。 */
   tile?: { x: number; y: number };
-  /** 攻击方锚点格坐标（damage_applied / salvo 的 attacker 位置；无则 undefined）。 */
-  attackerTile?: { x: number; y: number };
   /** 攻击方实体 id / 类型（音效按炮塔类型区分用）。 */
   attackerId?: string;
   attackerType?: string;
@@ -51,6 +49,11 @@ export function payloadTile(value: unknown): { x: number; y: number } | undefine
   if (typeof point.x !== 'number' || typeof point.y !== 'number') return undefined;
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined;
   return { x: point.x, y: point.y };
+}
+
+/** payload 里的锚点格坐标：position → target_pos → from 第一个可用的（全仓只此一处口径）。 */
+export function payloadAnchor(payload: Record<string, unknown>): { x: number; y: number } | undefined {
+  return payloadTile(payload.position) ?? payloadTile(payload.target_pos) ?? payloadTile(payload.from);
 }
 
 export type BattleEventListener = (event: BattleEvent) => void;
@@ -85,13 +88,9 @@ export function emitBattleEvent(
     // 音效空间化锚点：服务端只在部分事件带位置（entity_destroyed.position、
     // enemy_wave_incoming.from/target_pos、loot_dropped.position）；缺省由调用方
     // 用场景里的实体位置补（见 features/audio/use-game-audio.ts）。
-    tile: payloadTile(payload.position) ?? payloadTile(payload.target_pos) ?? payloadTile(payload.from),
-    attackerTile: payloadTile(payload.attacker_position) ?? payloadTile(payload.source_pos),
+    tile: payloadAnchor(payload),
     attackerId: typeof payload.attacker_id === 'string' ? payload.attacker_id : undefined,
     attackerType: typeof payload.attacker_type === 'string' ? payload.attacker_type : undefined,
-    // damage_applied 的服务端 payload 也可能直接带 attacker_type（炮塔开火时），
-    // 从总线 emit 进来的事件没有上面那条提取，这里补一次。
-    ...(typeof payload.attacker_type === 'string' ? { attackerType: payload.attacker_type } : {}),
   };
   nextSeq += 1;
   listeners.forEach((listener) => {

@@ -12,7 +12,6 @@ import { useEffect, useState } from 'react';
 import type { FleetDetailView, FormationType } from '@shared/types';
 
 import { Button } from '@/common/controls';
-import { sfx } from '@/engine/audio';
 import { fleetStateLabel } from '@/features/starmap/model';
 import { useStarmapViewStore } from '@/features/starmap/store';
 import type { WarCommandHint } from '@/features/war/error-hints';
@@ -67,8 +66,8 @@ export function FleetSelectionBar({
     });
   }
 
+  // 点击音由共用 Button 统一出（不在这里再手写一次，否则一次点击响两遍）。
   function handleAttackToggle() {
-    sfx.uiClick();
     if (attacking) {
       exitInteractionMode();
       return;
@@ -82,7 +81,6 @@ export function FleetSelectionBar({
   }
 
   function handleMoveToggle() {
-    sfx.uiClick();
     if (moving) {
       exitInteractionMode();
       return;
