@@ -92,6 +92,7 @@ BAN_WORDS = [
     "hand railgun", "handrailgun", "uzi", "sniper", "handheld", "hand gun",
     "diybio", "ventilador", "talha", "centrifuga", "compresor",
     "gas pump", "gas station", "petrol station", "fuel dispenser",
+    "starship delivery", "uber", "atari", "arcade machine", "starbot",
     "extinguisher", "mercedes", "lamborghini", "porsche", "boeing", "cessna",
     "me262", "fluorite", "limonite", "tractor", "dieselpunk", "steampunk",
     "victorian", "drainage", "sinter", "glassware", "cabinet", "terminal",
