@@ -20,8 +20,7 @@ import { ACCENT_METAL, BUILDING_MATERIALS, GLOW, SURFACE, STATUS_LIGHT } from '.
 /** 材质池的键：材质族 + 阵营（或发光色）。 */
 export type SurfaceKey =
   | 'ceramic' | 'graphite' | 'alloy' | 'plate' | 'plastic' | 'rubber'
-  | 'enemyCeramic' | 'enemyGraphite' | 'enemyAlloy' | 'enemyPlate'
-  | 'fogCeramic' | 'fogGraphite' | 'fogAlloy'
+  | 'enemyCeramic' | 'fogCeramic'
   | 'copper' | 'copperDark' | 'glass'
   | 'blue' | 'orange' | 'fogGlow' | 'fogHostileGlow' | 'warning' | 'hazard';
 
@@ -47,12 +46,7 @@ const SPEC: Record<SurfaceKey, SurfaceSpec> = {
   plastic: { family: 'plastic', color: OWN.plastic.color, ...SURFACE.plastic },
   rubber: { family: 'rubber', color: '#18242a', ...SURFACE.rubber },
   enemyCeramic: { family: 'ceramic', color: ENEMY.ceramic.color, ...SURFACE.ceramic, procedural: 'ceramic' },
-  enemyGraphite: { family: 'graphite', color: ENEMY.graphite.color, ...SURFACE.graphite, procedural: 'graphite' },
-  enemyAlloy: { family: 'alloy', color: ENEMY.alloy.color, ...SURFACE.alloy, procedural: 'alloy' },
-  enemyPlate: { family: 'plate', color: ENEMY.plate.color, ...SURFACE.plate },
   fogCeramic: { family: 'ceramic', color: FOG.ceramic.color, roughness: .5, metalness: .3, procedural: 'ceramic' },
-  fogGraphite: { family: 'graphite', color: FOG.graphite.color, roughness: .55, metalness: .35, procedural: 'graphite' },
-  fogAlloy: { family: 'alloy', color: FOG.alloy.color, roughness: .42, metalness: .7, procedural: 'alloy' },
   // 铜/黄铜小件在 1 格里是细管细环：每格 1.2 次重复才读得出金属拉丝，否则整根管是均匀色。
   copper: { family: 'alloy', color: ACCENT_METAL.copper, roughness: .34, metalness: .78, repeat: 1.2 },
   copperDark: { family: 'alloy', color: ACCENT_METAL.copperDark, roughness: .55, metalness: .62, repeat: 1.2 },
@@ -138,12 +132,10 @@ export class IndustrialSurfaces {
     return true;
   }
 
+  /** 清空材质池，按需懒建（`get()`）：没有模型用到的材质族不建（审查 L4：23 个材质只建实际用到的）。 */
   private rebuild() {
-    for (const key of Object.keys(SPEC) as SurfaceKey[]) this.materials.set(key, this.build(key));
-    // 逐建筑变体（停机发光件）跟着重建：先清掉旧变体再按需懒建。
-    for (const cacheKey of [...this.materials.keys()]) {
-      if (!(cacheKey in SPEC)) { this.materials.get(cacheKey)?.dispose(); this.materials.delete(cacheKey); }
-    }
+    for (const material of this.materials.values()) material.dispose();
+    this.materials.clear();
   }
 
   private build(key: SurfaceKey): THREE.MeshStandardMaterial {

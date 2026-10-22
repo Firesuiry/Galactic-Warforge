@@ -43,8 +43,9 @@ describe('material texture failure fallback', () => {
       expect(material).toBeInstanceOf(THREE.MeshStandardMaterial);
       expect(material.name).toBe(`industrial-${key}`);
     }
-    // hazard 贴花自带程序贴图（斜条纹），不依赖网络。
+    // hazard 贴花自带程序贴图（斜条纹），不依赖网络；重复取不新建贴图（L4：旧贴图回收）。
     expect(surfaces.get('hazard').map).toBeTruthy();
+    expect(surfaces.get('hazard').map).toBe(surfaces.get('hazard').map);
     surfaces.dispose();
     expect(() => surfaces.dispose()).not.toThrow();
   });
