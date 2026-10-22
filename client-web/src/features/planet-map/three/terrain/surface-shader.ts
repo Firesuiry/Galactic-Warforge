@@ -331,12 +331,17 @@ export const SHADER_COLOR = /* glsl */`
         else if (wTop == wSoil) { swLayerA = 2.0; swLayerB = wMoss >= wGravel ? 0.0 : 3.0; }
         else { swLayerA = 3.0; swLayerB = wMoss >= wSoil ? 0.0 : 2.0; }
       }
-      SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScale);
-      SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScale);
+      // 贴地极近时一格占满半屏，同一张贴图重复次数太多会闪成高频噪点：
+      // 按像素脚印把采样尺度在 0.72–1.25 之间收放（近处纹理放大、远处略缩），
+      // 远处仍按距离淡出到宏观色。
+      float swTexLod = clamp(swPixelFootprint / max(0.0001, swTileWorldSize), 0.6, 2.6);
+      float swTexScaleLod = swTexScale * mix(0.72, 1.25, (swTexLod - 0.6) / 2.0);
+      SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScaleLod);
+      SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScaleLod);
       // 宏观尺度再采一次主层（另一相位），用低频权重混合，破坏同一张贴图的周期性重复。
       SwSurface swMacro = swSampleLayer(swLayerA, swSurfacePosition + vec3(0.37, 0.11, 0.53), swTriW, swTexMacro);
       // 第三层：不同旋转相位的中尺度采样，进一步打散「同一朵花纹重复出现」的观感。
-      vec3 swRotated = swSurfacePosition * swTexScale;
+      vec3 swRotated = swSurfacePosition * swTexScaleLod;
       swRotated = vec3(swRotated.z * 0.94 + swRotated.x * 0.34, swRotated.y, -swRotated.x * 0.34 + swRotated.z * 0.94) + vec3(5.1, 3.7, 8.9);
       vec3 swMacroTint = texture2D(swAlbedoArray, vec3(swRotated.xz, swLayerA)).rgb * 0.5
         + texture2D(swAlbedoArray, vec3(swRotated.zy, swLayerA)).rgb * 0.5;
