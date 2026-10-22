@@ -26,6 +26,7 @@ vi.mock('@/engine/audio', () => ({
     researchComplete: vi.fn(),
     alert: vi.fn(),
     uiClick: vi.fn(),
+    uiHover: vi.fn(),
   },
 }));
 

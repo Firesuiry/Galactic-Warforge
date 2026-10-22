@@ -324,6 +324,7 @@ export function PlanetSelectionBar({ alerts, catalog, onShowDetail, planet, squa
               className="secondary-button planet-selection-bar__danger"
               type="button"
               onClick={() => {
+                sfx.demolish();
                 submit('demolish', () => client.cmdDemolish(building.id), { entityId: building.id });
                 setSelected(null);
               }}

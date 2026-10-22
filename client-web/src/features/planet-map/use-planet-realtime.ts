@@ -19,6 +19,7 @@ import {
 } from '@/features/planet-map/model';
 import { forwardGameEventToBattleBus } from '@/engine/battle-events';
 import { playPlanetEventAudio } from '@/features/audio/planet-audio';
+import { noteTenseEvent } from '@/features/audio/use-planet-audio-scene';
 import { notifyGameEvent } from '@/features/notifications/notify';
 import { usePlanetCommandStore } from '@/features/planet-commands/store';
 import { usePlanetViewStore } from '@/features/planet-map/store';
@@ -150,8 +151,10 @@ export function usePlanetRealtimeSync(options: UsePlanetRealtimeSyncOptions) {
       store.setLastEventId(event.event_id);
       usePlanetCommandStore.getState().ingestEvent(event);
 
-      // 行星事件音效分流（建造完成/研究完成/产线告警/火箭发射），内部按 event_id 去重
+      // 行星事件音效分流（建造完成/研究完成/产线告警/火箭发射/黑雾敌对…），内部按 event_id 去重
       playPlanetEventAudio(event);
+      // 配乐「紧张」信号（黑雾被激怒 / 波次来袭）：交给音频场景 hook 的模块级窗口。
+      noteTenseEvent(event, event.tick);
 
       // 全局事件通知 toast（内部 event_id 去重；?freeze=1 不弹）
       notifyGameEvent(event);

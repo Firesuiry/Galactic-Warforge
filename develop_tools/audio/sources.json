@@ -1,0 +1,116 @@
+{
+  "$comment": "音频源清单：build.mjs 按此表把源文件转码到 client-web/public/assets/audio/。源文件不入库（下载到 --source-dir），只入库成品。许可只允许 CC0 / CC-BY。",
+  "packs": {
+    "kenney_sci-fi-sounds": {
+      "url": "https://kenney.nl/media/pages/assets/sci-fi-sounds/6b296f9ecf-1677589334/kenney_sci-fi-sounds.zip",
+      "author": "Kenney",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    "kenney_impact-sounds": {
+      "url": "https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip",
+      "author": "Kenney",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://kenney.nl/assets/impact-sounds"
+    },
+    "kenney_interface-sounds": {
+      "url": "https://kenney.nl/media/pages/assets/interface-sounds/fa43c1dd4d-1677589452/kenney_interface-sounds.zip",
+      "author": "Kenney",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://kenney.nl/assets/interface-sounds"
+    },
+    "kenney_ui-audio": {
+      "url": "https://kenney.nl/media/pages/assets/ui-audio/490d233f68-1677590494/kenney_ui-audio.zip",
+      "author": "Kenney",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://kenney.nl/assets/ui-audio"
+    },
+    "kenney_digital-audio": {
+      "url": "https://kenney.nl/media/pages/assets/digital-audio/216eac4753-1677590265/kenney_digital-audio.zip",
+      "author": "Kenney",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://kenney.nl/assets/digital-audio"
+    },
+    "oga_space_wind": {
+      "url": "https://opengameart.org/sites/default/files/space-wind_0.mp3",
+      "author": "aquinn",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/space-winds"
+    },
+    "oga_wind": {
+      "url": "https://opengameart.org/sites/default/files/wind%20background%20noise%202.wav",
+      "author": "Bashar3A",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/mild-wind-background-noise"
+    },
+    "oga_factory": {
+      "url": "https://opengameart.org/sites/default/files/Factory.ogg",
+      "author": "yd",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/factory-ambiance"
+    },
+    "oga_calm": {
+      "url": "https://opengameart.org/sites/default/files/Spacearray_0.ogg",
+      "author": "Tozan",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/deep-space-array"
+    },
+    "oga_tense": {
+      "url": "https://opengameart.org/sites/default/files/space_graveyard_4.mp3",
+      "author": "TinyWorlds",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/space-graveyard-ambient-track"
+    },
+    "oga_combat": {
+      "url": "https://opengameart.org/sites/default/files/last_stand_in_space_looped.ogg",
+      "author": "buttons",
+      "license": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "page": "https://opengameart.org/content/last-stand-in-space-looped"
+    }
+  },
+  "outputs": [
+    { "out": "sfx/fire-gauss.ogg", "source": "kenney_sci-fi-sounds/Audio/laserRetro_000.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/laserRetro_001.ogg", "kenney_sci-fi-sounds/Audio/laserRetro_002.ogg"] },
+    { "out": "sfx/fire-laser.ogg", "source": "kenney_sci-fi-sounds/Audio/laserSmall_000.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/laserSmall_001.ogg", "kenney_sci-fi-sounds/Audio/laserSmall_002.ogg"] },
+    { "out": "sfx/fire-missile.ogg", "source": "kenney_sci-fi-sounds/Audio/spaceEngineSmall_000.ogg", "bus": "sfx", "trim": [0, 0.9], "variants": ["kenney_sci-fi-sounds/Audio/spaceEngineSmall_001.ogg", "kenney_sci-fi-sounds/Audio/spaceEngineSmall_002.ogg"] },
+    { "out": "sfx/fire-plasma.ogg", "source": "kenney_sci-fi-sounds/Audio/laserLarge_000.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/laserLarge_001.ogg", "kenney_sci-fi-sounds/Audio/laserLarge_002.ogg"] },
+    { "out": "sfx/fire-generic.ogg", "source": "kenney_sci-fi-sounds/Audio/laserLarge_003.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/laserLarge_004.ogg"] },
+    { "out": "sfx/explosion-near.ogg", "source": "kenney_sci-fi-sounds/Audio/explosionCrunch_000.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/explosionCrunch_001.ogg", "kenney_sci-fi-sounds/Audio/explosionCrunch_002.ogg"] },
+    { "out": "sfx/explosion-far.ogg", "source": "kenney_sci-fi-sounds/Audio/lowFrequency_explosion_001.ogg", "bus": "sfx", "variants": ["kenney_sci-fi-sounds/Audio/lowFrequency_explosion_000.ogg"] },
+    { "out": "sfx/intercept.ogg", "source": "kenney_sci-fi-sounds/Audio/forceField_000.ogg", "bus": "sfx", "trim": [0, 0.35], "variants": ["kenney_sci-fi-sounds/Audio/forceField_001.ogg", "kenney_sci-fi-sounds/Audio/forceField_002.ogg"] },
+    { "out": "sfx/hit.ogg", "source": "kenney_impact-sounds/Audio/impactMetal_light_000.ogg", "bus": "sfx", "variants": ["kenney_impact-sounds/Audio/impactMetal_light_001.ogg", "kenney_impact-sounds/Audio/impactMetal_light_002.ogg"] },
+    { "out": "sfx/build-place.ogg", "source": "kenney_impact-sounds/Audio/impactPlate_light_000.ogg", "bus": "sfx", "variants": ["kenney_impact-sounds/Audio/impactPlate_light_001.ogg", "kenney_impact-sounds/Audio/impactPlate_light_002.ogg"] },
+    { "out": "sfx/demolish.ogg", "source": "kenney_impact-sounds/Audio/impactGlass_heavy_000.ogg", "bus": "sfx", "variants": ["kenney_impact-sounds/Audio/impactGlass_heavy_001.ogg"] },
+    { "out": "sfx/belt-place.ogg", "source": "kenney_interface-sounds/Audio/switch_001.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/switch_002.ogg", "kenney_interface-sounds/Audio/switch_003.ogg"] },
+    { "out": "sfx/construction-complete.ogg", "source": "kenney_interface-sounds/Audio/confirmation_001.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/confirmation_002.ogg"] },
+    { "out": "sfx/research-complete.ogg", "source": "kenney_digital-audio/Audio/powerUp4.ogg", "bus": "sfx" },
+    { "out": "sfx/unit-select.ogg", "source": "kenney_ui-audio/Audio/rollover2.ogg", "bus": "sfx" },
+    { "out": "sfx/unit-ack.ogg", "source": "kenney_digital-audio/Audio/twoTone1.ogg", "bus": "sfx" },
+    { "out": "sfx/order-move.ogg", "source": "kenney_interface-sounds/Audio/drop_001.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/drop_002.ogg"] },
+    { "out": "sfx/order-attack.ogg", "source": "kenney_interface-sounds/Audio/select_001.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/select_002.ogg"] },
+    { "out": "sfx/command-ok.ogg", "source": "kenney_digital-audio/Audio/twoTone2.ogg", "bus": "sfx" },
+    { "out": "sfx/command-fail.ogg", "source": "kenney_interface-sounds/Audio/error_001.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/error_002.ogg"] },
+    { "out": "sfx/alert.ogg", "source": "kenney_interface-sounds/Audio/error_004.ogg", "bus": "sfx", "variants": ["kenney_interface-sounds/Audio/error_006.ogg"] },
+    { "out": "sfx/notify.ogg", "source": "kenney_interface-sounds/Audio/bong_001.ogg", "bus": "sfx" },
+    { "out": "ui/hover.ogg", "source": "kenney_ui-audio/Audio/rollover1.ogg", "bus": "ui" },
+    { "out": "ui/click.ogg", "source": "kenney_ui-audio/Audio/click1.ogg", "bus": "ui", "variants": ["kenney_ui-audio/Audio/click2.ogg"] },
+    { "out": "ui/panel-open.ogg", "source": "kenney_interface-sounds/Audio/open_001.ogg", "bus": "ui" },
+    { "out": "ui/panel-close.ogg", "source": "kenney_interface-sounds/Audio/close_001.ogg", "bus": "ui" },
+    { "out": "ambient/wind.ogg", "source": "oga_wind", "bus": "ambient", "loop": true },
+    { "out": "ambient/factory.ogg", "source": "oga_factory", "bus": "ambient", "loop": true },
+    { "out": "ambient/space.ogg", "source": "oga_space_wind", "bus": "ambient", "loop": true },
+    { "out": "music/calm.ogg", "source": "oga_calm", "bus": "music", "loop": true },
+    { "out": "music/tense.ogg", "source": "oga_tense", "bus": "music", "loop": true },
+    { "out": "music/combat.ogg", "source": "oga_combat", "bus": "music", "loop": true }
+  ]
+}

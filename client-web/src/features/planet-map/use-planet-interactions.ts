@@ -28,6 +28,7 @@ import type {
 } from '@shared/types';
 import type { Direction } from '@shared/api';
 
+import { sfx } from '@/engine/audio';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { assessBuildTiles, describeBuildBlock, shouldBlockBuildLocally } from '@/features/planet-map/build-workflow';
@@ -244,6 +245,11 @@ export function usePlanetInteractions({ catalog, foreignMechaIds, inventory, mec
       const store = usePlanetViewStore.getState();
       const mode = store.interactionMode;
       const position: Position = { x: tile.x, y: tile.y, z: 0 };
+      /** 放置反馈：建造/铺带在**预检通过后**响（被拦的格子已经由 commandFail 提示）。 */
+      const placementSound = (buildingType: string) => {
+        if (buildingType.startsWith('conveyor_belt_')) sfx.beltPlace();
+        else sfx.buildPlace();
+      };
 
       // §4 运输机器人「设置运输」：依次点起点建筑、终点建筑（同一格只认建筑）。
       if (mode.kind === 'haul') {
@@ -291,6 +297,7 @@ export function usePlanetInteractions({ catalog, foreignMechaIds, inventory, mec
           });
           return;
         }
+        placementSound(mode.buildingType);
         void submitPlanetCommand({
           commandType: 'build',
           planetId: planet.planet_id,
@@ -319,6 +326,7 @@ export function usePlanetInteractions({ catalog, foreignMechaIds, inventory, mec
           store.exitInteractionMode();
           return;
         }
+        sfx.orderMove();
         submitMove(selector, position);
         store.exitInteractionMode();
         return;
@@ -336,6 +344,7 @@ export function usePlanetInteractions({ catalog, foreignMechaIds, inventory, mec
           reportLocalBlock('attack', planet.planet_id, '该位置没有可攻击目标', { position });
           return;
         }
+        sfx.orderAttack();
         submitAttack(selector, target.id, position);
         store.exitInteractionMode();
         return;
