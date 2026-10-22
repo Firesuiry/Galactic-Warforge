@@ -38,6 +38,8 @@ export interface SkyUniforms {
   stars: { value: number };
   /** 大气浓度：控制地平线雾霾与太阳光晕的厚度。 */
   haze: { value: number };
+  /** 太阳圆盘 + 眩光的强度倍率（IBL 烘焙时置 0：那部分由主光负责，重复会过曝）。 */
+  sunDisc: { value: number };
 }
 
 const SKY_VERTEX = /* glsl */ `
@@ -68,6 +70,7 @@ const SKY_FRAGMENT = /* glsl */ `
   uniform float atmosphere;
   uniform float stars;
   uniform float haze;
+  uniform float sunDisc;
 
   float hash(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.17, 0.31, 0.59));
@@ -102,7 +105,7 @@ const SKY_FRAGMENT = /* glsl */ `
     // 太阳圆盘（角半径约 0.6°）+ 两层光晕。
     float disc = smoothstep(0.99975, 0.99992, sunDot);
     float glow = pow(max(sunDot, 0.0), 900.0) * 1.6 + pow(max(sunDot, 0.0), 120.0) * 0.35;
-    sky += sunColor * (disc * 26.0 + glow) * atmosphere;
+    sky += sunColor * (disc * 26.0 + glow) * atmosphere * sunDisc;
 
     // 星空：大气越薄越亮；天顶隐约可见，靠近地平线被雾霾洗掉。
     float starMask = smoothstep(0.25, 1.0, aboveHorizon);
@@ -137,6 +140,7 @@ export function createSkyUniforms(quality: PlanetRenderQuality): SkyUniforms {
     atmosphere: { value: 1 },
     stars: { value: 0.5 },
     haze: { value: 1 },
+    sunDisc: { value: 1 },
   };
 }
 
@@ -161,6 +165,7 @@ export class SkyDome {
         atmosphere: this.uniforms.atmosphere,
         stars: this.uniforms.stars,
         haze: this.uniforms.haze,
+        sunDisc: this.uniforms.sunDisc,
       },
       vertexShader: SKY_VERTEX,
       fragmentShader: SKY_FRAGMENT,
@@ -210,49 +215,81 @@ export class SkyDome {
   }
 }
 
-/** 散射壳（全球视角）：边缘增亮、日面瑞利蓝、明暗交界偏橙、夜面暗而不黑。 */
+/**
+ * 散射壳（全球 / 中空视角）：边缘增亮、日面瑞利蓝、明暗交界偏橙、夜面暗而不黑。
+ *
+ * 两层：
+ * - `rim`（BackSide，半径 1.025R）：星球轮廓外的一圈大气边缘光；
+ * - `veil`（FrontSide，同半径）：盖在星球圆盘上的薄大气（日面才加），越靠轮廓越厚——
+ *   全球视角读成「向阳面亮、背阳面暗 + 边缘发亮」，中空视角读成远处地表的轻微空气透视。
+ *
+ * **太阳方向是星球局部空间**：两层都挂在 `world` 下（随星球旋转），shader 用物体空间法线
+ * 与局部空间太阳方向做点积；`setSunDirection(sceneSun, worldQuaternion)` 负责把场景主光
+ * 方向换算到局部空间。以前直接拿场景空间方向与（被 world 旋转过的）法线比，明暗交界会
+ * 相对真实光照整体转一个角度。
+ */
 export class AtmosphereShell {
-  readonly mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  /** 两层壳的父节点（场景只开关整组可见性）。 */
+  readonly mesh: THREE.Group;
+  private readonly rim: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  private readonly veil: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  /** 局部空间的太阳方向（uniform 的持有者）。 */
+  private readonly sunDirection = new THREE.Vector3(-0.36, 0.5, 0.82).normalize();
 
   constructor(radius: number, sunDirection: THREE.Vector3) {
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        sunDirection: { value: sunDirection.clone().normalize() },
-        dayColor: { value: new THREE.Color('#5aa6e8') },
-        horizonColor: { value: new THREE.Color('#ff9a5c') },
-        nightColor: { value: new THREE.Color('#0b1622') },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vNormal;
-        varying vec3 vViewPosition;
-        void main() {
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vNormal = normalize(normalMatrix * normal);
-          vViewPosition = -mv.xyz;
-          gl_Position = projectionMatrix * mv;
-        }
-      `,
+    this.setSunDirection(sunDirection);
+    const shared = {
+      sunDirection: { value: this.sunDirection },
+      dayColor: { value: new THREE.Color('#7db8ee') },
+      dayWhite: { value: new THREE.Color('#e8f3ff') },
+      horizonColor: { value: new THREE.Color('#ff9a5c') },
+      nightColor: { value: new THREE.Color('#0b1622') },
+      veilCool: { value: new THREE.Color('#4f86bd') },
+      veilWarm: { value: new THREE.Color('#cfe4f7') },
+      /** 薄大气整体强度：全球视角 1，中空视角减弱（免得把已探索地表刷成蓝色）。 */
+      veilStrength: { value: 1 },
+    };
+    const vertexShader = /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vObjectNormal;
+      varying vec3 vViewPosition;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        // 物体空间法线：与局部空间太阳方向同空间，world 怎么转都对得上。
+        vObjectNormal = normalize(normal);
+        vViewPosition = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }
+    `;
+    const rimMaterial = new THREE.ShaderMaterial({
+      uniforms: shared,
+      vertexShader,
       fragmentShader: /* glsl */ `
         uniform vec3 sunDirection;
         uniform vec3 dayColor;
+        uniform vec3 dayWhite;
         uniform vec3 horizonColor;
         uniform vec3 nightColor;
         varying vec3 vNormal;
+        varying vec3 vObjectNormal;
         varying vec3 vViewPosition;
         void main() {
           // BackSide 渲染的是球壳远端：外法线背对相机，这里翻过来，让 |dot| 在轮廓处为 0。
           vec3 normal = -normalize(vNormal);
           vec3 viewDir = normalize(vViewPosition);
           // 边缘（视线掠过的球壳厚度）：pow 让边缘只有一圈亮带，不糊住整个球面。
-          float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.2);
-          float sun = dot(normal, sunDirection);
-          float day = smoothstep(-0.28, 0.55, sun);
-          // 明暗交界：±0.25 的窄带偏橙（瑞利散射被拉长）。
-          float terminator = smoothstep(0.45, 0.0, abs(sun + 0.02)) * smoothstep(-0.35, 0.1, sun);
+          float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+          float sun = dot(normalize(vObjectNormal), sunDirection);
+          float day = smoothstep(-0.22, 0.5, sun);
+          // 明暗交界：窄带偏橙（瑞利散射被拉长），只在日面一侧出现。
+          float terminator = smoothstep(0.5, 0.0, abs(sun + 0.04)) * smoothstep(-0.4, 0.15, sun);
           vec3 color = mix(nightColor, dayColor, day);
-          color = mix(color, horizonColor, terminator * 0.75);
+          // 向阳一侧（太阳在左上前方）：边缘是蓝白，最亮。
+          color = mix(color, dayWhite, smoothstep(0.25, 0.95, sun) * 0.6);
+          color = mix(color, horizonColor, terminator * 0.65);
           // 夜面保持一点冷色轮廓，不纯黑。
-          color += nightColor * rim * 0.6;
+          color += nightColor * rim * 0.5;
           float alpha = rim * (0.10 + 0.85 * day);
           gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.95));
         }
@@ -264,25 +301,90 @@ export class AtmosphereShell {
       toneMapped: false,
       fog: false,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.025, 128, 96), material);
+    const veilMaterial = new THREE.ShaderMaterial({
+      uniforms: shared,
+      vertexShader,
+      fragmentShader: /* glsl */ `
+        uniform vec3 sunDirection;
+        uniform vec3 veilCool;
+        uniform vec3 veilWarm;
+        uniform float veilStrength;
+        varying vec3 vNormal;
+        varying vec3 vObjectNormal;
+        varying vec3 vViewPosition;
+        void main() {
+          vec3 normal = normalize(vNormal);
+          vec3 viewDir = normalize(vViewPosition);
+          // 视线穿过大气的厚度：圆盘中心最薄、靠近轮廓最厚（远处地表 = 空气透视）。
+          float facing = max(dot(normal, viewDir), 0.0);
+          float thickness = pow(1.0 - facing, 1.7);
+          float sun = dot(normalize(vObjectNormal), sunDirection);
+          float day = smoothstep(-0.18, 0.5, sun);
+          vec3 color = mix(veilCool, veilWarm, smoothstep(0.15, 0.9, sun));
+          // 日面才有大气：夜面不加（夜面靠 rim 的冷色轮廓）。
+          float alpha = day * (0.05 + 0.5 * thickness) * veilStrength;
+          gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.6));
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.FrontSide,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      fog: false,
+    });
+    const geometry = new THREE.SphereGeometry(radius * 1.025, 128, 96);
+    this.rim = new THREE.Mesh(geometry, rimMaterial);
+    this.rim.name = 'atmosphere-shell-rim';
+    this.rim.renderOrder = 10;
+    // 薄大气层：不写深度、但参与深度测试——星球本体（半径 100 < 102.5）挡不住它，
+    // 于是日面圆盘整体被轻微提亮（以前只有轮廓一圈，圆盘本身没有大气贡献）。
+    this.veil = new THREE.Mesh(geometry, veilMaterial);
+    this.veil.name = 'atmosphere-shell-veil';
+    this.veil.renderOrder = 9;
+    this.mesh = new THREE.Group();
     this.mesh.name = 'atmosphere-shell';
-    this.mesh.renderOrder = 10;
+    this.mesh.add(this.rim, this.veil);
   }
 
-  setSunDirection(direction: THREE.Vector3) {
-    (this.mesh.material.uniforms.sunDirection.value as THREE.Vector3).copy(direction).normalize();
+  /**
+   * 设置太阳方向。`worldQuaternion` 是星球（`world`）当前的旋转：给了就先把场景空间的
+   * 主光方向换算到星球局部空间，保证 shader 里「物体空间法线 · 太阳方向」与场景主光一致。
+   */
+  setSunDirection(direction: THREE.Vector3, worldQuaternion?: THREE.Quaternion) {
+    this.sunDirection.copy(direction);
+    if (worldQuaternion) this.sunDirection.applyQuaternion(worldQuaternion.clone().invert());
+    this.sunDirection.normalize();
+  }
+
+  /** 当前 shader 使用的太阳方向（星球局部空间）。 */
+  get sunDirectionLocal() { return this.sunDirection; }
+
+  /** 薄大气强度（全球视角 1；中空视角按高度减弱）。 */
+  setVeilStrength(strength: number) {
+    (this.veil.material.uniforms.veilStrength.value as number) = strength;
   }
 
   dispose() {
-    this.mesh.geometry.dispose();
-    this.mesh.material.dispose();
+    this.rim.geometry.dispose();
+    this.rim.material.dispose();
+    this.veil.material.dispose();
   }
 }
 
 /**
  * 只含天空的 IBL：`PMREMGenerator.fromScene` 直接从天空穹顶烘出环境贴图。
  * 调用方负责 dispose 返回值；只在换星球 / 换档位时调用（不逐帧）。
+ *
+ * 白平衡（3A 第二轮 §13）：天光直接烘进 IBL 会把陶瓷白染成冰蓝（贴地机位实测受光面
+ * R−B ≈ −17，阴影偏青绿）。这里只烘「去饱和的天光」——把天空色按 `SKY_IBL_DESATURATION`
+ * 向中性灰靠拢，太阳圆盘/眩光不烘（那部分由 DirectionalLight 负责，重复会过曝），
+ * 再乘 `SKY_IBL_INTENSITY`。天空穹顶本身的颜色不变（画面里的天空仍是目标色）。
  */
+export const SKY_IBL_DESATURATION = 0.55;
+export const SKY_IBL_INTENSITY = 0.72;
+
 export function createSkyEnvironment(renderer: THREE.WebGLRenderer, sunDirection: THREE.Vector3, envSize: number): THREE.WebGLRenderTarget {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const scene = new THREE.Scene();
@@ -291,6 +393,16 @@ export function createSkyEnvironment(renderer: THREE.WebGLRenderer, sunDirection
   // 环境贴图要的是「全天空」的亮度：贴地机位的高度过渡在这里不适用。
   dome.uniforms.atmosphere.value = 1;
   dome.uniforms.stars.value = 0.3;
+  // 去饱和 + 降强度：IBL 只作环境补光，不把材质染蓝（见上面白平衡说明）。
+  const desaturate = (color: THREE.Color) => {
+    const luma = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+    color.lerp(new THREE.Color(luma, luma, luma), SKY_IBL_DESATURATION);
+    color.multiplyScalar(SKY_IBL_INTENSITY);
+  };
+  desaturate(dome.uniforms.zenith);
+  desaturate(dome.uniforms.horizon);
+  // 环境贴图里不要太阳圆盘（会与 DirectionalLight 叠加过曝）。
+  dome.uniforms.sunDisc.value = 0;
   scene.add(dome.mesh);
   const target = pmrem.fromScene(scene, 0.02, 0.1, 4000, { size: envSize });
   dome.dispose();

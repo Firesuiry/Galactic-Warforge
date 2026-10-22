@@ -168,7 +168,8 @@ export class PlanetThreeScene {
   /** 分拣器/分流器顶面方向箭头（全网络合并 1 draw）+ 过滤物品标签。 */
   private readonly logisticsMarks = new LogisticsDirectionMarks();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
-  private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
+  // 太阳：暖白 #ffe2bd（3A §1），强度与曝光一起配到陶瓷白不过曝（第二轮 §13 略加强）。
+  private readonly sunlight = new THREE.DirectionalLight(0xffe2bd, 3.9);
   private dressing?: THREE.Group;
   private dressingSignature = '';
   private localSurface: ReturnType<typeof createLocalSurface> = null;
@@ -183,6 +184,8 @@ export class PlanetThreeScene {
    */
   private readonly motion = new CameraMotion();
   private readonly motionOut: MotionOutput = {};
+  /** 大气壳太阳方向换算用的临时向量（每帧复用）。 */
+  private readonly sunDirectionScratch = new THREE.Vector3();
   /** 拖拽角速度（rad/s），松手时交给惯性。 */
   private dragVelocity = { x: 0, y: 0, at: 0 };
   private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite }; operatorTag?: { sprite: THREE.Sprite; text: string } }>();
@@ -276,8 +279,9 @@ export class PlanetThreeScene {
     // 空气透视雾：自定义 chunk（按视线方向着色），scene.fog 只作 USE_FOG 编译开关。
     this.fog = new AtmosphericFog(this.quality);
     this.scene.fog = this.fog.sceneFog;
-    // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空。
-    this.scene.environmentIntensity = .8;
+    // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空；
+    // 倍率与 rebuildEnvironment 同一口径（第二轮 §13 白平衡）。
+    this.scene.environmentIntensity = .62;
     // Default-canvas antialiasing does not reach postprocessing render targets.
     // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
     // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
@@ -340,7 +344,8 @@ export class PlanetThreeScene {
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
     // 天光/补光（3A §1）：冷蓝 #9cc7ff，只在暗部补一点，主要环境光来自天空 IBL。
-    this.scene.add(new THREE.HemisphereLight(0x9cc7ff, 0x2c3a44, .28));
+    // 第二轮 §13：IBL 已去饱和降强度，半球光再压一档，避免天光把受光面染成冰蓝。
+    this.scene.add(new THREE.HemisphereLight(0x9cc7ff, 0x2c3a44, .22));
     this.sunlight.position.set(-100, 140, 230);
     this.sunlight.target.position.set(0, 0, RADIUS);
     this.sunlight.castShadow = true;
@@ -352,8 +357,8 @@ export class PlanetThreeScene {
     this.sunlight.shadow.camera.near = 1;
     this.sunlight.shadow.camera.far = 500;
     this.scene.add(this.sunlight, this.sunlight.target);
-    // 轮廓光保留但更弱更冷（3A §8）。
-    const rim = new THREE.DirectionalLight(0x7fa8d4, .32);
+    // 轮廓光保留但更弱更冷（3A §8）；第二轮 §13 再弱一点，阴影不偏青绿。
+    const rim = new THREE.DirectionalLight(0x7fa8d4, .24);
     rim.position.set(100, -60, -70);
     this.scene.add(rim);
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
@@ -419,7 +424,8 @@ export class PlanetThreeScene {
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
     this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize);
     this.scene.environment = this.environment.texture;
-    this.scene.environmentIntensity = .8;
+    // IBL 贴图已去饱和 + 降强度（atmosphere.ts 的 SKY_IBL_*），场景倍率不再额外翻倍。
+    this.scene.environmentIntensity = .62;
   }
 
   /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
@@ -628,6 +634,16 @@ export class PlanetThreeScene {
   private updateSunFlare() {
     if (!this.flare.enabled) return;
     this.flare.update(PLANET_CENTER, RADIUS);
+  }
+
+  /**
+   * 大气壳的太阳方向换算到星球局部空间（3A 第二轮 §14）：`world` 会被拖拽/聚焦旋转，
+   * 壳挂在 `world` 下、shader 用物体空间法线，所以必须把场景空间的主光方向反向旋转。
+   * 每帧一次（几个向量运算），旋转后立即生效、不用等拖拽结束。
+   */
+  private syncAtmosphereSun() {
+    this.sunDirectionScratch.copy(this.sunlight.position).sub(this.sunlight.target.position).normalize();
+    this.atmosphereShell.setSunDirection(this.sunDirectionScratch, this.world.quaternion);
   }
 
   private part(parent: THREE.Group, kind: string, color: string, size: [number, number, number], position: [number, number, number], glow = false) {
@@ -1776,8 +1792,12 @@ export class PlanetThreeScene {
     // 天空 / 雾按相机高度过渡（≤25 全天空、≥60 纯太空）；穹顶位置由 onBeforeRender 每帧同步。
     this.sky.setAltitude(this.altitude);
     this.fog.setAltitude(this.altitude);
-    // 散射壳：只在全球 / 中空视角可见（贴地时相机在壳内，壳会盖住地表）。
+    // 散射壳：全球视角与中空视角都可见（贴地时相机在壳内，壳会盖住地表）。
+    // 中空（altitude 60）时壳的边缘正好落在地平线弧上（3A 第二轮 §15）：细而亮的蓝色
+    // 大气光带；此时圆盘上的薄大气减弱，免得把已探索地表刷成蓝色。
     this.atmosphereShell.mesh.visible = !this.groundView || this.altitude > 60;
+    this.atmosphereShell.setVeilStrength(THREE.MathUtils.smoothstep(this.altitude, 40, 120));
+    this.syncAtmosphereSun();
     this.camera.updateMatrixWorld();
   }
   getCenterTile() {
@@ -1998,6 +2018,8 @@ export class PlanetThreeScene {
       // 阶段标签贴机器人（机器人移动是每帧插值的，标签跟着走才不脱节）。
       this.updateHaulLabels();
       this.updateSunFlare();
+      // 拖拽旋转后大气壳的太阳方向要跟着换算（每帧几个向量运算，壳可见时才做）。
+      if (this.atmosphereShell.mesh.visible) this.syncAtmosphereSun();
       this.renderer.info.reset();
       this.composer.render();
     }

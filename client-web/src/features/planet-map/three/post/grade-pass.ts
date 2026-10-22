@@ -81,9 +81,11 @@ const FRAGMENT = /* glsl */ `
     color = mix(vec3(luma), color, saturation);
 
     // 分离色调：高光暖（+R -B）、暗部冷（-R +B）。
+    // 3A 第二轮 §13：高光那一档略加强、暗部冷色收窄（原来青色分量太重，陶瓷白受光面被染冰蓝，
+    // 阴影发青绿）。冷色只压 R、抬一点 B，G 保持中性。
     float luma2 = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    vec3 warm = vec3(0.045, 0.018, -0.035);
-    vec3 cool = vec3(-0.028, -0.004, 0.05);
+    vec3 warm = vec3(0.055, 0.020, -0.040);
+    vec3 cool = vec3(-0.024, 0.000, 0.036);
     color += mix(cool, warm, smoothstep(0.25, 0.85, luma2)) * splitTone;
 
     // 暗角（椭圆、以画面中心为准，长边方向更宽）。
