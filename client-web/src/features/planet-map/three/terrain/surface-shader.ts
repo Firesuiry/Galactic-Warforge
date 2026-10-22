@@ -217,8 +217,9 @@ export const SHADER_COLOR = /* glsl */`
       float swWaveC = sin(dot(swWavePosition, vec3(53.0, 26.0, -39.0)) - swTime * 2.1);
       // 水波 UV 用球面三平面（与地形纹理同一套，无接缝），两个不同尺度各自滚动。
       // 水面用球面 UV（经度/纬度）：球面上处处连续，没有三平面在 45° 处的混合带。
-      // 重复次数按格宽定：约 4 格一次，近景可见细浪、远处交给 mipmap。
-      float swWaveRepeat = max(2.0, swMapWidth / 3.0 / 4.0);
+      // 重复次数按格宽定：约 1.6 格一次（贴地时一格约 300px，浪纹尺度接近真实水面；
+      // 再稀疏就会读成大片云影），远处交给 mipmap。
+      float swWaveRepeat = max(4.0, swMapWidth / 3.0 / 1.6);
       vec2 swSphereUV = vec2(atan(swP.z, swP.x) / 6.2831853 + 0.5, asin(clamp(swP.y, -1.0, 1.0)) / 3.14159265 + 0.5);
       // 极点处经度会挤压：按纬度补偿横向重复次数。
       float swLat = max(0.25, cos(asin(clamp(swP.y, -1.0, 1.0))));
@@ -227,14 +228,14 @@ export const SHADER_COLOR = /* glsl */`
       vec3 swWaterN1 = texture2D(swWaterNormal, swWaveUV1).rgb;
       vec3 swWaterN2 = texture2D(swWaterNormal, swWaveUV2).rgb;
       // 水波法线：两层法线图 xy 的偏差（z 分量用作强度包络），按细节距离淡出。
-      float swRipple = ((swWaterN1.r - 0.5) + (swWaterN2.g - 0.5)) * swWaveDetail * 2.2;
-      swWaterNormalXY = vec2(swWaterN1.r - 0.5, swWaterN2.g - 0.5) * 2.6 * swWaveDetail;
+      float swRipple = ((swWaterN1.r - 0.5) + (swWaterN2.g - 0.5)) * swWaveDetail * 1.6;
+      swWaterNormalXY = vec2(swWaterN1.r - 0.5, swWaterN2.g - 0.5) * 2.0 * swWaveDetail;
       swEastW = normalize(cross(vec3(0.0, 1.0, 0.0), swP) + vec3(0.0001));
       swSouthW = cross(swP, swEastW);
       swWaveDetailOut = swWaveDetail;
       // 波纹明暗 + 轻微浪峰高光（确定性：只依赖 swTime）。
-      float swWaveCrest = swRipple * 6.0 + (swWaveA * swWaveB) * 0.10 * swWaveDetail;
-      swSurfaceAlbedo = swWaterAlbedo * (0.85 + swWaveCrest * 0.30);
+      float swWaveCrest = swRipple * 3.2 + (swWaveA * swWaveB) * 0.08 * swWaveDetail;
+      swSurfaceAlbedo = swWaterAlbedo * (0.92 + swWaveCrest * 0.18);
       swSurfaceAlbedo += vec3(0.06, 0.10, 0.115) * max(0.0, swWaveCrest) * 0.45 * swWaveDetail;
       // 泡沫线：只在已知陆/水相邻处出现（跨面邻接规则不变）。
       float swFoamEdge = 0.035 + 0.010 * swWaveA;

@@ -318,11 +318,14 @@ export class PlanetThreeScene {
       if (!this.destroyed) this.reloadModels();
     }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
     // 扫描岩石异步加载：就绪后把程序化碎石换成 Poly Haven 网格（重建装饰组）。
-    void preloadDressingRocks().then((rocks) => {
-      if (this.destroyed || !rocks.length) return;
+    const dressingAssets = preloadDressingRocks().then((rocks) => {
+      if (this.destroyed || !rocks.length) return false;
       this.dressingRocks = rocks;
       this.rebuildDressing();
-    });
+      return true;
+    }).catch(() => false);
+    // 测试钩子：夹具截图脚本等「装饰素材已就绪」再判定画面稳定，否则会拍到程序化碎石那一帧。
+    (window as unknown as { __dressingAssetsReady?: Promise<boolean> }).__dressingAssetsReady = dressingAssets;
   }
 
   /** 重建地表装饰（草/岩石/卵石）；岩石资源就绪与数据签名变化都走这里。 */
