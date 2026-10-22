@@ -76,3 +76,6 @@ tmp
 # Sketchfab 原始下载（体积大、可重新拉取）
 develop_tools/sketchfab/raw/
 develop_tools/sketchfab/node_modules/
+
+# Sketchfab 规整报告（可重跑）
+develop_tools/sketchfab/normalize-report.json

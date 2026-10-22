@@ -20,7 +20,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import {
-  dedup, flatten, join, prune, weld, simplify, meshopt,
+  dedup, flatten, join, prune, weld, simplify, meshopt, normals,
 } from '@gltf-transform/functions';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,7 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 
 /** 每个模型的规整参数。三角预算是**简化后**的上限（规整前允许更高）。 */
 const CONFIG = {
-  executor: { tris: 40000, texture: 2048, hero: true },
+  executor: { tris: 40000, texture: 2048, textureFloor: 512, hero: true },
   mecha: { tris: 12000, texture: 1024 },
   soldier: { tris: 12000, texture: 1024 },
   worker: { tris: 12000, texture: 1024 },
@@ -136,18 +136,139 @@ function mergeMaterials(doc) {
   }
 }
 
-/** 居中落地（X/Z 居中、底面 Y=0）并缩到最长边 1。直接改 POSITION 顶点。 */
-function fitToUnit(doc) {
-  const meshes = doc.getRoot().listMeshes();
-  const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
-  for (const mesh of meshes) {
+/** 丢掉名字像特效面片的 mesh 节点（尾焰/火焰/烟雾/排气）。 */
+function dropEffectPlanes(doc) {
+  const pattern = /(^|[^a-z])(fire|flame|flames|smoke|exhaust|plasma\s*fire)/i;
+  for (const node of [...doc.getRoot().listNodes()]) {
+    const mesh = node.getMesh();
+    if (!mesh) continue;
+    if (!pattern.test(node.getName() || '')) continue;
+    node.dispose();
+    if (mesh.listParents().every((parent) => parent.propertyType !== 'Node')) mesh.dispose();
+  }
+}
+
+/**
+ * 按「位置」简化：gltf-transform 的 weld 按全部属性（含 UV）判重，硬表面模型同一位置
+ * 常有几十个 UV 接缝顶点，weld 合不掉 → meshopt 的 error 早早就到上限，减面减不动
+ * （导弹车 1.4 万面只能减到 1.4 万）。这里只用**位置**建代表顶点去减面，再把结果
+ * 映射回原顶点索引：UV 跟着代表顶点走，几何变简洁、贴图不裂。
+ */
+function simplifyByPosition(doc, ratio, error) {
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const position = prim.getAttribute('POSITION');
+      const indices = prim.getIndices();
+      if (!position || !indices) continue;
+      const count = indices.getCount();
+      const target = Math.floor(ratio * count / 3) * 3;
+      if (target < 3) continue;
+      const positions = position.getArray();
+      const source = indices.getArray();
+      const representative = new Map();
+      const repVertices = [];
+      const compact = new Uint32Array(count);
+      for (let i = 0; i < count; i++) {
+        const vertex = source[i];
+        const x = positions[vertex * 3], y = positions[vertex * 3 + 1], z = positions[vertex * 3 + 2];
+        const key = `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`;
+        let index = representative.get(key);
+        if (index === undefined) {
+          index = repVertices.length;
+          representative.set(key, index);
+          repVertices.push(vertex);
+        }
+        compact[i] = index;
+      }
+      const repPositions = new Float32Array(repVertices.length * 3);
+      repVertices.forEach((vertex, slot) => {
+        repPositions[slot * 3] = positions[vertex * 3];
+        repPositions[slot * 3 + 1] = positions[vertex * 3 + 1];
+        repPositions[slot * 3 + 2] = positions[vertex * 3 + 2];
+      });
+      const [simplified] = MeshoptSimplifier.simplify(compact, repPositions, 3, target, error, []);
+      const remapped = new Uint32Array(simplified.length);
+      for (let i = 0; i < simplified.length; i++) remapped[i] = repVertices[simplified[i]];
+      indices.setArray(remapped);
+    }
+  }
+}
+
+/**
+ * 把每个 mesh 节点的世界矩阵烘进顶点（position 用完整矩阵，normal 用法线矩阵）。
+ * 共享 mesh 先克隆，避免同一份顶点被烘两次。
+ */
+function bakeTransforms(doc) {
+  const root = doc.getRoot();
+  const seen = new Set();
+  for (const node of root.listNodes()) {
+    let mesh = node.getMesh();
+    if (!mesh) continue;
+    const elements = node.getWorldMatrix();
+    if (!elements) continue;
+    const isIdentity = elements.every((value, index) => Math.abs(value - [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1][index]) < 1e-9);
+    if (isIdentity) continue;
+    if (seen.has(mesh)) { mesh = mesh.clone(); node.setMesh(mesh); }
+    seen.add(mesh);
     for (const prim of mesh.listPrimitives()) {
       const position = prim.getAttribute('POSITION');
       if (!position) continue;
-      for (let v = 0; v < position.getCount(); v++) {
-        const p = position.getElement(v, []);
-        for (let k = 0; k < 3; k++) { bounds.min[k] = Math.min(bounds.min[k], p[k]); bounds.max[k] = Math.max(bounds.max[k], p[k]); }
+      const count = position.getCount();
+      const out = new Float32Array(count * 3);
+      for (let v = 0; v < count; v++) {
+        const [x, y, z] = position.getElement(v, []);
+        out[v * 3] = elements[0] * x + elements[4] * y + elements[8] * z + elements[12];
+        out[v * 3 + 1] = elements[1] * x + elements[5] * y + elements[9] * z + elements[13];
+        out[v * 3 + 2] = elements[2] * x + elements[6] * y + elements[10] * z + elements[14];
       }
+      position.setArray(out);
+      const normal = prim.getAttribute('NORMAL');
+      if (normal) {
+        const nOut = new Float32Array(count * 3);
+        for (let v = 0; v < count; v++) {
+          const [x, y, z] = normal.getElement(v, []);
+          const nx = elements[0] * x + elements[4] * y + elements[8] * z;
+          const ny = elements[1] * x + elements[5] * y + elements[9] * z;
+          const nz = elements[2] * x + elements[6] * y + elements[10] * z;
+          const length = Math.hypot(nx, ny, nz) || 1;
+          nOut[v * 3] = nx / length; nOut[v * 3 + 1] = ny / length; nOut[v * 3 + 2] = nz / length;
+        }
+        normal.setArray(nOut);
+      }
+    }
+    node.setMatrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  }
+}
+
+/** 居中落地（X/Z 居中、底面 Y=0）并缩到最长边 1。直接改 POSITION 顶点。 */
+function fitToUnit(doc) {
+  const root = doc.getRoot();
+  // 关键：flatten 只压平**场景里可达**的节点，源 FBX 的原始节点（带 0.01 / 100 缩放）仍挂在
+  // mesh 上但不在场景图里。顶点数组是**节点局部坐标**，必须乘各自节点的世界矩阵才是模型空间；
+  // 直接读顶点会把不同缩放层的零件当成同一尺度（rail ejector 的 17:1 长条、matrix_lab 的散件都这么来的）。
+  const entries = [];
+  const bounds = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
+  for (const node of root.listNodes()) {
+    const mesh = node.getMesh();
+    if (!mesh) continue;
+    const matrix = node.getWorldMatrix() ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    for (const prim of mesh.listPrimitives()) {
+      const position = prim.getAttribute('POSITION');
+      if (!position) continue;
+      const count = position.getCount();
+      const world = new Float32Array(count * 3);
+      for (let v = 0; v < count; v++) {
+        const [x, y, z] = position.getElement(v, []);
+        world[v * 3] = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+        world[v * 3 + 1] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+        world[v * 3 + 2] = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+        for (let k = 0; k < 3; k++) {
+          const value = world[v * 3 + k];
+          bounds.min[k] = Math.min(bounds.min[k], value);
+          bounds.max[k] = Math.max(bounds.max[k], value);
+        }
+      }
+      entries.push({ prim, world, count });
     }
   }
   const size = bounds.max.map((value, index) => value - bounds.min[index]);
@@ -159,24 +280,20 @@ function fitToUnit(doc) {
     -bounds.min[1] * scale,
     -((bounds.min[2] + bounds.max[2]) / 2) * scale,
   ];
-  for (const mesh of meshes) {
-    for (const prim of mesh.listPrimitives()) {
-      const position = prim.getAttribute('POSITION');
-      if (!position) continue;
-      const out = new Float32Array(position.getCount() * 3);
-      for (let v = 0; v < position.getCount(); v++) {
-        const [x, y, z] = position.getElement(v, []);
-        out[v * 3] = x * scale + offset[0];
-        out[v * 3 + 1] = y * scale + offset[1];
-        out[v * 3 + 2] = z * scale + offset[2];
-      }
-      position.setArray(out);
+  for (const { prim, world, count } of entries) {
+    const out = new Float32Array(count * 3);
+    for (let v = 0; v < count; v++) {
+      out[v * 3] = world[v * 3] * scale + offset[0];
+      out[v * 3 + 1] = world[v * 3 + 1] * scale + offset[1];
+      out[v * 3 + 2] = world[v * 3 + 2] * scale + offset[2];
     }
+    prim.getAttribute('POSITION').setArray(out);
   }
-  // 节点变换已由 flatten 烘进顶点；清掉残留的平移/缩放，避免二次变换。
-  for (const node of doc.getRoot().listNodes()) {
+  // 顶点已是模型空间；清掉节点变换，避免二次变换。
+  for (const node of root.listNodes()) {
     node.setTranslation([0, 0, 0]);
     node.setScale([1, 1, 1]);
+    node.setRotation([0, 0, 0, 1]);
   }
   return { size: size.map((value) => +(value * scale).toFixed(3)) };
 }
@@ -323,6 +440,8 @@ function stripSkins(doc) {
 
 /** 贴图去饱和系数（保留原色的 35%，其余向亮度靠拢）。 */
 const DESATURATE = 0.35;
+/** 贴图亮度归一化的目标均值（sRGB 0–255）：作者贴图均值落在 45–150 都能拉到同一档。 */
+const TEXTURE_MEAN = 150;
 
 const KEEP = new Set(['POSITION', 'NORMAL', 'TEXCOORD_0', 'JOINTS_0', 'WEIGHTS_0']);
 
@@ -370,17 +489,43 @@ async function normalizeOne(type, role) {
   }
   const before = triangleCount(doc.getRoot());
   stripDocument(doc);
+  // 特效面片（尾焰 / 烟雾 / 排气）是给渲染器看的平面，进场景会变成一大片发光薄片
+  // （K07 无人机尾焰比机身还大）。VFX 分支负责特效，这里直接丢掉这些节点。
+  dropEffectPlanes(doc);
   // 剥蒙皮必须在 flatten/join **之前**：这两个变换会重排节点层级，蒙皮的关节链与
   // 世界矩阵就对不上了（之前烘出来的顶点被放大到几十万倍）。
   if (!config.keepSkin) stripSkins(doc);
   await doc.transform(prune(), dedup(), flatten(), join({ keepNamed: false }));
+  // flatten 之后仍有残留节点变换（LoadingCrane 这类带 2.27 缩放的零件，gltf-transform
+  // 只清理能安全合并的部分）。这里自己把每个 mesh 节点的世界矩阵烘进顶点，
+  // 之后 fitToUnit 读到的就是同一模型空间。
+  bakeTransforms(doc);
   const merged = triangleCount(doc.getRoot());
   // simplify 是**逐 primitive** 按 ratio 减面的：join 之后整模只有一个 primitive 才能按总预算精确收敛。
+  // 顶点法线会阻止简化（相邻面法线不同就不能合并），减面前丢掉，减完用 `normals()` 重建。
+  const droppedNormals = config.tris > 0 && triangleCount(doc.getRoot()) > config.tris;
+  if (droppedNormals) {
+    for (const mesh of doc.getRoot().listMeshes()) for (const prim of mesh.listPrimitives()) prim.setAttribute('NORMAL', null);
+  }
   await doc.transform(weld());
   const meshCount = doc.getRoot().listMeshes().length;
   const finalMerged = triangleCount(doc.getRoot());
-  if (finalMerged > config.tris) {
-    await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: config.tris / finalMerged, error: 0.002 }));
+  // meshopt 的 simplify 有**误差上限**：ratio 只是目标，撞到误差上限就停。逐轮加大误差逼近预算。
+  for (let attempt = 0; attempt < 7; attempt++) {
+    const current = triangleCount(doc.getRoot());
+    if (current <= config.tris) break;
+    const error = [0.002, 0.01, 0.03, 0.08, 0.2, 0.5, 1.0][attempt];
+    simplifyByPosition(doc, config.tris / current, error);
+  }
+  if (droppedNormals) await doc.transform(normals({ overwrite: true }));
+  // 材质 PBR 归一：Sketchfab 导出的材质常是 metalness=1 / roughness=1（全金属哑光），
+  // 进场景会读成黑块；压到本作「白陶瓷 + 拉丝钛」的区间（与 industrial-gltf 的 Kenney 处理同口径）。
+  for (const material of doc.getRoot().listMaterials()) {
+    material.setMetallicFactor(Math.min(material.getMetallicFactor(), 0.35));
+    material.setRoughnessFactor(Math.min(Math.max(material.getRoughnessFactor(), 0.45), 0.75));
+    // 自发光强度收敛：作者常把整张 albedo 也塞进 emissive 槽，强度 1 会让模型在暗处自亮。
+    const emissive = material.getEmissiveFactor();
+    if (emissive.some((value) => value > 0.05) && !material.getEmissiveTexture()) material.setEmissiveFactor([0, 0, 0]);
   }
   // 材质收敛到 1–3 个：贴图完全相同的材质合并（dedup 只处理属性相同的对象，
   // 大量「同一张贴图、不同名字」的材质要靠 palette 之外的显式合并）。
@@ -402,9 +547,9 @@ async function normalizeOne(type, role) {
   // 逐材质烘焙的模型（mining_machine 有 190 张图）按张数反比降分辨率：
   // 远景里每张图只占几十像素，256² 足够；不合并贴图（合并会毁掉零件的独立涂装）。
   const textureCount = doc.getRoot().listTextures().length;
-  const textureSize = textureCount > 32 ? Math.min(config.texture, 256)
-    : textureCount > 8 ? Math.min(config.texture, 512)
-    : config.texture;
+  const adaptive = textureCount > 32 ? 256 : textureCount > 8 ? 512 : config.texture;
+  // 英雄单位（executor）是特写对象，纹理不低于 512（它有 51 张逐材质烘焙的图）。
+  const textureSize = Math.max(Math.min(config.texture, adaptive), config.textureFloor ?? 0);
   // 纹理：缩放 + 去饱和 + 转 webp 一次做完（gltf-transform 的 resize 走 `fit: fill`
   // 会拉歪非方图，所以缩放自己用 sharp 做）。
   // 去饱和到约 35% 是「不同作者同屏色调统一」的关键：作者们各用一套彩色贴图，
@@ -419,11 +564,30 @@ async function normalizeOne(type, role) {
       pipeline = pipeline.resize(textureSize, textureSize, { fit: 'inside', kernel: 'lanczos3' });
     }
     const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true });
-    for (let i = 0; i < data.length / info.channels; i++) {
-      const offset = i * info.channels;
+    // 亮度均值 → 拉到本作的中灰（作者贴图普遍偏暗：mecha 的贴图均值只有 45–53，
+    // 乘阵营色后整台读成黑块）。归一化后只保留明暗关系，阵营色才是主色。
+    let sum = 0, pixels = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      pixels++;
+    }
+    const mean = sum / Math.max(pixels, 1);
+    // 贴图种类决定怎么归一：
+    // - 只有很少几种颜色（≤ 24 色）的是**平涂配色图**（matrix_lab 的黑穹顶、em_rail 的白墙绿台），
+    //   不能拉亮度（黑穹顶会变白穹顶），只去饱和；
+    // - 其余是带明暗的材质贴图，按均值拉到中灰（作者贴图普遍偏暗，mecha 均值只有 45–53）。
+    const histogram = new Set();
+    for (let i = 0; i < data.length; i += info.channels * 7) {
+      histogram.add(`${data[i] >> 4},${data[i + 1] >> 4},${data[i + 2] >> 4}`);
+      if (histogram.size > 24) break;
+    }
+    const flat = histogram.size <= 24;
+    const gain = flat || mean <= 0 ? 1 : Math.min(4.5, Math.max(0.55, TEXTURE_MEAN / mean));
+    for (let i = 0; i < data.length; i += info.channels) {
+      const offset = i;
       const r = data[offset], g = data[offset + 1], b = data[offset + 2];
       const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      const mix = (channel) => Math.round(luma + (channel - luma) * DESATURATE);
+      const mix = (channel) => Math.round(Math.min(255, (luma + (channel - luma) * DESATURATE) * gain));
       data[offset] = mix(r); data[offset + 1] = mix(g); data[offset + 2] = mix(b);
     }
     const encoded = await sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
