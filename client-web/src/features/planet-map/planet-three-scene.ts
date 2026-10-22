@@ -13,6 +13,7 @@ import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/c
 import { createSpace } from './three/space';
 import { createSkyEnvironment } from './three/atmosphere';
 import { AtmosphericFog } from './three/atmospheric-fog';
+import { CameraMotion, type MotionOutput } from './three/camera-motion';
 import { GradePass } from './three/post/grade-pass';
 import { SunFlare } from './three/post/sun-flare';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality, type PlanetRenderSettings } from './three/render-quality';
@@ -176,6 +177,14 @@ export class PlanetThreeScene {
   private tacticalOverlaySignature = '';
   private groundView = false;
   private tilt = .65;
+  /**
+   * 镜头手感（3A §9）：只服务 UI 输入路径（拖拽惯性 / 滚轮 / 缩放、回家、全球按钮）。
+   * 测试钩子与夹具仍走立即生效的 focus/zoom/setAltitude/orbit，不经过这里。
+   */
+  private readonly motion = new CameraMotion();
+  private readonly motionOut: MotionOutput = {};
+  /** 拖拽角速度（rad/s），松手时交给惯性。 */
+  private dragVelocity = { x: 0, y: 0, at: 0 };
   private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite }; operatorTag?: { sprite: THREE.Sprite; text: string } }>();
   private readonly staticEntities = new Map<string, { group: THREE.Group; signature: string }>();
   private readonly linkSignatures = new Map<string, string>();
@@ -347,7 +356,11 @@ export class PlanetThreeScene {
     this.flare.setEnabled(quality.flare);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
-      if (!tap) return;
+      // 松手惯性（3A §9）：拖动结束后按最后一段的角速度继续转 ~300ms。
+      if (!tap) {
+        if (!this.frozen && !this.reducedMotion.matches) this.motion.startInertia(this.dragVelocity.x, this.dragVelocity.y, performance.now());
+        return;
+      }
       // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
       // 用抬起时刻的坐标**重新拾取**（不用节流后的 hover 结果）：指针在按下与抬起之间
       // 微移时，旧 hover 可能是相邻格/上一帧的格，多格建筑会因此「点两次才选中」（试玩 1019 C）。
@@ -434,21 +447,21 @@ export class PlanetThreeScene {
         strength: this.fog.uniforms.strength.value,
         density: this.fog.uniforms.density.value,
         color: `#${this.fog.uniforms.color.getHexString()}`,
-        // 编译审计：材质是否真的拿到了注入后的 shader（onBeforeCompile 是否跑到）。
+        // 编译审计：材质是否真的拿到了注入后的雾（onBeforeCompile 跑到了、uniform 也被 three 收下）。
         compiled: (() => {
-          let withVarying = 0; let total = 0;
+          let withFog = 0; let total = 0;
           const materials = new Set<THREE.Material>();
           this.world.traverse((o) => {
             if (!(o instanceof THREE.Mesh)) return;
             for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
           });
           for (const m of materials) {
-            const program = (this.renderer.properties.get(m) as { currentProgram?: { fragmentShader?: string } | null }).currentProgram;
-            if (!program) continue;
+            const uniforms = (this.renderer.properties.get(m) as { uniforms?: Record<string, unknown> | null }).uniforms;
+            if (!uniforms) continue;
             total += 1;
-            if (program.fragmentShader?.source?.includes?.("swFogDensity") ?? false) withVarying += 1;
+            if ('swFogDensity' in uniforms) withFog += 1;
           }
-          return { total, withVarying };
+          return { total, withFog };
         })(),
       },
       sun: { color: `#${this.sunlight.color.getHexString()}`, intensity: this.sunlight.intensity },
@@ -1646,6 +1659,75 @@ export class PlanetThreeScene {
     this.setAltitude(this.altitude / factor);
   }
   /**
+   * 用户路径的缩放（滚轮 / 缩放按钮 / +/- 快捷键）：与 `zoom()` 同口径，但走 180ms 缓动。
+   * 跨过地面/全球阈值时俯仰也一起补间（否则相机会在 130/190 处突然抬头/低头）。
+   * `?freeze=1` 与 reduced-motion 下直接落位。
+   */
+  zoomSmooth(factor: number) {
+    if (!(factor > 0)) return;
+    const target = THREE.MathUtils.clamp(this.altitude / factor, Math.max(this.tileScale() * 2.5, 0.03), 430);
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.setAltitude(target);
+      return;
+    }
+    const now = performance.now();
+    const nextGround = groundViewAtAltitude(target, this.groundView);
+    // 地面视角之外俯仰恒为 0（全球视角）；进出地面视角时把俯仰一起补间。
+    const fromTilt = this.groundView ? this.tilt : 0;
+    const toTilt = nextGround ? this.tilt : 0;
+    this.motion.cancel();
+    this.motion.tweenAltitude(this.altitude, target, now);
+    if (Math.abs(toTilt - fromTilt) > 1e-4) this.motion.tweenTilt(fromTilt, toTilt, now);
+    else this.groundView = nextGround;
+  }
+  /**
+   * 用户路径的聚焦（回家按钮 / 点选聚焦）：高度与朝向 600ms ease-in-out 补间。
+   * 与 `focus()` 同一目标值；`close` 语义一致。
+   */
+  focusSmooth(tile: TilePoint, close = true) {
+    if (!this.data) return;
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.focus(tile, close);
+      return;
+    }
+    const target = this.normal(tile.x, tile.y);
+    const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(target, FRONT);
+    const altitude = close ? Math.min(75, Math.max(this.tileScale() * 16, .08)) : Math.min(75, Math.max(this.tileScale() * 18, .1));
+    this.motion.tweenView({
+      altitude: this.altitude, tilt: this.groundView ? this.tilt : 0, groundView: this.groundView,
+      quaternion: this.world.quaternion,
+    }, { altitude, tilt: this.tilt, groundView: true, quaternion: targetQuaternion }, performance.now());
+  }
+  /** 用户路径的「全球视角」：高度 + 俯仰 + 朝向 600ms ease-in-out。 */
+  orbitSmooth() {
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.orbit();
+      return;
+    }
+    // 全球视角的朝向：保持当前中心格，只把俯仰收回 0（与 orbit() 一致：不改 world 朝向）。
+    this.motion.tweenView({
+      altitude: this.altitude, tilt: this.groundView ? this.tilt : 0, groundView: this.groundView,
+      quaternion: this.world.quaternion,
+    }, { altitude: 300, tilt: this.tilt, groundView: false, quaternion: this.world.quaternion.clone() }, performance.now());
+  }
+  /**
+   * 把 CameraMotion 的本帧结果写回镜头状态并更新相机。
+   * groundView 在补间期间固定为补间的目标值（不按高度阈值逐帧重算，避免中途跳变）。
+   */
+  private applyMotion(now: number, dt: number) {
+    const out = this.motionOut;
+    out.altitude = undefined; out.tilt = undefined; out.groundView = undefined; out.quaternion = undefined;
+    if (!this.motion.sample(now, dt, out)) return;
+    if (out.altitude !== undefined) this.altitude = out.altitude;
+    if (out.tilt !== undefined) this.tilt = out.tilt;
+    if (out.groundView !== undefined) this.groundView = out.groundView;
+    if (out.quaternion !== undefined) this.world.quaternion.copy(out.quaternion);
+    this.updateCamera();
+  }
+  /**
    * 绝对高度入口（深链 `?zoom=`）：与 `zoom(factor)` 同一套 190/130 阈值决定地面视角，
    * 全球高度（300）读回 `groundView === false`，贴地高度读回 true。
    */
@@ -1833,6 +1915,10 @@ export class PlanetThreeScene {
         const sensitivity = Math.min(0.006, this.altitude / Math.max(this.host.clientHeight, 1) / RADIUS * 0.9);
         const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(dy * sensitivity, dx * sensitivity, 0));
         this.world.quaternion.premultiply(rotation);
+        // 角速度（rad/s）供松手惯性用：相邻两次 pointermove 的增量 / 时间差。
+        const now = performance.now();
+        const elapsed = Math.max(8, now - (this.dragVelocity.at || now)) / 1000;
+        this.dragVelocity = { x: dx * sensitivity / elapsed, y: dy * sensitivity / elapsed, at: now };
         this.emitHover(null);
       }
     } else {
@@ -1852,13 +1938,14 @@ export class PlanetThreeScene {
     this.onHover(tile);
   }
   private pointerLeave = () => { this.hoverPoint = null; this.emitHover(null); };
-  private wheel = (event: WheelEvent) => { event.preventDefault(); this.zoom(Math.exp(-event.deltaY * 0.0015)); };
+  private wheel = (event: WheelEvent) => { event.preventDefault(); this.zoomSmooth(Math.exp(-event.deltaY * 0.0015)); };
   private animate = (time: number) => {
     if (this.destroyed) return;
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
     const reducedMotion = this.reducedMotion.matches;
     if (!document.hidden && !this.frozen && !reducedMotion) this.industrial.animate(time / 1000, dt);
     if (!document.hidden) {
+      if (this.motion.active && !this.frozen && !reducedMotion) this.applyMotion(time, dt);
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
