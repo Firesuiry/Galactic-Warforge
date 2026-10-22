@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import type { Building } from '@shared/types';
 import { groundBuildingMap, sorterArmPose, sorterGripPoint, sorterSpan, SORTER_HANG, SORTER_GHOST_COLOR, SORTER_PIVOT_Y, SorterRigs } from './sorter-rig';
@@ -292,5 +292,48 @@ describe('SorterRigs', () => {
     expect(moved.swing).not.toBe(start.swing);
     expect(moved).toEqual(poseAt((.4 / 1.6) % 1));
     ghost.dispose();
+  });
+});
+
+const pbrState = vi.hoisted(() => ({ ready: false }));
+vi.mock('./industrial-materials', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./industrial-materials')>();
+  const THREE = await import('three');
+  return {
+    ...actual,
+    industrialMaterialsReady: () => pbrState.ready || actual.industrialMaterialsReady(),
+    createPbrMaterial: (family: Parameters<typeof actual.createPbrMaterial>[0], color: string,
+      parameters: Parameters<typeof actual.createPbrMaterial>[2]) =>
+      pbrState.ready
+        ? new THREE.MeshStandardMaterial({ ...parameters, color, normalMap: new THREE.DataTexture(new Uint8Array(4), 1, 1) })
+        : actual.createPbrMaterial(family, color, parameters),
+  };
+});
+
+describe('sorter PBR upgrade (M3)', () => {
+  it('swaps arm materials once textures are ready without changing layout or progress', () => {
+    const rigs = new SorterRigs();
+    rigs.refresh([sorter(8, 8)], ground([belt('west', 7, 8), belt('east', 9, 8)]), FACE, 100, 0);
+    const materialsOf = () => (rigs as unknown as { materials: Record<string, THREE.Material> }).materials;
+    const before = { ...materialsOf() };
+    const alloy = before.alloy as THREE.MeshStandardMaterial;
+    expect(alloy).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect(alloy.normalMap).toBeNull();
+    expect(rigs.upgradeMaterials()).toBe(false);
+    expect(materialsOf().alloy).toBe(before.alloy);
+    const pose = rigs.inspect('sorter')!.pose;
+    pbrState.ready = true;
+    try {
+      expect(rigs.upgradeMaterials()).toBe(true);
+      const after = materialsOf();
+      expect(after.alloy).not.toBe(before.alloy);
+      expect((after.alloy as THREE.MeshStandardMaterial).normalMap).toBeTruthy();
+      expect(after.light.uuid).toBe(before.light.uuid);
+      // 布局与搬运进度不变（只是换了材质并重建实例网格）。
+      expect(rigs.inspect('sorter')!.pose).toEqual(pose);
+      expect(rigs.group.getObjectByName('sorter-plate')).toBeTruthy();
+      expect(rigs.upgradeMaterials()).toBe(false);
+    } finally { pbrState.ready = false; }
+    rigs.dispose();
   });
 });
