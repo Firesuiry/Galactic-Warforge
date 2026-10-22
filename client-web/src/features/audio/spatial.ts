@@ -112,11 +112,6 @@ export function setAudioListener(next: AudioListenerSnapshot | null) {
   listener = next;
 }
 
-/** 当前监听器快照（调试/诊断用；生产逻辑只通过 spatialForTile 读）。 */
-export function getAudioListener(): AudioListenerSnapshot | null {
-  return listener;
-}
-
 /** 测试用：清空监听器。 */
 export function resetAudioListenerForTests() {
   listener = null;

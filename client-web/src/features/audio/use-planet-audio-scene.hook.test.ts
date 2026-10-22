@@ -31,7 +31,7 @@ import {
   usePlanetAudioScene,
   type AudioSceneHandle,
 } from '@/features/audio/use-planet-audio-scene';
-import { getAudioListener, resetAudioListenerForTests } from '@/features/audio/spatial';
+import { resetAudioListenerForTests, spatialForTile } from '@/features/audio/spatial';
 import { getBattleEntityIndex, resetBattleEntityIndexForTests } from '@/features/audio/battle-context';
 
 function planetWith(ownerId: string, running: number): PlanetRenderView {
@@ -54,7 +54,8 @@ function planetWith(ownerId: string, running: number): PlanetRenderView {
 function sceneHandle(altitude = 10): AudioSceneHandle {
   return {
     getCameraState: () => ({ center: { x: 10, y: 10 }, altitude, tilt: 0.65, groundView: altitude < 190 }),
-    project: () => ({ x: 500, y: 400, visible: true }),
+    // 投影按画布宽 1200 算：x=900 → pan +0.5（若错用 window.innerWidth=1024 会得 0.758）
+    project: () => ({ x: 900, y: 400, visible: true }),
     getViewport: () => ({ width: 1200, height: 900 }),
   };
 }
@@ -85,7 +86,8 @@ describe('usePlanetAudioScene hook', () => {
       const layers = audio.setAmbientLayers.mock.calls[0][0] as Array<{ name: string; level: number }>;
       expect(layers.map((layer) => layer.name)).toEqual(['wind', 'factory']);
       expect(audio.setMusic).toHaveBeenCalledWith('calm');
-      expect(getAudioListener()?.width).toBe(1200);
+      // 声相按画布宽归一化（1200），不是 window.innerWidth（jsdom 1024）
+      expect(spatialForTile({ x: 11, y: 10 })?.pan).toBeCloseTo(0.5, 5);
 
       const before = audio.setAmbientLayers.mock.calls.length;
       vi.advanceTimersByTime(AUDIO_CAMERA_POLL_MS);
@@ -141,7 +143,7 @@ describe('usePlanetAudioScene hook', () => {
     unmount();
     expect(audio.setAmbientLayers).toHaveBeenLastCalledWith([]);
     expect(audio.setMusic).toHaveBeenLastCalledWith(null);
-    expect(getAudioListener()).toBeNull();
+    expect(spatialForTile({ x: 11, y: 10 })).toBeUndefined();
     expect(getBattleEntityIndex().size).toBe(0);
   });
 
