@@ -162,4 +162,22 @@ describe('building status lights', () => {
     expect(bulbs.instanceColor!.version).toBe(version);
     lights.dispose();
   });
+
+  it('recomputes positions when a building root is replaced by a rebuilt model', () => {
+    const { layerGroup } = setup();
+    const root = building(layerGroup, 0);
+    body(root, 0.9);
+    const lights = new StatusLights(() => TILE);
+    const entries = [{ id: 'a', type: 'headquarters', state: 'running', root, width: 5, height: 5 }];
+    lights.refresh(entries, layerGroup);
+    const low = lights.positionAt(0)!.y;
+    // 换成更高的模型（例如 GLB / PBR 重建后）：签名里带 root 引用，灯位要跟着顶面重算。
+    layerGroup.remove(root);
+    const taller = building(layerGroup, 0);
+    body(taller, 2.0);
+    entries[0].root = taller;
+    expect(lights.refresh(entries, layerGroup)).toBe(true);
+    expect(lights.positionAt(0)!.y).toBeGreaterThan(low);
+    lights.dispose();
+  });
 });

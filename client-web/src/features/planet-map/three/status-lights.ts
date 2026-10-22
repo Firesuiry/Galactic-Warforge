@@ -79,6 +79,15 @@ export function statusLightIntensity(state: StatusLightState, time: number, froz
 
 interface Slot { position: THREE.Vector3; bulb: number; halo: number }
 
+/** 对象 → 稳定编号（签名里代替对象本身）。 */
+const refIds = new WeakMap<object, number>();
+let nextRefId = 1;
+function refId(value: object) {
+  let id = refIds.get(value);
+  if (!id) { id = nextRefId++; refIds.set(value, id); }
+  return id;
+}
+
 /**
  * 状态灯实例集合：一个 `InstancedMesh`（灯珠）+ 一个（光晕）。
  * `sync()` / `refresh()` 只在建筑集合变化时重建实例（静态批不受影响）；`update()` 每帧只改颜色/光晕尺寸。
@@ -155,7 +164,8 @@ export class StatusLights {
    * 状态变化只记在 `entries` 里，由 `update()` 比较后写 instanceColor。
    */
   refresh(entries: readonly StatusLightEntry[], layer: THREE.Object3D): boolean {
-    const signature = entries.map(entry => `${entry.id}:${entry.type}:${entry.width}x${entry.height}`).join('|');
+    // 建筑根换了（GLB / PBR 就绪后重建实体）也要重算灯位：包围盒随模型变化。
+    const signature = entries.map(entry => `${entry.id}:${entry.type}:${entry.width}x${entry.height}:${refId(entry.root)}`).join('|');
     this.entries = entries.map(entry => ({ ...entry }));
     if (signature === this.signature) return false;
     this.signature = signature;
@@ -176,12 +186,16 @@ export class StatusLights {
     this.group.add(halos, bulbs);
     const size = this.tileScale();
     // 图层空间 = 建筑自己的坐标空间：世界旋转不改变它，灯随建筑一起转（不必逐帧重算）。
-    layer.updateWorldMatrix(true, false);
-    this.layerInverse.copy(layer.matrixWorld).invert();
+    // 图层还没有世界矩阵时（未挂进场景）用单位阵：此时 root.matrix 就是图层空间矩阵。
+    const attached = Boolean(layer.parent);
+    if (attached) layer.updateWorldMatrix(true, false);
+    if (attached) this.layerInverse.copy(layer.matrixWorld).invert();
+    else this.layerInverse.identity();
     this.slots = [];
     entries.forEach((entry, index) => {
       entry.root.updateWorldMatrix(true, true);
-      this.rootLocal.multiplyMatrices(this.layerInverse, entry.root.matrixWorld);
+      if (attached) this.rootLocal.multiplyMatrices(this.layerInverse, entry.root.matrixWorld);
+      else this.rootLocal.copy(entry.root.matrix);
       // 包围盒换算回建筑局部（模型单位 = 格）：顶面高度与半宽都从这里取。
       this.box.setFromObject(entry.root);
       const empty = this.box.isEmpty();

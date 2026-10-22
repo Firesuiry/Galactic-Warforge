@@ -199,7 +199,7 @@ export class PlanetThreeScene {
   private readonly rangeCircles = new RangeCircleOverlay(RADIUS);
   private readonly detectionMarks = new DetectionOverlay(RADIUS);
   private readonly constructionBars = new ConstructionProgressOverlay(RADIUS);
-  /** 建筑状态灯（第 23 轮 3A）：全场 2 个 InstancedMesh，状态切换只写 instanceColor。 */
+  /** 建筑状态灯（3A）：全场 2 个 InstancedMesh。 */
   private readonly statusLights = new StatusLights(() => this.tileScale());
   /** 拖拽铺带路径（PlanetMapThree 拖动时写入）：ghost 逐格显示方向与高度（坡道），松手清空。 */
   private beltDragPath: BeltDragCell[] = [];
@@ -310,10 +310,10 @@ export class PlanetThreeScene {
     // 首帧渲染不等它（模型可能还没下载完），期间继续用程序化模型，不会出现空建筑。
     void IndustrialModels.preload().then(() => {
       if (this.destroyed) return;
-      // PBR 材质贴图就绪：换共享材质（程序纹理回退时返回 false，不动已建实体）。
+      // PBR 贴图就绪：换共享材质并重建实体。
       this.industrial.upgradeSurfaces();
       this.reloadModels();
-    }).catch((error: unknown) => console.warn('现成 3D 模型 / PBR 材质加载失败，继续使用程序化模型', error));
+    }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
   }
 
   getQuality() { return this.quality; }
@@ -357,7 +357,7 @@ export class PlanetThreeScene {
 
   setData(data: PlanetThreeData) {
     this.data = data;
-    // 三平面材质的纹素密度按格（M1）：换了 face_size 的地图就重算 uniform（不重编译着色器）。
+    // 三平面纹素密度按格（M1）：换 face_size 的地图就更新 uniform。
     setIndustrialTileScale(this.tileScale());
     // 大行星的局部曲面与全球球面共用 surface.material（同一个 swFog uniform），
     // 这里把图层开关一起喂进去，重建局部曲面后迷雾开关同样生效。
@@ -568,7 +568,7 @@ export class PlanetThreeScene {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
     this.syncPowerAlertMarks(visibleBuildings);
-    // 状态灯只挂己方建筑（不暴露敌方产线状态），状态只取权威 runtime.state。
+    // 状态灯只挂己方建筑（不暴露对方产线），状态只取权威 runtime.state。
     this.statusLights.sync(visibleBuildings, playerId, id => this.staticEntities.get(`building:${id}`)?.group, this.layer('buildings'));
     const batchEntries = [...this.staticEntities.values()].map(({ group }) => ({
       root: group, layer: group.parent!, tile: group.userData.tile as TilePoint,
@@ -1685,11 +1685,11 @@ export class PlanetThreeScene {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
     const reducedMotion = this.reducedMotion.matches;
     if (!document.hidden && !this.frozen && !reducedMotion) this.industrial.animate(time / 1000, dt);
-    // 运行发光件呼吸：只在场上有设备在运行（`setActivity`）时按 2.2 rad/s 呼吸；冻结定格在最亮相位。
+    // 运行发光件呼吸；冻结定格在最亮相位。
     if (!document.hidden) this.industrial.pulseGlow(time / 1000, this.frozen || reducedMotion);
     if (!document.hidden) {
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
-      // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格（画面是时间的纯函数）。
+      // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格。
       this.statusLights.update(time / 1000, this.frozen || reducedMotion);
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
