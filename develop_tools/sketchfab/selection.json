@@ -1,0 +1,612 @@
+{
+  "executor": {
+    "primary": {
+      "uid": "94cbf12e92c4490ba2ea5739221e7252",
+      "name": "XR-88 Mecha",
+      "author": "rafadurand",
+      "license": "CC Attribution",
+      "faces": 79930,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-94cbf12e92c4490ba2ea5739221e7252",
+      "source": "executor#6"
+    },
+    "fallback": {
+      "uid": "6cc2ba0a1e2e4f298e1e45e6e5704b6f",
+      "name": "Battle Mech",
+      "author": "mrchampu",
+      "license": "CC Attribution",
+      "faces": 30326,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-6cc2ba0a1e2e4f298e1e45e6e5704b6f",
+      "source": "executor#3"
+    }
+  },
+  "mecha": {
+    "primary": {
+      "uid": "2388257bc61049bf841ea4094af7faa7",
+      "name": "W9231 Combat Mech (Rigged)",
+      "author": "anusher3D",
+      "license": "CC Attribution",
+      "faces": 70832,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-2388257bc61049bf841ea4094af7faa7",
+      "source": "mecha#4"
+    },
+    "fallback": {
+      "uid": "c4465bbc0aaf4eb19b8da339cf5b8969",
+      "name": "Markhor Heavy Gunner",
+      "author": "jw202471",
+      "license": "CC Attribution",
+      "faces": 22489,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-c4465bbc0aaf4eb19b8da339cf5b8969",
+      "source": "mecha#3"
+    }
+  },
+  "soldier": {
+    "primary": {
+      "uid": "e5ce9b92325d45d6b75799716a28844e",
+      "name": "Robo-soldier",
+      "author": "efforya",
+      "license": "CC Attribution",
+      "faces": 21262,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-e5ce9b92325d45d6b75799716a28844e",
+      "source": "soldier#1"
+    },
+    "fallback": {
+      "uid": "e4caf58f757d4a688e7abe8ef64e3b3a",
+      "name": "VX-09 Sentinel Unit Series | Modular Robots Pack",
+      "author": "DevPoly3D",
+      "license": "CC Attribution",
+      "faces": 50699,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-e4caf58f757d4a688e7abe8ef64e3b3a",
+      "source": "soldier#5"
+    }
+  },
+  "worker": {
+    "primary": {
+      "uid": "c6f928098b0d417e80cdde71231d328d",
+      "name": "Worker ROBOT",
+      "author": "NickBorovik",
+      "license": "CC Attribution",
+      "faces": 27618,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-c6f928098b0d417e80cdde71231d328d",
+      "source": "worker#6"
+    },
+    "fallback": {
+      "uid": "33c7c1d058e946379c450078caf1346f",
+      "name": "Mobile Worker",
+      "author": "HiagoTadeu",
+      "license": "CC Attribution",
+      "faces": 50780,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-33c7c1d058e946379c450078caf1346f",
+      "source": "worker#4"
+    }
+  },
+  "scout": {
+    "primary": {
+      "uid": "f001890ee9e74f58aa7682eab1f112b5",
+      "name": "Hover bike",
+      "author": "Gamau",
+      "license": "CC Attribution",
+      "faces": 32796,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-f001890ee9e74f58aa7682eab1f112b5",
+      "source": "scout#3"
+    },
+    "fallback": {
+      "uid": "74ee92cf4d224af4bacfb234b41d6708",
+      "name": "Hoverbike",
+      "author": "Nixak",
+      "license": "CC Attribution",
+      "faces": 10994,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-74ee92cf4d224af4bacfb234b41d6708",
+      "source": "scout#6"
+    }
+  },
+  "attack_drone": {
+    "primary": {
+      "uid": "ca849f95d9874d58a19324eec223ccdf",
+      "name": "K07 Drone",
+      "author": "klaus5",
+      "license": "CC Attribution",
+      "faces": 9842,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-ca849f95d9874d58a19324eec223ccdf",
+      "source": "attack_drone#2"
+    },
+    "fallback": {
+      "uid": "8d06874aac5246c59edb4adbe3606e0e",
+      "name": "Mech Drone",
+      "author": "skudgee",
+      "license": "CC Attribution",
+      "faces": 9131,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-8d06874aac5246c59edb4adbe3606e0e",
+      "source": "attack_drone#1"
+    }
+  },
+  "missile_vehicle": {
+    "primary": {
+      "uid": "58054ae4535042639bbb489e1b952909",
+      "name": "Sci-Fi Infantry combat vehicle",
+      "author": "dinmas.db",
+      "license": "CC Attribution",
+      "faces": 78048,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-58054ae4535042639bbb489e1b952909",
+      "source": "missile_vehicle#5"
+    },
+    "fallback": {
+      "uid": "a3cb343f3bf8486c8a0482df5b753c38",
+      "name": "Shaanxi SX2190 Missile Launcher",
+      "author": "MirzaArrafiERV_45",
+      "license": "CC Attribution",
+      "faces": 11008,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a3cb343f3bf8486c8a0482df5b753c38",
+      "source": "missile_vehicle#4"
+    }
+  },
+  "repair_vehicle": {
+    "primary": {
+      "uid": "a96241f8fbcf400d92eb7ea4aaaa37c6",
+      "name": "1955 Sci-Fi | Africa Tow Truck",
+      "author": "dougitougi123",
+      "license": "CC Attribution",
+      "faces": 44258,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a96241f8fbcf400d92eb7ea4aaaa37c6",
+      "source": "repair_vehicle#6"
+    },
+    "fallback": {
+      "uid": "a3b462d0a83d4d97a32cf2c10750f040",
+      "name": "Research>Mechanisms>Vehicles>Samus's Gunship",
+      "author": "jameslucino117",
+      "license": "CC Attribution",
+      "faces": 42399,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a3b462d0a83d4d97a32cf2c10750f040",
+      "source": "repair_vehicle#3"
+    }
+  },
+  "supply_truck": {
+    "primary": {
+      "uid": "26e809cce40e4359a3199649f12ef295",
+      "name": "MD '84 Armored - Low poly model",
+      "author": "DanielZhabotinsky",
+      "license": "CC Attribution",
+      "faces": 20364,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-26e809cce40e4359a3199649f12ef295",
+      "source": "supply_truck#3"
+    },
+    "fallback": {
+      "uid": "5d19c751b12849eeb390d637b2b686a1",
+      "name": "Military Truck 1/2 Ton",
+      "author": "andrewswihart",
+      "license": "CC Attribution",
+      "faces": 16667,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-5d19c751b12849eeb390d637b2b686a1",
+      "source": "supply_truck#2"
+    }
+  },
+  "dark_fog": {
+    "primary": {
+      "uid": "bdb9c9cfcf9c4a5eafec9f58b170bf98",
+      "name": "Free - Biomechanical Mutant",
+      "author": "Game-Ready",
+      "license": "CC Attribution",
+      "faces": 25988,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-bdb9c9cfcf9c4a5eafec9f58b170bf98",
+      "source": "dark_fog#3"
+    },
+    "fallback": {
+      "uid": "4028043549f64b40a14b6b12392663a7",
+      "name": "Alien",
+      "author": "bumstrum",
+      "license": "CC Attribution",
+      "faces": 8144,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-4028043549f64b40a14b6b12392663a7",
+      "source": "dark_fog#5"
+    }
+  },
+  "ship": {
+    "primary": {
+      "uid": "00ae2c7c273448338d84b45fc35d3f9c",
+      "name": "Futuristic Cargo Drone",
+      "author": "johndarrenmagturo",
+      "license": "CC Attribution",
+      "faces": 40054,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-00ae2c7c273448338d84b45fc35d3f9c",
+      "source": "ship#8"
+    },
+    "fallback": {
+      "uid": "709a1916c0cc4cbebe197e7ef26964cb",
+      "name": "Sci-fi Dropship",
+      "author": "baltazo",
+      "license": "CC Attribution",
+      "faces": 36568,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-709a1916c0cc4cbebe197e7ef26964cb",
+      "source": "ship#6"
+    }
+  },
+  "cargo_ship": {
+    "primary": {
+      "uid": "e9faa887c3684271b67be00649e11dcf",
+      "name": "SPACESHIP - CARGO",
+      "author": "Keremz",
+      "license": "CC Attribution",
+      "faces": 53380,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-e9faa887c3684271b67be00649e11dcf",
+      "source": "cargo_ship#1"
+    },
+    "fallback": {
+      "uid": "b8ca3ba89e8548419e9faeabc81c2d7d",
+      "name": "Carguero Pesado Buey II",
+      "author": "doclusifer2",
+      "license": "CC Attribution",
+      "faces": 6511,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-b8ca3ba89e8548419e9faeabc81c2d7d",
+      "source": "cargo_ship#6"
+    }
+  },
+  "battlefield_analysis_base": {
+    "primary": {
+      "uid": "bea991112295424a9c16b9cf92eb4357",
+      "name": "Building 01  sci-fi  base",
+      "author": "LJ2023",
+      "license": "CC Attribution",
+      "faces": 24097,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-bea991112295424a9c16b9cf92eb4357",
+      "source": "battlefield_analysis_base#3"
+    }
+  },
+  "gauss_turret": {
+    "primary": {
+      "uid": "28fb90b851b5454589f5170b08c8c66d",
+      "name": "Sci-fi Turret 3",
+      "author": "everlastinggrey",
+      "license": "CC Attribution",
+      "faces": 7492,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-28fb90b851b5454589f5170b08c8c66d",
+      "source": "gauss_turret#1"
+    },
+    "fallback": {
+      "uid": "fe59a306020d4492b50eea6ec47226a3",
+      "name": "Sci-Fi Turret",
+      "author": "JonasDelnaye",
+      "license": "CC Attribution",
+      "faces": 6168,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-fe59a306020d4492b50eea6ec47226a3",
+      "source": "gauss_turret#5"
+    }
+  },
+  "laser_turret": {
+    "primary": {
+      "uid": "93a6929ad9ee45bd977637fcfde5abbd",
+      "name": "Mounted Laser Cannon",
+      "author": "cosmiccobra",
+      "license": "CC Attribution",
+      "faces": 7888,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-93a6929ad9ee45bd977637fcfde5abbd",
+      "source": "laser_turret#4"
+    },
+    "fallback": {
+      "uid": "41a8514d6f8f447083c6af1dbeb8144a",
+      "name": "M11-23A1 Anti-Drone Turret",
+      "author": "Planetrix23",
+      "license": "CC Attribution",
+      "faces": 5638,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-41a8514d6f8f447083c6af1dbeb8144a",
+      "source": "laser_turret#6"
+    }
+  },
+  "missile_turret": {
+    "primary": {
+      "uid": "c5504e5ca6d742008eda50e9bfd942f4",
+      "name": "WEAPONS: MISSILE TURRET",
+      "author": "Nayo3D",
+      "license": "CC Attribution",
+      "faces": 9464,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-c5504e5ca6d742008eda50e9bfd942f4",
+      "source": "missile_turret#3"
+    },
+    "fallback": {
+      "uid": "851d6d54020944608840951800085025",
+      "name": "Rocket turret - free",
+      "author": "NETRUNNER_pl",
+      "license": "CC Attribution",
+      "faces": 22156,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-851d6d54020944608840951800085025",
+      "source": "missile_turret#4"
+    }
+  },
+  "plasma_turret": {
+    "primary": {
+      "uid": "3d5952eeb6d44ee2b9ffc16a6aa378d8",
+      "name": "Heavy Infiltrator cannon",
+      "author": "Bl4ckGh0st",
+      "license": "CC Attribution",
+      "faces": 50760,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-3d5952eeb6d44ee2b9ffc16a6aa378d8",
+      "source": "plasma_turret#1"
+    },
+    "fallback": {
+      "uid": "9818bd406a9b499395ac51ec47a0aeca",
+      "name": "Heavy Turbolaser Cannon V3",
+      "author": "ademis",
+      "license": "CC Attribution",
+      "faces": 6030,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-9818bd406a9b499395ac51ec47a0aeca",
+      "source": "plasma_turret#6"
+    }
+  },
+  "anti_air_turret": {
+    "primary": {
+      "uid": "a2c5ebb07a6b434f88880f31522e07b6",
+      "name": "AA turret",
+      "author": "kirikom9000",
+      "license": "CC Attribution",
+      "faces": 11988,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a2c5ebb07a6b434f88880f31522e07b6",
+      "source": "anti_air_turret#3"
+    },
+    "fallback": {
+      "uid": "1056ea79c3154aadb775e958924fd4c3",
+      "name": "FLAK pack (low poly)",
+      "author": "vonBerlichingen",
+      "license": "CC Attribution",
+      "faces": 14434,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-1056ea79c3154aadb775e958924fd4c3",
+      "source": "anti_air_turret#7"
+    }
+  },
+  "em_rail_ejector": {
+    "primary": {
+      "uid": "5fe560f4d97a476b9bbd8d5c01f65464",
+      "name": "Mass Driver",
+      "author": "briligg",
+      "license": "CC Attribution",
+      "faces": 15330,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-5fe560f4d97a476b9bbd8d5c01f65464",
+      "source": "em_rail_ejector#5"
+    }
+  },
+  "barracks": {
+    "primary": {
+      "uid": "84977830bf5940ee9b491febaadd2456",
+      "name": "Clone Barracks",
+      "author": "StrangeUsernames1",
+      "license": "CC Attribution",
+      "faces": 18555,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-84977830bf5940ee9b491febaadd2456",
+      "source": "barracks#2"
+    }
+  },
+  "vehicle_factory": {
+    "primary": {
+      "uid": "62c4768df1334909a3d206dcf610ea7e",
+      "name": "Vehicle_Factory",
+      "author": "rakshaan",
+      "license": "CC Attribution",
+      "faces": 7233,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-62c4768df1334909a3d206dcf610ea7e",
+      "source": "vehicle_factory#3"
+    }
+  },
+  "airfield": {
+    "primary": {
+      "uid": "f77e37ea3db44ff5afdc92a1554c1e71",
+      "name": "Airfield base",
+      "author": "rakshaan",
+      "license": "CC Attribution",
+      "faces": 23036,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-f77e37ea3db44ff5afdc92a1554c1e71",
+      "source": "airfield#4"
+    }
+  },
+  "ray_receiver": {
+    "primary": {
+      "uid": "3d1668dc014e4ff3b5205773b7940e71",
+      "name": "Satellite Dish",
+      "author": "JordieLitt",
+      "license": "CC Attribution",
+      "faces": 27248,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-3d1668dc014e4ff3b5205773b7940e71",
+      "source": "ray_receiver#3"
+    }
+  },
+  "vertical_launching_silo": {
+    "primary": {
+      "uid": "cbe59336373c40f98fb1695359928395",
+      "name": "Low Poly Space Launch Station",
+      "author": "anais.fernandez",
+      "license": "CC Attribution",
+      "faces": 4272,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-cbe59336373c40f98fb1695359928395",
+      "source": "vertical_launching_silo#4"
+    }
+  },
+  "artificial_star": {
+    "primary": {
+      "uid": "a996292bc068406590b4ddd045f7bd19",
+      "name": "Sci-Fi Reactor Core",
+      "author": "yewonkim0621",
+      "license": "CC Attribution",
+      "faces": 30576,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a996292bc068406590b4ddd045f7bd19",
+      "source": "artificial_star#4"
+    }
+  },
+  "oil_extractor": {
+    "primary": {
+      "uid": "7c5fdd845bf54d3e80d954bd4b08c5b5",
+      "name": "Oil Pumpjack - Animated",
+      "author": "felhamard",
+      "license": "CC Attribution",
+      "faces": 26956,
+      "animated": true,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-7c5fdd845bf54d3e80d954bd4b08c5b5",
+      "source": "oil_extractor#3"
+    }
+  },
+  "mining_machine": {
+    "primary": {
+      "uid": "1d18e751219345e88ba29138303b9a87",
+      "name": "Mining drill",
+      "author": "Natriarchy",
+      "license": "CC Attribution",
+      "faces": 23270,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-1d18e751219345e88ba29138303b9a87",
+      "source": "mining_machine#2"
+    }
+  },
+  "tesla_tower": {
+    "primary": {
+      "uid": "ebf82bbb494e43388fee954d8359011e",
+      "name": "Tesla Coil",
+      "author": "pretendlabs",
+      "license": "CC Attribution",
+      "faces": 21660,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-ebf82bbb494e43388fee954d8359011e",
+      "source": "tesla_tower#5"
+    }
+  },
+  "accumulator": {
+    "primary": {
+      "uid": "88a6ae64f3874c57aa5d008ed1d1c5d9",
+      "name": "Sci-Fi Batteries",
+      "author": "DanielCardonaArt",
+      "license": "CC Attribution",
+      "faces": 7936,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-88a6ae64f3874c57aa5d008ed1d1c5d9",
+      "source": "accumulator#4"
+    }
+  },
+  "thermal_power_plant": {
+    "primary": {
+      "uid": "bf2e1a087adb4628a376ffbed17c41ff",
+      "name": "SCIFI GENERATOR",
+      "author": "LordCinn",
+      "license": "CC Attribution",
+      "faces": 68574,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-bf2e1a087adb4628a376ffbed17c41ff",
+      "source": "thermal_power_plant#3"
+    }
+  },
+  "matrix_lab": {
+    "primary": {
+      "uid": "e84fd3405b34421095c70b0e09cc3111",
+      "name": "Low Poly Sci-Fi Lab",
+      "author": "berkay.tari",
+      "license": "CC Attribution",
+      "faces": 9197,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-e84fd3405b34421095c70b0e09cc3111",
+      "source": "matrix_lab#4"
+    }
+  },
+  "oil_refinery": {
+    "primary": {
+      "uid": "41fc8f48094f4e74ae5cf9c1e915dead",
+      "name": "Rare Earth Element Refinery",
+      "author": "novusod",
+      "license": "CC Attribution",
+      "faces": 15800,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-41fc8f48094f4e74ae5cf9c1e915dead",
+      "source": "oil_refinery#5"
+    }
+  },
+  "storage_tank": {
+    "primary": {
+      "uid": "a9d52429810644fbafdd435b7f698bd1",
+      "name": "Black vertical storage tank",
+      "author": "Gertol",
+      "license": "CC Attribution",
+      "faces": 6004,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-a9d52429810644fbafdd435b7f698bd1",
+      "source": "storage_tank#6"
+    }
+  },
+  "artillery": {
+    "primary": {
+      "uid": "26a0ef2d8b8b4b8ca4dc9a2bd27ea810",
+      "name": "Death Crawler Tank",
+      "author": "Herrsher",
+      "license": "CC Attribution",
+      "faces": 60295,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-26a0ef2d8b8b4b8ca4dc9a2bd27ea810",
+      "source": "packs/vehicles#12"
+    },
+    "fallback": {
+      "uid": "da078be6bc66461e87034f29600a4982",
+      "name": "PANZERHAUBITZE 2000 ARTILLERY (PzH-2000)",
+      "author": "MirzaArrafiERV_45",
+      "license": "CC Attribution",
+      "faces": 53310,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-da078be6bc66461e87034f29600a4982",
+      "source": "artillery#4"
+    }
+  },
+  "packs/industrial": {
+    "kit": {
+      "uid": "86245425f3d0468eb70456528b399f90",
+      "name": "Top Down Scifi Industrial platforms",
+      "author": "rakshaan",
+      "license": "CC Attribution",
+      "faces": 39282,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-86245425f3d0468eb70456528b399f90",
+      "source": "packs/industrial#2"
+    },
+    "kit2": {
+      "uid": "cf0b6d6e39e447268157dcd75764ef86",
+      "name": "Industrial building kit low poly",
+      "author": "txnomod",
+      "license": "CC Attribution",
+      "faces": 12350,
+      "animated": false,
+      "viewerUrl": "https://sketchfab.com/3d-models/none-cf0b6d6e39e447268157dcd75764ef86",
+      "source": "packs/industrial#20"
+    }
+  }
+}

@@ -118,11 +118,13 @@ def model_detail(uid: str) -> dict:
 
 
 def download_url(uid: str) -> str:
-    d = _get_json(
+    """S3 签名 URL 有有效期，不能走磁盘缓存（缓存里的旧 URL 会 403）。"""
+    req = urllib.request.Request(
         f"{API}/models/{uid}/download",
-        headers={"Authorization": f"Token {token()}"},
+        headers={"Authorization": f"Token {token()}", "User-Agent": UA},
     )
-    return d["glb"]["url"]
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        return json.loads(resp.read())["glb"]["url"]
 
 
 def thumbnail_url(model: dict, target_w: int = 720) -> str:
