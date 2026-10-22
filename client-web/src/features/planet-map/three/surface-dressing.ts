@@ -141,7 +141,7 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
   const normal = new THREE.Vector3();
   const twist = new THREE.Quaternion();
   const tileSize = surfaceTileSize(radius, planet.surface.face_size);
-  const collect = (list: typeof cells, budgetFor: number, perCell: number, minSize: number, maxSize: number, salt: number) => {
+  const collect = (list: typeof cells, budgetFor: number, perCell: number, minSize: number, maxSize: number, salt: number, heightOffset = 0) => {
     const transforms: THREE.Matrix4[] = [];
     const colors: THREE.Color[] = [];
     if (!list.length) return { transforms, colors };
@@ -156,7 +156,9 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
         normal.copy(tileNormal({ x: cell.x + offsetX, y: cell.y + offsetY }, planet.surface.face_size));
         const variation = hash(cell.x, cell.y, i * 7 + salt + 2);
         const size = tileSize * (minSize + variation * (maxSize - minSize));
-        dummy.position.copy(normal).multiplyScalar(radius + size * 0.05);
+        // 贴地：扫描岩石的底面在 y = 0，实例原点直接放在球面上；草簇/卵石再抬一点
+        // 让叶根与小石不完全陷进地表。
+        dummy.position.copy(normal).multiplyScalar(radius + heightOffset * size);
         dummy.quaternion.setFromUnitVectors(UP, normal);
         twist.setFromAxisAngle(UP, hash(cell.x, cell.y, i * 7 + salt + 3) * Math.PI * 2);
         dummy.quaternion.multiply(twist);
@@ -175,13 +177,13 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
     return new THREE.Color('#5d6b3a').lerp(new THREE.Color('#7d8a4a'), variation * 0.7).multiplyScalar(0.9 + variation * 0.2);
   });
   // 岩石：blocked 格，每格 3–5 块，大小明显大于草。
-  const rocks = collect(rockCells, rockBudget, 4, 0.16, 0.34, 120);
+  const rocks = collect(rockCells, rockBudget, 4, 0.10, 0.22, 120);
   const rockColors = rocks.transforms.map((_, index) => {
     const variation = (index * 0.38196601125) % 1;
     return new THREE.Color('#6a6f68').lerp(new THREE.Color('#9a9c92'), variation * 0.6);
   });
   // 卵石：可建造/沙地上零星小石。
-  const pebbles = collect(pebbleCells, pebbleBudget, ice ? 3 : 2, ice ? 0.02 : 0.03, ice ? 0.05 : 0.06, 160);
+  const pebbles = collect(pebbleCells, pebbleBudget, ice ? 3 : 2, ice ? 0.02 : 0.03, ice ? 0.05 : 0.06, 160, 0.35);
   const pebbleColors = pebbles.transforms.map((_, index) => new THREE.Color('#8a8d84').multiplyScalar(0.85 + ((index * 0.61803398875) % 1) * 0.3));
 
   const time = options.time ?? { value: 0 };

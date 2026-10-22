@@ -51,19 +51,22 @@ export function parseRockBinary(buffer: ArrayBuffer, name: string): { positions:
   const headerLength = view.getUint32(offset, true); offset += 4;
   offset += headerLength; // JSON 头（faces/verts/license），渲染不需要
   const indexCount = view.getUint32(offset, true); offset += 4;
-  const indices = new Uint32Array(buffer, offset, indexCount); offset += indexCount * 4;
+  // JSON 头长度不保证 4 字节对齐，不能直接在原 buffer 上建 typed array 视图：
+  // 先拷贝到对齐的独立 buffer 再解析（fetch 拿到的 ArrayBuffer 可能带 byteOffset 语义）。
+  const indices = new Uint32Array(indexCount);
+  for (let i = 0; i < indexCount; i++) indices[i] = view.getUint32(offset + i * 4, true);
+  offset += indexCount * 4;
   const vertexCount = indexCount > 0 ? (buffer.byteLength - offset) / 8 / 4 : 0;
-  const data = new Float32Array(buffer, offset, vertexCount * 8);
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   for (let i = 0; i < vertexCount; i++) {
-    const base = i * 8;
-    positions[i * 3] = data[base]; positions[i * 3 + 1] = data[base + 1]; positions[i * 3 + 2] = data[base + 2];
-    normals[i * 3] = data[base + 3]; normals[i * 3 + 1] = data[base + 4]; normals[i * 3 + 2] = data[base + 5];
-    uvs[i * 2] = data[base + 6]; uvs[i * 2 + 1] = data[base + 7];
+    const base = offset + i * 32;
+    positions[i * 3] = view.getFloat32(base, true); positions[i * 3 + 1] = view.getFloat32(base + 4, true); positions[i * 3 + 2] = view.getFloat32(base + 8, true);
+    normals[i * 3] = view.getFloat32(base + 12, true); normals[i * 3 + 1] = view.getFloat32(base + 16, true); normals[i * 3 + 2] = view.getFloat32(base + 20, true);
+    uvs[i * 2] = view.getFloat32(base + 24, true); uvs[i * 2 + 1] = view.getFloat32(base + 28, true);
   }
-  return { positions, normals, uvs, indices: indices.slice(), faces: indexCount / 3 };
+  return { positions, normals, uvs, indices, faces: indexCount / 3 };
 }
 
 let rockPromise: Promise<RockMeshAsset[]> | null = null;

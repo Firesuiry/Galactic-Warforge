@@ -183,12 +183,13 @@ export const SHADER_COLOR = /* glsl */`
   float swGrain = mix(0.5, swFbm(swSurfacePosition * 2.4), swMicroDetail);
   float swFine = mix(0.5, swNoise(swSurfacePosition * 13.0), 1.0 - smoothstep(0.025, 0.12, swPixelFootprint));
   float swRidges = abs(swNoise(swSurfacePosition * 1.7 + swContinental) * 2.0 - 1.0);
-  // 纹理一次重复 ≈ 4 格；贴地时脚下一格约 300px，故在「每格像素覆盖 > 0.3 格」就开始淡出，
+  // 纹理一次重复 ≈ 3 格（1K 纹理铺 3 格时近景细节够，又不会细到成噪点）；
+  // 贴地时脚下一格约 300px，故在「每格像素覆盖 > 0.3 格」就开始淡出，
   // 远景（全球视角）只剩图集宏观色，避免摩尔纹闪烁。
-  float swTexScale = 1.0 / max(0.0001, swTileWorldSize * 4.0);
+  float swTexScale = 1.0 / max(0.0001, swTileWorldSize * 3.0);
   float swTexDetail = 1.0 - smoothstep(0.25, 1.1, swPixelFootprint / max(0.0001, swTileWorldSize));
   // 近景用第二尺度采样打散平铺重复感（低频大块 + 细节层）。
-  float swTexMacro = 1.0 / max(0.0001, swTileWorldSize * 13.0);
+  float swTexMacro = 1.0 / max(0.0001, swTileWorldSize * 11.0);
   vec3 swTriW = swTriplanarWeights(swSurfacePosition);
   float swBiomeNoise = swFbm(swP * 5.3 + swSeed * 17.0);
   float swBiomeNoise2 = swFbm(swP * 15.7 + swSeed * 31.0 + 7.0);
@@ -255,22 +256,45 @@ export const SHADER_COLOR = /* glsl */`
         + swRipple * swTileWorldSize * 0.0016;
       swWaterMask = swKnown;
     } else if (swLava > 0.5) {
-      // 岩浆：冷却硬壳纹理 + 自发光；缓慢流动（swTime 冻结即固定相位）。
-      vec3 swFlow = swSurfacePosition * swTexScale * 1.4;
-      // 冷却硬壳：暗色玄武质壳层；缝隙里的热熔体才发光。硬壳用低频噪声决定厚薄，
-      // 避免整片橙红（那样在近景读成一块发光塑料）。
-      vec3 swCrust = texture2D(swAlbedoArray, vec3(swFlow.xz, 10.0)).rgb;
-      vec3 swCrustB = texture2D(swAlbedoArray, vec3(swFlow.zy + swTime * 0.004, 10.0)).rgb;
-      float swCrustMask = smoothstep(0.42, 0.72, swFbm(swSurfacePosition * 1.1 + 9.0));
-      vec3 swEmit = texture2D(swLavaEmissionMap, swFlow.xz * 0.8 + vec2(swTime * 0.003, -swTime * 0.002)).rgb;
-      // 壳越厚越暗（几乎黑），薄处透出暗红。
-      swSurfaceAlbedo = mix(vec3(0.045, 0.038, 0.036), mix(swCrust, swCrustB, 0.35) * 0.16, 1.0 - swCrustMask);
-      // 橙红自发光（#ff5a1f 量级）：emissive 图 × 色温 × (1 - 壳厚)。
-      vec3 swLavaGlow = swEmit * vec3(1.0, 0.30, 0.09) * 1.15 * (1.0 - swCrustMask * 0.85);
-      swLavaGlow += vec3(0.55, 0.12, 0.03) * 0.12;
+      // 岩浆：冷却硬壳（玄武质板块）+ 裂缝里的热熔体 + 橙红自发光。
+      // 纹理一律用**球面三平面**采样（与陆地同一套）：熔岩图沿世界轴向的 UV 拉伸会在
+      // 近景变成纵向条带，三平面没有这个问题。流动用不同相位/尺度的两层叠加。
+      // 三层噪声：板块（硬壳厚薄）、裂缝（交界）、熔体流动。
+      float swPlateNoise = swFbm(swSurfacePosition * 1.7 + 3.3);
+      float swPlateNoise2 = swFbm(swSurfacePosition * 4.3 + 17.1);
+      // 硬壳板块：阈值偏「多壳」；壳越厚越黑。
+      float swCrustMask = smoothstep(0.34, 0.60, swPlateNoise * 0.72 + swPlateNoise2 * 0.38);
+      // 板块交界（Voronoi 式细缝）：两层噪声等值线附近形成网状裂缝，缝隙里透热。
+      float swSeamA = 1.0 - smoothstep(0.0, 0.045, abs(swPlateNoise - 0.52));
+      float swSeamB = 1.0 - smoothstep(0.0, 0.030, abs(swPlateNoise2 - 0.48));
+      float swSeam = max(swSeamA, swSeamB * 0.85);
+      // 硬壳表面：玄武岩纹理（球面三平面，无 UV 拉伸），压得很暗。
+      vec3 swFlow = swSurfacePosition * swTexScale * 1.15;
+      vec3 swCrust = texture2D(swAlbedoArray, vec3(swFlow.xz, 6.0)).rgb * swTriW.x
+        + texture2D(swAlbedoArray, vec3(swFlow.zy, 6.0)).rgb * swTriW.y
+        + texture2D(swAlbedoArray, vec3(swFlow.xy, 6.0)).rgb * swTriW.z;
+      // 熔体：自发光图两层（不同尺度、缓慢反向漂移），只出现在裂缝与薄壳处。
+      vec2 swMeltUV = vec2(dot(swSurfacePosition, vec3(0.91, 0.37, 0.19)), dot(swSurfacePosition, vec3(-0.28, 0.86, 0.43)));
+      vec3 swEmitA = texture2D(swLavaEmissionMap, swMeltUV * (swTexScale * 1.1) + vec2(swTime * 0.004, -swTime * 0.003)).rgb;
+      vec3 swEmitB = texture2D(swLavaEmissionMap, swMeltUV.yx * (swTexScale * 2.3) - vec2(swTime * 0.007, swTime * 0.005)).rgb;
+      vec3 swEmit = mix(swEmitA, swEmitB, 0.42);
+      float swMelt = clamp((1.0 - swCrustMask) * 0.55 + swSeam * 0.85, 0.0, 1.0);
+      // 壳色：暗玄武岩（近黑但有细节），裂缝/薄壳处是暗红熔体反照率。
+      vec3 swCrustAlbedo = swCrust * 0.09 + vec3(0.014, 0.012, 0.012);
+      vec3 swMeltAlbedo = swEmit * swEmit * vec3(0.30, 0.065, 0.02);
+      // 反照率只在裂缝/薄壳处透一点暗红；壳面保持黑玄武岩。
+      swSurfaceAlbedo = mix(swCrustAlbedo, swMeltAlbedo, swMelt * 0.7);
+      // 自发光：取纹理亮度（luma）当热强度，再乘橙红色温——不直接用图里的 RGB，
+      // 否则 8-bit 图的红通道饱和后色温被拉偏、bloom 只吃到一片浅橙。
+      // 只有薄壳/裂缝处的热熔体发光（壳面几乎不发光），bloom 阈值 2.5 才能吃到。
+      float swHeat = dot(swEmit, vec3(0.299, 0.587, 0.114));
+      float swHeatContrast = pow(clamp(swHeat, 0.0, 1.0), 2.2);
+      float swMeltHeat = clamp((1.0 - swCrustMask) * 0.30 + swSeam, 0.0, 1.0);
+      vec3 swLavaGlow = vec3(1.0, 0.22, 0.045) * swHeatContrast * swMeltHeat * 1.6;
+      swLavaGlow += vec3(1.2, 0.20, 0.04) * swSeam * 0.22;
       swLavaEmissive = swLavaGlow * swKnown;
-      swSurfaceRough = mix(0.82, 0.55, 1.0 - swCrustMask);
-      swSurfaceHeight = texture2D(swPackedArray, vec3(swFlow.xz, 10.0)).a * 0.35 + swCrustMask * 0.25;
+      swSurfaceRough = mix(0.52, 0.95, swCrustMask);
+      swSurfaceHeight = (swCrustMask * 0.34 + swSeam * 0.12) * swTileWorldSize * 0.004;
       swLavaMask = swKnown;
     } else {
       // 陆地：按权重取两种纹理做高度混合。
@@ -308,14 +332,21 @@ export const SHADER_COLOR = /* glsl */`
       }
       SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScale);
       SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScale);
-      // 宏观尺度再采一次主层，用低频权重混合，破坏同一张贴图的周期性重复。
+      // 宏观尺度再采一次主层（另一相位），用低频权重混合，破坏同一张贴图的周期性重复。
       SwSurface swMacro = swSampleLayer(swLayerA, swSurfacePosition + vec3(0.37, 0.11, 0.53), swTriW, swTexMacro);
+      // 第三层：不同旋转相位的中尺度采样，进一步打散「同一朵花纹重复出现」的观感。
+      vec3 swRotated = swSurfacePosition * swTexScale;
+      swRotated = vec3(swRotated.z * 0.94 + swRotated.x * 0.34, swRotated.y, -swRotated.x * 0.34 + swRotated.z * 0.94) + vec3(5.1, 3.7, 8.9);
+      vec3 swMacroTint = texture2D(swAlbedoArray, vec3(swRotated.xz, swLayerA)).rgb * 0.5
+        + texture2D(swAlbedoArray, vec3(swRotated.zy, swLayerA)).rgb * 0.5;
       float swMacroMix = 0.30 + 0.18 * swBiomeNoise2;
       float swBlend = swHeightBlend(swA.height, swB.height, swWeightA, swWeightB, swBiomeNoise2);
       // 群落交界处打散成 1–3 格宽的斑块，而不是沿噪声等值线的整片边界。
       swBlend = smoothstep(0.22, 0.78, swBlend + (swBiomeNoise2 - 0.5) * 0.55);
       vec3 swTextured = mix(swB.albedo, swA.albedo, swBlend);
       swTextured = mix(swTextured, swTextured * (swMacro.albedo * 2.1 + 0.45), swMacroMix * swTexDetail);
+      // 中尺度调制：只改明暗（约 ±12%），不引入第二种颜色，避免近景发花。
+      swTextured *= mix(vec3(1.0), 0.82 + swMacroTint * 0.36, swTexDetail * 0.35);
       float swRoughTextured = mix(swB.rough, swA.rough, swBlend);
       // 潮湿度：低洼（height 小）更湿、颜色偏冷偏暗；高处更干更亮。
       float swWet = (1.0 - swElevation) * (0.35 + swBiomeNoise * 0.35);
