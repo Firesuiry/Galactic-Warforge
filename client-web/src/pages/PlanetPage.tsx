@@ -786,6 +786,7 @@ export function PlanetPage() {
     sceneRef: audioSceneRef,
     playerId: session.playerId,
     frozen: audioFrozen,
+    gameIdentity: currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '',
   });
   const isLoading = [
     sceneQuery.isLoading,

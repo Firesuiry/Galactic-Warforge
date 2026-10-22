@@ -56,6 +56,8 @@ export interface PlanetAudioSceneInput {
   playerId: string;
   /** 深链/截图冻结时不播（?freeze=1）。 */
   frozen?: boolean;
+  /** 对局标识（started_at::map_seed）：换局时清「最近一次交战」，配乐不会带着上一局的交战档进新局。 */
+  gameIdentity?: string;
 }
 
 /** 载入区域里运行中的己方建筑数（声床嗡鸣电平的输入）。 */
@@ -68,7 +70,7 @@ export function countRunningBuildings(planet: PlanetRenderView | undefined, play
   return count;
 }
 
-export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, frozen = false }: PlanetAudioSceneInput): void {
+export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, frozen = false, gameIdentity = '' }: PlanetAudioSceneInput): void {
   const lastCombatAt = useRef<number | null>(null);
   // 配乐状态只在实际变化时调 setMusic（setMix 等也会读它）；值本身仍是模块级状态。
   const musicRef = useRef<string | null>(null);
@@ -82,6 +84,12 @@ export function usePlanetAudioScene({ planet, runtime, sceneRef, playerId, froze
       lastCombatAt.current = event.at;
     }
   }), []);
+
+  // 换局：上一局的交战时间戳不能带进新局（否则新局开场就是 combat 档）。
+  useEffect(() => {
+    if (!gameIdentity) return;
+    lastCombatAt.current = null;
+  }, [gameIdentity]);
 
   // 实体索引：每来一帧行星窗口数据就整份换掉（AppShell 注入的 resolver 读它）。
   useEffect(() => {
