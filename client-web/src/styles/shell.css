@@ -895,3 +895,51 @@
   color: var(--text-muted);
   cursor: help;
 }
+
+/* 设置面板：音量混音（第 23 轮音频） */
+.top-nav__settings-section {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-glow);
+}
+
+.top-nav__settings-section-title {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.audio-mix {
+  display: grid;
+  gap: 6px;
+}
+
+.audio-mix__row {
+  display: grid;
+  grid-template-columns: 52px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.audio-mix__label {
+  color: var(--text-muted);
+}
+
+.audio-mix__slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.audio-mix__value {
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-mix__mute {
+  margin-top: 4px;
+  width: 100%;
+}
