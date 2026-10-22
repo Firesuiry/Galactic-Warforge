@@ -357,8 +357,11 @@ export class PlanetThreeScene {
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       // 松手惯性（3A §9）：拖动结束后按最后一段的角速度继续转 ~300ms。
+      // 刚松手时先清空角速度记录：下一次按下后到第一次 pointermove 之间的间隔可能很长
+      // （用户停顿），拿它当时间差会把惯性放得很大。
       if (!tap) {
         if (!this.frozen && !this.reducedMotion.matches) this.motion.startInertia(this.dragVelocity.x, this.dragVelocity.y, performance.now());
+        this.dragVelocity = { x: 0, y: 0, at: 0 };
         return;
       }
       // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
