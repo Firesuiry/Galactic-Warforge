@@ -4,7 +4,8 @@
  * Playwright 的 worker 只能稳定继承 `process.env`（`test.info()` 在 spec 收集阶段不可用），
  * 所以每个场景配一个 setup project（metadata.scenario = 场景名），它产出的 env 由
  * dispatcher 透传给依赖它的 project 的 worker（见 playwright 的 producedEnv 机制）。
- * 同一份文件被两个 setup project 各跑一次。webServer 在顶层（Playwright 1.58 不支持
+ * 同一份文件被每个 setup project 各跑一次（skirmish / war，以及显式 `--project=poles`
+ * 时的极区夹具）。webServer 在顶层（Playwright 1.58 不支持
  * project 级 webServer），主进程启动时已经等到健康检查通过；这里再确认一次入口可用，
  * 失败信息会带场景名，比 spec 里一堆 ECONNREFUSED 清楚。
  */

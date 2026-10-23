@@ -70,6 +70,9 @@ func (rt *Runtime) ResetToConfiguredNewGame(cfg *config.Config) error {
 	if maps == nil || maps.PrimaryPlanet() == nil {
 		return fmt.Errorf("%w: map config produces no planets", ErrInvalidNewGame)
 	}
+	if err := gamecore.ValidateScenarioBootstrap(&clone, maps); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidNewGame, err)
+	}
 	q := queue.New()
 	bus := gamecore.NewEventBus()
 	store := newSnapshotStore(clone.Server)

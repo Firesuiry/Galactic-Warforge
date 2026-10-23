@@ -21,6 +21,8 @@ const gpuLaunchArgs = [
  * 依赖**官方战争场景**预置（战场分析基站/重组制造台/补给站、固定出生点）的 spec：
  * 只在 war project 里跑；skirmish project 整文件忽略，war project 只收这些文件。
  */
+const POLES_SPECS = ['**/cube-poles.spec.ts'];
+
 const WAR_ONLY_SPECS = [
   '**/planet-three.spec.ts',
   '**/cube-surface.spec.ts',
@@ -43,6 +45,9 @@ const WAR_ONLY_SPECS = [
  * 因此默认 `npx playwright test` 两个场景的服务端与 Web 都会起来，各自被对应的 project 使用。
  * 默认两个 project 都跑，覆盖不会悄悄丢；只跑一个场景用 `--project=skirmish` / `--project=war`
  * （另一场景的 webServer 仍会被拉起，但不会有测试连它）。
+ *
+ * 极区夹具（`poles`，N=48 地图 + `config-dev.yaml`）只在显式指定 `--project=poles`
+ * 或 `SW_SCENARIO=poles` 时起：它要用自己的地图，默认带上会多起一组服务端。
  * 只连已起好的环境：`SW_SKIP_WEBSERVER=1` + `SW_WEB_ENTRY` / `SW_BACKEND_ENTRY`（此时只有一个 project）。
  */
 function scenarioWebServer(ports: PlaywrightPorts, kind: ScenarioKind) {
@@ -91,16 +96,26 @@ function scenarioProjects(kind: ScenarioKind, ports: PlaywrightPorts): Project[]
     {
       name: kind,
       dependencies: [`${kind}-setup`],
-      testMatch: kind === 'war' ? WAR_ONLY_SPECS : undefined,
-      testIgnore: kind === 'skirmish' ? WAR_ONLY_SPECS : undefined,
+      // war：只收依赖战争预置的 spec；skirmish：排除它们和极区夹具；poles：只收极区 spec。
+      testMatch: kind === 'war' ? WAR_ONLY_SPECS : kind === 'poles' ? POLES_SPECS : undefined,
+      testIgnore: kind === 'skirmish' ? [...WAR_ONLY_SPECS, ...POLES_SPECS] : undefined,
       use: { baseURL: ports.webEntry },
     },
   ];
 }
 
+// 显式只要极区夹具时（`SW_SCENARIO=poles` 或命令行 `--project=poles`）只起它那一组
+// 服务端；默认仍是 skirmish + war 两组，极区夹具不进默认跑。
+// worker 进程重新加载本配置时 argv 里没有 `--project`，所以主进程判定后写回
+// SW_SCENARIO，worker 靠环境变量看到同一个选择（否则 project 集合对不上）。
+if (process.argv.some(arg => /^--project[= ]poles\b/.test(arg))) {
+  process.env.SW_SCENARIO = 'poles';
+}
 const scenarioKinds: ScenarioKind[] = skipWebServer
   ? [scenarioKindOf()]
-  : ['skirmish', 'war'];
+  : scenarioKindOf() === 'poles'
+    ? ['poles']
+    : ['skirmish', 'war'];
 const portsByKind = await resolveScenarioPorts(scenarioKinds);
 
 export default defineConfig({
@@ -122,8 +137,8 @@ export default defineConfig({
         name: scenarioKindOf(),
         use: { baseURL: process.env.SW_WEB_ENTRY },
       }]
-    : scenarioKinds.flatMap(kind => scenarioProjects(kind, portsByKind[kind])),
+    : scenarioKinds.flatMap(kind => scenarioProjects(kind, portsByKind[kind]!)),
   webServer: skipWebServer
     ? undefined
-    : scenarioKinds.flatMap(kind => scenarioWebServer(portsByKind[kind], kind)),
+    : scenarioKinds.flatMap(kind => scenarioWebServer(portsByKind[kind]!, kind)),
 });

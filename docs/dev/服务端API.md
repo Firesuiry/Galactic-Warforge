@@ -38,6 +38,7 @@
   - 两个文件都合法：续档；存档内的 `battlefield`、`players`、`map_config` 优先于外部配置。
   - 只有其一或目录非空但不完整：拒绝启动。
 - 续档时仍可被外部覆盖的纯运行参数：`server.port`、`event_history_limit`、`snapshot_max_events`、`alert_history_limit`、`auto_save_interval_seconds`、`tick_rate_override`。
+- `scenario_bootstrap.planets[].buildings[]` 的 `x`/`y` 在**加载期**校验是否落在该行星的立方体球面网格内（`mapgen` 生成的 `3×face_size` × `2×face_size` 图集，跨面邻接不影响越界判定）。越界直接拒绝启动（`load runtime: scenario_bootstrap.planets[0].buildings[1] (tesla_tower at 126,132) out of planet-1-1 cube-sphere bounds 144x96`），不 panic、不静默夹紧；错误里的下标就是配置文件里的数组位置。`/games/new` 的热重置与 `checkpointbuild` 的 `cp-root` 重建同样先校验，失败按 `ErrInvalidNewGame` 回执。校验只看配置与地图模型，所以换地图（比如把战争场景套到 N=48 的极区夹具上）时第一时间报错。
 - `server.game_data_dir`（可选）：游戏数据目录，放整套 `items/recipes/techs/buildings/units/combat/war.yaml`，非空时替换内置 `server/data/`；启动时做完整引用校验，失败即拒绝启动并列出全部错误。格式见 [数据配置文件](数据配置文件.md)。与 `data_dir`（存档）是两回事。
 - 自动保存默认每 60 秒覆盖 `save.json`，`auto_save_interval_seconds = 0` 关闭；只有一个存档槽，手动保存同样覆盖。
 - `server.tick_rate_override`（可选，默认 0）：进程级 tick 速率覆盖。0 = 不覆盖，沿用新局或存档里固化的 `battlefield.max_tick_rate`；非 0 时取 1..1000（校验同 `max_tick_rate`），新开局、启动恢复、热加载存档点后的实际 tick 速率以及 `GET /games/current` 的 `max_tick_rate` 都用它。tick 速率是运行参数，覆盖值不写进 `meta.json`，同一个存档点可以用不同速率读档（试玩用 3 慢跑、构建段用 100 快进，见 [存档点回归测试](../guide/存档点回归测试.md) 第 7 节）。
