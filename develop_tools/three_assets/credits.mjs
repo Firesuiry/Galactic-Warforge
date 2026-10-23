@@ -34,6 +34,19 @@ const EXTRA_CHANGES = {
   'supply_truck': '映射表里绕 Y 旋转 180° 对齐正面 +Z',
 };
 
+/**
+ * `selection.json` 的 `viewerUrl` 必须是真的模型页：`raw/` 是 gitignore 的，干净克隆上重跑本脚本
+ * 读不到许可记录，只能靠 selection.json 兜底。占位符（`/3d-models/none-<uid>`）会产出 404 链接，
+ * 这里直接报错，避免悄悄写进产物。
+ */
+function assertViewerUrl(entry, label) {
+  const url = entry.viewerUrl ?? '';
+  if (!url || /\/3d-models\/none-/.test(url)) {
+    throw new Error(`${label} 的 viewerUrl 是占位符（${url || '(空)'}）：请先用 fetch.py 的许可记录回写 selection.json`);
+  }
+  return url;
+}
+
 function sketchfabModels() {
   const rows = [];
   for (const [type, value] of Object.entries(SELECTION)) {
@@ -48,8 +61,8 @@ function sketchfabModels() {
       type,
       title: entry.name,
       author: entry.author,
-      authorUrl: license.author_url ?? `https://sketchfab.com/${entry.author}`,
-      modelUrl: license.viewerUrl ?? entry.viewerUrl,
+      authorUrl: license.author_url ?? entry.authorUrl ?? `https://sketchfab.com/${entry.author}`,
+      modelUrl: license.viewerUrl ?? assertViewerUrl(entry, type),
       license: 'CC BY 4.0',
       licenseUrl: license.license_url ?? 'https://creativecommons.org/licenses/by/4.0/',
       changes: [CHANGES, EXTRA_CHANGES[type]].filter(Boolean).join('；'),
