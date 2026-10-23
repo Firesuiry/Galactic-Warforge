@@ -23,6 +23,9 @@ export interface AtlasSet {
   properties: THREE.DataTexture;
   coast: THREE.DataTexture;
   heat: THREE.DataTexture;
+  /** 平滑类别场（0 为等值线，范围 ±0.5）：R 水面、G 岩性、B 岩浆、A 到未知区。
+   *  着色器用它做亚格边界：等值线被均值核磨圆、跨格连续，不再沿格边走方块（L15）。 */
+  sdf: THREE.DataTexture;
 }
 
 /** 宏观色（线性 0..1）：纹理未就绪/远景时使用；sRGB 编码写进图集。 */
@@ -60,12 +63,14 @@ function srgbByte(value: number) {
   return Math.round(srgb * 255);
 }
 
-function dataTexture(bytes: Uint8Array, width: number, height: number) {
+function dataTexture(bytes: Uint8Array, width: number, height: number, linear = false) {
   const texture = new THREE.DataTexture(bytes, width, height, THREE.RGBAFormat);
   // Linear values are baked below; data texture rows follow the six-face atlas.
   texture.colorSpace = THREE.NoColorSpace;
-  texture.minFilter = THREE.NearestFilter;
-  texture.magFilter = THREE.NearestFilter;
+  // 逐格类别数据必须最近邻（插值会造出不存在的类别）；SDF 相反——它的亚格边界
+  // 完全靠硬件双线性插值，用最近邻就又退回沿格边的方块（L15）。
+  texture.minFilter = linear ? THREE.LinearFilter : THREE.NearestFilter;
+  texture.magFilter = linear ? THREE.LinearFilter : THREE.NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
@@ -104,6 +109,45 @@ function distanceField(
   return result;
 }
 
+/** 每格的超采样倍数：平滑场在这个分辨率上算，线性插值后等值线才不是方格（L15）。 */
+export const SDF_SUPERSAMPLE = 8;
+
+/**
+ * 平滑类别场（L15 的亚格边界）：把格级掩码超采样后做两遍宽核均值，得到 0..1 的覆盖度场，
+ * 再减 0.5 成为以 0 为等值线的有符号场（内侧正、外侧负）。
+ *
+ * 为什么不用距离变换：距离变换忠实保留输入的形状——格子边界还是格子，只是给了距离。
+ * 覆盖度场的 0 等值线则被均值核「磨圆」：拐角变圆角、单格凸起收成小半岛，这正是海岸线
+ * 需要的圆润不规则（半径约 1 格），再叠着色器里的噪声弯折成自然的湾与岬。
+ */
+function smoothField(width: number, height: number, mask: (x: number, y: number) => boolean) {
+  const S = SDF_SUPERSAMPLE;
+  const w = width * S, h = height * S;
+  let field = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    field[y * w + x] = mask(Math.floor(x / S), Math.floor(y / S)) ? 1 : 0;
+  }
+  // 两遍 [1 2 1]/4 分离卷积 ≈ σ ≈ 1 格：核宽正好让等值线圆润到「一个格子的尺度」。
+  const radius = S;
+  const pass = (axis: 'x' | 'y') => {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let sum = 0, weight = 0;
+      for (let d = -radius; d <= radius; d++) {
+        const nx = axis === 'x' ? x + d : x, ny = axis === 'y' ? y + d : y;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const k = radius + 1 - Math.abs(d);
+        sum += field[ny * w + nx] * k; weight += k;
+      }
+      out[y * w + x] = sum / weight;
+    }
+    field = out;
+  };
+  pass('x'); pass('y');
+  for (let i = 0; i < field.length; i++) field[i] -= 0.5;
+  return { data: field, width: w, height: h };
+}
+
 /** 到未知区（未探索/无数据）的格数渐变：只在已探索格上有值，未探索格恒为 0。 */
 function knownEdgeField(width: number, height: number, sample: SampleAt, boundsX: number, boundsY: number) {
   const distance = distanceField(width, height, boundsX, boundsY,
@@ -138,6 +182,23 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, 
   const waterDistance = distanceField(width, height, boundsX, boundsY,
     (x, y) => { const cell = sample(x, y); return cell.explored && WATER_TERRAINS.has(cell.terrain); }, faceSize, 5);
   const edge = knownEdgeField(width, height, sample, boundsX, boundsY);
+  const knownCell = (x: number, y: number) => { const cell = sample(x, y); return cell.explored && cell.terrain !== 'unknown'; };
+  // 外侧只数**已探索的非该类格**：未探索格既不是水也不是陆，不能把水面距离场往探索区外推。
+  // 未知格一律算「外侧」：等值线停在探索前沿，不会把地形色推进未探索区（信息诚实）。
+  const waterGrid = smoothField(width, height, (x, y) => {
+    const cell = sample(boundsX + x, boundsY + y);
+    return cell.explored && cell.terrain !== 'unknown' && WATER_TERRAINS.has(cell.terrain);
+  }, 3);
+  const rockGrid = smoothField(width, height, (x, y) => {
+    const cell = sample(boundsX + x, boundsY + y);
+    return cell.explored && cell.terrain !== 'unknown' && finishFlags(cell.terrain).rock >= 0.5;
+  }, 3);
+  const lavaGrid = smoothField(width, height, (x, y) => {
+    const cell = sample(boundsX + x, boundsY + y);
+    return cell.explored && cell.terrain !== 'unknown' && cell.terrain === 'lava';
+  }, 3);
+  // 编码：场值 ±0.5 → 0..255（0.5 = 0）。场本身是覆盖度，范围天然是 ±0.5。
+  const encodeSdf = (value: number) => Math.max(0, Math.min(255, Math.round((value + 0.5) * 255)));
   const directionOrder: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -168,11 +229,23 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, 
       heat[i + 3] = known ? Math.round(255 * edge[y * width + x]) : 0;
     }
   }
+  // SDF 图是超采样分辨率（每格 4×4）：直接在它的格点上编码。
+  const sdf = new Uint8Array(waterGrid.width * waterGrid.height * 4);
+  for (let i = 0; i < waterGrid.data.length; i++) {
+    sdf[i * 4] = encodeSdf(waterGrid.data[i]);
+    sdf[i * 4 + 1] = encodeSdf(rockGrid.data[i]);
+    sdf[i * 4 + 2] = encodeSdf(lavaGrid.data[i]);
+    // A：到未知区的距离（已探索侧为正）：SDF 版本由 knownEdgeField 放大到超采样分辨率。
+    const gx = i % waterGrid.width, gy = Math.floor(i / waterGrid.width);
+    const cellEdge = edge[Math.min(height - 1, Math.floor(gy / SDF_SUPERSAMPLE)) * width + Math.min(width - 1, Math.floor(gx / SDF_SUPERSAMPLE))];
+    sdf[i * 4 + 3] = encodeSdf(cellEdge * 0.5 - 0.25);
+  }
   return {
     color: dataTexture(colors, width, height),
     properties: dataTexture(properties, width, height),
     coast: dataTexture(coast, width, height),
     heat: dataTexture(heat, width, height),
+    sdf: dataTexture(sdf, waterGrid.width, waterGrid.height, true),
   };
 }
 
@@ -205,5 +278,5 @@ function terrainHeight(planet: PlanetRenderView, x: number, y: number) {
 }
 
 export function disposeAtlas(atlas: AtlasSet) {
-  atlas.color.dispose(); atlas.properties.dispose(); atlas.coast.dispose(); atlas.heat.dispose();
+  atlas.color.dispose(); atlas.properties.dispose(); atlas.coast.dispose(); atlas.heat.dispose(); atlas.sdf.dispose();
 }

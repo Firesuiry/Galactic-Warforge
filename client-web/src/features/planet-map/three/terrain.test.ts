@@ -195,6 +195,27 @@ describe('3A terrain shader contract', () => {
     expect(SHADER_COLOR).not.toContain('swLavaNear * (1.0 - swRock)');
   });
 
+  it('亚格边界：未探索格的类别权重恒为「未知」，平滑只在已探索格之间发生', () => {
+    // 平滑类别场（sdf 图）只由已探索格生成：未探索格参与 mask 时值为「外侧」（< 0.5），
+    // 已探索的水格为「内侧」（> 0.5）。任何未知格都不能在平滑场里变成内侧。
+    const mesh = createPlanetSurface(100);
+    updatePlanetSurface(mesh, { planet: scene() });
+    const shader = uniforms(mesh);
+    const sdf = shader.swLocalSdf.value as THREE.DataTexture;
+    const bytes = sdf.image.data!;
+    const width = sdf.image.width;
+    // 局部图集 2×2 格、每格 8×8 超采样：格心 (0,0)=水（已探索）、(1,0)=blocked（未知）。
+    const sample = (cellX: number, cellY: number) => {
+      const x = cellX * 8 + 4, y = cellY * 8 + 4;
+      return Array.from(bytes.slice((y * width + x) * 4, (y * width + x) * 4 + 4));
+    };
+    const water = sample(0, 0), unknown = sample(1, 0), unknownBelow = sample(0, 1);
+    expect(water[0]).toBeGreaterThan(128);      // R 水面：已探索水格在内侧
+    expect(unknown[0]).toBeLessThan(128);       // 未探索格不参与平滑，恒为外侧
+    expect(unknownBelow[0]).toBeLessThan(128);
+    disposePlanetSurface(mesh);
+  });
+
   it('未探索格没有草/岩石/矿脉几何（装饰只按 explored 生成）', () => {
     const mesh = createPlanetSurface(100);
     updatePlanetSurface(mesh, { planet: { ...scene(), explored: [[false, false], [false, false]] } });

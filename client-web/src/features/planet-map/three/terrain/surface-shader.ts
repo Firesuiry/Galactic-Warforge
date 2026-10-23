@@ -21,6 +21,8 @@ export const SHADER_HEADER = /* glsl */`
   uniform sampler2D swLocalCoast;
   uniform sampler2D swOverviewHeat;
   uniform sampler2D swLocalHeat;
+  uniform sampler2D swOverviewSdf;
+  uniform sampler2D swLocalSdf;
   uniform sampler2DArray swAlbedoArray;
   uniform sampler2DArray swPackedArray;
   uniform sampler2D swWaterNormal;
@@ -121,6 +123,9 @@ export const SHADER_HEADER = /* glsl */`
     vec3 color;
     vec4 coast;
     vec4 heat;
+    /** 有符号距离场（格，±4 编码到 0..1，0.5 = 0）：R 水面、G 岩性、B 岩浆、A 到未知区。
+     *  双线性插值后等值线在格内是斜的、跨格连续——这就是 L15 的亚格边界。 */
+    vec4 sdf;
     /** 已探索度 0..1：只在已探索格内部上升，未探索格恒为 0（信息诚实）。 */
     float known;
     /** 格内坐标（0..1，含域扭曲），用于测绘网格与泡沫线。 */
@@ -135,7 +140,7 @@ export const SHADER_HEADER = /* glsl */`
    * 本格中心的已知位——域扭曲把采样点推进未知格时，那里依然是面纱而不是地形色。
    */
   SwAtlasSample swSampleAtlas(sampler2D propsTex, sampler2D colorTex, sampler2D coastTex, sampler2D heatTex,
-    vec2 cellIndex, vec2 dims, vec4 rect) {
+    sampler2D sdfTex, vec2 cellIndex, vec2 dims, vec4 rect) {
     vec2 p = cellIndex - 0.5;
     vec2 base = floor(p);
     vec2 f = clamp(p - base, 0.0, 1.0);
@@ -161,6 +166,9 @@ export const SHADER_HEADER = /* glsl */`
       + texture2D(coastTex, uv01) * wk.z + texture2D(coastTex, uv11) * wk.w) * norm;
     s.heat = (texture2D(heatTex, uv00) * wk.x + texture2D(heatTex, uv10) * wk.y
       + texture2D(heatTex, uv01) * wk.z + texture2D(heatTex, uv11) * wk.w) * norm;
+    // SDF 图是每格 4×4 的超采样距离场：按连续的格坐标直接取一个点，硬件线性过滤
+    // 就把 1/4 格精度的等值线插成平滑曲线（四邻权重只适用于逐格类别图）。
+    s.sdf = texture2D(sdfTex, clamp(cellIndex / dims, low, high));
     // 本格中心的已知位（未加权、未归一化）：域扭曲不能把地形色带进未探索格。
     vec2 ownUV = clamp((floor(cellIndex) + 0.5) / dims, low, high);
     float own = step(0.5, texture2D(propsTex, ownUV).b);
@@ -191,24 +199,30 @@ export const SHADER_COLOR = /* glsl */`
   }
   swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
   vec2 swFaceCell = clamp(swFaceUV,0.000001,0.999999) * swOverviewDimensions;
+  // 像素脚印（世界单位）：分类之前就要用（域扭曲按它淡出），后面纹理细节也用同一个值。
+  float swPixelFootprintEarly = length(fwidth(swSurfacePosition));
+  // 每格世界尺寸：格边界的双线性只在已探索格之间生效，所以邻格查表要跨面（atan 面内坐标）。
+  float swCellWorld = 3.3321622036 * length(swSurfacePosition) / max(1.0, swMapDimensions.x);
   // 亚格边界（L15）：格内坐标先做域扭曲（幅度 ≤ .35 格、确定性、与时间无关），
   // 再在四邻格之间双线性混合类别权重——海岸线圆润不规则，不再沿格子走方块锯齿。
   // 频率按「格」定：贴地时一格 ≈ 0.3 世界单位，所以 8–20 的球面频率约 2–6 格一个起伏；
   // 再高就会让岸线变成细锯齿（噪声本身就是逐像素的高频）。
-  float swTwistNoise = swFbm(swP * 9.0 + 5.7) - 0.5;
-  float swTwistNoise2 = swFbm(swP * 15.0 + 17.3) - 0.5;
-  // 世界尺度（单位 = 行星半径 100；贴地时一格约 0.3 单位）：岸线的弯折尺度。
-  vec3 swCellSpace = swSurfacePosition * (swMapDimensions.x / 3.3321622036);
-  float swCoastTwist = swFbm(swCellSpace * 0.10 + 21.3) - 0.5;
-  float swCoastTwist2 = swFbm(swCellSpace * 0.23 + 4.1) - 0.5;
-  vec2 swCellCoord = swFaceCell + vec2(swTwistNoise, swTwistNoise2) * 2.4;
+  // 域扭曲（L15）：类别权重本身是二值的，双线性插值只会把 0.5 等值线整体挪半格，
+  // 仍是沿格边的直线段。真正让边界「圆润不规则」的是把采样点按亚格噪声抖动：
+  // 幅度 ≤ .35 格、波长 1–2 格，于是等值线在每个格子里都弯一下，方块阶梯被抹掉。
+  // 远景（一格不到几个像素）时扭曲会退化成亚像素抖动，按像素脚印淡出即可。
+  float swWarpFade = 1.0 - smoothstep(0.18, 0.9, swPixelFootprintEarly / max(1e-5, swCellWorld));
+  vec3 swCellSpace = swSurfacePosition / max(1e-5, swCellWorld);
+  vec2 swWarp = vec2(swFbm(swCellSpace * 0.9 + 5.7), swFbm(swCellSpace * 1.7 + 17.3)) - 0.5;
+  vec2 swCellCoord = swFaceCell + swWarp * (0.70 * swWarpFade);
   vec4 swOverviewRect = vec4(vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0), vec2(1.0) / vec2(3.0,2.0));
   SwAtlasSample swAtlas = swSampleAtlas(swOverviewProperties, swOverviewColor, swOverviewCoast, swOverviewHeat,
-    swCellCoord, swOverviewDimensions, swOverviewRect);
+    swOverviewSdf, swCellCoord, swOverviewDimensions, swOverviewRect);
   vec4 swProps = swAtlas.props;
   vec3 swAlbedo = swAtlas.color;
   vec4 swCoast = swAtlas.coast;
   vec4 swHeat = swAtlas.heat;
+  vec4 swSdf = swAtlas.sdf;
   vec2 swCellUV = swAtlas.cellUV;
   vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + swFaceUV) / vec2(3.0,2.0);
   // 已探索度取「本次实际采样的那张图集」（全局 overview 或场景窗口 local）：
@@ -230,11 +244,12 @@ export const SHADER_COLOR = /* glsl */`
       vec2 localCell = clamp(swUV, bounds.xy, bounds.xy + bounds.zw) * swMapDimensions;
       vec2 packedCell = rect.xy * swLocalDimensions + (localCell - bounds.xy * swMapDimensions);
       SwAtlasSample local = swSampleAtlas(swLocalProperties, swLocalColor, swLocalCoast, swLocalHeat,
-        packedCell + vec2(swTwistNoise, swTwistNoise2) * 2.4, swLocalDimensions, rect);
+        swLocalSdf, packedCell + swWarp * (0.70 * swWarpFade), swLocalDimensions, rect);
       swProps = local.props;
       swAlbedo = local.color;
       swCoast = local.coast;
       swHeat = local.heat;
+      swSdf = local.sdf;
       swCellUV = local.cellUV;
       swAtlasKnown = local.known;
       vec2 packedUV = clamp(rect.xy + uv * rect.zw, rect.xy + texel, rect.xy + rect.zw - texel);
@@ -254,26 +269,42 @@ export const SHADER_COLOR = /* glsl */`
   float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
   // 已探索边界软化：heat.a 是「本格到未知区的格数」渐变，只在已探索格内部生效，
   // 未探索格永远不会因为插值露出地形色（双线性权重也只累加已探索邻格）。
-  float swKnown = min(swAtlasKnown, smoothstep(0.02, 0.98, swHeat.a));
-  float swWater = smoothstep(0.15, 0.85, swProps.r);
-  float swRock = swProps.g;
-  float swLava = smoothstep(0.72, 0.98, swHeat.r) * swKnown;
+  // 已探索但不可见：heat.a 是「本格到未知区的格数」渐变（0..1，已探索格内部），
+  // 它只作用在**边缘那一格**（2.5 格内），不会在整片探索区里切出方格——用来把探索前沿
+  // 压暗成柔和的过渡带（L15 的「已探索但不可见压暗区不得沿格走方块」）。
+  float swKnown = swAtlasKnown;
+  float swFrontier = 1.0 - smoothstep(0.02, 0.98, swHeat.a);
+  // 分类权重（L15）：双线性后是 0..1 的连续场，用较宽的 smoothstep 交叉，
+  // 让水/陆、阻挡/可建造、岩浆/可建造三类边界都在**格内部**完成过渡（而不是在格边硬切）。
+  // 平滑场解码：0.5 = 等值线；值是覆盖度（0..1 之间），乘以 8 换算成「格」的量级，
+  // 方便下面与噪声（同样以格为单位）相加。
+  float swSdfWater = (swSdf.r - 0.5) * 8.0;
+  float swSdfRock = (swSdf.g - 0.5) * 8.0;
+  float swSdfLava = (swSdf.b - 0.5) * 8.0;
+  // 距离场只解决「等值线在哪」，形状仍是格子的；真正的圆润来自把噪声加进距离场本身：
+  // 幅度 ±0.45 格、波长 2–4 格，等值线就被推成不规则的湾与岬（L15 的域扭曲，作用在 SDF 上
+  // 比作用在采样坐标上更可控——不会把地形色推进未知格）。
+  vec3 swSdfCellSpace = swSurfacePosition / max(1e-5, swCellWorld);
+  float swCoastNoise = (swFbm(swSdfCellSpace * 0.28 + 3.9) - 0.5) * 0.9
+    + (swFbm(swSdfCellSpace * 0.75 + 11.7) - 0.5) * 0.35;
+  float swRockNoise = (swFbm(swSdfCellSpace * 0.33 + 27.1) - 0.5) * 0.8;
+  float swLavaNoise = (swFbm(swSdfCellSpace * 0.55 + 41.3) - 0.5) * 0.7;
+  float swWater = smoothstep(-0.45, 0.45, swSdfWater + swCoastNoise);
+  float swRock = smoothstep(-0.45, 0.45, swSdfRock + swRockNoise);
+  float swLava = smoothstep(-0.40, 0.40, swSdfLava + swLavaNoise) * swKnown;
+  // 焦土：到岩浆格的连续距离场（heat.r 在 5 格内线性衰减），再乘 (1 - 岩浆本体)。
   float swLavaNear = smoothstep(0.02, 0.85, swHeat.r) * (1.0 - swLava);
-  float swShoreNear = smoothstep(0.02, 0.9, swHeat.g);
-  // 连续离岸距离（L15）：coast 的四向标志给出本格哪些边挨着已探索陆地，
-  // 格内坐标给出到这些边的连续距离；再叠一点域扭曲让岸线不规则。
-  // 已知陆/水相邻才写标志（未知边界不参与），所以这里不会泄露未探索地形。
-  vec2 swEdgeDistance = vec2(min(swCellUV.x, 1.0 - swCellUV.x), min(swCellUV.y, 1.0 - swCellUV.y));
-  float swShoreFromEdges = min(
-    mix(1.0, swEdgeDistance.y, clamp(swCoast.r + swCoast.b, 0.0, 1.0)),
-    mix(1.0, swEdgeDistance.x, clamp(swCoast.g + swCoast.a, 0.0, 1.0)));
-  // 离岸距离再按格尺度的域扭曲偏移：水面/陆地的分界被推成不规则的曲线，
-  // 而不是沿格心插值出来的折线（折线本身已经比方块前进了一步，但仍有明显的斜边）。
-  // 水面这一侧的离岸距离再往前推 0.5 格：双线性把「水」的权重推到邻格中心附近，
-  // 水域实际已经越过了格边——岸线要跟着移动，否则会在水面上留下一条方格状的暗边。
-  swShoreDistance = max(0.0, swShoreFromEdges + (swCoastTwist * 0.9 + swCoastTwist2 * 0.45) + swWater * 0.5);
+  // 连续离岸距离（L15）：直接取水面距离场（含上面叠的噪声），
+  // 所以浅滩、泡沫线、岸边沙泥都与同一条平滑岸线对齐，不会在格边留暗边。
+  // 水面侧为正、陆地侧为负；离岸距离 = 到岸线的格数。
+  // 水面侧为正（SDF 内正外负）：水里的离岸距离就是 SDF 本身。
+  // 场值是覆盖度：斜率约 0.45/格，除以它换算成格（只用于深浅/沙泥的衰减尺度，不需要精确）。
+  swShoreDistance = max(0.0, swSdfWater) * 2.2;
+  // 陆地侧的「到水距离」：岸边沙泥用（2.2 格内由沙泥过渡到土壤）。
+  float swInlandDistance = max(0.0, -swSdfWater) * 2.2;
+  float swShoreNear = smoothstep(2.2, 0.15, swInlandDistance) * (1.0 - swWater);
   float swContinental = swFbm(swP * 8.0);
-  float swPixelFootprint = length(fwidth(swSurfacePosition));
+  float swPixelFootprint = swPixelFootprintEarly;
   float swMicroDetail = 1.0 - smoothstep(0.09, 0.42, swPixelFootprint);
   float swGrain = mix(0.5, swFbm(swSurfacePosition * 2.4), swMicroDetail);
   float swFine = mix(0.5, swNoise(swSurfacePosition * 13.0), 1.0 - smoothstep(0.025, 0.12, swPixelFootprint));

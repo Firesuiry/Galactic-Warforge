@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { FogMapView, PlanetOverviewView, PlanetSceneView } from '@shared/types';
 import { getFogState, getTerrainTile, type PlanetRenderView } from '../model';
 import { SHADER_COLOR, SHADER_HEADER } from './terrain/surface-shader';
-import { buildAtlas, disposeAtlas, localSampler, UNKNOWN_COLOR, type AtlasSet } from './terrain/atlas';
+import { buildAtlas, disposeAtlas, localSampler, SDF_SUPERSAMPLE, UNKNOWN_COLOR, type AtlasSet } from './terrain/atlas';
 import { biomeProfile } from './terrain/biome';
 import { loadTerrainTextures, createPlaceholderTerrainTextures, type TerrainTextures } from './terrain/texture-library';
 
@@ -30,6 +30,8 @@ interface SurfaceState {
     swLocalCoast: { value: THREE.DataTexture };
     swOverviewHeat: { value: THREE.DataTexture };
     swLocalHeat: { value: THREE.DataTexture };
+    swOverviewSdf: { value: THREE.DataTexture };
+    swLocalSdf: { value: THREE.DataTexture };
     swMapDimensions: { value: THREE.Vector2 };
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewDimensions: { value: THREE.Vector2 };
@@ -103,6 +105,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
     swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
     swOverviewHeat: { value: overview.heat }, swLocalHeat: { value: local.heat },
+    swOverviewSdf: { value: overview.sdf }, swLocalSdf: { value: local.sdf },
     swAlbedoArray: { value: textures.albedo }, swPackedArray: { value: textures.packed },
     swWaterNormal: { value: null as THREE.Texture | null }, swLavaEmissionMap: { value: null as THREE.Texture | null },
     swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) },
@@ -265,6 +268,8 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   state.uniforms.swLocalCoast.value = localAtlas.coast;
   state.uniforms.swOverviewHeat.value = globalAtlas.heat;
   state.uniforms.swLocalHeat.value = localAtlas.heat;
+  state.uniforms.swOverviewSdf.value = globalAtlas.sdf;
+  state.uniforms.swLocalSdf.value = localAtlas.sdf;
   state.uniforms.swMapDimensions.value.set(planet.map_width, planet.map_height);
   state.uniforms.swLocalDimensions.value.set(localWidth, localHeight);
   state.uniforms.swOverviewDimensions.value.set(overviewWidth, overviewHeight);
@@ -282,25 +287,30 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
 /** 把多补片图集按行拼成一张（每张 RGBA8 1024 级像素；仅在地表数据变化时调用）。 */
 function combineAtlases(atlases: AtlasSet[], packed: { offset: number; bounds: { width: number; height: number } }[], width: number, height: number): AtlasSet {
   if (atlases.length === 1) return atlases[0];
-  const make = (pick: (atlas: AtlasSet) => THREE.DataTexture) => {
-    const bytes = new Uint8Array(width * height * 4);
+  // 逐格图集（最近邻）与 SDF（每格 4×4 超采样、线性过滤）分辨率不同，分开拼。
+  const make = (pick: (atlas: AtlasSet) => THREE.DataTexture, scale: number, linear: boolean) => {
+    const bytes = new Uint8Array(width * scale * height * scale * 4);
     atlases.forEach((atlas, index) => {
-      const texture = pick(atlas);
-      const source = texture.image.data as Uint8Array;
+      const source = pick(atlas).image.data as Uint8Array;
       const patch = packed[index];
-      const rowBytes = patch.bounds.width * 4;
-      for (let row = 0; row < patch.bounds.height; row++) {
-        const target = ((patch.offset + row) * width) * 4;
+      const rowBytes = patch.bounds.width * scale * 4;
+      for (let row = 0; row < patch.bounds.height * scale; row++) {
+        const target = ((patch.offset * scale + row) * width * scale) * 4;
         bytes.set(source.subarray(row * rowBytes, row * rowBytes + rowBytes), target);
       }
     });
-    const texture = new THREE.DataTexture(bytes, width, height, THREE.RGBAFormat);
+    const texture = new THREE.DataTexture(bytes, width * scale, height * scale, THREE.RGBAFormat);
     texture.colorSpace = THREE.NoColorSpace;
-    texture.minFilter = THREE.NearestFilter; texture.magFilter = THREE.NearestFilter;
+    const filter = linear ? THREE.LinearFilter : THREE.NearestFilter;
+    texture.minFilter = filter; texture.magFilter = filter;
     texture.generateMipmaps = false; texture.needsUpdate = true;
     return texture;
   };
-  return { color: make(a => a.color), properties: make(a => a.properties), coast: make(a => a.coast), heat: make(a => a.heat) };
+  return {
+    color: make(a => a.color, 1, false), properties: make(a => a.properties, 1, false),
+    coast: make(a => a.coast, 1, false), heat: make(a => a.heat, 1, false),
+    sdf: make(a => a.sdf, SDF_SUPERSAMPLE, true),
+  };
 }
 
 function planetSeedValue(planetId: string) {
