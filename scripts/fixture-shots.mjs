@@ -83,6 +83,8 @@ try {
     await page.goto(`${entry}/iframe.html?id=${id}&viewMode=story&quality=${quality}`, { waitUntil: 'domcontentloaded' });
     await page.locator('.planet-three__surface canvas').waitFor({ state: 'visible', timeout: 90_000 });
     await page.waitForFunction(() => Boolean(window.__planetThree), null, { timeout: 90_000 });
+    // 地表装饰（扫描岩石）异步加载：等它就绪再判定「画面稳定」，否则会拍到程序化回退帧。
+    await page.evaluate(() => window.__dressingAssetsReady ?? Promise.resolve());
     await page.waitForTimeout(1500);
     let previous = null;
     for (let i = 0; i < 40; i++) {

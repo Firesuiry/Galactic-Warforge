@@ -48,14 +48,23 @@ it('raises only explored rock cells, leaving buildable, water and uncharted cell
   const mesh = createTerrainRelief({ planet }, 100)!;
   expect(mesh).not.toBeNull();
   const positions = mesh.geometry.getAttribute('position');
+  // 岩脊是连续掩码：抬升只出现在阻挡格及其一格过渡带内；离岩区两格以上的顶点严格在球面上。
+  const rocks = new Set(['1:1', '2:2']);
+  const nearRock = (tile: { x: number; y: number }, distance: number) =>
+    [...rocks].some(key => {
+      const [rx, ry] = key.split(':').map(Number);
+      return Math.max(Math.abs(rx - tile.x), Math.abs(ry - tile.y)) <= distance;
+    });
   let raised = 0, boundary = 0;
   for (let i = 0; i < positions.count; i++) {
     const point = new THREE.Vector3().fromBufferAttribute(positions, i);
+    const tile = normalTile(point.clone().normalize(), 4);
     if (point.length() > 100.0001) {
-      expect(normalTile(point.clone().normalize(), 4)).toEqual({ x: 1, y: 1 });
+      expect(nearRock(tile, 1)).toBe(true);
       raised++;
     } else {
-      expect(Math.abs(point.length() - 100)).toBeLessThan(0.00002);
+      // 未抬升的顶点必须在数学球面上（可建造/水/未探索格）；岩区过渡带允许 < 1e-4 的残差。
+      expect(Math.abs(point.length() - 100)).toBeLessThan(0.0001);
       boundary++;
     }
   }

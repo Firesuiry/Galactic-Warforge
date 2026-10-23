@@ -6,10 +6,11 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
-import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
+import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, updatePlanetSurfaceView, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
+import { createClouds, disposeClouds, updateClouds } from './three/clouds';
 import { createSkyEnvironment, skyIblObserver } from './three/atmosphere';
 import { AtmosphericFog } from './three/atmospheric-fog';
 import { CameraMotion, type MotionOutput } from './three/camera-motion';
@@ -23,7 +24,9 @@ import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './
 import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
-import { createSurfaceDressing } from './three/surface-dressing';
+import { createOreDeposit, disposeOreDeposits, preloadOreRocks, setOreDepositTime } from './three/ore-deposits';
+import { createSurfaceDressing, disposeSurfaceDressing, dressingVisibleAt, preloadDressingRocks } from './three/surface-dressing';
+import type { RockMeshAsset } from './three/terrain/rock-meshes';
 import { createLocalSurface } from './three/local-surface';
 import { IndustrialActivity, type ActivitySource } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
@@ -180,8 +183,11 @@ export class PlanetThreeScene {
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
   // 太阳：暖白 #ffe2bd（3A §1），强度与曝光一起配到陶瓷白不过曝（第二轮 §13 略加强）。
   private readonly sunlight = new THREE.DirectionalLight(0xffe2bd, 3.9);
+  private clouds!: ReturnType<typeof createClouds>;
   private dressing?: THREE.Group;
   private dressingSignature = '';
+  private dressingRocks: RockMeshAsset[] = [];
+  private readonly dressingTime = { value: 0 };
   private localSurface: ReturnType<typeof createLocalSurface> = null;
   private localSurfaceKey = '';
   /** 战术叠加层输入签名（悬停/选中/图层/数据未变时跳过重建）。 */
@@ -266,6 +272,7 @@ export class PlanetThreeScene {
   private lastHover: TilePoint | null = null;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly motionScratch = { from: new THREE.Vector3(), to: new THREE.Vector3(), up: new THREE.Vector3(), rotation: new THREE.Quaternion(), identity: new THREE.Quaternion() };
+  private readonly surfaceViewScratch = { sun: new THREE.Vector3(), camera: new THREE.Vector3(), inverse: new THREE.Quaternion() };
 
 
   constructor(
@@ -397,6 +404,9 @@ export class PlanetThreeScene {
     // 这里用 onBeforeRender 每帧同步（任何渲染路径——包括 GTAO 的法线预渲染——都会走到）。
     sky.mesh.onBeforeRender = () => sky.followCamera(this.camera);
     this.scene.add(sky.mesh); this.world.add(shell.mesh);
+    // 云壳：大气壳（≈102.5）之内、地表之上；随世界一起转，覆盖率与探索无关。
+    this.clouds = createClouds(RADIUS, { sun: sunDirection });
+    this.world.add(this.clouds);
     this.fog.setSunDirection(sunDirection);
     this.fog.setHorizon(sky.uniforms.horizonColor);
     sky.setPlanet(PLANET_CENTER, RADIUS);
@@ -444,6 +454,41 @@ export class PlanetThreeScene {
     void IndustrialModels.preload().then(() => {
       if (!this.destroyed) this.reloadModels();
     }).catch((error: unknown) => console.warn('现成 3D 模型加载失败，继续使用程序化模型', error));
+    // 扫描岩石异步加载：就绪后把程序化碎石换成 Poly Haven 网格（重建装饰组）。
+    const dressingAssets = preloadDressingRocks().then((rocks) => {
+      if (this.destroyed || !rocks.length) return false;
+      this.dressingRocks = rocks;
+      this.rebuildDressing();
+      return true;
+    }).catch(() => false);
+    // 矿点也用同一批扫描岩石：就绪后清掉矿点模型缓存重建（否则 retain 认为外观没变）。
+    void preloadOreRocks(() => {
+      if (this.destroyed) return;
+      for (const [key, entry] of this.staticEntities) {
+        if (!key.startsWith('resource:')) continue;
+        this.removeModel(entry.group);
+        this.staticEntities.delete(key);
+      }
+      // 几何/材质缓存也是按扫描岩石之前的版本建的：一并丢掉再重建。
+      disposeOreDeposits();
+      this.buildEntities();
+    });
+    // 测试钩子：夹具截图脚本等「装饰素材已就绪」再判定画面稳定，否则会拍到程序化碎石那一帧。
+    (window as unknown as { __dressingAssetsReady?: Promise<boolean> }).__dressingAssetsReady = dressingAssets;
+  }
+
+  /** 重建地表装饰（草/岩石/卵石）；岩石资源就绪与数据签名变化都走这里。 */
+  private rebuildDressing() {
+    if (!this.data) return;
+    if (this.dressing) {
+      const shared = new Set<THREE.Material | THREE.BufferGeometry>();
+      for (const rock of this.dressingRocks) { shared.add(rock.geometry); shared.add(rock.material); }
+      disposeSurfaceDressing(this.dressing, shared);
+      this.world.remove(this.dressing);
+    }
+    this.dressing = createSurfaceDressing(this.data, RADIUS, { quality: this.quality, time: this.dressingTime, rocks: this.dressingRocks });
+    this.dressing.visible = this.groundView && dressingVisibleAt(this.altitude);
+    this.world.add(this.dressing);
   }
 
   getQuality() { return this.quality; }
@@ -590,6 +635,8 @@ export class PlanetThreeScene {
   setQuality(quality: PlanetRenderQuality) {
     const changed = quality !== this.quality;
     this.quality = quality;
+    // 档位变了：植被/岩石实例预算跟着变，清签名让下一次数据刷新重建装饰组。
+    if (changed) this.dressingSignature = '';
     this.resize();
     // 档位表（粒子上限 / 发射率 / 点光源 / 焦痕池）在 VFX 层构造时固化：
     // 切档必须重建整层，否则 UI 里切 high→low 后这些上限都不变（审查 M2）。
@@ -674,11 +721,7 @@ export class PlanetThreeScene {
     const dressingSignature = JSON.stringify([refId(data.planet.terrain), 'bounds' in data.planet ? [data.planet.bounds, refId(data.planet.surface_patches)] : null,
       Object.values(data.planet.buildings ?? {}).map(b => [b.position, getBuildingFootprint(b)]), refId(data.fog?.visible)]);
     if (dressingSignature !== this.dressingSignature) {
-      this.dressing?.traverse(o => { if (o instanceof THREE.InstancedMesh) o.dispose(); if (o instanceof THREE.Mesh) { o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
-      if (this.dressing) this.world.remove(this.dressing);
-      this.dressing = createSurfaceDressing(data, RADIUS);
-      this.dressing.visible = this.groundView;
-      this.world.add(this.dressing);
+      this.rebuildDressing();
       this.dressingSignature = dressingSignature;
     }
     this.buildEntities();
@@ -890,11 +933,11 @@ export class PlanetThreeScene {
     for (const resource of planet.resources ?? []) {
       if (!this.known(resource.position)) continue;
       const covered = occupiedTiles.has(`${resource.position.x}:${resource.position.y}`);
-      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y, covered], () => {
-        const group = this.industrial.resource(resource.kind);
-        // Keep the deposit visible at ground level without hiding the belt deck
-        // or moving sorter arm. Removing the building restores the outcrop.
-        if (covered) group.scale.y *= .1;
+      // 造型按 kind + 位置变体 + 枯竭/被占地状态重建；剩余量只影响枯竭标志，不逐帧换模型。
+      const depleted = Boolean(resource.depleted) || (resource.behavior === 'finite' && resource.remaining === 0);
+      const variant = (Math.abs(Math.round(resource.position.x)) * 7 + Math.abs(Math.round(resource.position.y)) * 13) % 3;
+      retain(`resource:${resource.kind}:${resource.position.x}:${resource.position.y}`, [resource.kind, resource.position.x, resource.position.y, covered, depleted, variant], () => {
+        const group = createOreDeposit(resource.kind, { variant, covered, depleted });
         this.place(group, resource.position, 'resources');
         return group;
       });
@@ -1897,7 +1940,7 @@ export class PlanetThreeScene {
   private updateCamera() {
     this.camera.near = Math.max(0.0001, this.altitude * 0.05);
     this.camera.updateProjectionMatrix();
-    if (this.dressing) this.dressing.visible = this.groundView;
+    if (this.dressing) this.dressing.visible = this.groundView && dressingVisibleAt(this.altitude);
     const tilt = this.groundView ? this.tilt : 0;
     this.camera.position.set(0, -Math.sin(tilt) * this.altitude, RADIUS + Math.cos(tilt) * this.altitude);
     this.camera.lookAt(0, 0, this.groundView ? RADIUS : 0);
@@ -2119,6 +2162,21 @@ export class PlanetThreeScene {
       // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格。
       this.statusLights.update(time / 1000, this.frozen || reducedMotion);
       if (!this.frozen && !reducedMotion) updatePlanetSurfaceTime(this.surface, time / 1000);
+      // 草摆：冻结/减弱动效时固定相位（截图可复现）。
+      this.dressingTime.value = this.frozen || reducedMotion ? 0 : time / 1000;
+      // 矿脉液面虹彩/酸液微光：与草摆同一个时间源，冻结时固定相位。
+      setOreDepositTime(this.frozen || reducedMotion ? 0 : time / 1000);
+      // 水面反射/高光：太阳方向与相机位置换算到对象空间（世界旋转时高光跟着转）。
+      this.surfaceViewScratch.sun.copy(this.sunlight.position).sub(this.sunlight.target.position).normalize()
+        .applyQuaternion(this.surfaceViewScratch.inverse.copy(this.world.quaternion).invert());
+      this.surfaceViewScratch.camera.copy(this.camera.position).applyQuaternion(this.surfaceViewScratch.inverse);
+      updatePlanetSurfaceView(this.surface, this.surfaceViewScratch.sun, this.surfaceViewScratch.camera);
+      // 云层：缓慢旋转；冻结/减弱动效时固定相位。高度决定云层淡入（贴地全透明）。
+      updateClouds(this.clouds, {
+        seconds: this.frozen || reducedMotion ? 0 : time / 1000,
+        altitude: this.altitude,
+        sun: this.surfaceViewScratch.sun,
+      });
       this.activity.animate(dt, time / 1000, { paused: this.frozen, reducedMotion, buildings: this.interaction?.layers.buildings, logistics: this.interaction?.layers.logistics, power: this.interaction?.layers.power });
       // 带面箭头按档位滚动（1 : 2 : 5，与带上物品同速）；DSP 的带子不耗电，只有冻结/减弱动效时静止。
       this.conveyors.update(this.frozen || reducedMotion ? 0 : dt);
@@ -2198,7 +2256,8 @@ export class PlanetThreeScene {
     this.materials.forEach((m) => materials.add(m));
     this.markMaterials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface);
+    this.activity.destroy(); this.industrial.dispose(); disposeOreDeposits();
+    disposeClouds(this.clouds); disposePlanetSurface(this.surface);
     this.sky.dispose(); this.atmosphereShell.dispose(); this.flare.dispose();
     this.gtao.dispose(); this.aoProbe.dispose(); this.grade.dispose(); this.smaa.dispose();
     this.environment?.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();

@@ -1,7 +1,12 @@
 import * as THREE from 'three';
-import { surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { FogMapView, PlanetOverviewView, PlanetSceneView } from '@shared/types';
 import { getFogState, getTerrainTile, type PlanetRenderView } from '../model';
+import { SHADER_COLOR, SHADER_HEADER } from './terrain/surface-shader';
+import { buildAtlas, disposeAtlas, localSampler, SDF_SUPERSAMPLE, type AtlasSet } from './terrain/atlas';
+import { biomeProfile } from './terrain/biome';
+import { loadTerrainTextures, createPlaceholderTerrainTextures, type TerrainTextures } from './terrain/texture-library';
+
+export { SHADER_COLOR, SHADER_HEADER };
 
 export type PlanetSurface = THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
 export interface PlanetSurfaceData {
@@ -12,276 +17,196 @@ export interface PlanetSurfaceData {
   fogLayer?: boolean;
 }
 
-// These are surface finishes, not generated terrain. Every biome and fog bit
-// comes from the player's server view. Unknown cells have no biome data at all.
-const FINISHES: Record<string, [string, number, number]> = {
-  buildable: ['#455f51', 0, 0.15], plains: ['#455f51', 0, 0.15],
-  plain: ['#455f51', 0, 0.15], grass: ['#3e6150', 0, 0.1], grassland: ['#3e6150', 0, 0.1],
-  forest: ['#3c624d', 0, 0.2], blocked: ['#89867c', 0, 1],
-  rock: ['#89867c', 0, 1], mountain: ['#89867c', 0, 1], mountains: ['#89867c', 0, 1],
-  water: ['#125d63', 1, 0], sea: ['#125d63', 1, 0], ocean: ['#125d63', 1, 0],
-  desert: ['#b3a080', 0, 0.3], sand: ['#b3a080', 0, 0.2],
-  ice: ['#abc6cd', 0.5, 0.3], snow: ['#c5d3cf', 0, 0.3],
-  swamp: ['#4e6656', 0.45, 0.1], lava: ['#8b4938', 0, 1],
-};
-const UNKNOWN_COLOR = new THREE.Color('#354655');
-const COLORS = Object.fromEntries(Object.entries(FINISHES).map(([key, value]) => [key, new THREE.Color(value[0])]));
-interface SurfaceSample { terrain: string; explored: boolean; visible: boolean; coast?: number[] }
-interface Atlas { color: THREE.DataTexture; properties: THREE.DataTexture; coast: THREE.DataTexture }
 interface SurfaceState {
-  overview: Atlas;
-  local: Atlas;
+  overview: AtlasSet;
+  local: AtlasSet;
+  /** 单补片时的 local 图集本体（增量重建的上一版）；多补片为 undefined。 */
+  localPatches?: AtlasSet[];
   uniforms: {
     swOverviewColor: { value: THREE.DataTexture };
     swOverviewProperties: { value: THREE.DataTexture };
     swLocalColor: { value: THREE.DataTexture };
     swLocalProperties: { value: THREE.DataTexture };
-    swOverviewCoast: { value: THREE.DataTexture };
-    swLocalCoast: { value: THREE.DataTexture };
+    swOverviewHeat: { value: THREE.DataTexture };
+    swLocalHeat: { value: THREE.DataTexture };
+    swOverviewSdf: { value: THREE.DataTexture };
+    swLocalSdf: { value: THREE.DataTexture };
     swMapDimensions: { value: THREE.Vector2 };
     swLocalDimensions: { value: THREE.Vector2 };
     swOverviewDimensions: { value: THREE.Vector2 };
     swTime: { value: number };
     /** 迷雾/测绘面纱开关（R20-A 图层「迷雾」）：0 = 不盖面纱，未探索格按已知地形显示。 */
     swFog: { value: number };
-    swPatchBounds: {value: THREE.Vector4[]};
-    swPatchUV: {value: THREE.Vector4[]};
+    swPatchBounds: { value: THREE.Vector4[] };
+    swPatchUV: { value: THREE.Vector4[] };
+    swWaterNormal: { value: THREE.Texture | null };
+    swAlbedoArray: { value: THREE.DataArrayTexture };
+    swPackedArray: { value: THREE.DataArrayTexture };
+    swLavaEmissionMap: { value: THREE.Texture | null };
+    swSoilWeights: { value: THREE.Vector3 };
+    swBiomeTint: { value: THREE.Color };
+    swBiomeSaturation: { value: number };
+    swBiomeBrightness: { value: number };
+    swBiomeIce: { value: number };
+    swSeed: { value: number };
+    swDebug: { value: number };
+    swSunObject: { value: THREE.Vector3 };
+    swCameraObject: { value: THREE.Vector3 };
   };
   source?: unknown[];
 }
 const states = new WeakMap<PlanetSurface, SurfaceState>();
 
-function dataTexture(bytes: Uint8Array, width: number, height: number) {
-  const texture = new THREE.DataTexture(bytes, width, height, THREE.RGBAFormat);
-  // Linear values are baked below; data texture rows follow the six-face atlas.
-  texture.colorSpace = THREE.NoColorSpace;
-  texture.minFilter = THREE.NearestFilter;
-  texture.magFilter = THREE.NearestFilter;
-  texture.generateMipmaps = false;
-  texture.needsUpdate = true;
-  return texture;
+/** 纹理库只加载一次（同一页面内所有星球/曲面共用同一组 DataArrayTexture）。 */
+let terrainTexturesPromise: Promise<TerrainTextures> | null = null;
+const textureListeners = new Set<(textures: TerrainTextures) => void>();
+/**
+ * 页面内共享的一套占位纹理：所有曲面从一开始就用它，真实像素加载完成后原地填入
+ * （同一组 DataArrayTexture，不需要换引用），所以每个场景不再各自占 92 MB（审查 P2-4）。
+ */
+let sharedPlaceholder: TerrainTextures | null = null;
+function placeholderTerrainTextures() {
+  if (!sharedPlaceholder) sharedPlaceholder = createPlaceholderTerrainTextures();
+  return sharedPlaceholder;
+}
+function sharedTerrainTextures() {
+  if (!terrainTexturesPromise) {
+    terrainTexturesPromise = loadTerrainTextures(placeholderTerrainTextures(), (textures) => {
+      for (const listener of textureListeners) listener(textures);
+    });
+  }
+  return terrainTexturesPromise;
 }
 
-function atlas(width: number, height: number, sample: (x: number, y: number) => SurfaceSample): Atlas {
-  const colors = new Uint8Array(width * height * 4);
-  const properties = new Uint8Array(width * height * 4);
-  const coast = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const cell = sample(x, y);
-      const known = cell.explored && cell.terrain !== 'unknown';
-      const finish = known ? FINISHES[cell.terrain] ?? FINISHES.buildable : undefined;
-      const color = known ? COLORS[cell.terrain] ?? COLORS.buildable : UNKNOWN_COLOR;
-      const i = (y * width + x) * 4;
-      colors[i] = Math.round(color.r * 255);
-      colors[i + 1] = Math.round(color.g * 255);
-      colors[i + 2] = Math.round(color.b * 255);
-      colors[i + 3] = 255;
-      properties[i] = Math.round((finish?.[1] ?? 0) * 255);
-      properties[i + 1] = Math.round((finish?.[2] ?? 0) * 255);
-      properties[i + 2] = known ? 255 : 0;
-      properties[i + 3] = known && cell.visible ? 255 : 0;
-      if (known && finish?.[1] === 1) coast.set(cell.coast ?? [0, 0, 0, 0], i);
-    }
+/** 水法线贴图（512² webp）：独立于 DataArrayTexture 的普通 2D 图。 */
+let waterNormalPromise: Promise<THREE.Texture | null> | null = null;
+function loadWaterNormal() {
+  if (!waterNormalPromise) {
+    waterNormalPromise = new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => {
+        const texture = new THREE.Texture(image);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        // 掠射角下水纹沿视线拉伸，默认各向异性 1 会产生细密条纹：开到硬件上限。
+        texture.anisotropy = 8;
+        texture.colorSpace = THREE.NoColorSpace;
+        texture.needsUpdate = true;
+        resolve(texture);
+      };
+      image.onerror = () => resolve(null);
+      image.src = `${import.meta.env.BASE_URL ?? '/'}assets/textures/terrain/water_normal.webp`;
+    });
   }
-  return { color: dataTexture(colors, width, height), properties: dataTexture(properties, width, height), coast: dataTexture(coast, width, height) };
+  return waterNormalPromise;
 }
-
-/** Cardinal shore flags use real cube-sphere neighbors, including rotated face seams. */
-function coastAt(x: number, y: number, faceSize: number, sample: (x: number, y: number) => SurfaceSample) {
-  return (['north', 'east', 'south', 'west'] as SurfaceDirection[]).map(direction => {
-    const { tile } = surfaceStep({ x, y }, direction, faceSize);
-    const neighbor = sample(tile.x, tile.y);
-    return neighbor.explored && neighbor.terrain !== 'unknown' && (FINISHES[neighbor.terrain]?.[1] ?? 0) === 0 ? 255 : 0;
-  });
-}
-
-export const SHADER_HEADER = /* glsl */`
-  varying vec3 swSurfacePosition;
-  uniform sampler2D swOverviewColor;
-  uniform sampler2D swOverviewProperties;
-  uniform sampler2D swLocalColor;
-  uniform sampler2D swLocalProperties;
-  uniform sampler2D swOverviewCoast;
-  uniform sampler2D swLocalCoast;
-  uniform vec2 swMapDimensions;
-  uniform vec2 swLocalDimensions;
-  uniform vec2 swOverviewDimensions;
-  uniform float swTime;
-  uniform float swFog;
-  uniform vec4 swPatchBounds[7];
-  uniform vec4 swPatchUV[7];
-  float swHash(vec3 p) {
-    p = fract(p * 0.3183099 + vec3(0.17, 0.43, 0.71));
-    p *= 17.0;
-    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-  }
-  float swNoise(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(swHash(i), swHash(i + vec3(1,0,0)), f.x),
-      mix(swHash(i + vec3(0,1,0)), swHash(i + vec3(1,1,0)), f.x), f.y),
-      mix(mix(swHash(i + vec3(0,0,1)), swHash(i + vec3(1,0,1)), f.x),
-      mix(swHash(i + vec3(0,1,1)), swHash(i + vec3(1,1,1)), f.x), f.y), f.z);
-  }
-  float swFbm(vec3 p) {
-    return swNoise(p) * 0.55 + swNoise(p * 2.03 + 13.7) * 0.27 + swNoise(p * 4.13 + 31.1) * 0.12 + swNoise(p * 8.31) * 0.06;
-  }
-`;
-
-/** Exported for tests: the map_fragment replacement, including the unexplored survey veil. */
-export const SHADER_COLOR = /* glsl */`
-  vec3 swP = normalize(swSurfacePosition);
-  vec3 swA = abs(swP);
-  float swFace; vec2 swFaceUV;
-  if (swA.z >= swA.x && swA.z >= swA.y) {
-    swFace = swP.z >= 0.0 ? 0.0 : 2.0;
-    swFaceUV = vec2(swP.z >= 0.0 ? swP.x : -swP.x, -swP.y) / swA.z;
-  } else if (swA.x >= swA.y) {
-    swFace = swP.x >= 0.0 ? 1.0 : 3.0;
-    swFaceUV = vec2(swP.x >= 0.0 ? -swP.z : swP.z, -swP.y) / swA.x;
-  } else {
-    swFace = swP.y >= 0.0 ? 4.0 : 5.0;
-    swFaceUV = vec2(swP.x, swP.y >= 0.0 ? swP.z : -swP.z) / swA.y;
-  }
-  swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
-  vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + clamp(swFaceUV,0.000001,0.999999)) / vec2(3.0,2.0);
-  vec2 swFaceOrigin = vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0);
-  vec2 swOverviewHalfTexel = 0.5 / swOverviewDimensions;
-  vec2 swOverviewUV = clamp(swUV, swFaceOrigin + swOverviewHalfTexel,
-    swFaceOrigin + 1.0 / vec2(3.0,2.0) - swOverviewHalfTexel);
-  vec4 swProps = texture2D(swOverviewProperties, swOverviewUV);
-  vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
-  vec4 swCoast = texture2D(swOverviewCoast, swOverviewUV);
-  vec2 swCellUV = fract(swUV * swOverviewDimensions);
-  // Fog boundary glow: an unknown cell that touches an explored cell in the local
-  // scene window. Sampled from the same atlas the surface reads, so a fog edge can
-  // never imply undiscovered terrain data.
-  float swKnownEdge = 0.0;
-  for(int i=0;i<7;i++) {
-    vec4 bounds = swPatchBounds[i];
-    if(bounds.z <= 0.0) continue;
-    vec2 uv = (swUV - bounds.xy) / bounds.zw;
-    if(all(greaterThanEqual(uv,vec2(0))) && all(lessThanEqual(uv,vec2(1)))) {
-      vec4 rect = swPatchUV[i];
-      vec2 texel = 0.5 / swLocalDimensions;
-      vec2 packedUV = clamp(rect.xy+uv*rect.zw, rect.xy+texel, rect.xy+rect.zw-texel);
-      swProps = texture2D(swLocalProperties,packedUV);
-      swAlbedo = texture2D(swLocalColor,packedUV).rgb;
-      swCoast = texture2D(swLocalCoast,packedUV);
-      swCellUV = fract(swUV * swMapDimensions);
-      if(swProps.b < 0.5) {
-        vec2 low = rect.xy+texel, high = rect.xy+rect.zw-texel;
-        for(int dy=-1;dy<=1;dy++) {
-          for(int dx=-1;dx<=1;dx++) {
-            if(dx==0 && dy==0) continue;
-            float neighbor = texture2D(swLocalProperties, clamp(packedUV + vec2(float(dx),float(dy))*texel, low, high)).b;
-            swKnownEdge = max(swKnownEdge, smoothstep(0.05,0.95,neighbor));
-          }
-        }
-      }
-    }
-  }
-  float swMapWidth = swMapDimensions.x;
-  float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
-  float swKnown = smoothstep(0.05,0.95,swProps.b);
-  float swWater = smoothstep(0.15, 0.85, swProps.r);
-  float swRock = swProps.g;
-  float swContinental = swFbm(swP * 8.0);
-  float swPixelFootprint = length(fwidth(swSurfacePosition));
-  float swMicroDetail = 1.0 - smoothstep(0.09, 0.42, swPixelFootprint);
-  float swGrain = mix(0.5, swFbm(swSurfacePosition * 2.4), swMicroDetail);
-  float swFine = mix(0.5, swNoise(swSurfacePosition * 13.0), 1.0 - smoothstep(0.025, 0.12, swPixelFootprint));
-  float swRidges = abs(swNoise(swSurfacePosition * 1.7 + swContinental) * 2.0 - 1.0);
-  // Mineral stains and small soil variations remain continuous across tile edges.
-  vec3 swSoilTint = mix(vec3(0.82, 0.91, 0.91), vec3(1.03, 1.03, 0.94), swContinental);
-  swAlbedo *= mix(swSoilTint * (0.88 + swGrain * 0.16 + swFine * 0.08), vec3(0.95 + swContinental * 0.1), swWater);
-  swAlbedo *= 1.0 - swRock * smoothstep(0.64, 0.95, swRidges) * 0.25;
-  vec4 swEdgeDistance = vec4(swCellUV.y, 1.0-swCellUV.x, 1.0-swCellUV.y, swCellUV.x);
-  vec4 swCoastDistance = mix(vec4(1.0), swEdgeDistance, swCoast);
-  float swShoreDistance = min(min(swCoastDistance.x,swCoastDistance.y),min(swCoastDistance.z,swCoastDistance.w));
-  vec3 swWavePosition = swSurfacePosition / max(0.0001, swTileWorldSize);
-  float swWaveDetail = 1.0 - smoothstep(0.025, 0.16, swPixelFootprint / swTileWorldSize);
-  float swWaveA = sin(dot(swWavePosition, vec3(14.0, 8.0, 19.0)) - swTime * 1.3);
-  float swWaveB = sin(dot(swWavePosition, vec3(-31.0, 17.0, 12.0)) + swTime * 1.7);
-  float swWaveC = sin(dot(swWavePosition, vec3(53.0, 26.0, -39.0)) - swTime * 2.1);
-  float swWaveHeight = (swWaveA * 0.0012 + swWaveB * 0.0006 + swWaveC * 0.0003) * swTileWorldSize * swWaveDetail;
-  // Shallow turquoise and a narrow moving foam line require known land/water
-  // neighbors. A fog boundary must never imply an undiscovered coastline.
-  float swShallow = (1.0 - smoothstep(0.02, 0.32, swShoreDistance)) * swWater * swKnown;
-  swAlbedo = mix(swAlbedo, vec3(0.025, 0.22, 0.19), swShallow * 0.65);
-  float swFoamEdge = 0.025 + 0.009 * swWaveA;
-  float swFoamAA = max(fwidth(swShoreDistance), 0.003);
-  float swFoam = (1.0-smoothstep(swFoamEdge,swFoamEdge+swFoamAA,swShoreDistance)) * swWater * swKnown;
-  swAlbedo += vec3(0.12, 0.20, 0.19) * swFoam * (0.6 + swWaveB * 0.2);
-  // The uncharted hemisphere is an unmapped survey veil: a clearly visible dark
-  // slate surface so the planet silhouette never disappears into the starfield.
-  // Close up it must read as terrain, not a flat wash: a tile-scale survey grid
-  // (thin, low contrast, anti-aliased through fwidth) plus tile-scale fine relief.
-  // The grid fades out with distance so the globe keeps the original dark veil
-  // and never shimmers into moire. Everything is a pure function of position
-  // (never swTime) so screenshot baselines remain reproducible.
-  float swVeilPatch = swFbm(swP * 6.5 + 3.1);
-  float swVeilGrain = mix(0.5, swFbm(swSurfacePosition * 1.6 + 11.0), swMicroDetail);
-  float swVeilRelief = mix(0.5, swNoise(swSurfacePosition * 24.0 + 5.0), 1.0 - smoothstep(0.03, 0.14, swPixelFootprint));
-  // Tile-scale grid: one line per map cell, only legible while a cell spans a
-  // reasonable pixel footprint (close range); fades out well before the globe view.
-  float swGridCell = max(1.0, swMapWidth * 0.02);
-  vec2 swGridUV = swCellUV * max(1.0, 1.0 / swGridCell);
-  vec2 swGridWidth = fwidth(swGridUV);
-  vec2 swGridLine = 1.0 - smoothstep(vec2(0.0), swGridWidth * 1.6, abs(fract(swGridUV + 0.5) - 0.5));
-  float swGridFade = 1.0 - smoothstep(0.02, 0.10, swPixelFootprint);
-  float swSurveyGrid = max(swGridLine.x, swGridLine.y) * swGridFade;
-  vec3 swVeil = vec3(0.046, 0.062, 0.088) * (0.82 + swContinental * 0.08 + swVeilPatch * 0.10 + swVeilGrain * 0.10 + swVeilRelief * 0.07);
-  swVeil += vec3(0.030, 0.052, 0.062) * swSurveyGrid * 0.75;
-  // Fog frontier edge light: a soft band where the unknown region meets explored
-  // land, so the boundary reads as a scan frontier instead of a hard cut.
-  swVeil += vec3(0.055, 0.105, 0.115) * swKnownEdge * (0.35 + 0.65 * (1.0 - smoothstep(0.0, 0.5, length(swCellUV - 0.5))));
-  // layers.fog = off：不盖测绘面纱。未探索格没有地形数据（未知格），仍用面纱的不透明
-  // 填充当底色，只是去掉网格/前沿光/浮雕——否则会露出球体背面的天体，画面读成「星球消失」。
-  vec3 swUnknownBase = vec3(0.046, 0.062, 0.088);
-  swAlbedo = mix(mix(swAlbedo, mix(swUnknownBase, swVeil, swFog), swFog), swAlbedo, swKnown);
-  swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
-  diffuseColor.rgb *= swAlbedo;
-  float swHeight = mix((swGrain * 0.012 + swFine * 0.002 + swRidges * swRock * 0.012), swWaveHeight, swWater) * swKnown;
-  // Unknown cells keep a shallow tile-scale relief so the close ground view has
-  // horizon/relief cues (gated by (1 - swKnown), never leaks explored terrain).
-  swHeight += swVeilRelief * 0.010 * (1.0 - swKnown) * swFog;
-`;
 
 export function createPlanetSurface(radius: number): PlanetSurface {
-  const empty = () => atlas(3, 2, () => ({ terrain: 'unknown', explored: false, visible: false }));
+  const empty = () => buildAtlas({ width: 1, height: 1, boundsX: 0, boundsY: 0, faceSize: 1, sample: () => ({ terrain: 'unknown', explored: false, visible: false }) });
   const overview = empty(), local = empty();
-  const uniforms: SurfaceState['uniforms'] = {
-    swPatchBounds: {value: Array.from({length:7},()=>new THREE.Vector4())}, swPatchUV: {value: Array.from({length:7},()=>new THREE.Vector4())},
+  const textures = placeholderTerrainTextures();
+  const uniforms = {
+    swPatchBounds: { value: Array.from({ length: 7 }, () => new THREE.Vector4()) },
+    swPatchUV: { value: Array.from({ length: 7 }, () => new THREE.Vector4()) },
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
-    swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
-    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) }, swTime: { value: 0 }, swFog: { value: 1 },
+    swOverviewHeat: { value: overview.heat }, swLocalHeat: { value: local.heat },
+    swOverviewSdf: { value: overview.sdf }, swLocalSdf: { value: local.sdf },
+    swAlbedoArray: { value: textures.albedo }, swPackedArray: { value: textures.packed },
+    swWaterNormal: { value: null as THREE.Texture | null }, swLavaEmissionMap: { value: null as THREE.Texture | null },
+    swMapDimensions: { value: new THREE.Vector2(3, 2) }, swLocalDimensions: { value: new THREE.Vector2(1, 1) }, swOverviewDimensions: { value: new THREE.Vector2(3, 2) },
+    swTime: { value: 0 }, swFog: { value: 1 },
+    swSoilWeights: { value: new THREE.Vector3(0.55, 0.25, 0.2) }, swBiomeTint: { value: new THREE.Color(1, 1, 1) },
+    swBiomeSaturation: { value: 1 }, swBiomeBrightness: { value: 1 }, swBiomeIce: { value: 0 }, swSeed: { value: 0 },
+    // 测试钩子（?terrainDebug=1 时 = 1）：把 swKnown / swWater / swLava / swTexDetail / swBiomeNoise 直接输出成颜色。
+    swDebug: { value: 0 },
+    swSunObject: { value: new THREE.Vector3(0, 1, 0) }, swCameraObject: { value: new THREE.Vector3(0, 0, 200) },
   };
-  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025 });
+  // envMapIntensity 压低：程序化房间环境图在光滑水面上会映出一大片「云状亮斑」；
+  // 水面反射由着色器里的天空渐变 + 太阳高光负责，陆地是粗糙漫反射，几乎不受影响。
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91, metalness: 0.025, envMapIntensity: 0.18 });
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 swSurfacePosition;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nswSurfacePosition = position;');
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 swSurfacePosition;\nvarying vec3 swSurfaceWorldNormal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nswSurfacePosition = position;\nswSurfaceWorldNormal = normal;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + SHADER_HEADER)
       .replace('#include <map_fragment>', SHADER_COLOR)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.94, mix(0.86 + swGrain * 0.1, 0.36, swWater), swKnown);')
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= mix(1.0, 0.3, swWater * swKnown);')
+      // 每像素粗糙度（L14）：陆地 1.0、水 0.075（清晰的环境反射）、岩浆 0.62（硬壳）。
+      // 陆地为什么给满：苔草/碎石的 albedo 纹理逐像素就有 ±60 的明暗，任何 < 1 的粗糙度都会
+      // 把太阳镜面乘在这层明暗上，近景成一颗颗孤立亮点、远景叠成一片白斑（修前实测 5000+ 个）。
+      // 干土/草/碎石本来就是纯漫反射介质，粗糙度 1.0 + 镜面清零才是对的观感。
+      .replace('#include <roughnessmap_fragment>', /* glsl */`
+        #include <roughnessmap_fragment>
+        // 陆地/未探索固定 1.0（见上），水与岩浆用逐像素值；最后一行的 mix 直接覆盖前两行。
+        roughnessFactor = mix(roughnessFactor, 1.0, 1.0 - max(swWaterMask, swLavaMask));
+      `)
+      .replace('#include <metalnessmap_fragment>', /* glsl */`
+        #include <metalnessmap_fragment>
+        metalnessFactor = mix(mix(0.025, 0.02, swKnown), swWaterMetal, swWaterMask);
+      `)
+      // 岩浆自发光（被 bloom 吃到）：来自 lava_emissive 图与自发光底色。
+      .replace('#include <emissivemap_fragment>', /* glsl */`
+        #include <emissivemap_fragment>
+        // 水面：环境反射走解析式（swWaterSky），不走 scene.environment——后者在粗糙度低时
+        // 会把整片水映成程序化房间的亮斑（indirectSpecular 在 lights_fragment_end 里清零）。
+        totalEmissiveRadiance += swLavaEmissive + swWaterSky * swWaterMask;
+      `)
+      // 物理镜面项：陆地清零（同上，纯漫反射），水面清零（太阳高光由 map_fragment 段的
+      // 解析式 swWaterSky 提供），只有岩浆硬壳保留。
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= swLavaMask;')
+      .replace('#include <lights_fragment_end>', /* glsl */`
+        #include <lights_fragment_end>
+        // 水面反射：用解析天空色替换环境镜面（陆地保持原环境光照）。
+        reflectedLight.indirectSpecular *= mix(1.0, 0.0, swWaterMask);
+        reflectedLight.indirectDiffuse *= mix(1.0, 0.55, swWaterMask);
+        reflectedLight.directSpecular *= mix(1.0, 0.0, swWaterMask);
+      `)
       .replace('#include <normal_fragment_maps>', /* glsl */`
         #include <normal_fragment_maps>
         vec3 swDx = dFdx(-vViewPosition), swDy = dFdy(-vViewPosition);
         vec3 swR1 = cross(swDy, normal), swR2 = cross(normal, swDx);
         float swDet = dot(swDx, swR1);
-        vec3 swGradient = sign(swDet) * (dFdx(swHeight) * swR1 + dFdy(swHeight) * swR2);
+        vec3 swGradient = sign(swDet) * (dFdx(swHeightField) * swR1 + dFdy(swHeightField) * swR2);
+        // 远处法线强度随像素覆盖衰减：一个像素跨越多格时，bump 只是噪声。
+        swGradient *= swBumpDetail;
         normal = normalize(abs(swDet) * normal - swGradient);
+        // 水面：两层滚动法线在世界空间扰动球面法线（保留球面光照与太阳高光）。
+        if (swWaterMask > 0.001) {
+          vec3 swEast = normalize(cross(vec3(0.0, 1.0, 0.0), swP) + vec3(0.0001));
+          vec3 swSouth = cross(swP, swEast);
+          float swStrength = mix(0.12, 0.55, swWaveDetailOut);
+          vec3 swWaterNormal = normalize(swP - swEast * swWaterNormalXY.x * swStrength - swSouth * swWaterNormalXY.y * swStrength);
+          // swWaterNormal 是世界空间法线；转到视图空间后替换（three 的 normal 是视图空间）。
+          normal = normalize((viewMatrix * vec4(swWaterNormal, 0.0)).xyz);
+        }
       `);
   };
-  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v7';
+  material.customProgramCacheKey = () => 'siliconworld-planet-surface-v8';
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 192, 128), material);
-  mesh.receiveShadow = true;
+  // 阴影自遮挡会在球面斜角处把地表压成大面积灰绿斑（近景整片发暗），地表不接受阴影；
+  // 建筑/单位仍正常投影到彼此上。
+  mesh.receiveShadow = false;
+  mesh.castShadow = false;
   mesh.name = 'player-visible-planet-surface';
-  states.set(mesh, { overview, local, uniforms });
+  const state: SurfaceState = { overview, local, uniforms };
+  states.set(mesh, state);
+  // 纹理异步加载：同一个 DataArrayTexture 原地换数据，不需要重建材质，也不需要换引用。
+  void sharedTerrainTextures().then(() => {
+    uniforms.swLavaEmissionMap.value = sharedPlaceholder?.lavaEmissive ?? null;
+    // 已编译的程序在下一次绘制时自动上传新数据（needsUpdate 已在加载器里置位）。
+    material.needsUpdate = true;
+  });
+  const refresh = (loaded: TerrainTextures) => {
+    uniforms.swAlbedoArray.value = loaded.albedo;
+    uniforms.swPackedArray.value = loaded.packed;
+    uniforms.swLavaEmissionMap.value = loaded.lavaEmissive;
+    material.needsUpdate = true;
+  };
+  textureListeners.add(refresh);
+  mesh.userData.terrainTextureRefresh = refresh;
+  void loadWaterNormal().then((texture) => { uniforms.swWaterNormal.value = texture; });
+  if (new URLSearchParams(window.location.search).get('terrainDebug') === '1') uniforms.swDebug.value = 1;
   return mesh;
 }
 
@@ -293,63 +218,118 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   const bounds = 'bounds' in planet ? planet.bounds : { x: 0, y: 0, width: planet.map_width, height: planet.map_height };
   const effectiveFog = fog ?? ('bounds' in planet ? planet : undefined);
   const source = [planet.terrain, planet.map_width, planet.map_height, bounds.x, bounds.y, effectiveFog?.explored, effectiveFog?.visible,
-    'surface_patches' in planet ? planet.surface_patches : null, overview?.terrain, overview?.explored, overview?.visible, overview?.step];
+    'surface_patches' in planet ? planet.surface_patches : null, overview?.terrain, overview?.explored, overview?.visible, overview?.step,
+    planet.kind, planet.height];
   if (state.source?.every((value, i) => value === source[i])) return;
   state.source = source;
   const unknown = { terrain: 'unknown', explored: false, visible: false };
   const overviewWidth = Math.max(1, overview?.cells_width ?? 3);
   const overviewHeight = Math.max(1, overview?.cells_height ?? 2);
-  const sampleOverview = (x: number, y: number): SurfaceSample => overview ? {
+  const sampleOverview = (x: number, y: number) => overview ? {
     terrain: overview.terrain?.[y]?.[x] ?? 'unknown',
     explored: Boolean(overview.explored?.[y]?.[x]), visible: Boolean(overview.visible?.[y]?.[x]),
   } : unknown;
-  const globalAtlas = atlas(overviewWidth, overviewHeight, (x, y) => {
-    const cell = sampleOverview(x, y);
-    return cell.explored && FINISHES[cell.terrain]?.[1] === 1
-      ? { ...cell, coast: coastAt(x, y, overviewWidth / 3, sampleOverview) } : cell;
+  // 增量重建（审查 P2-3）：把上一版图集交给 buildAtlas，只重算变化格附近。
+  const globalAtlas = buildAtlas({ width: overviewWidth, height: overviewHeight, boundsX: 0, boundsY: 0, faceSize: overviewWidth / 3, sample: sampleOverview, previous: state.overview });
+  const patches = [{ bounds, terrain: planet.terrain, explored: effectiveFog?.explored, visible: effectiveFog?.visible, height: planet.height }, ...('surface_patches' in planet ? planet.surface_patches ?? [] : [])].slice(0, 7);
+  const localWidth = Math.max(1, ...patches.map(p => p.bounds.width));
+  const localHeight = Math.max(1, patches.reduce((sum, p) => sum + p.bounds.height, 0));
+  let offset = 0;
+  const packed = patches.map(p => { const result = { ...p, offset }; offset += p.bounds.height; return result; });
+  const sampleLocal = localSampler(planet, effectiveFog);
+  // 多补片窗口：每个补片单独建图集，再按行拼进一张 local 图集（通道语义相同）。
+  // 单补片且尺寸未变时复用上一版 local 图集做增量；多补片是拼接出来的新纹理，
+  // 每个补片图集单独建（成本本来就小），不做增量。
+  const previousLocal = state.localPatches && packed.length === 1 ? state.localPatches[0] : undefined;
+  const localAtlases = packed.map((patch, index) => buildAtlas({
+    width: patch.bounds.width, height: patch.bounds.height, boundsX: patch.bounds.x, boundsY: patch.bounds.y,
+    faceSize: planet.surface.face_size,
+    previous: index === 0 ? previousLocal : undefined,
+    sample: (x, y) => {
+      const row = y - patch.bounds.y;
+      const terrain = patch.terrain?.[row]?.[x - patch.bounds.x] ?? 'unknown';
+      const explored = patch.explored ? Boolean(patch.explored[row]?.[x - patch.bounds.x]) : terrain !== 'unknown';
+      const visible = patch.visible ? Boolean(patch.visible[row]?.[x - patch.bounds.x]) : terrain !== 'unknown';
+      return { terrain, explored, visible, height: patch.height?.[row]?.[x - patch.bounds.x] ?? sampleLocal(x, y).height };
+    },
+  }));
+  const localAtlas = combineAtlases(localAtlases, packed, localWidth, localHeight);
+  // 单补片时 combineAtlases 直接返回补片图集本身：这时它就是 local，不能 dispose（审查 P2-2）。
+  if (localAtlas !== localAtlases[0]) for (const atlas of localAtlases) disposeAtlas(atlas);
+  state.localPatches = localAtlas === localAtlases[0] ? [localAtlas] : undefined;
+  state.uniforms.swPatchBounds.value.forEach((v, i) => {
+    const p = packed[i];
+    if (!p) { v.set(0, 0, 0, 0); return; }
+    v.set(p.bounds.x / planet.map_width, p.bounds.y / planet.map_height, p.bounds.width / planet.map_width, p.bounds.height / planet.map_height);
+    state.uniforms.swPatchUV.value[i].set(0, p.offset / localHeight, p.bounds.width / localWidth, p.bounds.height / localHeight);
   });
-  const patches = [{bounds, terrain: planet.terrain, explored: effectiveFog?.explored, visible: effectiveFog?.visible}, ...('surface_patches' in planet ? planet.surface_patches ?? [] : [])].slice(0,7);
-  const localWidth = Math.max(1,...patches.map(p=>p.bounds.width));
-  const localHeight = Math.max(1,patches.reduce((sum,p)=>sum+p.bounds.height,0));
-  let offset=0;
-  const packed=patches.map(p=>{const result={...p,offset};offset+=p.bounds.height;return result;});
-  const sampleLocal = (x: number, y: number): SurfaceSample => {
-    const terrain = getTerrainTile(planet, x, y);
-    const state = effectiveFog ? getFogState(effectiveFog, x, y) : { explored: terrain !== 'unknown', visible: terrain !== 'unknown' };
-    return { terrain, ...state };
-  };
-  const localAtlas = atlas(localWidth,localHeight,(x,y)=>{
-    const patch=packed.find(p=>y>=p.offset&&y<p.offset+p.bounds.height&&x<p.bounds.width);
-    if(!patch) return unknown;
-    const row=y-patch.offset, terrain=patch.terrain?.[row]?.[x]??'unknown';
-    const explored = patch.explored ? Boolean(patch.explored[row]?.[x]) : terrain !== 'unknown';
-    return {terrain, explored, visible:patch.visible ? Boolean(patch.visible[row]?.[x]) : terrain!=='unknown',
-      coast: explored && FINISHES[terrain]?.[1] === 1 ? coastAt(patch.bounds.x+x, patch.bounds.y+row, planet.surface.face_size, sampleLocal) : undefined};
-  });
-  state.uniforms.swPatchBounds.value.forEach((v,i)=>{
-    const p=packed[i];
-    if(!p) {v.set(0,0,0,0);return;}
-    v.set(p.bounds.x/planet.map_width,p.bounds.y/planet.map_height,p.bounds.width/planet.map_width,p.bounds.height/planet.map_height);
-    state.uniforms.swPatchUV.value[i].set(0,p.offset/localHeight,p.bounds.width/localWidth,p.bounds.height/localHeight);
-  });
-  for (const previous of [state.overview, state.local]) { previous.color.dispose(); previous.properties.dispose(); previous.coast.dispose(); }
+  disposeAtlas(state.overview); disposeAtlas(state.local);
   state.overview = globalAtlas;
   state.local = localAtlas;
   state.uniforms.swOverviewColor.value = globalAtlas.color;
   state.uniforms.swOverviewProperties.value = globalAtlas.properties;
   state.uniforms.swLocalColor.value = localAtlas.color;
   state.uniforms.swLocalProperties.value = localAtlas.properties;
-  state.uniforms.swOverviewCoast.value = globalAtlas.coast;
-  state.uniforms.swLocalCoast.value = localAtlas.coast;
+  state.uniforms.swOverviewHeat.value = globalAtlas.heat;
+  state.uniforms.swLocalHeat.value = localAtlas.heat;
+  state.uniforms.swOverviewSdf.value = globalAtlas.sdf;
+  state.uniforms.swLocalSdf.value = localAtlas.sdf;
   state.uniforms.swMapDimensions.value.set(planet.map_width, planet.map_height);
   state.uniforms.swLocalDimensions.value.set(localWidth, localHeight);
   state.uniforms.swOverviewDimensions.value.set(overviewWidth, overviewHeight);
+  // 群落（按星球 kind + ID 种子）：不同星球在同一套材质上一眼可分。
+  const profile = biomeProfile(planet.kind, planet.planet_id);
+  state.uniforms.swSoilWeights.value.set(...profile.soilWeights);
+  const tint = new THREE.Color().setHSL((profile.hueShift + 1) % 1, 0.5, 0.5).lerp(new THREE.Color(1, 1, 1), 0.85);
+  state.uniforms.swBiomeTint.value.set(tint.r, tint.g, tint.b);
+  state.uniforms.swBiomeSaturation.value = profile.saturation;
+  state.uniforms.swBiomeBrightness.value = profile.brightness;
+  state.uniforms.swBiomeIce.value = profile.kind === 'ice' ? 1 : 0;
+  state.uniforms.swSeed.value = planetSeedValue(planet.planet_id);
+}
+
+/** 把多补片图集按行拼成一张（每张 RGBA8 1024 级像素；仅在地表数据变化时调用）。 */
+function combineAtlases(atlases: AtlasSet[], packed: { offset: number; bounds: { width: number; height: number } }[], width: number, height: number): AtlasSet {
+  if (atlases.length === 1) return atlases[0];
+  // 逐格图集（最近邻）与 SDF（每格 4×4 超采样、线性过滤）分辨率不同，分开拼。
+  const make = (pick: (atlas: AtlasSet) => THREE.DataTexture, scale: number, linear: boolean) => {
+    const bytes = new Uint8Array(width * scale * height * scale * 4);
+    atlases.forEach((atlas, index) => {
+      const source = pick(atlas).image.data as Uint8Array;
+      const patch = packed[index];
+      const rowBytes = patch.bounds.width * scale * 4;
+      for (let row = 0; row < patch.bounds.height * scale; row++) {
+        const target = ((patch.offset * scale + row) * width * scale) * 4;
+        bytes.set(source.subarray(row * rowBytes, row * rowBytes + rowBytes), target);
+      }
+    });
+    const texture = new THREE.DataTexture(bytes, width * scale, height * scale, THREE.RGBAFormat);
+    texture.colorSpace = THREE.NoColorSpace;
+    const filter = linear ? THREE.LinearFilter : THREE.NearestFilter;
+    texture.minFilter = filter; texture.magFilter = filter;
+    texture.generateMipmaps = false; texture.needsUpdate = true;
+    return texture;
+  };
+  return {
+    color: make(a => a.color, 1, false), properties: make(a => a.properties, 1, false),
+    heat: make(a => a.heat, 1, false),
+    sdf: make(a => a.sdf, SDF_SUPERSAMPLE, true),
+  };
+}
+
+function planetSeedValue(planetId: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < planetId.length; i++) { hash ^= planetId.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  return ((hash >>> 0) % 1000) / 1000;
 }
 
 export function disposePlanetSurface(mesh: PlanetSurface) {
   const state = states.get(mesh);
   if (state) {
-    for (const value of [state.overview, state.local]) { value.color.dispose(); value.properties.dispose(); value.coast.dispose(); }
+    disposeAtlas(state.overview); disposeAtlas(state.local);
+    const refresh = mesh.userData.terrainTextureRefresh as ((textures: TerrainTextures) => void) | undefined;
+    if (refresh) textureListeners.delete(refresh);
+    // 纹理库是跨星球共享的：这里不 dispose，只解除监听。
     states.delete(mesh);
   }
   mesh.geometry.dispose();
@@ -367,4 +347,17 @@ export function setPlanetSurfaceFog(mesh: PlanetSurface, enabled: boolean) {
 export function updatePlanetSurfaceTime(mesh: PlanetSurface, seconds: number) {
   const state = states.get(mesh);
   if (state) state.uniforms.swTime.value = seconds;
+}
+
+/** 水面反射/高光需要对象空间的太阳方向与相机位置（每帧或相机变化时写一次）。 */
+export function updatePlanetSurfaceView(mesh: PlanetSurface, sunObject: THREE.Vector3, cameraObject: THREE.Vector3) {
+  const state = states.get(mesh);
+  if (!state) return;
+  state.uniforms.swSunObject.value.copy(sunObject);
+  state.uniforms.swCameraObject.value.copy(cameraObject);
+}
+
+/** 测试钩子：当前状态（图集与 uniform）便于断言纹理通道语义。 */
+export function terrainUniforms(mesh: PlanetSurface) {
+  return states.get(mesh)?.uniforms;
 }
