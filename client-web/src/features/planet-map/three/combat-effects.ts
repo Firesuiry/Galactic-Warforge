@@ -164,6 +164,9 @@ const HIT_TONE_COLORS: Record<HitTone, string> = {
   enemy_hit: '#ff6b6b',
 };
 
+/** 伤害飘字字体：Orbitron 只含拉丁字形，数字与负号全在其中；中文兜底系统字体。 */
+const DAMAGE_FONT_STACK = '"Orbitron", "PingFang SC", "Microsoft YaHei", sans-serif';
+
 interface Timed {
   elapsed: number;
   duration: number;
@@ -233,11 +236,12 @@ function drawDamageText(canvas: HTMLCanvasElement, text: string, tone: HitTone):
   // jsdom 等无真实 canvas 实现的环境跳过文字绘制（空白纹理，特效照常计时）
   if (!context || typeof context.strokeText !== 'function') return;
   context.clearRect(0, 0, canvas.width, canvas.height);
-  context.font = 'bold 28px sans-serif';
+  // 3A 画质：数值用 Orbitron（与 HUD 数值同字体）+ 深色描边，暴击/治疗各有区分色。
+  context.font = `700 30px ${DAMAGE_FONT_STACK}`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.strokeStyle = 'rgba(0,0,0,0.85)';
-  context.lineWidth = 5;
+  context.strokeStyle = 'rgba(4,10,14,0.9)';
+  context.lineWidth = 6;
   context.strokeText(text, 64, 24);
   context.fillStyle = HIT_TONE_COLORS[tone];
   context.fillText(text, 64, 24);
@@ -291,7 +295,7 @@ export class CombatEffects {
     if (!material) {
       material = new THREE.MeshBasicMaterial({
         color: FIRE_TONE_COLORS[tone],
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       });
@@ -363,7 +367,7 @@ export class CombatEffects {
     const fx = this.freeFlashes.pop() ?? {
       sprite: new THREE.Sprite(new THREE.SpriteMaterial({
         map: this.flashTexture,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),
@@ -446,7 +450,7 @@ export class CombatEffects {
     const fx = this.freeRipples.pop() ?? {
       mesh: new THREE.Mesh(this.rippleGeometry, new THREE.MeshBasicMaterial({
         color: 0x5fd7ff,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -472,14 +476,14 @@ export class CombatEffects {
     const fx = this.freeExplosions.pop() ?? {
       mesh: new THREE.Mesh(this.explosionGeometry, new THREE.MeshBasicMaterial({
         color: 0xffa245,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),
       flash: new THREE.Sprite(new THREE.SpriteMaterial({
         map: this.flashTexture,
         color: 0xfff3c9,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),

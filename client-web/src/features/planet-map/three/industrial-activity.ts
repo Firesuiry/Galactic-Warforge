@@ -18,7 +18,12 @@ export interface ActivityOptions {
 }
 export interface ActivitySource {
   id: string;
-  kind: 'cargo' | 'energy' | 'mining' | 'heat' | 'flight';
+  /**
+   * `heat` = 熔炉/高炉在跑配方（火光 + 火花 + 轻烟）；
+   * `process` = 其它生产建筑（制造台 / 化工 / 炼油）在跑配方，或研究模式的研究站——
+   * 具体表现按建筑类型分流（焊花 / 蒸汽 / 全息光粒），见 `vfx/emitters.ts`。
+   */
+  kind: 'cargo' | 'energy' | 'mining' | 'heat' | 'process' | 'flight';
   position: TilePoint;
   active: boolean;
   direction?: ConveyorDirection;
@@ -68,7 +73,9 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
   for (const building of Object.values(data.planet.buildings ?? {})) {
     if (!visible(building.position)) continue;
     const running = building.runtime?.state === 'running';
-    const base = { position: building.position, active: running };
+    // 表面法线随源一起给：工业氛围发射器要沿法线抬高发射口；缺了它只能拿图集坐标猜，
+    // 位置会偏到别的格（vfx 分支实测熔炉的烟飘到了隔壁）。
+    const base = { position: building.position, active: running, buildingId: building.id, normal: tileNormal(building.position, data.planet.surface.face_size) };
     // One cube per authoritative nonempty stack (quantity is retained, not multiplied into invented items).
     // Splitter buffers are enclosed; no authoritative per-item route is exposed,
     // so do not show their stock moving along an arbitrary branch.
@@ -90,8 +97,15 @@ export function collectActivity(data: PlanetThreeData): ActivitySource[] {
     const collecting = definition && (!definition.requires_resource_node || resourceProducing);
     if ((functions?.collect?.yield_per_tick ?? 0) > 0 && collecting) sources.push({ ...base, id: `${building.id}:mining`, kind: 'mining', color: '#e3bc7f' });
     // Recipe in progress, not merely an installed production module or cached input inventory.
-    if (functions?.production && (building.production?.remaining_ticks ?? 0) > 0 && /smelt|furnace/.test(building.type)) {
+    // 熔炉类走 heat（火光 + 火花 + 轻烟），其它生产建筑走 process（按类型分流成焊花/蒸汽/光粒）。
+    const processing = (building.production?.remaining_ticks ?? 0) > 0;
+    if (functions?.production && processing && /smelt|furnace/.test(building.type)) {
       sources.push({ ...base, id: `${building.id}:heat`, kind: 'heat', color: '#ff9856' });
+    } else if (functions?.production && processing) {
+      sources.push({ ...base, id: `${building.id}:process`, kind: 'process', color: '#ffd9a0' });
+    } else if (functions?.research && !(building.production?.recipe_id ?? '')) {
+      // 研究模式（未设配方）的研究站：服务端 `isResearchLab` 同一口径；running 即已通电运转。
+      sources.push({ ...base, id: `${building.id}:process`, kind: 'process', color: '#8fe8ff' });
     }
   }
   for (const drone of [...(data.runtime?.logistics_drones ?? []), ...(data.runtime?.logistics_ships ?? [])]) {
@@ -175,7 +189,7 @@ export class IndustrialActivity {
     geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setAttribute('particleSize', new THREE.BufferAttribute(this.sizes, 1).setUsage(THREE.DynamicDrawUsage));
     const material = new THREE.ShaderMaterial({
-      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
       vertexShader: `attribute float particleSize; varying vec3 tint; void main(){ tint=color; vec4 view=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*view; gl_PointSize=clamp(particleSize*650./max(.01,-view.z),1.,24.); }`,
       fragmentShader: `varying vec3 tint; void main(){ float r=length(gl_PointCoord-.5)*2.; if(r>1.) discard; gl_FragColor=vec4(tint,pow(1.-r,2.)*.7); }`,
     });
@@ -305,10 +319,11 @@ export class IndustrialActivity {
         const count = options.reducedMotion ? 1 : source.kind === 'energy' ? 2 : 3;
         for (let i = 0; i < count; i++) {
           const drift = (this.time * .35 + i / count) % 1;
-          const height = source.kind === 'heat' ? .8 + drift * .65 : source.kind === 'mining' ? .2 + drift * .25 : .65 + i * .14;
+          const hot = source.kind === 'heat' || source.kind === 'process';
+          const height = hot ? .8 + drift * .65 : source.kind === 'mining' ? .2 + drift * .25 : .65 + i * .14;
           this.position.copy(normal).multiplyScalar(this.radius + size * height);
           if (source.kind !== 'energy') this.position.addScaledVector(tangent, Math.sin(i * 3 + this.time) * size * .1);
-          point(this.position, color, size * (source.kind === 'heat' ? .3 : .14) * pulse);
+          point(this.position, color, size * (hot ? .3 : .14) * pulse);
         }
       }
     }

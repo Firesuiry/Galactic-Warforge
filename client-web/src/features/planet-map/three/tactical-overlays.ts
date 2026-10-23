@@ -5,7 +5,8 @@ import { surfaceOffset } from '@shared/surface';
 import type { RangeCircleSpec } from '../range-circles';
 import { RANGE_CIRCLE_COLORS } from '../range-circles';
 import { normalTile, surfaceTileSize, tileFrame, tileNormal } from './projection';
-import { circleLoop, discGeometry, ribbonGeometry } from './surface-ribbon';
+import { circleLoop } from './surface-ribbon';
+import { DASH_RING, dashFlowPhase, dashedRingGeometry, radialDiscGeometry } from './vfx/range-ring';
 
 /**
  * 3D 行星面的战术叠加层（第 20 轮 R20-B，契约 D4）：
@@ -19,10 +20,15 @@ import { circleLoop, discGeometry, ribbonGeometry } from './surface-ribbon';
  * 不重建几何。所有对象在 `dispose()` 里释放（场景 destroy 调用）。
  */
 
-/** 射程圈线宽（格宽比例）与不透明度（主代理定：.55 线 / .08 填充）。 */
-export const RANGE_CIRCLE_WIDTH_TILES = 0.06;
+/**
+ * 射程圈线宽（格）与不透明度：与补给光环同一画法（细虚线 + 极淡径向渐变）。
+ * 3A 画质起射程圈与补给光环共用 `vfx/range-ring` 的虚线参数（线宽 ≤ .06 格）。
+ *
+ * 不透明度是 R20-B 已定的契约（`.55`），3A 分支只换画法、不改既定口径（审查 L5 / 步骤 22）。
+ */
+export const RANGE_CIRCLE_WIDTH_TILES = DASH_RING.width;
 export const RANGE_CIRCLE_OPACITY = 0.55;
-export const RANGE_CIRCLE_FILL_OPACITY = 0.08;
+export const RANGE_CIRCLE_FILL_OPACITY = DASH_RING.fillEdge;
 
 /** 侦测点圆环配色、脉冲周期（秒）与尺寸（格）。 */
 export const DETECTION_COLOR = '#ffa53d';
@@ -101,16 +107,18 @@ export interface RangeCircleItem {
  */
 export class RangeCircleOverlay {
   readonly group = new THREE.Group();
-  private readonly meshes = new Map<string, { holder: THREE.Group; edge: THREE.Mesh; fill: THREE.Mesh; radius: number; kind: RangeCircleSpec['kind'] }>();
+  private readonly meshes = new Map<string, { holder: THREE.Group; edge: THREE.Mesh; fill: THREE.Mesh; radius: number; kind: RangeCircleSpec['kind']; base?: THREE.Quaternion; normal?: THREE.Vector3 }>();
   private readonly geometries = new Map<string, { edge: THREE.BufferGeometry; fill: THREE.BufferGeometry }>();
   private readonly materials: Record<RangeCircleSpec['kind'], { edge: THREE.MeshBasicMaterial; fill: THREE.MeshBasicMaterial }>;
   private faceSize = 0;
+  private flow = 0;
 
   constructor(private readonly radius: number) {
     this.group.name = 'range-circles';
+    // 填充用顶点色 alpha（中心 0 → 边缘 .05），材质本身 opacity = 1。
     const make = (color: string) => ({
-      edge: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: RANGE_CIRCLE_OPACITY, depthWrite: false, side: THREE.DoubleSide }),
-      fill: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: RANGE_CIRCLE_FILL_OPACITY, depthWrite: false, side: THREE.DoubleSide }),
+      edge: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: RANGE_CIRCLE_OPACITY, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }),
+      fill: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide, vertexColors: true, toneMapped: false }),
     });
     this.materials = { combat: make(RANGE_CIRCLE_COLORS.combat), power: make(RANGE_CIRCLE_COLORS.power) };
   }
@@ -122,10 +130,13 @@ export class RangeCircleOverlay {
     const ts = surfaceTileSize(this.radius, this.faceSize);
     const angle = rangeCircleAngle(spec.radiusTiles, this.faceSize, this.radius);
     // 规范系：圆心 +Z、东 +X、南 −Y（与 circleQuaternion 的基底一致）。
-    const loop = circleLoop(new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0), angle, 96);
+    const center = new THREE.Vector3(0, 0, 1);
+    const east = new THREE.Vector3(1, 0, 0);
+    const south = new THREE.Vector3(0, -1, 0);
+    const loop = circleLoop(center, east, south, angle, 128);
     cached = {
-      edge: ribbonGeometry(loop, this.radius + ts * .09, Math.max(ts * RANGE_CIRCLE_WIDTH_TILES, .02)),
-      fill: discGeometry(loop, new THREE.Vector3(0, 0, 1), this.radius + ts * .05),
+      edge: dashedRingGeometry(center, east, south, angle, this.radius + ts * .07, Math.max(ts * RANGE_CIRCLE_WIDTH_TILES / 2, .012), spec.radiusTiles),
+      fill: radialDiscGeometry(loop, center, this.radius + ts * .045, RANGE_CIRCLE_FILL_OPACITY),
     };
     this.geometries.set(key, cached);
     return cached;
@@ -167,6 +178,19 @@ export class RangeCircleOverlay {
         this.meshes.set(item.key, entry);
       }
       entry.holder.quaternion.copy(circleQuaternion(item.center, faceSize));
+      entry.base = entry.holder.quaternion.clone();
+      entry.normal = tileNormal(item.center, faceSize);
+    }
+  }
+
+  /** 虚线流动（与补给光环同一相位；冻结时由场景传固定相位）。 */
+  animate(seconds: number, frozen: boolean): void {
+    const phase = dashFlowPhase(seconds, frozen);
+    const swing = (phase - 0.5) * 0.09;
+    this.flow = swing;
+    for (const entry of this.meshes.values()) {
+      if (!entry.base) continue;
+      entry.holder.quaternion.setFromAxisAngle(entry.normal!, this.flow).multiply(entry.base);
     }
   }
 

@@ -1,23 +1,31 @@
-import { resolveSelectionPosition } from './model';
 import { surfaceFace, surfaceOffset } from '@shared/surface';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disposePlanetSurface, setPlanetSurfaceFog } from './three/terrain';
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
-import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality } from './three/render-quality';
+import { createSkyEnvironment, skyIblObserver } from './three/atmosphere';
+import { AtmosphericFog } from './three/atmospheric-fog';
+import { CameraMotion, type MotionOutput } from './three/camera-motion';
+import { GradePass } from './three/post/grade-pass';
+import { SunFlare } from './three/post/sun-flare';
+import { aoDepthBoundToReadBuffer, bindAoDepth } from './three/post/ao-depth';
+import { useDeterministicAoNoise } from './three/post/ao-noise';
+import { AoProbe, type AoStats } from './three/post/ao-probe';
+import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality, type PlanetRenderSettings } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
-import { IndustrialActivity } from './three/industrial-activity';
+import { IndustrialActivity, type ActivitySource } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { StatusLights } from './three/status-lights';
@@ -39,7 +47,9 @@ import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
 import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from './transport-haul';
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
-import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
+import { VfxLayer } from './three/vfx';
+import { buildSelectionItems, buildHoloTasks, buildSupplyAuras } from './three/vfx/scene-bridge';
+import { ribbonGeometry } from './three/surface-ribbon';
 import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
 import { buildingCoveringTile } from './three/pick-targets';
 import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
@@ -97,6 +107,8 @@ function refId(value: object | undefined | null) {
   return id;
 }
 const FRONT = new THREE.Vector3(0, 0, 1);
+/** 星球球心（世界原点）：太阳光晕的遮挡测试用。 */
+const PLANET_CENTER = new THREE.Vector3(0, 0, 0);
 /** 传送带 ghost 的流向箭头色（沿用旧版的琥珀色）。 */
 const GHOST_ARROW_COLOR = '#ffd76a';
 /** 传送带 ghost 箭头相对旧版缩小到 .5 倍：细箭头只作流向提示，不抢带体本身。 */
@@ -130,7 +142,28 @@ export class PlanetThreeScene {
   private readonly press: PointerPress;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
-  private readonly environment: THREE.WebGLRenderTarget;
+  /** GTAO（环境光遮蔽）：low 档禁用，balanced 半分辨率，high 全分辨率。 */
+  private readonly gtao: GTAOPass;
+  /** AO 验收探针（只读，见 aoStats）。 */
+  private readonly aoProbe = new AoProbe();
+  /** 调色（显示空间）：lift/gamma/gain、饱和、对比、分离色调、暗角、颗粒。 */
+  private readonly grade: GradePass;
+  /** SMAA：samples == 0（low 档）时给后处理链补抗锯齿。 */
+  private readonly smaa: SMAAPass;
+  /** 太阳镜头光晕（high 档）。 */
+  private readonly flare: SunFlare;
+  /** 天空 IBL：只在换星球 / 换档位时重建（不逐帧）。 */
+  private environment: THREE.WebGLRenderTarget | null = null;
+  /** IBL 的烘焙观察点（地表上方，见 rebuildEnvironment）。 */
+  private readonly environmentObserver = new THREE.Vector3(0, 0, RADIUS + 3.5);
+  /** 当前档位的完整设置（render-quality.ts），构造与 updateQuality 共用。 */
+  private settings: PlanetRenderSettings;
+  /** 空气透视雾（自定义 fog chunk）：颜色取视线方向的地平线色 + 朝向太阳的内散射。 */
+  private readonly fog: AtmosphericFog;
+  /** 贴地天空穹顶（物理天空 / 太空背景，按相机高度过渡）。 */
+  private sky!: ReturnType<typeof createSpace>['sky'];
+  /** 全球视角的散射壳（挂 world，随星球旋转）。 */
+  private atmosphereShell!: ReturnType<typeof createSpace>['shell'];
   private readonly industrial = new IndustrialModels();
   private readonly staticBatches = new StaticBatches();
   private readonly dynamicBatches = new DynamicBatches();
@@ -145,7 +178,8 @@ export class PlanetThreeScene {
   /** 分拣器/分流器顶面方向箭头（全网络合并 1 draw）+ 过滤物品标签。 */
   private readonly logisticsMarks = new LogisticsDirectionMarks();
   private readonly activity = new IndustrialActivity(this.world, RADIUS);
-  private readonly sunlight = new THREE.DirectionalLight(0xffe5c1, 3.5);
+  // 太阳：暖白 #ffe2bd（3A §1），强度与曝光一起配到陶瓷白不过曝（第二轮 §13 略加强）。
+  private readonly sunlight = new THREE.DirectionalLight(0xffe2bd, 3.9);
   private dressing?: THREE.Group;
   private dressingSignature = '';
   private localSurface: ReturnType<typeof createLocalSurface> = null;
@@ -154,6 +188,16 @@ export class PlanetThreeScene {
   private tacticalOverlaySignature = '';
   private groundView = false;
   private tilt = .65;
+  /**
+   * 镜头手感（3A §9）：只服务 UI 输入路径（拖拽惯性 / 滚轮 / 缩放、回家、全球按钮）。
+   * 测试钩子与夹具仍走立即生效的 focus/zoom/setAltitude/orbit，不经过这里。
+   */
+  private readonly motion = new CameraMotion();
+  private readonly motionOut: MotionOutput = {};
+  /** 大气壳太阳方向换算用的临时向量（每帧复用）。 */
+  private readonly sunDirectionScratch = new THREE.Vector3();
+  /** 拖拽角速度（rad/s），松手时交给惯性。 */
+  private dragVelocity = { x: 0, y: 0, at: 0 };
   private readonly moving = new Map<string, { group: THREE.Group; target: THREE.Vector3; signature: string; baseScale: THREE.Vector3; bar?: { bg: THREE.Sprite; fg: THREE.Sprite; tag?: THREE.Sprite }; operatorTag?: { sprite: THREE.Sprite; text: string } }>();
   private readonly staticEntities = new Map<string, { group: THREE.Group; signature: string }>();
   private readonly linkSignatures = new Map<string, string>();
@@ -165,6 +209,13 @@ export class PlanetThreeScene {
   private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
   /** C2 战斗演出：弹道/枪口/命中/飘字/护盾波纹/爆炸/残骸（挂 world 随星球旋转）。 */
   private readonly combat = new CombatEffects(this.world, () => this.tileScale());
+  /**
+   * 3A 画质 VFX 层（vfx 分支）：GPU 粒子、战斗演出、工业氛围、施工全息、选中反馈、
+   * 补给光环、镜头震动。全部由这一处接入，场景其余部分只调它的几个入口。
+   */
+  private vfx: VfxLayer;
+  /** 上一帧的 VFX 数据（切档重建 VFX 层时用来恢复活动源/选中/施工，不丢一帧状态）。 */
+  private lastVfxActivity: ActivitySource[] = [];
   /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次）。 */
   private lastBattleSeq = 0;
   /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
@@ -185,8 +236,6 @@ export class PlanetThreeScene {
   private haulRouteSignature = '';
   /** 阶段胶囊标签：随机器人移动每帧重贴位置（只重建于路线签名变化时）。 */
   private haulLabels: { sprite: THREE.Sprite; unitId: string }[] = [];
-  /** 补给光环材质：动画循环里做缓慢呼吸。 */
-  private readonly auraMaterials = new Set<THREE.MeshBasicMaterial>();
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
   private readonly commandMarkers = new CommandMarkerMeshes(this.world, tile => this.data ? this.normal(tile.x, tile.y) : null, RADIUS, () => this.tileScale());
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
@@ -232,29 +281,83 @@ export class PlanetThreeScene {
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
     const quality = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
+    this.settings = quality;
     this.renderer.setPixelRatio(quality.pixelRatio);
     this.renderer.setClearColor('#030912');
     // 每帧自己重置绘制统计（composer 会多次 render，autoReset 只保留最后一趟的数字）。
     this.renderer.info.autoReset = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    // 曝光与太阳强度一起配（第 23 轮 3A §8）：陶瓷白高光 ≤ .95，暗部靠天光 IBL 抬起来。
+    this.renderer.toneMappingExposure = .92;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const room = new RoomEnvironment();
-    this.environment = pmrem.fromScene(room, .04);
-    this.scene.environment = this.environment.texture;
-    this.scene.environmentIntensity = .32;
-    room.dispose(); pmrem.dispose();
+    // r186 起 PCFSoftShadowMap 已移除（会退化成 PCF 并打警告）；软阴影靠 PCF 的 shadowRadius。
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // 空气透视雾：自定义 chunk（按视线方向着色），scene.fog 只作 USE_FOG 编译开关。
+    this.fog = new AtmosphericFog(this.quality);
+    this.scene.fog = this.fog.sceneFog;
+    // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空；
+    // 倍率与 rebuildEnvironment 同一口径（第二轮 §13 白平衡）。
+    this.scene.environmentIntensity = .45;
     // Default-canvas antialiasing does not reach postprocessing render targets.
-    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: quality.samples });
+    // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
+    // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
+    // 深度纹理给 GTAO 直接复用 RenderPass 的那一份：省掉 GTAO 自己再渲染一遍整棵树
+    // （贴地机位约 280 次绘制）。composer 目标不开 MSAA 正是为了让深度能解析回纹理。
+    const depthTexture = new THREE.DepthTexture(1, 1);
+    depthTexture.type = THREE.UnsignedIntType;
+    const renderTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0, depthTexture });
     this.composer = new EffectComposer(this.renderer, renderTarget);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .32, .45, 2.5);
+    // 后处理链（3A §5）：AO → Bloom → Output（ACES + sRGB）→ 调色 →（samples==0）SMAA。
+    // GTAO 用自带的深度/法线 GBuffer（构造时不传 depthTexture 即自动建）：
+    // composer 目标的深度纹理在带 MSAA 时不解析，自带 GBuffer 与 MSAA 设置无关。
+    this.gtao = new GTAOPass(this.scene, this.camera, 1, 1);
+    // @types/three 的 GTAOPass 声明落后于 r186 实现（少了 ao/pd 参数），这里用实现里的方法配参。
+    const gtao = this.gtao as unknown as {
+      updateGtaoMaterial(parameters: Record<string, number>): void;
+      updatePdMaterial(parameters: Record<string, number>): void;
+      blendIntensity: number;
+      output: number;
+    };
+    gtao.updateGtaoMaterial({ radius: .55, distanceExponent: 1.2, thickness: 1.0, distanceFallOff: 1.0, scale: 1.0 });
+    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    // 降噪噪声换成固定种子（`fix/3a-freeze-determinism`）：GTAOPass 构造时用 Math.random()
+    // 填 SimplexNoise 的置乱表，同一场景跨两次运行截图会差 2–18% 像素。冻结下画面必须是
+    // 时间的纯函数；非冻结时观感不变（噪声只决定降噪采样的逐像素旋转角，图案不可见）。
+    useDeterministicAoNoise(this.gtao as unknown as Parameters<typeof useDeterministicAoNoise>[0]);
+    // 法线从深度重建（NORMAL_VECTOR_TYPE=0，同 three 自带 SSAOPass 的做法）：GTAO 不再需要
+    // 自己那趟「法线 + 深度」预渲染，直接吃 RenderPass 的深度纹理。平直地表上重建法线足够，
+    // 且与深度缓冲严格一致、不会漏 AO 缝。GTAOPass 没有公开参数，直接改它内部材质。
+    //
+    // 深度纹理**每帧**按 composer.readBuffer 重绑（见 animate）：composer 有两块 RT
+    // （RT2 是 RT1 的 clone，深度纹理也是克隆），RenderPass 写的是当时的 readBuffer；
+    // 构造时绑死 RT1 的深度会让 AO 永远读一块全 0 的纹理（审查 P1-3）。
+    this.gtao.setGBuffer(depthTexture, undefined);
+    const gtaoInternals = this.gtao as unknown as {
+      gtaoMaterial: { defines: Record<string, number>; needsUpdate: boolean };
+      pdMaterial: { defines: Record<string, number>; needsUpdate: boolean };
+    };
+    gtaoInternals.gtaoMaterial.defines.NORMAL_VECTOR_TYPE = 0;
+    gtaoInternals.gtaoMaterial.needsUpdate = true;
+    gtaoInternals.pdMaterial.defines.NORMAL_VECTOR_TYPE = 0;
+    gtaoInternals.pdMaterial.needsUpdate = true;
+    gtao.output = GTAOPass.OUTPUT.Default;
+    gtao.blendIntensity = .85;
+    this.gtao.enabled = quality.ao !== 'off';
+    this.composer.addPass(this.gtao);
+    // Bloom（3A 第二轮 §16）：只有发光件（HDR > 1.2）泛光；radius .6 → .42（−30%），
+    // strength 再收 .45 → .38，近景基站的发光条不糊成一团（发光件本体仍保留柔和泛光）。
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .38, .42, 1.2);
     this.bloom.enabled = quality.bloom;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.grade = new GradePass({}, this.frozen);
+    this.grade.enabled = quality.grade;
+    this.composer.addPass(this.grade);
+    this.smaa = new SMAAPass();
+    this.smaa.enabled = quality.samples === 0;
+    this.composer.addPass(this.smaa);
     this.renderer.domElement.setAttribute('aria-label', '3D 行星地图：拖动旋转，滚轮缩放，点击地块操作');
     this.renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:none;outline:none';
     this.renderer.domElement.tabIndex = 0;
@@ -267,24 +370,54 @@ export class PlanetThreeScene {
     this.surface = createPlanetSurface(RADIUS);
     this.surface.receiveShadow = true;
     this.world.add(this.surface);
-    this.scene.add(new THREE.HemisphereLight(0xb6dafa, 0x384044, .75));
+    // 天光/补光（3A §1）：冷蓝 #9cc7ff，只在暗部补一点，主要环境光来自天空 IBL。
+    // 第二轮 §13：IBL 已去饱和降强度，半球光再压一档，避免天光把受光面染成冰蓝。
+    // 第二轮 §13：天光色比 3A §1 的 #9cc7ff 更偏蓝（同亮度下 G 低一档），阴影不发青绿。
+    this.scene.add(new THREE.HemisphereLight(0xc9cfe0, 0x3a3a3a, .30));
     this.sunlight.position.set(-100, 140, 230);
     this.sunlight.target.position.set(0, 0, RADIUS);
     this.sunlight.castShadow = true;
     this.sunlight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
     this.sunlight.shadow.bias = -.00015;
     this.sunlight.shadow.normalBias = .035;
+    // 软阴影（3A §7）：PCF 的 Vogel 盘采样半径，按档位给（low 硬阴影）。
+    this.sunlight.shadow.radius = quality.softShadows ? 2.6 : 1;
     this.sunlight.shadow.camera.near = 1;
     this.sunlight.shadow.camera.far = 500;
     this.scene.add(this.sunlight, this.sunlight.target);
-    const rim = new THREE.DirectionalLight(0x719dc7, .75);
+    // 轮廓光保留但更弱更冷（3A §8）；第二轮 §13 再弱一点，阴影不偏青绿。
+    const rim = new THREE.DirectionalLight(0xa8a4c8, .18);
     rim.position.set(100, -60, -70);
     this.scene.add(rim);
-    const { sky, atmosphere } = createSpace(RADIUS, this.sunlight.position.clone().sub(this.sunlight.target.position).normalize());
-    this.scene.add(sky); this.world.add(atmosphere);
+    const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
+    const { sky, shell } = createSpace(RADIUS, sunDirection, this.quality);
+    this.sky = sky;
+    this.atmosphereShell = shell;
+    // 天空穹顶：跟随相机的方向由材质里的 uniform 提供（见 atmosphere.ts），
+    // 这里用 onBeforeRender 每帧同步（任何渲染路径——包括 GTAO 的法线预渲染——都会走到）。
+    sky.mesh.onBeforeRender = () => sky.followCamera(this.camera);
+    this.scene.add(sky.mesh); this.world.add(shell.mesh);
+    this.fog.setSunDirection(sunDirection);
+    this.fog.setHorizon(sky.uniforms.horizonColor);
+    sky.setPlanet(PLANET_CENTER, RADIUS);
+    this.rebuildEnvironment();
+    this.flare = new SunFlare(this.camera, sunDirection);
+    this.flare.setEnabled(quality.flare);
+    // 光晕 sprite 挂在相机下：相机必须进场景，子节点才会被渲染（审查 P1-4 第 2 条）。
+    this.scene.add(this.camera);
+    // 3A 画质 VFX 层（vfx 分支）：粒子/战斗/工业/全息/选中/光环/震动。
+    this.vfx = this.createVfxLayer(this.quality);
+    this.vfx.setCamera(this.camera);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
-      if (!tap) return;
+      // 松手惯性（3A §9）：拖动结束后按最后一段的角速度继续转 ~300ms。
+      // 刚松手时先清空角速度记录：下一次按下后到第一次 pointermove 之间的间隔可能很长
+      // （用户停顿），拿它当时间差会把惯性放得很大。
+      if (!tap) {
+        if (!this.frozen && !this.reducedMotion.matches) this.motion.startInertia(this.dragVelocity.x, this.dragVelocity.y, performance.now());
+        this.dragVelocity = { x: 0, y: 0, at: 0 };
+        return;
+      }
       // 命中高架带/分拣器时带上建筑 id：同一格可能叠着地面带与高架带（契约 §3.5）。
       // 用抬起时刻的坐标**重新拾取**（不用节流后的 hover 结果）：指针在按下与抬起之间
       // 微移时，旧 hover 可能是相邻格/上一帧的格，多格建筑会因此「点两次才选中」（试玩 1019 C）。
@@ -315,6 +448,51 @@ export class PlanetThreeScene {
 
   getQuality() { return this.quality; }
 
+  /**
+   * 夹具：按 `?vfxPhase=` 在固定位置注入合成特效并定格到指定相位。
+   * 只在测试构建（`window.__planetThree` 存在）里由故事壳调用；真机不触发。
+   * 返回注入的指令条数（测试用）。
+   *
+   * `fixture-hooks` 是**动态导入**：静态导入会把 `fx-target` / `fx-construction` 打进
+   * 生产 bundle（审查 L4）。调用方在 `exposeTestHook()` 分支里才会走到这里。
+   */
+  async applyVfxFixturePhase(phase: string, seconds?: number): Promise<number> {
+    // 构建期常量门控：生产构建里下面整个分支被常量折叠删掉，动态 import 的 chunk
+    // 也就不会产出（`dist/` 里 grep 不到 `fx-target`，审查 L4）。
+    if (!import.meta.env.DEV && import.meta.env.VITE_E2E !== '1') return 0;
+    if (this.destroyed) return 0;
+    const { applyFixturePhase } = await import('./three/vfx/fixture-hooks');
+    return applyFixturePhase(this.vfx, phase, seconds, {
+      normal: (x, y) => this.normal(x, y),
+      radius: RADIUS,
+      scale: this.tileScale(),
+      faceSize: this.data?.planet.surface.face_size ?? 16,
+      buildings: this.data?.planet.buildings,
+      catalog: this.data?.catalog,
+    });
+  }
+
+  /** 夹具/诊断：VFX 层计数（粒子、战斗对象、发射器）。 */
+  vfxStats() {
+    return this.vfx.stats();
+  }
+
+  /**
+   * 重建天空 IBL：只含天空的临时场景 → `PMREMGenerator.fromScene`。
+   * 只在换星球 / 换档位时调用（不逐帧）。天空色/太阳方向变化不重建（IBL 是低频环境光）。
+   */
+  private rebuildEnvironment() {
+    this.environment?.dispose();
+    const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
+    // 烘焙位置：相机当前所在的地表点（相机在 `updateCamera` 里总是沿 +Z 方向、距球心
+    // RADIUS + altitude）。IBL 是低频环境光，用当前高度即可；不能放在球心（审查 P1-5）。
+    this.environmentObserver.copy(skyIblObserver(RADIUS, this.altitude));
+    this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize, this.environmentObserver, RADIUS);
+    this.scene.environment = this.environment.texture;
+    // IBL 贴图已去饱和 + 降强度（atmosphere.ts 的 SKY_IBL_*），场景倍率不再额外翻倍。
+    this.scene.environmentIntensity = .45;
+  }
+
   /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
    * 取上一帧的 `renderer.info.render`，要在动画跑过一帧之后再读。 */
   get renderStats() {
@@ -326,13 +504,130 @@ export class PlanetThreeScene {
     };
   }
 
+  /**
+   * 画面调试探针（只读，3A 画质迭代用）：天空 / 雾 / 环境光 / 太阳的当前取值。
+   * 不参与游戏逻辑，也不改变任何状态。
+   */
+  lightingDebug() {
+    return {
+      altitude: this.altitude,
+      quality: this.quality,
+      sky: {
+        atmosphere: this.sky.uniforms.atmosphere.value,
+        stars: this.sky.uniforms.stars.value,
+        zenith: `#${this.sky.uniforms.zenith.getHexString()}`,
+        horizon: `#${this.sky.uniforms.horizon.getHexString()}`,
+        sunDirection: this.sky.uniforms.sunDirection.toArray().map(v => Number(v.toFixed(3))),
+      },
+      fog: {
+
+        materialAudit: (() => {
+          let meshes = 0; let fogged = 0; const missing: string[] = [];
+          this.world.traverse((o) => {
+            if (!(o instanceof THREE.Mesh)) return;
+            meshes += 1;
+            const list = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of list) {
+              if ((m.userData as Record<string, unknown>).swFog) fogged += 1;
+              else if (missing.length < 12) missing.push(`${o.name || o.type}:${m.type}:${(m as THREE.Material & { fog?: boolean }).fog}`);
+            }
+          });
+          return { meshes, fogged, missing };
+        })(),
+        strength: this.fog.uniforms.strength.value,
+        density: this.fog.uniforms.density.value,
+        color: `#${this.fog.uniforms.color.getHexString()}`,
+        // 编译审计：材质是否真的拿到了注入后的雾（onBeforeCompile 跑到了、uniform 也被 three 收下）。
+        compiled: (() => {
+          let withFog = 0; let total = 0;
+          const materials = new Set<THREE.Material>();
+          this.world.traverse((o) => {
+            if (!(o instanceof THREE.Mesh)) return;
+            for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+          });
+          for (const m of materials) {
+            const uniforms = (this.renderer.properties.get(m) as { uniforms?: Record<string, unknown> | null }).uniforms;
+            if (!uniforms) continue;
+            total += 1;
+            if ('swFogDensity' in uniforms) withFog += 1;
+          }
+          return { total, withFog };
+        })(),
+      },
+      sun: { color: `#${this.sunlight.color.getHexString()}`, intensity: this.sunlight.intensity },
+      exposure: this.renderer.toneMappingExposure,
+      environmentIntensity: this.scene.environmentIntensity,
+      passes: {
+        gtao: this.gtao.enabled,
+        aoBlend: (this.gtao as unknown as { blendIntensity: number }).blendIntensity,
+        // AO 深度是否指向本帧 readBuffer（审查 P1-3 的常驻断言）。
+        aoDepthOnReadBuffer: aoDepthBoundToReadBuffer((this.gtao as unknown as { depthTexture?: unknown }).depthTexture, this.composer),
+        bloom: this.bloom.enabled,
+        grade: this.grade.enabled,
+        smaa: this.smaa.enabled,
+        flare: this.flare.enabled,
+        flareDebug: this.flare.debug(),
+      },
+      shellVisible: this.atmosphereShell.mesh.visible,
+      shellSunLocal: this.atmosphereShell.sunDirectionLocal.toArray().map(v => Number(v.toFixed(3))),
+      shellSunScene: this.atmosphereShell.sunDirectionLocal.clone().applyQuaternion(this.world.quaternion).toArray().map(v => Number(v.toFixed(3))),
+      worldQuaternion: this.world.quaternion.toArray().map(v => Number(v.toFixed(3))),
+      sunScene: this.sunlight.position.clone().sub(this.sunlight.target.position).normalize().toArray().map(v => Number(v.toFixed(3))),
+    };
+  }
+
+  /**
+   * AO 探针（审查 P1-3 验收）：读 GTAO 降噪后的 AO 贴图统计。
+   * `region` 是归一化屏幕区域（0–1，左下原点），默认全屏；AO 关闭时返回 null。
+   * 只读：渲染目标用完恢复，不改变场景状态。
+   */
+  aoStats(region?: Partial<AoStats['region']>): AoStats | null {
+    if (!this.gtao.enabled) return null;
+    const texture = (this.gtao as unknown as { gtaoMap?: THREE.Texture }).gtaoMap ?? null;
+    return this.aoProbe.measure(this.renderer, texture, region);
+  }
+
   setQuality(quality: PlanetRenderQuality) {
+    const changed = quality !== this.quality;
     this.quality = quality;
     this.resize();
+    // 档位表（粒子上限 / 发射率 / 点光源 / 焦痕池）在 VFX 层构造时固化：
+    // 切档必须重建整层，否则 UI 里切 high→low 后这些上限都不变（审查 M2）。
+    if (changed) this.rebuildVfxLayer();
+  }
+
+  private createVfxLayer(quality: PlanetRenderQuality): VfxLayer {
+    return new VfxLayer(this.world, {
+      radius: RADIUS,
+      scale: () => this.tileScale(),
+      models: this.industrial,
+      normalOf: (tile) => this.data ? this.normal(tile.x, tile.y) : new THREE.Vector3(0, 0, 1),
+      footprintOf: (buildingId) => {
+        const building = this.data?.planet.buildings?.[buildingId];
+        return building ? getBuildingFootprint(building) : undefined;
+      },
+      quality,
+      frozen: this.frozen,
+      reducedMotion: this.reducedMotion.matches,
+      shakeEnabled: () => !this.frozen && !this.reducedMotion.matches,
+    });
+  }
+
+  /** 切档：销毁旧层、按新档位重建，并恢复活动源与（下一帧 updateMarks 会重算的）选中/光环。 */
+  private rebuildVfxLayer(): void {
+    if (this.destroyed) return;
+    this.vfx.dispose();
+    this.vfx = this.createVfxLayer(this.quality);
+    this.vfx.setCamera(this.camera);
+    this.vfx.setSources(this.lastVfxActivity);
+    this.syncVfxSelection();
+    this.syncTacticalOverlays();
   }
 
   private updateQuality() {
     const settings = renderQualitySettings(this.quality, window.innerWidth, window.devicePixelRatio, this.renderer.capabilities.maxSamples);
+    const previous = this.settings;
+    this.settings = settings;
     if (this.renderer.getPixelRatio() !== settings.pixelRatio) {
       this.renderer.setPixelRatio(settings.pixelRatio);
       this.composer.setPixelRatio(settings.pixelRatio);
@@ -350,6 +645,15 @@ export class PlanetThreeScene {
       this.sunlight.shadow.needsUpdate = true;
     }
     this.bloom.enabled = settings.bloom;
+    this.sunlight.shadow.radius = settings.softShadows ? 2.6 : 1;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.gtao.enabled = settings.ao !== 'off';
+    this.grade.enabled = settings.grade;
+    this.smaa.enabled = settings.samples === 0;
+    this.flare.setEnabled(settings.flare);
+    this.fog.setQuality(this.quality);
+    // 换档位时重建 IBL（环境贴图分辨率变了）。
+    if (!previous || previous.envSize !== settings.envSize) this.rebuildEnvironment();
   }
 
   setData(data: PlanetThreeData) {
@@ -378,6 +682,9 @@ export class PlanetThreeScene {
       this.dressingSignature = dressingSignature;
     }
     this.buildEntities();
+    // 新建筑/单位/地表装饰的材质接入空气透视（已接入的材质走 WeakSet 跳过）。
+    this.fog.apply(this.surface.material);
+    this.fog.applyTo(this.world);
     this.activity.update(data);
     this.updateMarks();
   }
@@ -399,6 +706,19 @@ export class PlanetThreeScene {
 
   private tileFromNormal(n: THREE.Vector3): TilePoint | null {
     return this.data ? normalTile(n, this.data.planet.surface.face_size) : null;
+  }
+
+  /**
+   * 粒子尺寸（格）→ 屏幕像素的换算：格宽 × (绘制缓冲高/2) / tan(fov/2)。
+   *
+   * `gl_PointSize` 的单位是**绘制缓冲像素**，不是 CSS 像素：HiDPI 屏（pixelRatio 上限 2）
+   * 不乘 DPR 会让粒子与曳光的像素下限只有一半尺寸（审查 M5）。用 `clientHeight ×
+   * renderer.getPixelRatio()` 而不是 drawingBufferHeight（后者在 resize 当帧可能还没更新）。
+   */
+  private particlePixelScale() {
+    const fov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const bufferHeight = this.host.clientHeight * this.renderer.getPixelRatio();
+    return this.tileScale() * (bufferHeight / 2) / Math.max(0.0001, Math.tan(fov));
   }
 
   private tileScale() {
@@ -428,8 +748,32 @@ export class PlanetThreeScene {
 
   private material(color: string, emissive = false) {
     const key = color + emissive;
-    if (!this.materials.has(key)) this.materials.set(key, new THREE.MeshStandardMaterial({ color, roughness: emissive ? 0.35 : 0.58, metalness: 0.45, emissive: emissive ? color : '#000000', emissiveIntensity: emissive ? 1.3 : 0 }));
+    if (!this.materials.has(key)) {
+      const material = new THREE.MeshStandardMaterial({ color, roughness: emissive ? 0.35 : 0.58, metalness: 0.45, emissive: emissive ? color : '#000000', emissiveIntensity: emissive ? 1.3 : 0 });
+      // 空气透视：新材质创建时就接入（合批共享材质只接一次）。
+      this.fog.apply(material);
+      this.materials.set(key, material);
+    }
     return this.materials.get(key)!;
+  }
+
+  /**
+   * 太阳镜头光晕（`flare` 档）：每帧按相机矩阵把太阳投到屏幕。
+   * 冻结时不闪动（位置只由相机决定），逐帧一致。
+   */
+  private updateSunFlare() {
+    if (!this.flare.enabled) return;
+    this.flare.update(PLANET_CENTER, RADIUS);
+  }
+
+  /**
+   * 大气壳的太阳方向换算到星球局部空间（3A 第二轮 §14）：`world` 会被拖拽/聚焦旋转，
+   * 壳挂在 `world` 下、shader 用物体空间法线，所以必须把场景空间的主光方向反向旋转。
+   * 每帧一次（几个向量运算），旋转后立即生效、不用等拖拽结束。
+   */
+  private syncAtmosphereSun() {
+    this.sunDirectionScratch.copy(this.sunlight.position).sub(this.sunlight.target.position).normalize();
+    this.atmosphereShell.setSunDirection(this.sunDirectionScratch, this.world.quaternion);
   }
 
   private part(parent: THREE.Group, kind: string, color: string, size: [number, number, number], position: [number, number, number], glow = false) {
@@ -525,6 +869,11 @@ export class PlanetThreeScene {
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
     }
     this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
+    // 工业氛围只认权威活动源（暂停/缺电/矿点枯竭时源不存在 → 不发射）。
+    this.lastVfxActivity = this.vfx.setActivity({ ...this.data!, planet }, {
+      buildings: this.interaction?.layers.buildings,
+      power: this.interaction?.layers.power,
+    });
     this.sorterRigs.refresh(sorters, this.groundMap, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
     this.layer('buildings').add(this.sorterRigs.group);
     // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
@@ -550,17 +899,8 @@ export class PlanetThreeScene {
         return group;
       });
     }
-    for (const task of runtime?.construction_tasks ?? []) {
-      if (!this.known(task.position)) continue;
-      // 施工脚手架只画在**已探索**格：未探索区域连地形都没有，立柱会浮在测绘面纱上。
-      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type, this.known(task.position)], () => {
-        if (!this.known(task.position)) return null;
-        const group = new THREE.Group();
-        for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(group, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
-        this.place(group, task.position, 'construction');
-        return group;
-      });
-    }
+    // 施工：3A 画质起不再画四角脚手架，改由 VFX 层的全息分身表达（`syncConstruction`，
+    // 目标模型 + 青色全息 + 按进度自下而上溶解）；进度条 billboard 仍由 tactical-overlays 画。
     for (const [key, entry] of this.staticEntities) {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
@@ -871,6 +1211,12 @@ export class PlanetThreeScene {
     if (event.seq <= this.lastBattleSeq) return;
     this.lastBattleSeq = event.seq;
     this.combat.spawnSpecs(specsFromCombatEvent(event, (entityId) => this.resolveCombatPoint(entityId)));
+    // 3A 画质：同一批事件展开成粒子/曳光/焦痕/冲击波/点光源（事件口径不变）。
+    this.vfx.combatEvent(
+      event,
+      (entityId) => this.resolveCombatPoint(entityId),
+      this.camera.position.clone().normalize().multiplyScalar(RADIUS),
+    );
   }
 
   /** 实体 id → 战斗演出锚点（建筑取模型位置，单位取平滑后的实时位置；小队未在 3D 渲染，解析为 null）。 */
@@ -984,15 +1330,13 @@ export class PlanetThreeScene {
   }
 
   /** 地表标记共享材质（userData.shared：清理标记时只释放几何）。 */
-  private markMaterial(color: string, opacity: number, aura = false) {
-    const key = `${color}:${opacity}:${aura}`;
+  private markMaterial(color: string, opacity: number) {
+    const key = `${color}:${opacity}`;
     let material = this.markMaterials.get(key);
     if (!material) {
       material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
       material.userData.shared = true;
-      material.userData.baseOpacity = opacity;
       this.markMaterials.set(key, material);
-      if (aura) this.auraMaterials.add(material);
     }
     return material;
   }
@@ -1024,34 +1368,14 @@ export class PlanetThreeScene {
   /** 补给光环与网格：只在其输入变化时重建（hover/选中变化不触发）。 */
   private updateStaticMarks() {
     const data = this.data!, layers = this.interaction!.layers;
-    const auras: { x: number; y: number; radius: number; color: string }[] = [];
-    if (layers.logistics) {
-      for (const b of Object.values(data.planet.buildings ?? {})) {
-        const radius = data.catalog?.buildings?.find(d => d.id === b.type)?.supply_radius ?? 0;
-        if (b.owner_id === data.playerId && b.hp > 0 && radius > 0) auras.push({ x: b.position.x, y: b.position.y, radius, color: b.runtime?.state === 'running' ? '#5ff0b0' : '#e0727f' });
-      }
-      for (const u of Object.values(data.planet.units ?? {})) {
-        const radius = data.catalog?.world_units?.find(d => d.id === u.type)?.supply_radius ?? 0;
-        if (u.owner_id === data.playerId && u.hp > 0 && u.type === 'supply_truck' && radius > 0) auras.push({ x: Math.round(u.position.x), y: Math.round(u.position.y), radius, color: '#7dc5f4' });
-      }
-    }
+    // 3A 画质：补给光环改由 VFX 层的 `SupplyAuraLayer` 画（细虚线 + 极淡渐变），
+    // 这里不再生成粗色带；签名只保留网格，避免无谓重建。
     const grids = layers.grid && 'bounds' in data.planet ? [data.planet.bounds, ...(data.planet.surface_patches ?? []).map(p => p.bounds)] : [];
     const size = data.planet.surface.face_size;
-    const signature = JSON.stringify([size, auras, grids]);
+    const signature = JSON.stringify([size, grids]);
     if (signature === this.staticMarksSignature) return;
     this.staticMarksSignature = signature;
     this.clearMarks(this.staticMarks);
-    const ts = this.tileScale();
-    for (const aura of auras) {
-      // 补给光环：粗色带外圈（呼吸）+ 极淡填充，远景也能一眼看出覆盖范围。
-      const center = this.normal(aura.x, aura.y);
-      const { east, south } = tileFrame(aura, size);
-      const loop = circleLoop(center, east, south, aura.radius * ts / RADIUS, 96);
-      const fill = new THREE.Mesh(discGeometry(loop, center, RADIUS + ts * .05), this.markMaterial(aura.color, .07));
-      const edge = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .09, Math.max(ts * .16, .02)), this.markMaterial(aura.color, .85, true));
-      fill.renderOrder = 10; edge.renderOrder = 11;
-      this.staticMarks.add(fill, edge);
-    }
     for (const b of grids) {
       const stride = Math.max(1, Math.ceil(Math.max(b.width, b.height) / 64));
       const points: THREE.Vector3[] = [];
@@ -1122,27 +1446,9 @@ export class PlanetThreeScene {
         this.marks.add(mesh);
       }
     }
-    const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
-    if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
-    // 多选单位：每个单位一个选中标记（主选中环之外追加）
-    if (this.interaction.layers.selection) {
-      for (const unitId of this.interaction.selectedUnits ?? []) {
-        if (this.interaction.selected?.kind === 'unit' && this.interaction.selected.id === unitId) continue;
-        const unit = this.data.planet.units?.[unitId];
-        if (unit) add({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) }, '#9ef7c9');
-      }
-    }
-    // 选中建筑：按**整个占地**画选中框（细分网格后 3×3/5×5 建筑必须整块高亮，
-    // 只框左上 1 cell 会让玩家以为选错了格）。
-    if (this.interaction.layers.selection && this.interaction.selected?.kind === 'building') {
-      const building = this.data.planet.buildings?.[this.interaction.selected.id];
-      if (building) {
-        const footprint = getBuildingFootprint(building);
-        for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-          add(surfaceOffset(building.position, dx, dy, this.data.planet.surface.face_size), '#ffd166');
-        }
-      }
-    }
+    // 3A 画质：选中/悬停反馈由 VFX 层画（建筑 = 四角括号 + 地面光晕，单位 = 细环 + 方向三角），
+    // 不再用每格一条粗色带。颜色语义沿用旧口径（SELECTION_COLORS）。
+    this.syncVfxSelection();
     // 运输机器人：选中时画起点→终点虚线（可一次多选，同一路线只画一条）。
     this.updateHaulRoutes();
     if (this.interaction.hoveredTile) {
@@ -1156,7 +1462,7 @@ export class PlanetThreeScene {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);
           add(p, assessment?.buildable && this.visible(p) ? '#5ef7a1' : '#ff6666');
         }
-      } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
+      } else if (this.interaction.interactionMode.kind === 'attack') add(tile, '#ff6666');
     }
     this.updateBuildGhost();
     this.syncTacticalOverlays();
@@ -1173,6 +1479,8 @@ export class PlanetThreeScene {
   private syncTacticalOverlays() {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
+    // 补给光环不参与下面的签名短路：图层/数据变化（运行/停机）必须立刻反映到环上。
+    this.vfx.syncAuras(interaction.layers.logistics ? buildSupplyAuras(data) : [], data.planet.surface.face_size);
     const faceSize = data.planet.surface.face_size;
     const mode = interaction.interactionMode;
     const hovered = interaction.hoveredTile;
@@ -1225,6 +1533,26 @@ export class PlanetThreeScene {
       progress: constructionBarProgress(task),
     })).filter(bar => this.known(bar.tile));
     this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
+    // 施工全息（目标模型 + 按进度溶解）：与进度条同一份 tasks/进度口径。
+    this.vfx.syncConstruction(
+      interaction.layers.construction
+        ? buildHoloTasks(data.runtime?.available ? data.runtime.construction_tasks ?? [] : [], data.catalog, faceSize, task => this.known(task.position))
+        : [],
+      faceSize,
+    );
+  }
+
+  /** 选中/悬停反馈（VFX 层）：括号/细环/方向三角，颜色沿用旧语义。 */
+  private syncVfxSelection() {
+    const data = this.data, interaction = this.interaction;
+    if (!data || !interaction) return;
+    // 收拢动画的时间基必须与 `SelectionOverlay.animate` 同一个时钟（`VfxLayer.currentTime`），
+    // 否则页面时间（几十秒）与场景累计 dt 恒差一个 t0，括号永远停在最暗、收拢不播（审查 H2）。
+    this.vfx.syncSelection(
+      buildSelectionItems(data, interaction),
+      data.planet.surface.face_size,
+      this.vfx.currentTime,
+    );
   }
 
   /**
@@ -1484,6 +1812,79 @@ export class PlanetThreeScene {
     this.setAltitude(this.altitude / factor);
   }
   /**
+   * 用户路径的缩放（滚轮 / 缩放按钮 / +/- 快捷键）：与 `zoom()` 同口径，但走 180ms 缓动。
+   * 跨过地面/全球阈值时俯仰也一起补间（否则相机会在 130/190 处突然抬头/低头）。
+   * `?freeze=1` 与 reduced-motion 下直接落位。
+   */
+  zoomSmooth(factor: number) {
+    if (!(factor > 0)) return;
+    const target = THREE.MathUtils.clamp(this.altitude / factor, Math.max(this.tileScale() * 2.5, 0.03), 430);
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.setAltitude(target);
+      return;
+    }
+    const now = performance.now();
+    const nextGround = groundViewAtAltitude(target, this.groundView);
+    // 地面视角之外俯仰恒为 0（全球视角）；进出地面视角时把俯仰一起补间。
+    const fromTilt = this.groundView ? this.tilt : 0;
+    const toTilt = nextGround ? this.tilt : 0;
+    this.motion.cancel();
+    this.motion.tweenAltitude(this.altitude, target, now);
+    if (Math.abs(toTilt - fromTilt) > 1e-4) this.motion.tweenTilt(fromTilt, toTilt, now);
+    else this.groundView = nextGround;
+  }
+  /**
+   * 用户路径的聚焦（回家按钮 / 点选聚焦）：高度与朝向 600ms ease-in-out 补间。
+   * 与 `focus()` 同一目标值；`close` 语义一致。
+   */
+  focusSmooth(tile: TilePoint, close = true) {
+    if (!this.data) return;
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.focus(tile, close);
+      return;
+    }
+    const target = this.normal(tile.x, tile.y);
+    const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(target, FRONT);
+    const altitude = close ? Math.min(75, Math.max(this.tileScale() * 16, .08)) : Math.min(75, Math.max(this.tileScale() * 18, .1));
+    this.motion.tweenView({
+      altitude: this.altitude, tilt: this.groundView ? this.tilt : 0, groundView: this.groundView,
+      quaternion: this.world.quaternion,
+    }, { altitude, tilt: this.tilt, groundView: true, quaternion: targetQuaternion }, performance.now());
+  }
+  /** 用户路径的「全球视角」：高度 + 俯仰 + 朝向 600ms ease-in-out。 */
+  orbitSmooth() {
+    if (this.frozen || this.reducedMotion.matches) {
+      this.motion.cancel();
+      this.orbit();
+      return;
+    }
+    // 全球视角的朝向：保持当前中心格，只把俯仰收回 0（与 orbit() 一致：不改 world 朝向）。
+    this.motion.tweenView({
+      altitude: this.altitude, tilt: this.groundView ? this.tilt : 0, groundView: this.groundView,
+      quaternion: this.world.quaternion,
+    }, { altitude: 300, tilt: this.tilt, groundView: false, quaternion: this.world.quaternion.clone() }, performance.now());
+  }
+  /**
+   * 把 CameraMotion 的本帧结果写回镜头状态并更新相机。
+   * groundView 在补间期间固定为补间的目标值（不按高度阈值逐帧重算，避免中途跳变）。
+   */
+  private applyMotion(now: number, dt: number) {
+    const out = this.motionOut;
+    out.altitude = undefined; out.tilt = undefined; out.groundView = undefined;
+    out.quaternion = undefined; out.quaternionDelta = undefined;
+    if (!this.motion.sample(now, dt, out)) return;
+    if (out.altitude !== undefined) this.altitude = out.altitude;
+    if (out.tilt !== undefined) this.tilt = out.tilt;
+    if (out.groundView !== undefined) this.groundView = out.groundView;
+    // 视角切换给的是绝对姿态；拖拽惯性给的是**增量**（审查 P0-1：以前两者都 copy，
+    // 松手后第一帧就把星球朝向重置成「上一帧的微小转角」）。
+    if (out.quaternion !== undefined) this.world.quaternion.copy(out.quaternion);
+    if (out.quaternionDelta !== undefined) this.world.quaternion.premultiply(out.quaternionDelta);
+    this.updateCamera();
+  }
+  /**
    * 绝对高度入口（深链 `?zoom=`）：与 `zoom(factor)` 同一套 190/130 阈值决定地面视角，
    * 全球高度（300）读回 `groundView === false`，贴地高度读回 true。
    */
@@ -1500,12 +1901,29 @@ export class PlanetThreeScene {
     const tilt = this.groundView ? this.tilt : 0;
     this.camera.position.set(0, -Math.sin(tilt) * this.altitude, RADIUS + Math.cos(tilt) * this.altitude);
     this.camera.lookAt(0, 0, this.groundView ? RADIUS : 0);
-    const range = Math.min(150, Math.max(2, this.altitude * .75));
+    // 阴影视锥（3A §7）：按相机高度取范围；地平线机位（tilt 大）视线更远，按 tilt 放大，
+    // 避免远处建筑缺阴影。边缘 15% 在 shader 里渐隐（atmospheric-fog 的 swShadowFade），
+    // 视锥边界不会出现硬切线，所以上限可以放宽到覆盖地平线机位的可见地表（切点 ≈ 39 单位）。
+    const tiltBoost = 1 + tilt * 1.1;
+    const range = Math.min(320, Math.max(2, this.altitude * .75 * tiltBoost));
     this.sunlight.shadow.normalBias = Math.min(.035, this.tileScale() * .015);
     const shadowCamera = this.sunlight.shadow.camera;
     shadowCamera.left = -range; shadowCamera.right = range;
     shadowCamera.top = range; shadowCamera.bottom = -range;
     shadowCamera.updateProjectionMatrix();
+    // 天空 / 雾按相机高度过渡（≤25 全天空、≥60 纯太空）；穹顶位置由 onBeforeRender 每帧同步。
+    this.sky.setAltitude(this.altitude);
+    this.fog.setAltitude(this.altitude);
+    // 散射壳：全球视角与中空视角都可见（贴地时相机在壳内，壳会盖住地表）。
+    // 中空（altitude ≥ 60）时相机已在壳外（壳半径 102.5、高度 60 → 距球心 160），
+    // 壳的边缘正好落在地平线弧上（3A 第二轮 §15）：细而亮的蓝色大气光带；
+    // 此时圆盘上的薄大气按 `setVeilStrength` 减弱，免得把已探索地表刷成蓝色。
+    // 阈值用 `>=`：中空机位的高度正好是 60，以前写成 `> 60` 导致这一档壳完全不可见。
+    this.atmosphereShell.mesh.visible = !this.groundView || this.altitude >= 60;
+    // 中空（60–120）也要有薄大气：以前从 40 起才渐入，60 处只有 0.1，圆盘整片接太空；
+    // 现在 45 起渐入、100 到满，中空 60 约 0.28（远处地表有轻微空气透视、圆盘不发蓝）。
+    this.atmosphereShell.setVeilStrength(THREE.MathUtils.smoothstep(this.altitude, 45, 100));
+    this.syncAtmosphereSun();
     this.camera.updateMatrixWorld();
   }
   getCenterTile() {
@@ -1537,6 +1955,11 @@ export class PlanetThreeScene {
     const width = Math.max(this.host.clientWidth, 1), height = Math.max(this.host.clientHeight, 1);
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
+    // GTAO 按档位降采样（balanced 半分辨率）：setSize 后要重新按分辨率设置一次。
+    // 深度纹理来自 composer 目标（全分辨率），降采样时 GTAO 的 tDepth 采样仍按全分辨率 UV，
+    // 所以半分辨率只影响 AO 与降噪缓冲，深度保持全分辨率、不会错位。
+    const aoScale = this.settings.ao === 'full' ? 1 : .5;
+    this.gtao.setSize(Math.max(1, Math.round(width * this.renderer.getPixelRatio() * aoScale)), Math.max(1, Math.round(height * this.renderer.getPixelRatio() * aoScale)));
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   };
@@ -1659,6 +2082,10 @@ export class PlanetThreeScene {
         const sensitivity = Math.min(0.006, this.altitude / Math.max(this.host.clientHeight, 1) / RADIUS * 0.9);
         const rotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(dy * sensitivity, dx * sensitivity, 0));
         this.world.quaternion.premultiply(rotation);
+        // 角速度（rad/s）供松手惯性用：相邻两次 pointermove 的增量 / 时间差。
+        const now = performance.now();
+        const elapsed = Math.max(8, now - (this.dragVelocity.at || now)) / 1000;
+        this.dragVelocity = { x: dx * sensitivity / elapsed, y: dy * sensitivity / elapsed, at: now };
         this.emitHover(null);
       }
     } else {
@@ -1678,7 +2105,7 @@ export class PlanetThreeScene {
     this.onHover(tile);
   }
   private pointerLeave = () => { this.hoverPoint = null; this.emitHover(null); };
-  private wheel = (event: WheelEvent) => { event.preventDefault(); this.zoom(Math.exp(-event.deltaY * 0.0015)); };
+  private wheel = (event: WheelEvent) => { event.preventDefault(); this.zoomSmooth(Math.exp(-event.deltaY * 0.0015)); };
   private animate = (time: number) => {
     if (this.destroyed) return;
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); this.lastTime = time;
@@ -1687,6 +2114,7 @@ export class PlanetThreeScene {
     // 运行发光件呼吸；冻结定格在最亮相位。
     if (!document.hidden) this.industrial.pulseGlow(time / 1000, this.frozen || reducedMotion);
     if (!document.hidden) {
+      if (this.motion.active && !this.frozen && !reducedMotion) this.applyMotion(time, dt);
       this.dynamicBatches.update({ paused: this.frozen || reducedMotion });
       // 状态灯：运行/空闲常亮，缺电慢闪；冻结时定格。
       this.statusLights.update(time / 1000, this.frozen || reducedMotion);
@@ -1701,10 +2129,11 @@ export class PlanetThreeScene {
         this.commandMarkers.update(dt * 1000);
         this.updateTurretAims(dt, time);
       }
+      // 3A 画质 VFX：粒子/工业氛围/施工全息/选中/补给光环（冻结时内部固定相位）。
+      this.vfx.setWorldScale(this.particlePixelScale(), this.tileScale());
+      this.vfx.update(dt, this.altitude, this.data?.planet.surface.face_size ?? 16);
+      this.rangeCircles.animate(time / 1000, this.frozen || reducedMotion);
       this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);
-      // 补给光环缓慢呼吸（2.4s 周期），减弱运动时保持常亮。
-      const breath = this.frozen || reducedMotion ? 1 : .78 + .22 * Math.sin(time / 1000 * 2.6);
-      for (const material of this.auraMaterials) material.opacity = material.userData.baseOpacity * breath;
       // 单位沿球面平滑趋近目标位置（复用临时向量，交战时几百个单位每帧不产生垃圾对象）。
       const amount = 1 - Math.exp(-dt * 12);
       const { from, to, up, rotation, identity } = this.motionScratch;
@@ -1719,8 +2148,16 @@ export class PlanetThreeScene {
       }
       // 阶段标签贴机器人（机器人移动是每帧插值的，标签跟着走才不脱节）。
       this.updateHaulLabels();
+      this.updateSunFlare();
+      // 拖拽旋转后大气壳的太阳方向要跟着换算（每帧几个向量运算，壳可见时才做）。
+      if (this.atmosphereShell.mesh.visible) this.syncAtmosphereSun();
+      // GTAO 的深度必须指向本帧 RenderPass 写入的那块 RT（两块 RT 的深度纹理是克隆，
+      // 绑死其中一块会在 swap 后读到全 0 → AO 全灭，审查 P1-3）。
+      if (this.gtao.enabled) bindAoDepth(this.gtao, this.composer);
       this.renderer.info.reset();
+      const restoreShake = this.vfx.shake.apply(this.camera);
       this.composer.render();
+      restoreShake();
     }
     this.frame = requestAnimationFrame(this.animate);
   };
@@ -1751,6 +2188,7 @@ export class PlanetThreeScene {
     this.constructionBars.dispose();
     disposeLogisticsTextures();
     this.combat.dispose();
+    this.vfx.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
     this.spriteMaterials.clear();
     const geometries = new Set<THREE.BufferGeometry>();
@@ -1760,6 +2198,9 @@ export class PlanetThreeScene {
     this.materials.forEach((m) => materials.add(m));
     this.markMaterials.forEach((m) => materials.add(m));
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
-    this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface); this.environment.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
+    this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface);
+    this.sky.dispose(); this.atmosphereShell.dispose(); this.flare.dispose();
+    this.gtao.dispose(); this.aoProbe.dispose(); this.grade.dispose(); this.smaa.dispose();
+    this.environment?.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }

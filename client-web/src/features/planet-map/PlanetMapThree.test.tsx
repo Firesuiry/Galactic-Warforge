@@ -41,7 +41,10 @@ vi.mock('./planet-three-scene', () => ({
     setInteraction() {}
     focus() {}
     orbit() {}
+    focusSmooth() {}
+    orbitSmooth() {}
     zoom(factor: number) { zoomCalls.push(factor); }
+    zoomSmooth(factor: number) { zoomCalls.push(factor); }
     setAltitude(altitude: number) { altitudeCalls.push(altitude); }
     getCenterTile() { return { x: 4, y: 4 }; }
     setTilt() {}
