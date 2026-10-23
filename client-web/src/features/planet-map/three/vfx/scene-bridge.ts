@@ -1,16 +1,16 @@
 /**
  * 场景 ↔ VFX 层的桥接：把场景数据整理成 VFX 层需要的输入（纯函数，可单测）。
  *
- * - `buildSelectionItems`：选中建筑 → 占地四角括号（每格一个 bracket），选中单位 →
- *   细环 + 方向三角，悬停 → 同款更淡；
+ * - `buildSelectionItems`：选中建筑 → **一个**以占地中心为圆心的四角括号 + 地面光晕，
+ *   选中单位 → 细环 + 方向三角，悬停 → 同款更淡；
  * - `buildHoloTasks`：施工任务 → 全息模型输入（建筑类型、占地、进度）；
  * - `buildSupplyAuras`：补给站/补给车 → 补给光环条目（判定口径与旧 `updateStaticMarks` 一致）。
  */
 
 import type { PlanetThreeData } from '../../planet-three-scene';
-import { getBuildingFootprint, type SelectedEntity, type TilePoint } from '../../model';
+import { getBuildingFootprint, toTilePoint, type SelectedEntity, type TilePoint } from '../../model';
 import type { Building, CatalogView, ConstructionTaskView } from '@shared/types';
-import { constructionBarProgress } from '../../three/tactical-overlays';
+import { constructionBarProgress, footprintCenterTile } from '../../three/tactical-overlays';
 import { surfaceOffset } from '@shared/surface';
 import { SELECTION_COLORS, type SelectionItem } from './selection';
 import type { HoloTask } from './construction-holo';
@@ -46,22 +46,19 @@ export function buildSelectionItems(
     const building = data.planet.buildings?.[selected.id];
     if (building && building.hp > 0) {
       const footprint = getBuildingFootprint(building);
+      const origin = toTilePoint(building.position);
       const tiles: TilePoint[] = [];
       for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-        tiles.push(surfaceOffset(building.position, dx, dy, faceSize));
+        const cell = surfaceOffset(origin, dx, dy, faceSize);
+        tiles.push({ x: Math.round(cell.x), y: Math.round(cell.y) });
       }
-      // 括号只画在占地**四角格**（整块每格都画会变成一格一格的虚线，读不出「选中了这个建筑」）。
-      const corners = footprint.width <= 1 && footprint.height <= 1
-        ? [tiles[0]]
-        : [tiles[0], tiles[footprint.width - 1], tiles[tiles.length - footprint.width], tiles[tiles.length - 1]];
-      for (const [index, corner] of corners.entries()) {
-        items.push({
-          key: `selected:${selected.id}:${index}`, tile: { x: Math.round(corner.x), y: Math.round(corner.y) },
-          color: SELECTION_COLORS.footprint, kind: 'building', opacity: 0.95,
-          // 只在左下角那格挂地面光晕（`footprint` 非空即画光晕）。
-          footprint: index === 0 ? tiles : undefined,
-        });
-      }
+      // 括号中心 = **占地中心**（`position` 是占地原点，直接用会让 3×3/5×5 的括号偏到左上角），
+      // 尺寸 = 占地格数。只画一个括号网格，不再逐格画。
+      items.push({
+        key: `selected:${selected.id}`, tile: footprintCenterTile(origin, footprint, faceSize),
+        color: SELECTION_COLORS.footprint, kind: 'building', opacity: 0.95,
+        footprint: tiles, footprintSize: footprint,
+      });
     }
   } else if (selected?.kind === 'unit') {
     const unit = data.planet.units?.[selected.id];

@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 
 import { ribbonGeometry } from '../surface-ribbon';
-import { tileFrame, tileNormal, tileQuad, surfaceTileSize } from '../projection';
+import { tileFrame, tileNormal, surfaceTileSize } from '../projection';
 import type { TilePoint } from '../../model';
 
 /** 颜色语义（与场景旧口径一致）。 */
@@ -27,24 +27,42 @@ export const SELECTION_COLORS = {
 /** 线宽（格）与括号臂长（格，占一格的比例）。 */
 export const SELECTION_LINE_TILES = 0.055;
 export const BRACKET_ARM = 0.34;
+/** 括号相对建筑模型的外扩（模型按占地 ×.86 建，括号略外一圈才不贴模型边）。 */
+export const BRACKET_SPAN = 0.9;
 /** 收拢动画时长（秒）。 */
 export const BRACKET_SNAP_SECONDS = 0.22;
 
+/** 括号围住的尺寸（格）：`tile` 是**占地中心**，`width/height` 是占地格数。 */
+export interface BracketFootprint { width: number; height: number }
+
 /**
- * 四角括号：返回贴球面的 L 形色带（4 条臂 × 2 段，共 8 条细带合并成一个几何）。
- * `inset` 0 = 贴格边，1 = 完全收拢到四角（臂长缩到 0）。
+ * 四角括号：以**占地中心**为圆心、按整块占地尺寸画在四角（不是逐格）。
+ *
+ * 旧实现把每格当成一个独立的 1×1 括号（`tileQuad(tile)`），场景侧传入的是占地**原点**
+ * （`position` 是左上角），于是 3×3/5×5 的括号整体偏到左上角两格之外。这里改成
+ * 「中心格 + 占地尺寸」：4 条臂 × 2 段，共 8 条细带合并成一个几何。
+ * `inset` 0 = 贴占地边，1 = 完全收拢到四角（臂长缩到 0）。
  */
-export function bracketGeometry(tile: TilePoint, faceSize: number, radius: number, lineWidth: number, inset: number): THREE.BufferGeometry {
-  const quad = tileQuad(tile, faceSize);
-  const arm = Math.max(0.02, BRACKET_ARM * (1 - inset));
-  // 四角顺序：quad = [(-.5,-.5), (.5,-.5), (.5,.5), (-.5,.5)]（与 tileQuad 一致）。
-  const corners = quad.map((corner) => corner.clone());
+export function bracketGeometry(
+  center: TilePoint, faceSize: number, radius: number, lineWidth: number, inset: number,
+  footprint: BracketFootprint = { width: 1, height: 1 },
+): THREE.BufferGeometry {
+  const { normal, east, south } = tileFrame(center, faceSize);
+  // 一格在**展开图坐标**里的角尺寸：一个面 90° 摊到 faceSize 格。不能用 `surfaceTileSize`
+  // （它除以 √2，是「最窄格」的物理宽度，拿来做格子步进会让 3×3 的括号只盖住 2 格）。
+  const tileAngle = Math.PI / (2 * faceSize);
+  const width = Math.max(1, footprint.width), height = Math.max(1, footprint.height);
+  const halfW = width * 0.5 * BRACKET_SPAN * tileAngle;
+  const halfH = height * 0.5 * BRACKET_SPAN * tileAngle;
+  // 臂长按较小边缩放：1×1 = .34 格、3×3 ≈ 1 格，大建筑不会只缩成一个小角。
+  const arm = Math.max(0.06, Math.min(width, height) * BRACKET_ARM * (1 - inset)) * tileAngle;
+  const at = (u: number, v: number) => normal.clone()
+    .addScaledVector(east, u).addScaledVector(south, v).normalize();
   const positions: number[] = [];
   const indices: number[] = [];
   let base = 0;
   const pushQuad = (a: THREE.Vector3, b: THREE.Vector3) => {
-    const loop = [a, b];
-    const ribbon = ribbonGeometry(loop, radius, lineWidth);
+    const ribbon = ribbonGeometry([a, b], radius, lineWidth);
     const array = ribbon.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < array.count; i++) positions.push(array.getX(i), array.getY(i), array.getZ(i));
     // ribbonGeometry 对 2 点环生成的索引是 0,1,2, 2,1,3（四边形）。
@@ -52,16 +70,13 @@ export function bracketGeometry(tile: TilePoint, faceSize: number, radius: numbe
     base += 4;
     ribbon.dispose();
   };
-  // 每条臂：从角点沿两条边向内 arm 格（在球面上按单位法线插值）。
-  for (let index = 0; index < 4; index++) {
-    const corner = corners[index];
-    const next = corners[(index + 1) % 4];
-    const previous = corners[(index + 3) % 4];
-    const toNext = corner.clone().lerp(next, arm).normalize();
-    const toPrevious = corner.clone().lerp(previous, arm).normalize();
-    const cornerOnSurface = corner.clone().normalize();
-    pushQuad(cornerOnSurface, toNext);
-    pushQuad(cornerOnSurface, toPrevious);
+  // 四角（u,v）：(-1,-1) (1,-1) (1,1) (-1,1)；每条臂沿边向内收。
+  for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const corner = at(u * halfW, v * halfH);
+    const armH = corner.clone().addScaledVector(east, -Math.sign(u) * arm).normalize();
+    const armV = corner.clone().addScaledVector(south, -Math.sign(v) * arm).normalize();
+    pushQuad(corner, armH);
+    pushQuad(corner, armV);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -138,28 +153,32 @@ export function glowDisc(tile: TilePoint, faceSize: number, radius: number, size
  */
 export interface SelectionItem {
   key: string;
+  /** 建筑 = 占地**中心格**（`footprintCenterTile`），单位/悬停 = 实体所在格。 */
   tile: TilePoint;
   color: string;
   kind: 'building' | 'unit' | 'hover';
   /** 单位朝向（可选）：给方向小三角用。 */
   direction?: { x: number; y: number };
-  /** 建筑占地的格列表（括号画在每格，光晕只画中心）。 */
+  /** 建筑占地格列表（地面光晕按它铺满整块；括号尺寸取 `footprintSize`）。 */
   footprint?: TilePoint[];
+  /** 建筑占地格数（括号按整块画，1×1/3×3/5×5 各一档）。 */
+  footprintSize?: BracketFootprint;
   opacity: number;
 }
 
 /**
  * 选中/悬停反馈层：括号（建筑）、细环 + 方向三角（单位）、悬停细环。
  *
- * - 几何按「key + 格」缓存，签名变化才重建（悬停切换每帧都有，不能每次重建）；
- * - 括号收拢动画：`animate(seconds, frozen)` 写 `inset`（0 → 1 的快照），冻结时固定在收拢完成；
+ * - 建筑只生成**一个**括号网格：中心 = 占地中心格、尺寸 = 占地 ×.86 外扩少量；
+ * - 几何在签名变化时重建（悬停切换每帧都有，不能每次重建）；
+ * - 括号收拢动画：`animate(seconds, frozen)` 写不透明度（0 → 1 的快照），冻结时固定在收拢完成；
  * - 材质按颜色缓存（共享），不逐实例克隆。
  */
 export class SelectionOverlay {
   readonly group = new THREE.Group();
   private readonly materials = new Map<string, THREE.MeshBasicMaterial>();
   private readonly glowMaterials = new Map<string, THREE.MeshBasicMaterial>();
-  private entries = new Map<string, { mesh: THREE.Mesh; kind: SelectionItem['kind']; color: string; born: number; tile: TilePoint; footprint?: TilePoint[] }>();
+  private entries = new Map<string, { mesh: THREE.Mesh; kind: SelectionItem['kind']; color: string; born: number; tile: TilePoint; footprint?: TilePoint[]; footprintSize?: BracketFootprint }>();
   private glows: { mesh: THREE.Mesh; color: string; ownMaterial?: boolean }[] = [];
   private radius: number;
   private scale: () => number;
@@ -199,7 +218,7 @@ export class SelectionOverlay {
 
   /** 同步选中/悬停项（签名不变直接返回）。 */
   sync(items: readonly SelectionItem[], faceSize: number, now: number): void {
-    const signature = JSON.stringify(items.map((item) => [item.key, item.tile.x, item.tile.y, item.color, item.kind, item.footprint?.length ?? 0, item.opacity]));
+    const signature = JSON.stringify(items.map((item) => [item.key, item.tile.x, item.tile.y, item.color, item.kind, item.footprint?.length ?? 0, item.footprintSize?.width ?? 0, item.footprintSize?.height ?? 0, item.opacity]));
     if (signature === this.signature) return;
     this.signature = signature;
     for (const entry of this.entries.values()) {
@@ -215,19 +234,18 @@ export class SelectionOverlay {
       // 色带贴地几乎看不见。取「0.02 格 → 世界」并留一点下限。
       const worldWidth = Math.max(this.scale() * 0.02, 0.006);
       const geometry = item.kind === 'building'
-        ? bracketGeometry(item.tile, faceSize, this.radius + this.scale() * 0.05, worldWidth, 0)
+        ? bracketGeometry(item.tile, faceSize, this.radius + this.scale() * 0.05, worldWidth, 0, item.footprintSize)
         : item.kind === 'unit'
           ? ringGeometry(item.tile, faceSize, this.radius, worldWidth, 0.34)
           : ringGeometry(item.tile, faceSize, this.radius, worldWidth * 0.8, 0.42);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.renderOrder = item.kind === 'hover' ? 11 : 12;
       this.group.add(mesh);
-      this.entries.set(item.key, { mesh, kind: item.kind, color: item.color, born: now, tile: item.tile, footprint: item.footprint });
+      this.entries.set(item.key, { mesh, kind: item.kind, color: item.color, born: now, tile: item.tile, footprint: item.footprint, footprintSize: item.footprintSize });
       if (item.kind === 'building' && item.footprint?.length) {
         // 柔和地面光晕：盖住整个占地（中心在最暗处，边缘极淡），不是一格小圆。
-        const center = item.footprint[Math.floor(item.footprint.length / 2)];
         const span = Math.sqrt(item.footprint.length) * 0.75;
-        const glowGeometry = glowDisc(center, faceSize, this.radius, Math.max(0.9, span));
+        const glowGeometry = glowDisc(item.tile, faceSize, this.radius, Math.max(0.9, span));
         const glow = new THREE.Mesh(glowGeometry, this.glowMaterial(item.color));
         glow.renderOrder = 10;
         this.group.add(glow);

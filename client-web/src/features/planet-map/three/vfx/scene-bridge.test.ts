@@ -51,16 +51,40 @@ function data(overrides: Partial<PlanetThreeData> = {}): PlanetThreeData {
 }
 
 describe('VFX 场景桥接（纯函数）', () => {
-  it('选中建筑：括号只画在占地四角格，光晕只挂一次', () => {
+  it('选中建筑：只画一个括号，中心 = 占地中心（position 是占地原点）', () => {
     const items = buildSelectionItems(data(), {
       selected: { kind: 'building', id: 'b-base', position: { x: 10, y: 10, z: 0 } }, hoveredTile: null,
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
     }, true);
-    expect(items).toHaveLength(4);
-    expect(items.every((item) => item.kind === 'building')).toBe(true);
-    expect(items.filter((item) => item.footprint).length).toBe(1);
-    // 3×3 的四角：(10,10) (12,10) (10,12) (12,12)
-    expect(items.map((item) => `${item.tile.x}:${item.tile.y}`).sort()).toEqual(['10:10', '10:12', '12:10', '12:12']);
+    expect(items).toHaveLength(1);
+    const bracket = items[0];
+    expect(bracket.kind).toBe('building');
+    // 3×3 从 (10,10) 起：占地中心是 (11,11)，不是原点 (10,10)。
+    expect(bracket.tile).toEqual({ x: 11, y: 11 });
+    expect(bracket.footprintSize).toEqual({ width: 3, height: 3 });
+    expect(bracket.footprint).toHaveLength(9);
+  });
+
+  it('选中建筑：1×1 / 5×5 的括号中心都等于占地中心', () => {
+    const base = data();
+    const withBuilding = (width: number, height: number) => ({
+      ...base,
+      planet: {
+        ...base.planet,
+        buildings: {
+          ...base.planet.buildings,
+          'b-x': { id: 'b-x', type: 't', position: { x: 6, y: 8, z: 0 }, owner_id: 'p1', hp: 100, rotation: 0,
+            runtime: { state: 'running', params: { footprint: { width, height } } } },
+        },
+      },
+    }) as unknown as PlanetThreeData;
+    const select = (dataSet: PlanetThreeData) => buildSelectionItems(dataSet, {
+      selected: { kind: 'building', id: 'b-x', position: { x: 6, y: 8, z: 0 } }, hoveredTile: null,
+      interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
+    }, true);
+    expect(select(withBuilding(1, 1))[0].tile).toEqual({ x: 6, y: 8 });
+    expect(select(withBuilding(5, 5))[0].tile).toEqual({ x: 8, y: 10 });
+    expect(select(withBuilding(5, 5))[0].footprintSize).toEqual({ width: 5, height: 5 });
   });
 
   it('选中单位：细环 + 方向三角（朝向取 rotation）', () => {

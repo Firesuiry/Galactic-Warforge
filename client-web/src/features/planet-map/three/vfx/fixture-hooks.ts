@@ -15,7 +15,10 @@
 import * as THREE from 'three';
 
 import type { Building, CatalogView } from '@shared/types';
+import { surfaceOffset } from '@shared/surface';
 import type { BattleEvent } from '@/engine/battle-events';
+import { getBuildingFootprint, toTilePoint } from '../../model';
+import { footprintCenterTile } from '../tactical-overlays';
 import { combatVfxFromEvent, type CombatPointLike } from './combat-vfx-specs';
 import type { VfxLayer } from './index';
 import type { HoloTask } from './construction-holo';
@@ -123,19 +126,21 @@ export function applyFixturePhase(layer: VfxLayer, phase: string, seconds: numbe
     }
     case 'selection': {
       // 选中基站 (54,144) + 士兵 2 个（细环 + 方向三角）。与真机同一套输入：
-      // 基站占地 3×3，四角括号；士兵是 (55,135)/(54,138)。
+      // 基站按真实占地（占地中心 + 占地格数）画**一个**四角括号；士兵是 (55,135)/(54,138)。
       const base = ctx.buildings?.['b-39'];
       const items: SelectionItem[] = [];
       if (base) {
-        const footprint = Array.from({ length: 9 }, (_, index) => ({ x: base.position.x + (index % 3), y: base.position.y + Math.floor(index / 3) }));
-        const corners = [footprint[0], footprint[2], footprint[6], footprint[8]];
-        for (const [index, corner] of corners.entries()) {
-          items.push({
-            key: `fx-base:${index}`, tile: corner,
-            color: '#ffd166', kind: 'building', opacity: 0.95,
-            footprint: index === 0 ? footprint : undefined,
-          });
-        }
+        const footprint = getBuildingFootprint(base as unknown as Building);
+        const origin = toTilePoint(base.position);
+        const tiles = Array.from({ length: footprint.width * footprint.height }, (_, index) => {
+          const cell = surfaceOffset(origin, index % footprint.width, Math.floor(index / footprint.width), ctx.faceSize);
+          return { x: Math.round(cell.x), y: Math.round(cell.y) };
+        });
+        items.push({
+          key: 'fx-base', tile: footprintCenterTile(origin, footprint, ctx.faceSize),
+          color: '#ffd166', kind: 'building', opacity: 0.95,
+          footprint: tiles, footprintSize: footprint,
+        });
       }
       for (const index of [0, 1]) {
         items.push({
