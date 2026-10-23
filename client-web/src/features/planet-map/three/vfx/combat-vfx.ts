@@ -34,6 +34,9 @@ export const COMBAT_VFX_LIMITS = {
 /** 残骸冒烟的发射间隔（秒）：同一具残骸 0.45s 冒一次，共 4.2s。 */
 export const WRECK_SMOKE_INTERVAL = 0.45;
 
+/** 冲击波环的线性亮度增益：越过 bloom 的 threshold（2.5），环才会发光而不是一圈米色。 */
+export const SHOCKWAVE_GAIN = 2.8;
+
 /** 曳光宽度：远景（相机高度 > `TRACER_PIXEL_FLOOR_ALTITUDE`）不再加宽，按像素下限保持。 */
 export const TRACER_WIDTH_TILES = 0.2;
 export const TRACER_PIXEL_FLOOR_ALTITUDE = 20;
@@ -124,10 +127,12 @@ export class CombatVfx {
       depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
     });
     // 冲击波：**亮橙白**的 additive 细环，不写深度、不挡地面。
-    // 旧色 0xffa860 是橙（R:G:B = 1 : .66 : .38），additive 叠在绿地上会读成土黄（审查步骤 23）；
-    // 提到接近 #ffd8a8 的暖白、并把整体亮度抬过 bloom 的 luminanceThreshold(.45 线性) 才有辉光。
+    // 旧色 0xffa860 是橙（R:G:B = 1 : .66 : .38），additive 叠在绿地上会读成土黄（审查步骤 23）。
+    // 改法：色相取 #ffd8a8 的暖白，再把线性亮度抬到 1 以上（`SHOCKWAVE_GAIN`）——
+    // UnrealBloomPass 的 threshold 是 2.5，颜色不越过 1 的环根本进不了 bloom，只会是一圈米色。
+    const shock = new THREE.Color(0xffc98a).multiplyScalar(SHOCKWAVE_GAIN);
     this.shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffd8a8, transparent: true, opacity: 1, depthWrite: false,
+      color: shock, transparent: true, opacity: 1, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
     });
   }

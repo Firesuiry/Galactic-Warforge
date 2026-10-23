@@ -34,6 +34,9 @@ export class HoloMaterials {
     material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
+      // additive：合并几何的面互相叠加时是「能量叠加变亮」而不是把 alpha 累加到不透明；
+      // 普通混合在 3×3/5×5 的实体尺寸上会糊成一块实心青板（实机夹具实测）。
+      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       uniforms: {
         uProgress: { value: 0 },
@@ -109,15 +112,20 @@ const HOLO_FRAGMENT = /* glsl */ `
     float reveal = smoothstep(height, height + 0.08, uProgress);
     if (reveal <= 0.001) discard;
 
-    float fresnel = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.2);
+    float fresnel = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 3.0);
     // 扫描线：沿高度流动的细亮条（冻结时 uTime 固定 → 画面定格）。
-    float scan = smoothstep(0.86, 1.0, sin((vLocal.y * uScan) - uTime * 5.0) * 0.5 + 0.5);
+    // 扫描线：在 0.45–1.0 之间取值，暗带仍然可见（纯 smoothstep(0.86,1.0) 只剩几条细亮线，
+    // 大块合并几何上读不出「全息」）。
+    float scan = 0.45 + 0.55 * smoothstep(0.55, 1.0, sin((vLocal.y * uScan) - uTime * 5.0) * 0.5 + 0.5);
 
     vec3 color = mix(uColor, uEdge, fresnel * 0.8 + scan * 0.35);
     // 基础半透明 + 菲涅尔边 + 前沿亮线。
+    // 基础填充压到 .03：静态合批后一个建筑是一整块合并几何，双面渲染下多层壳叠加，
+    // 旧值 .07 在 3×3 实体尺寸上会糊成一块不透明青色板（只能读出「一坨青」）。
     float front = smoothstep(0.0, 0.06, uProgress - height) * (1.0 - smoothstep(0.06, 0.14, uProgress - height));
-    float alpha = (0.07 + fresnel * 0.42 + scan * 0.08 + front * 0.6) * reveal;
-    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.92));
+    // additive 下多层壳会相加：单层权重必须小（0.01–0.12 量级），否则 3×3 的合并几何叠成一片白。
+    float alpha = (0.012 + fresnel * 0.13 + scan * 0.035 + front * 0.22) * reveal;
+    gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.35));
   }
 `;
 
