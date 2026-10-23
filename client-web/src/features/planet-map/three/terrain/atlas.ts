@@ -182,21 +182,20 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, 
   const waterDistance = distanceField(width, height, boundsX, boundsY,
     (x, y) => { const cell = sample(x, y); return cell.explored && WATER_TERRAINS.has(cell.terrain); }, faceSize, 5);
   const edge = knownEdgeField(width, height, sample, boundsX, boundsY);
-  const knownCell = (x: number, y: number) => { const cell = sample(x, y); return cell.explored && cell.terrain !== 'unknown'; };
-  // 外侧只数**已探索的非该类格**：未探索格既不是水也不是陆，不能把水面距离场往探索区外推。
-  // 未知格一律算「外侧」：等值线停在探索前沿，不会把地形色推进未探索区（信息诚实）。
+  // 只有**已探索**的格参与平滑场；未知格恒为外侧，等值线停在探索前沿，
+  // 不会把地形色推进未探索区（信息诚实）。
   const waterGrid = smoothField(width, height, (x, y) => {
     const cell = sample(boundsX + x, boundsY + y);
     return cell.explored && cell.terrain !== 'unknown' && WATER_TERRAINS.has(cell.terrain);
-  }, 3);
+  });
   const rockGrid = smoothField(width, height, (x, y) => {
     const cell = sample(boundsX + x, boundsY + y);
     return cell.explored && cell.terrain !== 'unknown' && finishFlags(cell.terrain).rock >= 0.5;
-  }, 3);
+  });
   const lavaGrid = smoothField(width, height, (x, y) => {
     const cell = sample(boundsX + x, boundsY + y);
     return cell.explored && cell.terrain !== 'unknown' && cell.terrain === 'lava';
-  }, 3);
+  });
   // 编码：场值 ±0.5 → 0..255（0.5 = 0）。场本身是覆盖度，范围天然是 ±0.5。
   const encodeSdf = (value: number) => Math.max(0, Math.min(255, Math.round((value + 0.5) * 255)));
   const directionOrder: SurfaceDirection[] = ['north', 'east', 'south', 'west'];

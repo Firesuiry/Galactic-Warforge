@@ -239,7 +239,7 @@ export function PlanetMapThree(props: Props) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const factor = zoomFactorForKey(event.key, event);
-      if (factor !== null) scene.current?.zoom(factor);
+      if (factor !== null) scene.current?.zoomSmooth(factor);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -486,7 +486,7 @@ export function PlanetMapThree(props: Props) {
 
   const home = () => {
     const tile = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(props.planet, session.playerId);
-    if (tile) scene.current?.focus(tile);
+    if (tile) scene.current?.focusSmooth(tile);
   };
 
   // Shift+左键框选：capture 阶段拦截，阻止球面旋转；抬起时按屏幕投影选中矩形内己方单位。
@@ -760,6 +760,10 @@ export function PlanetMapThree(props: Props) {
       },
       // 绘制调用统计（模型素材验收用）：getter 不会被 bindSceneMethods 绑上，这里显式取一次。
       renderStats: () => target.renderStats,
+      // 画面调试探针（3A 画质迭代用，只读）：天空 / 雾 / 环境光的当前取值。
+      lightingDebug: () => target.lightingDebug(),
+      // AO 探针（审查 P1-3 验收）：读 GTAO 降噪贴图的统计，默认全屏，可传归一化区域。
+      aoStats: (region?: { x: number; y: number; width: number; height: number }) => target.aoStats(region),
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);
@@ -998,16 +1002,16 @@ export function PlanetMapThree(props: Props) {
           图层勾选与 2D 的「图层与视角」是**同一份内容**（PlanetPage 传同一组件进来），
           免得两个视图各维护一套图层开关。 */}
       <div className="planet-three__nav-rail" ref={railRef}>
-        <button className="secondary-button planet-three__nav-btn" title="全球视角" aria-label="全球视角" onClick={() => scene.current?.orbit()}>
+        <button className="secondary-button planet-three__nav-btn" title="全球视角" aria-label="全球视角" onClick={() => scene.current?.orbitSmooth()}>
           <Globe2 size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <button className="secondary-button planet-three__nav-btn" title="聚焦基地" aria-label="聚焦基地" onClick={home}>
           <House size={16} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button className="secondary-button planet-three__nav-btn" title="3D 放大" aria-label="3D 放大" onClick={() => scene.current?.zoom(1.4)}>
+        <button className="secondary-button planet-three__nav-btn" title="3D 放大" aria-label="3D 放大" onClick={() => scene.current?.zoomSmooth(1.4)}>
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button className="secondary-button planet-three__nav-btn" title="3D 缩小" aria-label="3D 缩小" onClick={() => scene.current?.zoom(1 / 1.4)}>
+        <button className="secondary-button planet-three__nav-btn" title="3D 缩小" aria-label="3D 缩小" onClick={() => scene.current?.zoomSmooth(1 / 1.4)}>
           <Minus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         {props.layerPanel !== undefined ? (

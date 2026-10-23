@@ -3,6 +3,7 @@ import type { Building } from '@shared/types';
 import type { TilePoint } from '../model';
 import { getBuildingFootprint, toTilePoint } from '../model';
 import { getItemColorValue } from '../item-colors';
+import { createPbrMaterial, industrialMaterialsReady, onIndustrialMaterialsReady } from './industrial-materials';
 import { surfaceOffset } from '@shared/surface';
 import { occupiesGround, tierColor } from '../logistics-tier';
 import { OPPOSITE_DIRECTION, ROTATION_FACING, rotationTurns, stepTile, type CardinalDirection } from '../logistics-direction';
@@ -196,7 +197,9 @@ export interface SorterRigOptions { ghost?: boolean }
 export class SorterRigs {
   readonly group = new THREE.Group();
   private readonly geometries: Record<GeometryKey, THREE.BufferGeometry>;
-  private readonly materials: Record<MaterialKey, THREE.Material>;
+  private materials: Record<MaterialKey, THREE.Material>;
+  /** 当前金属件是否已用上 PBR 贴图（构造时未就绪 → 贴图就绪后 `upgradeMaterials()` 换一次）。 */
+  private pbr = false;
   private meshes = new Map<PartName, THREE.InstancedMesh>();
   private rigs: Rig[] = [];
   private readonly motions = new Map<string, SorterMotion>();
@@ -213,16 +216,31 @@ export class SorterRigs {
     this.group.name = options.ghost ? 'sorter-rig-ghost' : 'sorter-rigs';
     const cylinder = new THREE.CylinderGeometry(.5, .5, 1, 18); cylinder.rotateX(Math.PI / 2);
     this.geometries = { box: new THREE.BoxGeometry(1, 1, 1), cylinder, prism: prismGeometry() };
-    const ghost = options.ghost;
+    this.pbr = !options.ghost && industrialMaterialsReady();
+    this.materials = this.buildMaterials();
+    // 贴图异步就绪：原地换金属材质并重建实例网格。
+    if (!this.pbr) onIndustrialMaterialsReady(() => this.upgradeMaterials());
+  }
+
+  /**
+   * 分拣臂材质。PBR 贴图是异步加载的：构造时多半还没就绪，先给纯色；
+   * 场景在贴图加载完成后调 `upgradeMaterials()` 原地换掉（并重建实例网格）。
+   * ghost 永远是半透明绿，不贴图。
+   */
+  private buildMaterials(): Record<MaterialKey, THREE.Material> {
+    const ghost = this.options.ghost;
     // ghost 三档明度（深绿杆件 / 中绿合金 / 浅绿闸座）：纯一色半透明绿在绿色地表上会糊成一团（试玩 1018）。
     const solid = (parameters: THREE.MeshStandardMaterialParameters, ghostColor: string, opacity: number) => ghost
       ? new THREE.MeshStandardMaterial({ color: ghostColor, roughness: .5, metalness: .1, transparent: true, opacity, depthWrite: false })
       : new THREE.MeshStandardMaterial(parameters);
-    this.materials = {
-      graphite: solid({ color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
-      ceramic: solid({ color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
+    // 分拣臂金属 + 关节暗色（3A 画质 §7）：PBR 贴图就绪时用拉丝钛/石墨板的真实材质。
+    const pbr = (family: 'alloy' | 'graphite', parameters: THREE.MeshStandardMaterialParameters, ghostColor: string, opacity: number) =>
+      (!ghost && createPbrMaterial(family, String(parameters.color), parameters, 1)) || solid(parameters, ghostColor, opacity);
+    return {
+      graphite: pbr('graphite', { color: '#2b363c', roughness: .5, metalness: .45 }, '#0d3a26', .78),
+      ceramic: pbr('alloy', { color: '#e3e8e1', roughness: .44, metalness: .1 }, '#b4ffd6', .6),
       // 粗糙度压到 .46：太光滑时太阳高光会冲过 bloom 阈值，屏幕某一侧的机械臂整片发白。
-      alloy: solid({ color: '#8d9da4', roughness: .46, metalness: .6 }, '#45c987', .7),
+      alloy: pbr('alloy', { color: '#8d9da4', roughness: .46, metalness: .6 }, '#45c987', .7),
       // 档位灯：不受光照，按实例色（档位色）显示，亮度压在 bloom 阈值下。
       light: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, transparent: ghost, opacity: ghost ? .8 : 1, depthWrite: !ghost }),
       // 端点小座：实例色（正常 = 合金灰；ghost = 绿/黄/红表示端点接没接上）。
@@ -231,6 +249,21 @@ export class SorterRigs {
         : new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .48, metalness: .5 }),
       payload: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .72, metalness: .05, transparent: ghost, opacity: ghost ? .6 : 1 }),
     };
+  }
+
+  /** PBR 贴图加载完成后调用：换掉金属材质并重建实例网格（布局/搬运进度不变）。返回是否换了材质。 */
+  upgradeMaterials(): boolean {
+    if (this.options.ghost || this.pbr || !industrialMaterialsReady()) return false;
+    this.pbr = true;
+    const next = this.buildMaterials();
+    const current = this.materials;
+    // 只替换金属件（graphite / ceramic / alloy）；灯条、端点座、物品块与贴图无关，继续复用。
+    for (const key of ['graphite', 'ceramic', 'alloy'] as const) {
+      current[key].dispose();
+      current[key] = next[key];
+    }
+    if (this.rigs.length) { this.rebuildMeshes(); this.writeStatic(); this.writeDynamic(); }
+    return true;
   }
 
   /**
