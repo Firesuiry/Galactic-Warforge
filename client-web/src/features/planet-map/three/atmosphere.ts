@@ -387,16 +387,17 @@ export class AtmosphereShell {
  * 向中性灰靠拢，太阳圆盘/眩光不烘（那部分由 DirectionalLight 负责，重复会过曝），
  * 再乘 `SKY_IBL_INTENSITY`。天空穹顶本身的颜色不变（画面里的天空仍是目标色）。
  */
-export const SKY_IBL_DESATURATION = 0.18;
-export const SKY_IBL_INTENSITY = 0.9;
+export const SKY_IBL_DESATURATION = 0.78;
+export const SKY_IBL_INTENSITY = 0.48;
 /**
- * 环境光的色相微调（3A 第二轮 §13 复测）：天空色 G 与 B 很接近（地平线雾霾 #b9d3e6），
- * 暗部只吃天光时 G ≈ B 且 R 被压低 → 阴影读成青绿（实测 G−avg(R,B) ≈ +12…+18）。
- * 烘 IBL 时把 R 抬 6%、G 压 8%（亮度基本不变，色相从青蓝挪到蓝紫），阴影回到
- * 「偏蓝不偏青」。只作用于 IBL，画面里的天空穹顶仍是目标色。
+ * 环境光的色相微调（3A 第二轮 §13 复测，第三轮随 IBL 烘焙点修正重调）：
+ * 天空色 G 与 B 很接近（地平线雾霾 #b9d3e6），暗部只吃天光时 G ≈ B 且 R 被压低 →
+ * 阴影读成青绿（贴地实测 G−avg(R,B) ≈ +20）。烘 IBL 时把 G 压到 0.64（R 不动，
+ * 亮度约降 4%），色相从青蓝挪到蓝紫：阴影 G−avg 回到 ≈ −0.3…−3（不再发青），
+ * 受光陶瓷面 R−B 从 −30 回到 +9（中性偏暖）。只作用于 IBL，天空穹顶仍是目标色。
  */
 export const SKY_IBL_RED = 1.0;
-export const SKY_IBL_GREEN = 1.0;
+export const SKY_IBL_GREEN = 0.64;
 
 /**
  * 天空 shader 的「高出地平线角度 → 地平线雾霾权重」解析式（与 SKY_FRAGMENT 同一口径）：

@@ -92,7 +92,7 @@ export function createFogUniforms(): FogUniforms {
     sunColor: new THREE.Color().setRGB(...FOG_SUN_LINEAR, THREE.LinearSRGBColorSpace),
     sunDirection: new THREE.Vector3(-0.36, 0.5, 0.82).normalize(),
     density: { value: FOG_TUNING.density },
-    strength: { value: 1 },
+    strength: { value: 0 },
     sunScatter: { value: FOG_TUNING.sunScatter },
   };
 }

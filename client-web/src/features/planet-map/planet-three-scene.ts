@@ -287,7 +287,7 @@ export class PlanetThreeScene {
     this.scene.fog = this.fog.sceneFog;
     // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空；
     // 倍率与 rebuildEnvironment 同一口径（第二轮 §13 白平衡）。
-    this.scene.environmentIntensity = .72;
+    this.scene.environmentIntensity = .45;
     // Default-canvas antialiasing does not reach postprocessing render targets.
     // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
     // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
@@ -358,7 +358,7 @@ export class PlanetThreeScene {
     // 天光/补光（3A §1）：冷蓝 #9cc7ff，只在暗部补一点，主要环境光来自天空 IBL。
     // 第二轮 §13：IBL 已去饱和降强度，半球光再压一档，避免天光把受光面染成冰蓝。
     // 第二轮 §13：天光色比 3A §1 的 #9cc7ff 更偏蓝（同亮度下 G 低一档），阴影不发青绿。
-    this.scene.add(new THREE.HemisphereLight(0x93a6ff, 0x333844, .22));
+    this.scene.add(new THREE.HemisphereLight(0xc9cfe0, 0x3a3a3a, .30));
     this.sunlight.position.set(-100, 140, 230);
     this.sunlight.target.position.set(0, 0, RADIUS);
     this.sunlight.castShadow = true;
@@ -371,7 +371,7 @@ export class PlanetThreeScene {
     this.sunlight.shadow.camera.far = 500;
     this.scene.add(this.sunlight, this.sunlight.target);
     // 轮廓光保留但更弱更冷（3A §8）；第二轮 §13 再弱一点，阴影不偏青绿。
-    const rim = new THREE.DirectionalLight(0x8d9ae4, .24);
+    const rim = new THREE.DirectionalLight(0xa8a4c8, .18);
     rim.position.set(100, -60, -70);
     this.scene.add(rim);
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
@@ -443,7 +443,7 @@ export class PlanetThreeScene {
     this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize, this.environmentObserver, RADIUS);
     this.scene.environment = this.environment.texture;
     // IBL 贴图已去饱和 + 降强度（atmosphere.ts 的 SKY_IBL_*），场景倍率不再额外翻倍。
-    this.scene.environmentIntensity = .72;
+    this.scene.environmentIntensity = .45;
   }
 
   /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
