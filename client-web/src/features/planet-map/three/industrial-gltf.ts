@@ -281,6 +281,23 @@ function hatMaterial(color: number): THREE.MeshStandardMaterial {
  * 发光件取 `palette.GLOW`。贴图在规整阶段已去饱和到 35%、均值拉到中灰，所以这里
  * 是「乘主色」而不是 Kenney 的「光乘系数」。
  */
+/**
+ * 材质是否「发光件」：
+ * - 有 emissive 贴图：8×8 采样均值 > `EMISSIVE_MEAN_THRESHOLD`（作者常把整张 albedo 塞进 emissive 槽，
+ *   整张全黑/全亮都不算）；
+ * - 只有 emissiveFactor（`thermal_power_plant` 的蓝色核心、`worker` 的红色指示灯）：factor 亮度 > 0.05 即算。
+ *   这类材质的 emissive 是作者对**单个零件**的意图，不会像贴图那样铺满全身，保留它是安全的；
+ *   规整管线已经把「整块 albedo 复制进 emissive」的高亮度材质（> 0.6）清零了。
+ */
+export function isGlowMaterial(source: THREE.MeshStandardMaterial, mean?: number): boolean {
+  if (source.emissiveMap) {
+    const sampled = mean ?? emissiveMean(source.emissiveMap);
+    return sampled > EMISSIVE_MEAN_THRESHOLD;
+  }
+  const { r, g, b } = source.emissive;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.05;
+}
+
 /** 发光判定缓存（源材质 → 是否发光件）。同一 GLB 的 4 个阵营模板共用，只采样一次。 */
 const glowingSourceMaterials = new WeakMap<THREE.Material, boolean>();
 
@@ -351,8 +368,7 @@ function preparePalette(scene: THREE.Object3D, faction: TintKey, spec: GltfModel
         // 发光判定按**源材质**记忆化：同一材质在 4 个阵营里各跑一次 canvas 采样的话，
         // executor 的 15 个材质会做 60 次 `getImageData`（同步阻塞首帧）。
         const glowing = glowingSourceMaterials.has(source) ? glowingSourceMaterials.get(source)! : (() => {
-          const emissiveMap = (source as THREE.MeshStandardMaterial).emissiveMap;
-          const value = Boolean(emissiveMap) && emissiveMean(emissiveMap as THREE.Texture) > EMISSIVE_MEAN_THRESHOLD;
+          const value = isGlowMaterial(source as THREE.MeshStandardMaterial);
           glowingSourceMaterials.set(source, value);
           return value;
         })();

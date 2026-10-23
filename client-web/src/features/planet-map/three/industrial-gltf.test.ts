@@ -3,7 +3,9 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { BUILDING_GLTF, UNIT_GLTF, UNIT_HEIGHT, instantiateBuilding, instantiateUnit, templateKey, unitScale } from './industrial-gltf';
+import * as THREE from 'three';
+
+import { BUILDING_GLTF, UNIT_GLTF, UNIT_HEIGHT, instantiateBuilding, instantiateUnit, isGlowMaterial, templateKey, unitScale } from './industrial-gltf';
 
 const MODELS = resolve(__dirname, '../../../../public/assets/models');
 
@@ -110,6 +112,20 @@ describe('industrial GLB mapping', () => {
       // 单位：模型归一化后最长边 = 1，场景 2 格占地 × .86 → 约 1.7 格，容差 0.05 格 ≈ 0.03 模型单位。
       expect(Math.hypot(centerX - translation[0], centerZ - translation[2]), type).toBeLessThan(0.03);
     }
+  });
+
+  it('treats factor-only emissive materials as glow parts (thermal core, worker light)', () => {
+    const standard = (emissive: [number, number, number]) => new THREE.MeshStandardMaterial({ emissive: new THREE.Color(...emissive) });
+    // 只有 emissiveFactor 的材质：作者对单个零件的意图（thermal 蓝核心 / worker 红灯）。
+    expect(isGlowMaterial(standard([0.01, 0.08, 0.92]))).toBe(true);
+    expect(isGlowMaterial(standard([0.5, 0, 0]))).toBe(true);
+    // 全黑（无自发光）不算。
+    expect(isGlowMaterial(standard([0, 0, 0]))).toBe(false);
+    // 有 emissive 贴图时只看采样均值：低亮度贴图不算发光件（dark_fog 躯体 13.7 < 20）。
+    const mapped = standard([0.5, 0.5, 0.5]);
+    mapped.emissiveMap = new THREE.Texture();
+    expect(isGlowMaterial(mapped, 13.7)).toBe(false);
+    expect(isGlowMaterial(mapped, 40)).toBe(true);
   });
 
   it('falls back to the procedural model before the GLB templates are loaded', () => {
