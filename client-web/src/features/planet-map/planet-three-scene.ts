@@ -16,6 +16,8 @@ import { AtmosphericFog } from './three/atmospheric-fog';
 import { CameraMotion, type MotionOutput } from './three/camera-motion';
 import { GradePass } from './three/post/grade-pass';
 import { SunFlare } from './three/post/sun-flare';
+import { aoDepthBoundToReadBuffer, bindAoDepth } from './three/post/ao-depth';
+import { AoProbe, type AoStats } from './three/post/ao-probe';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality, type PlanetRenderSettings } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
 import { groundViewAtAltitude } from './planet-three-status';
@@ -138,6 +140,8 @@ export class PlanetThreeScene {
   private readonly bloom: UnrealBloomPass;
   /** GTAO（环境光遮蔽）：low 档禁用，balanced 半分辨率，high 全分辨率。 */
   private readonly gtao: GTAOPass;
+  /** AO 验收探针（只读，见 aoStats）。 */
+  private readonly aoProbe = new AoProbe();
   /** 调色（显示空间）：lift/gamma/gain、饱和、对比、分离色调、暗角、颗粒。 */
   private readonly grade: GradePass;
   /** SMAA：samples == 0（low 档）时给后处理链补抗锯齿。 */
@@ -146,6 +150,8 @@ export class PlanetThreeScene {
   private readonly flare: SunFlare;
   /** 天空 IBL：只在换星球 / 换档位时重建（不逐帧）。 */
   private environment: THREE.WebGLRenderTarget | null = null;
+  /** IBL 的烘焙观察点（地表上方，见 rebuildEnvironment）。 */
+  private readonly environmentObserver = new THREE.Vector3(0, 0, RADIUS + 3.5);
   /** 当前档位的完整设置（render-quality.ts），构造与 updateQuality 共用。 */
   private settings: PlanetRenderSettings;
   /** 空气透视雾（自定义 fog chunk）：颜色取视线方向的地平线色 + 朝向太阳的内散射。 */
@@ -281,7 +287,7 @@ export class PlanetThreeScene {
     this.scene.fog = this.fog.sceneFog;
     // 天空 IBL 在天空穹顶建好之后生成（见下面 createSpace 之后），这里先留空；
     // 倍率与 rebuildEnvironment 同一口径（第二轮 §13 白平衡）。
-    this.scene.environmentIntensity = .62;
+    this.scene.environmentIntensity = .72;
     // Default-canvas antialiasing does not reach postprocessing render targets.
     // GTAO 需要 RenderPass 的深度纹理；带 MSAA 的目标在 r186 里深度不会解析回纹理，
     // 所以 composer 目标不开 MSAA（samples 恒 0），抗锯齿由后处理链末尾的 SMAA 负责。
@@ -308,6 +314,10 @@ export class PlanetThreeScene {
     // 法线从深度重建（NORMAL_VECTOR_TYPE=0，同 three 自带 SSAOPass 的做法）：GTAO 不再需要
     // 自己那趟「法线 + 深度」预渲染，直接吃 RenderPass 的深度纹理。平直地表上重建法线足够，
     // 且与深度缓冲严格一致、不会漏 AO 缝。GTAOPass 没有公开参数，直接改它内部材质。
+    //
+    // 深度纹理**每帧**按 composer.readBuffer 重绑（见 animate）：composer 有两块 RT
+    // （RT2 是 RT1 的 clone，深度纹理也是克隆），RenderPass 写的是当时的 readBuffer；
+    // 构造时绑死 RT1 的深度会让 AO 永远读一块全 0 的纹理（审查 P1-3）。
     this.gtao.setGBuffer(depthTexture, undefined);
     const gtaoInternals = this.gtao as unknown as {
       gtaoMaterial: { defines: Record<string, number>; needsUpdate: boolean };
@@ -321,7 +331,9 @@ export class PlanetThreeScene {
     gtao.blendIntensity = .85;
     this.gtao.enabled = quality.ao !== 'off';
     this.composer.addPass(this.gtao);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .6, 1.2);
+    // Bloom（3A 第二轮 §16）：只有发光件（HDR > 1.2）泛光；radius 从 .6 收到 .42（≈ −30%），
+    // 近景基站的发光条不再糊成一团。
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .42, 1.2);
     this.bloom.enabled = quality.bloom;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -345,7 +357,8 @@ export class PlanetThreeScene {
     this.world.add(this.surface);
     // 天光/补光（3A §1）：冷蓝 #9cc7ff，只在暗部补一点，主要环境光来自天空 IBL。
     // 第二轮 §13：IBL 已去饱和降强度，半球光再压一档，避免天光把受光面染成冰蓝。
-    this.scene.add(new THREE.HemisphereLight(0x9cc7ff, 0x2c3a44, .22));
+    // 第二轮 §13：天光色比 3A §1 的 #9cc7ff 更偏蓝（同亮度下 G 低一档），阴影不发青绿。
+    this.scene.add(new THREE.HemisphereLight(0x93a6ff, 0x333844, .22));
     this.sunlight.position.set(-100, 140, 230);
     this.sunlight.target.position.set(0, 0, RADIUS);
     this.sunlight.castShadow = true;
@@ -358,7 +371,7 @@ export class PlanetThreeScene {
     this.sunlight.shadow.camera.far = 500;
     this.scene.add(this.sunlight, this.sunlight.target);
     // 轮廓光保留但更弱更冷（3A §8）；第二轮 §13 再弱一点，阴影不偏青绿。
-    const rim = new THREE.DirectionalLight(0x7fa8d4, .24);
+    const rim = new THREE.DirectionalLight(0x8d9ae4, .24);
     rim.position.set(100, -60, -70);
     this.scene.add(rim);
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
@@ -375,6 +388,8 @@ export class PlanetThreeScene {
     this.rebuildEnvironment();
     this.flare = new SunFlare(this.camera, sunDirection);
     this.flare.setEnabled(quality.flare);
+    // 光晕 sprite 挂在相机下：相机必须进场景，子节点才会被渲染（审查 P1-4 第 2 条）。
+    this.scene.add(this.camera);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       // 松手惯性（3A §9）：拖动结束后按最后一段的角速度继续转 ~300ms。
@@ -422,10 +437,13 @@ export class PlanetThreeScene {
   private rebuildEnvironment() {
     this.environment?.dispose();
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
-    this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize);
+    // 烘焙位置：相机当前所在的地表点（相机在 `updateCamera` 里总是沿 +Z 方向、距球心
+    // RADIUS + altitude）。IBL 是低频环境光，用当前高度即可；不能放在球心（审查 P1-5）。
+    this.environmentObserver.set(0, 0, RADIUS + Math.max(this.altitude, 3.5));
+    this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize, this.environmentObserver, RADIUS);
     this.scene.environment = this.environment.texture;
     // IBL 贴图已去饱和 + 降强度（atmosphere.ts 的 SKY_IBL_*），场景倍率不再额外翻倍。
-    this.scene.environmentIntensity = .62;
+    this.scene.environmentIntensity = .72;
   }
 
   /** 绘制调用/三角面统计（视觉验收用：模型换素材前后对比，不参与游戏逻辑）。
@@ -495,13 +513,30 @@ export class PlanetThreeScene {
       passes: {
         gtao: this.gtao.enabled,
         aoBlend: (this.gtao as unknown as { blendIntensity: number }).blendIntensity,
+        // AO 深度是否指向本帧 readBuffer（审查 P1-3 的常驻断言）。
+        aoDepthOnReadBuffer: aoDepthBoundToReadBuffer((this.gtao as unknown as { depthTexture?: unknown }).depthTexture, this.composer),
         bloom: this.bloom.enabled,
         grade: this.grade.enabled,
         smaa: this.smaa.enabled,
         flare: this.flare.enabled,
       },
       shellVisible: this.atmosphereShell.mesh.visible,
+      shellSunLocal: this.atmosphereShell.sunDirectionLocal.toArray().map(v => Number(v.toFixed(3))),
+      shellSunScene: this.atmosphereShell.sunDirectionLocal.clone().applyQuaternion(this.world.quaternion).toArray().map(v => Number(v.toFixed(3))),
+      worldQuaternion: this.world.quaternion.toArray().map(v => Number(v.toFixed(3))),
+      sunScene: this.sunlight.position.clone().sub(this.sunlight.target.position).normalize().toArray().map(v => Number(v.toFixed(3))),
     };
+  }
+
+  /**
+   * AO 探针（审查 P1-3 验收）：读 GTAO 降噪后的 AO 贴图统计。
+   * `region` 是归一化屏幕区域（0–1，左下原点），默认全屏；AO 关闭时返回 null。
+   * 只读：渲染目标用完恢复，不改变场景状态。
+   */
+  aoStats(region?: Partial<AoStats['region']>): AoStats | null {
+    if (!this.gtao.enabled) return null;
+    const texture = (this.gtao as unknown as { gtaoMap?: THREE.Texture }).gtaoMap ?? null;
+    return this.aoProbe.measure(this.renderer, texture, region);
   }
 
   setQuality(quality: PlanetRenderQuality) {
@@ -2024,6 +2059,9 @@ export class PlanetThreeScene {
       this.updateSunFlare();
       // 拖拽旋转后大气壳的太阳方向要跟着换算（每帧几个向量运算，壳可见时才做）。
       if (this.atmosphereShell.mesh.visible) this.syncAtmosphereSun();
+      // GTAO 的深度必须指向本帧 RenderPass 写入的那块 RT（两块 RT 的深度纹理是克隆，
+      // 绑死其中一块会在 swap 后读到全 0 → AO 全灭，审查 P1-3）。
+      if (this.gtao.enabled) bindAoDepth(this.gtao, this.composer);
       this.renderer.info.reset();
       this.composer.render();
     }
@@ -2066,7 +2104,7 @@ export class PlanetThreeScene {
     geometries.forEach((g) => g.dispose()); materials.forEach((m) => m.dispose());
     this.activity.destroy(); this.industrial.dispose(); disposePlanetSurface(this.surface);
     this.sky.dispose(); this.atmosphereShell.dispose(); this.flare.dispose();
-    this.gtao.dispose(); this.grade.dispose(); this.smaa.dispose();
+    this.gtao.dispose(); this.aoProbe.dispose(); this.grade.dispose(); this.smaa.dispose();
     this.environment?.dispose(); this.bloom.dispose(); this.composer.dispose(); this.renderer.dispose(); this.renderer.forceContextLoss(); canvas.remove();
   }
 }

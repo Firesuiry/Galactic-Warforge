@@ -43,6 +43,8 @@ export class SunFlare {
   private readonly center = new THREE.Vector2();
   private readonly sunScreen = new THREE.Vector3();
   private readonly worldSun = new THREE.Vector3();
+  /** 相机朝向（每帧复用，避免逐帧分配，审查 P3-4）。 */
+  private readonly cameraForward = new THREE.Vector3();
   private readonly ray = new THREE.Ray();
   private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 100);
   enabled = true;
@@ -88,15 +90,19 @@ export class SunFlare {
     }
     this.group.visible = false;
     this.group.renderOrder = 2000;
+    // 挂进相机：相机必须在场景里，子节点才会被渲染（审查 P1-4 第 2 条）。
     camera.add(this.group);
   }
 
   /** 每帧（或镜头变化后）调用：把太阳投到屏幕上，设置 ghost 位置与可见性。 */
   update(planetCenter: THREE.Vector3, radius: number) {
     if (!this.enabled) { this.group.visible = false; return; }
-    // 太阳方向在相机空间里固定（灯挂 scene、太阳相对相机固定）。
-    this.worldSun.copy(this.sunDirection).transformDirection(this.camera.matrixWorld);
-    const facing = this.worldSun.dot(this.camera.getWorldDirection(new THREE.Vector3()));
+    // `sunDirection` 已经是**世界空间**方向（与主光一致）：不要再做一次
+    // `transformDirection(camera.matrixWorld)`（那会把它转进相机空间，太阳恒被判为在背后，
+    // 审查 P1-4 第 1 条）。
+    this.worldSun.copy(this.sunDirection).normalize();
+    this.camera.getWorldDirection(this.cameraForward);
+    const facing = this.worldSun.dot(this.cameraForward);
     this.sunScreen.copy(this.camera.position).addScaledVector(this.worldSun, 1500);
     this.sunScreen.project(this.camera);
     const onScreen = facing > 0 && Math.abs(this.sunScreen.x) < 1.25 && Math.abs(this.sunScreen.y) < 1.25;
@@ -124,7 +130,8 @@ export class SunFlare {
       // ghost 沿「太阳 → 画面中心」连线排布（t=0 就是太阳本体）。
       const x = sx * (1 - ghost.t);
       const y = sy * (1 - ghost.t);
-      ghost.sprite.position.set(x, y, -near * 0.9);
+      // 必须放在近平面之外（-near*0.9 会被裁掉，审查 P1-4 第 3 条）。
+      ghost.sprite.position.set(x, y, -near * 3.9);
       const material = ghost.sprite.material as THREE.SpriteMaterial;
       material.opacity = ghost.base * edgeFade;
     }

@@ -770,6 +770,8 @@ export function PlanetMapThree(props: Props) {
       renderStats: () => target.renderStats,
       // 画面调试探针（3A 画质迭代用，只读）：天空 / 雾 / 环境光的当前取值。
       lightingDebug: () => target.lightingDebug(),
+      // AO 探针（审查 P1-3 验收）：读 GTAO 降噪贴图的统计，默认全屏，可传归一化区域。
+      aoStats: (region?: { x: number; y: number; width: number; height: number }) => target.aoStats(region),
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);
