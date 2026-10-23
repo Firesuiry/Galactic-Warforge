@@ -55,3 +55,6 @@ export const TerrainRocks: Story = storyWith({ focus: { x: 66, y: 127 }, tilt: 1
 
 /** 草地：苔草 / 火山土 / 碎石混合的贴地特写与草丛密度。 */
 export const TerrainMeadow: Story = storyWith({ focus: { x: 44, y: 128 }, tilt: 1.05, zoom: 2.0 });
+
+/** 矿点：铁/铜/煤/石矿的露头造型（扫描岩石网格 + 金属闪点）。 */
+export const TerrainOre: Story = storyWith({ focus: { x: 55, y: 139 }, tilt: 1.0, zoom: 1.6 });

@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { getItemColorValue } from '../item-colors';
+import { preloadRockMeshes, type RockMeshAsset } from './terrain/rock-meshes';
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -42,12 +43,13 @@ export interface OreProfile {
  * 正则兜底顺序从具体到宽泛，未知稀有矿走 `rare`。
  */
 const PROFILES: Record<string, OreProfile> = {
-  iron_ore: { kind: 'rock', base: '#5e3a2c', accent: '#b9744a', roughness: 0.78, metalness: 0.35 },
-  copper_ore: { kind: 'rock', base: '#4a6354', accent: '#b46a32', roughness: 0.72, metalness: 0.42 },
-  coal: { kind: 'rock', base: '#141519', accent: '#2e333b', roughness: 0.34, metalness: 0.22 },
-  stone_ore: { kind: 'rock', base: '#8b8f83', accent: '#b6b8a8', roughness: 0.95, metalness: 0.04 },
+  // 岩石类底色在扫描岩石的 albedo 上再乘一次：比纯色亮一档，避免在新光照下读成黑块。
+  iron_ore: { kind: 'rock', base: '#7d5540', accent: '#c9a273', roughness: 0.82, metalness: 0.25 },
+  copper_ore: { kind: 'rock', base: '#566f5f', accent: '#b98a55', roughness: 0.78, metalness: 0.30 },
+  coal: { kind: 'rock', base: '#24272c', accent: '#4a5058', roughness: 0.55, metalness: 0.18 },
+  stone_ore: { kind: 'rock', base: '#8f948a', accent: '#b6b8ab', roughness: 0.95, metalness: 0.04 },
   silicon_ore: { kind: 'crystal', base: '#41636d', accent: '#9fd8e0', roughness: 0.18, metalness: 0.12, translucent: true, glow: 0.35 },
-  titanium_ore: { kind: 'crystal', base: '#4d5666', accent: '#b9c6d8', roughness: 0.24, metalness: 0.62 },
+  titanium_ore: { kind: 'rock', base: '#6a7486', accent: '#c3d2e4', roughness: 0.42, metalness: 0.55 },
   crude_oil: { kind: 'liquid', base: '#140b1c', accent: '#3a2a55', roughness: 0.07, metalness: 0.45, iridescent: true },
   water: { kind: 'liquid', base: '#2c6f86', accent: '#7fd0e0', roughness: 0.1, metalness: 0.05 },
   sulfuric_acid: { kind: 'liquid', base: '#7d8f22', accent: '#c9e04a', roughness: 0.12, metalness: 0.08, glow: 0.5 },
@@ -110,7 +112,63 @@ function baked(geometry: THREE.BufferGeometry, position: [number, number, number
   return geometry;
 }
 
-/** 不规则岩块群：7 块压扁的二十面体，按 variant 确定性摆位。 */
+/** 扫描岩石（Poly Haven CC0，见 terrain/rock-meshes.ts）就绪后供矿点复用：
+ *  同 kind 的矿座由 2–3 块真实岩石网格拼成，不再用多面体堆。异步加载，未就绪时回退。 */
+let scannedRocks: RockMeshAsset[] = [];
+let scannedPromise: Promise<RockMeshAsset[]> | null = null;
+
+/** 场景构造时调用一次：岩石就绪后重建矿点（签名不变也要重建）。 */
+export function preloadOreRocks(onReady?: () => void) {
+  if (!scannedPromise) {
+    scannedPromise = preloadRockMeshes().then((assets) => {
+      scannedRocks = assets;
+      if (assets.length) onReady?.();
+      return assets;
+    }).catch(() => []);
+  }
+  return scannedPromise;
+}
+
+/** 用扫描岩石网格拼一组岩块（归一化到高 1、底面 y=0，再按 variant 摆位/缩放）。 */
+function scannedRockGeometry(variant: number, count: number) {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let index = 0; index < count; index++) {
+    const asset = scannedRocks[(variant + index) % scannedRocks.length];
+    // 扫描网格自带平滑法线（真实岩石的起伏）；保留 uv 以便同组合并，材质不贴图。
+    const source = asset.geometry.index ? asset.geometry.toNonIndexed() : asset.geometry.clone();
+    // 扫描网格归一化到「高 1、宽约 1–2.8」：主块取 0.30 高、副块 0.13–0.20 高，贴地摆放。
+    const size = index === 0 ? 0.34 : 0.16 + hash(variant, index, 11) * 0.08;
+    const angle = index * 2.399963 + hash(variant, index, 3) * 0.6;
+    const spread = index === 0 ? 0 : 0.17 + hash(variant, index, 7) * 0.10;
+    parts.push(baked(
+      source,
+      [Math.cos(angle) * spread, 0, Math.sin(angle) * spread],
+      // 横向收窄、竖向拉高：扫描岩石原始比例很扁（宽 2.3 : 高 1），照搬会读成一块石板。
+      [size * (0.55 + hash(variant, index, 17) * 0.20), size * (1.45 + hash(variant, index, 13) * 0.45), size * (0.55 + hash(variant, index, 23) * 0.20)],
+      [0, hash(variant, index, 19) * Math.PI * 2, 0],
+    ));
+  }
+  return merge(parts);
+}
+
+/** 金属闪点：主岩块表面撒一层微小八面体（同几何合并，仍是一次绘制）。 */
+function sparkleGeometry(variant: number, count: number) {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let index = 0; index < count; index++) {
+    const angle = hash(variant, index, 61) * Math.PI * 2;
+    const radius = 0.06 + hash(variant, index, 67) * 0.22;
+    const size = 0.012 + hash(variant, index, 71) * 0.016;
+    parts.push(baked(
+      new THREE.OctahedronGeometry(1, 0),
+      [Math.cos(angle) * radius, 0.10 + hash(variant, index, 73) * 0.22, Math.sin(angle) * radius],
+      [size, size, size],
+      [hash(variant, index, 79) * 3, angle, hash(variant, index, 83) * 3],
+    ));
+  }
+  return merge(parts);
+}
+
+/** 不规则岩块群：7 块压扁的二十面体，按 variant 确定性摆位（扫描岩石未就绪时的回退）。 */
 function rockGeometry(variant: number) {
   const parts: THREE.BufferGeometry[] = [];
   for (let index = 0; index < 7; index++) {
@@ -218,7 +276,8 @@ function materialFor(profile: OreProfile, accent: boolean) {
     color: color(hex),
     roughness: accent && profile.kind === 'crystal' ? Math.min(profile.roughness, 0.2) : profile.roughness,
     metalness: accent && profile.kind === 'crystal' ? Math.max(profile.metalness, 0.3) : profile.metalness,
-    flatShading: profile.kind === 'rock' || profile.kind === 'bush',
+    // 岩石用扫描网格的平滑法线（真实起伏），不再 flatShading——否则网格细节被切成多边形块面。
+    flatShading: profile.kind === 'bush',
     transparent: Boolean(profile.translucent),
     opacity: profile.translucent ? 0.82 : 1,
     emissive: profile.glow ? color(hex) : new THREE.Color(0x000000),
@@ -250,8 +309,55 @@ function materialFor(profile: OreProfile, accent: boolean) {
     };
     material.customProgramCacheKey = () => `ore-liquid-${profile.iridescent ? 'oil' : 'acid'}-v1`;
   }
+  if (accent && profile.kind === 'rock' && profile.metalness >= 0.2) {
+    // 金属闪点：小块八面体，给一点自发光当作「金属反光」，暗面也能读到。
+    material.emissive = color(hex);
+    material.emissiveIntensity = 0.22;
+  }
+  if (!accent && profile.kind === 'rock' && scannedRocks.length) {
+    // 岩石类矿座用扫描岩石的 albedo 做细节（逐像素石纹），阵营色由 material.color 乘上去；
+    // 几何合并后 UV 来自不同网格，纹理只当噪声用，不需要对齐。
+    // 合并后的 UV 是各网格的原 UV（0..1 一块石头），直接当纹理坐标会把整块石头缩进一个纹素区。
+    // 岩石色本身由 material.color 决定，这里只取纹理的低频细节：放大 8 倍重复，避免糊成一块色。
+    const detail = scannedRocks[0].material.map;
+    if (detail) {
+      const tiled = detail.clone();
+      tiled.wrapS = tiled.wrapT = THREE.RepeatWrapping;
+      tiled.repeat.set(6, 6);
+      tiled.needsUpdate = true;
+      // map 会乘 material.color：纹理均值 0.31（sRGB→线性后更低），直接乘会把矿点压成黑色。
+      // 用「纹理 / 均值」的中性细节图（均值 1），矿点保持 profile 的颜色。
+      material.map = neutralizedDetail(tiled);
+      material.roughness = Math.max(0.7, profile.roughness);
+    }
+  }
   material.name = `ore-${accent ? 'accent' : 'base'}`;
   return material;
+}
+
+/** 纹理中性化：逐通道除以全图均值，得到均值 ≈ 1 的细节图（不改变材质底色）。 */
+function neutralizedDetail(source: THREE.Texture) {
+  const image = source.image as HTMLImageElement;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 256;
+  const context = canvas.getContext('2d', { willReadFrequently: true })!;
+  context.drawImage(image, 0, 0, 256, 256);
+  const data = context.getImageData(0, 0, 256, 256);
+  const sums = [0, 0, 0];
+  for (let i = 0; i < data.data.length; i += 4) { sums[0] += data.data[i]; sums[1] += data.data[i + 1]; sums[2] += data.data[i + 2]; }
+  const count = data.data.length / 4;
+  const means = sums.map(sum => Math.max(1, sum / count));
+  for (let i = 0; i < data.data.length; i += 4) {
+    // 均值归一到 sRGB 0.9（≈ 线性 0.79）：中性细节图不应把矿点的底色压暗。
+    for (let channel = 0; channel < 3; channel++) data.data[i + channel] = Math.min(255, Math.round(data.data[i + channel] * 230 / means[channel]));
+  }
+  context.putImageData(data, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.copy(source.repeat);
+  texture.needsUpdate = true;
+  return texture;
 }
 
 /** 取（并缓存）某 kind 的共享几何与材质；`variant` 决定岩块摆位。 */
@@ -280,8 +386,17 @@ export function oreAssets(kind: string, variant = 0): OreAssets {
       accentGeometry = bushGeometry(variant);
       break;
     default:
-      baseGeometry = rockGeometry(variant);
-      accentGeometry = rockGeometry(variant + 2);
+      // 岩石类（铁/铜/煤/石/钛）：扫描岩石网格做矿座，金属类再撒一层闪点。
+      if (scannedRocks.length) {
+        baseGeometry = scannedRockGeometry(variant, 3);
+        // 金属矿（铁/铜/钛）：矿座 + 表面闪点；非金属（石/煤）：矿座 + 一小块伴生岩。
+        accentGeometry = profile.metalness >= 0.2
+          ? sparkleGeometry(variant, 30)
+          : scannedRockGeometry(variant + 2, 1);
+      } else {
+        baseGeometry = rockGeometry(variant);
+        accentGeometry = rockGeometry(variant + 2);
+      }
       break;
   }
   const assets = { base: materialFor(profile, false), accent: materialFor(profile, true), baseGeometry, accentGeometry };

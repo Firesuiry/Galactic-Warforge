@@ -24,7 +24,7 @@ import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './
 import { groundViewAtAltitude } from './planet-three-status';
 import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } from './three/ghost-arrow';
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
-import { createOreDeposit, disposeOreDeposits, setOreDepositTime } from './three/ore-deposits';
+import { createOreDeposit, disposeOreDeposits, preloadOreRocks, setOreDepositTime } from './three/ore-deposits';
 import { createSurfaceDressing, disposeSurfaceDressing, dressingVisibleAt, preloadDressingRocks } from './three/surface-dressing';
 import type { RockMeshAsset } from './three/terrain/rock-meshes';
 import { createLocalSurface } from './three/local-surface';
@@ -447,6 +447,18 @@ export class PlanetThreeScene {
       this.rebuildDressing();
       return true;
     }).catch(() => false);
+    // 矿点也用同一批扫描岩石：就绪后清掉矿点模型缓存重建（否则 retain 认为外观没变）。
+    void preloadOreRocks(() => {
+      if (this.destroyed) return;
+      for (const [key, entry] of this.staticEntities) {
+        if (!key.startsWith('resource:')) continue;
+        this.removeModel(entry.group);
+        this.staticEntities.delete(key);
+      }
+      // 几何/材质缓存也是按扫描岩石之前的版本建的：一并丢掉再重建。
+      disposeOreDeposits();
+      this.buildEntities();
+    });
     // 测试钩子：夹具截图脚本等「装饰素材已就绪」再判定画面稳定，否则会拍到程序化碎石那一帧。
     (window as unknown as { __dressingAssetsReady?: Promise<boolean> }).__dressingAssetsReady = dressingAssets;
   }

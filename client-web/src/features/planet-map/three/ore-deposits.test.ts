@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import { createOreDeposit, disposeOreDeposits, oreAssets, oreProfile, setOreDepositTime } from './ore-deposits';
 
+// 扫描岩石在 jsdom 里没法真加载（fetch + Image）：用一个可辨识的替身网格，
+// 验证「岩石类矿座改用扫描网格 + 金属类伴生件是闪点」这条契约。
+vi.mock('./terrain/rock-meshes', () => {
+  const geometry = new THREE.IcosahedronGeometry(1, 3);   // 320 面/块，远高于程序化岩块的 20 面
+  geometry.translate(0, 0.5, 0);
+  return {
+    ROCK_MESH_NAMES: ['test_a'],
+    preloadRockMeshes: () => Promise.resolve([
+      { name: 'test_a', geometry, material: new THREE.MeshStandardMaterial(), faces: 1280 },
+    ]),
+  };
+});
+
 function meshes(group: THREE.Object3D) {
   const result: THREE.Mesh[] = [];
   group.traverse((object) => { if (object instanceof THREE.Mesh) result.push(object); });
@@ -67,6 +80,26 @@ describe('ore deposits', () => {
     expect(shader.uniforms.swOreTime.value).toBe(3.5);
     setOreDepositTime(0);
     expect(shader.uniforms.swOreTime.value).toBe(0);
+  });
+
+  it('uses scanned Poly Haven rocks for stone/iron/copper/coal/titanium once loaded', async () => {
+    // 扫描岩石异步加载：就绪后岩石类矿座改用真实网格（三角数远高于 7 块二十面体的 140 面），
+    // 金属类（铁/铜/钛）的伴生件是闪点而不是第二块岩。
+    const { preloadOreRocks, oreAssets: assets } = await import('./ore-deposits');
+    await preloadOreRocks();
+    const faces = (kind: string) => {
+      const entry = assets(kind, 0) as unknown as { baseGeometry: THREE.BufferGeometry; accentGeometry: THREE.BufferGeometry };
+      return (entry.baseGeometry.index?.count ?? entry.baseGeometry.attributes.position.count) / 3;
+    };
+    expect(faces('stone_ore')).toBeGreaterThan(500);
+    expect(faces('coal')).toBeGreaterThan(500);
+    // 铁：矿座是扫描岩石，闪点是细碎八面体（三角数远小于矿座）。
+    const iron = assets('iron_ore', 0) as unknown as { baseGeometry: THREE.BufferGeometry; accentGeometry: THREE.BufferGeometry };
+    const ironAccent = (iron.accentGeometry.index?.count ?? iron.accentGeometry.attributes.position.count) / 3;
+    expect(ironAccent).toBeLessThan(400);
+    expect(faces('iron_ore')).toBeGreaterThan(500);
+    // 钛矿按造型归到岩石类（不再用晶簇）。
+    expect(oreProfile('titanium_ore').kind).toBe('rock');
   });
 
   it('reuses one asset cache entry per kind/variant and disposes it', () => {
