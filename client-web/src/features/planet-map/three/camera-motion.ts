@@ -33,7 +33,13 @@ export interface MotionOutput {
   altitude?: number;
   tilt?: number;
   groundView?: boolean;
+  /** **绝对**姿态（视角切换补间用）：场景直接 `world.quaternion.copy(...)`。 */
   quaternion?: THREE.Quaternion;
+  /**
+   * **增量**姿态（拖拽惯性用）：场景必须 `world.quaternion.premultiply(...)`，
+   * 不能当绝对姿态覆盖——否则松手后第一帧就把星球朝向重置成「上一帧的微小转角」。
+   */
+  quaternionDelta?: THREE.Quaternion;
 }
 
 interface Tween {
@@ -51,7 +57,12 @@ export class CameraMotion {
   private inertia: { vx: number; vy: number; start: number } | null = null;
   /** 视角切换期间固定的 groundView（不按高度阈值逐帧重算，避免中途跳变）。 */
   private groundView: boolean | null = null;
-  private readonly scratch = new THREE.Quaternion();
+  /** 输出容器（绝对姿态）。 */
+  private readonly scratchOut = new THREE.Quaternion();
+  /** 增量容器（惯性）：与输出容器分开，否则会拿增量自乘（审查 P0-2）。 */
+  private readonly scratchDelta = new THREE.Quaternion();
+  /** 增量输出容器（与增量计算容器分开，两个 scratch 不互相覆盖）。 */
+  private readonly scratchDeltaOut = new THREE.Quaternion();
   private readonly scratchEuler = new THREE.Euler();
 
   /** 是否有未完成的运动。 */
@@ -133,7 +144,7 @@ export class CameraMotion {
     }
     if (this.rotation) {
       const raw = Math.min(1, Math.max(0, (now - this.rotation.start) / this.rotation.duration));
-      out.quaternion = (out.quaternion ?? this.scratch.identity()).copy(this.rotation.from).slerp(this.rotation.to, EASING.inOutCubic(raw));
+      out.quaternion = (out.quaternion ?? this.scratchOut.identity()).copy(this.rotation.from).slerp(this.rotation.to, EASING.inOutCubic(raw));
       changed = true;
       if (raw >= 1) this.rotation = null;
     }
@@ -152,7 +163,8 @@ export class CameraMotion {
         const decay = (t: number) => Math.exp(-Math.min(t, span) / MOTION.inertiaTau);
         const scale = MOTION.inertiaTau * (decay(elapsed) - decay(elapsed + dt));
         this.scratchEuler.set(this.inertia.vy * scale, this.inertia.vx * scale, 0);
-        out.quaternion = (out.quaternion ?? this.scratch.identity()).premultiply(this.scratch.setFromEuler(this.scratchEuler));
+        this.scratchDelta.setFromEuler(this.scratchEuler);
+        out.quaternionDelta = (out.quaternionDelta ?? this.scratchDeltaOut.identity()).copy(this.scratchDelta);
         changed = true;
       }
     }

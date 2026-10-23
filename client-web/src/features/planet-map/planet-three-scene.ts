@@ -1754,12 +1754,16 @@ export class PlanetThreeScene {
    */
   private applyMotion(now: number, dt: number) {
     const out = this.motionOut;
-    out.altitude = undefined; out.tilt = undefined; out.groundView = undefined; out.quaternion = undefined;
+    out.altitude = undefined; out.tilt = undefined; out.groundView = undefined;
+    out.quaternion = undefined; out.quaternionDelta = undefined;
     if (!this.motion.sample(now, dt, out)) return;
     if (out.altitude !== undefined) this.altitude = out.altitude;
     if (out.tilt !== undefined) this.tilt = out.tilt;
     if (out.groundView !== undefined) this.groundView = out.groundView;
+    // 视角切换给的是绝对姿态；拖拽惯性给的是**增量**（审查 P0-1：以前两者都 copy，
+    // 松手后第一帧就把星球朝向重置成「上一帧的微小转角」）。
     if (out.quaternion !== undefined) this.world.quaternion.copy(out.quaternion);
+    if (out.quaternionDelta !== undefined) this.world.quaternion.premultiply(out.quaternionDelta);
     this.updateCamera();
   }
   /**

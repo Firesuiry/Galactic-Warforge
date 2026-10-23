@@ -66,12 +66,69 @@ describe('镜头手感（3A §9）', () => {
     for (let now = 0; now <= 400; now += 16) {
       const out: MotionOutput = {};
       motion.sample(now, 0.016, out);
-      if (out.quaternion) total += identity.angleTo(out.quaternion);
+      // 惯性是增量（审查 P0-1）：绝不能写绝对姿态 quaternion。
+      expect(out.quaternion).toBeUndefined();
+      if (out.quaternionDelta) total += identity.angleTo(out.quaternionDelta);
     }
     expect(total).toBeGreaterThan(0);
     // 角速度 2 rad/s、τ=0.1s：积分上界约 0.3 rad，留余量。
     expect(total).toBeLessThan(0.5);
     expect(motion.active).toBe(false);
+  });
+
+  it('惯性每帧转角等于解析值 v·τ·(e^{-t/τ}−e^{-(t+dt)/τ})（审查 P0-2：不得被自乘）', () => {
+    const motion = new CameraMotion();
+    const vx = 2;
+    motion.startInertia(vx, 0, 0);
+    const identity = new THREE.Quaternion();
+    const decay = (t: number) => Math.exp(-t / MOTION.inertiaTau);
+    for (let i = 0; i < 5; i++) {
+      const now = i * 16;
+      const out: MotionOutput = {};
+      motion.sample(now, 0.016, out);
+      const expected = vx * MOTION.inertiaTau * (decay(now / 1000) - decay((now + 16) / 1000));
+      expect(identity.angleTo(out.quaternionDelta!)).toBeCloseTo(expected, 5);
+    }
+  });
+
+  it('拖拽松手后第一帧只转动增量，不重置已有姿态（审查 P0-1）', () => {
+    const motion = new CameraMotion();
+    const world = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 1.2);
+    const before = world.clone();
+    motion.startInertia(2, 1, 0);
+    const out: MotionOutput = {};
+    motion.sample(0, 0.016, out);
+    // 场景的写法：绝对姿态 copy，增量 premultiply（planet-three-scene.applyMotion）。
+    if (out.quaternion) world.copy(out.quaternion);
+    if (out.quaternionDelta) world.premultiply(out.quaternionDelta);
+    // 与松手前连续：角差远小于 0.01 rad（期望 ≈ 0.026 rad）。
+    expect(before.angleTo(world)).toBeLessThan(0.05);
+    expect(before.angleTo(world)).toBeGreaterThan(0);
+  });
+
+  it('多帧惯性每帧转角等于解析增量，姿态单调累积（审查 P0-1/P0-2 的逐帧断言）', () => {
+    const motion = new CameraMotion();
+    const world = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.4, 1.2, -0.3));
+    motion.startInertia(1.5, 0.7, 0);
+    const decay = (t: number) => Math.exp(-t / MOTION.inertiaTau);
+    const expected: number[] = [];
+    let previous = world.clone();
+    for (let i = 0; i < 8; i++) {
+      const now = i * 16;
+      const out: MotionOutput = {};
+      motion.sample(now, 0.016, out);
+      expect(out.quaternion).toBeUndefined();
+      world.premultiply(out.quaternionDelta!);
+      // 每帧转角 == v·τ·(e^{-t/τ} − e^{-(t+dt)/τ})（两轴合成后的模长与四元数角一致）。
+      const step = previous.angleTo(world);
+      const expectedStep = Math.hypot(1.5, 0.7) * MOTION.inertiaTau * (decay(now / 1000) - decay((now + 16) / 1000));
+      expect(step).toBeCloseTo(expectedStep, 4);
+      expect(step).toBeLessThan(0.05);
+      expected.push(step);
+      previous = world.clone();
+    }
+    // 指数衰减：后一帧永远小于前一帧。
+    for (let i = 1; i < expected.length; i++) expect(expected[i]).toBeLessThan(expected[i - 1]);
   });
 
   it('取消后不再驱动任何字段', () => {
