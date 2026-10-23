@@ -70,6 +70,9 @@ func LoadRuntime(cfgPath, mapCfgPath string) (*Runtime, error) {
 		}
 		rt.mapCfg = externalMapCfg
 		maps = mapgen.Generate(externalMapCfg, cfg.Battlefield.MapSeed)
+		if err := gamecore.ValidateScenarioBootstrap(cfg, maps); err != nil {
+			return nil, err
+		}
 		q := queue.New()
 		bus := gamecore.NewEventBus()
 		store := newSnapshotStore(cfg.Server)

@@ -6,6 +6,7 @@ import (
 	"siliconworld/internal/config"
 	"siliconworld/internal/mapmodel"
 	"siliconworld/internal/model"
+	"siliconworld/internal/surface"
 )
 
 func applyScenarioBootstrap(
@@ -17,11 +18,46 @@ func applyScenarioBootstrap(
 	if cfg == nil {
 		return nil
 	}
+	if err := ValidateScenarioBootstrap(cfg, maps); err != nil {
+		return err
+	}
 	if err := applyScenarioPlanetBootstrap(cfg.ScenarioBootstrap.Planets, worlds); err != nil {
 		return err
 	}
 	if err := applyScenarioSystemBootstrap(cfg.ScenarioBootstrap.Systems, maps, spaceRuntime); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ValidateScenarioBootstrap 校验场景预置建筑坐标是否落在当前地图的立方体
+// 球面网格内。越界坐标以前会一路传进 surface.Grid.Step（FindFootprintOrigin
+// 从起点向外找占地原点，起点本身越界即 panic），表现为服务端启动时
+// `panic: invalid cube-sphere step`；这里改为返回带字段路径的错误，由启动
+// 路径拒绝启动。Step 自身的 panic 保留（那是程序错误）。
+//
+// 只需要地图模型（每颗行星的 face_size），不依赖世界运行时，因此开新局的
+// 任何入口（启动、热重置、存档点重建）都能在装配世界之前先报错。
+func ValidateScenarioBootstrap(cfg *config.Config, maps *mapmodel.Universe) error {
+	if cfg == nil || maps == nil {
+		return nil
+	}
+	for pi, preset := range cfg.ScenarioBootstrap.Planets {
+		planet, ok := maps.Planet(preset.PlanetID)
+		if !ok || planet == nil {
+			continue // 未生成的行星由 applyScenarioPlanetBootstrap 报「runtime not loaded」
+		}
+		grid := surface.Grid{Size: planet.FaceSize}
+		for bi, buildingCfg := range preset.Buildings {
+			if grid.Valid(surface.Tile{X: buildingCfg.X, Y: buildingCfg.Y}) {
+				continue
+			}
+			return fmt.Errorf(
+				"scenario_bootstrap.planets[%d].buildings[%d] (%s at %d,%d) out of %s cube-sphere bounds %dx%d",
+				pi, bi, buildingCfg.BuildingType, buildingCfg.X, buildingCfg.Y,
+				preset.PlanetID, grid.Width(), grid.Height(),
+			)
+		}
 	}
 	return nil
 }

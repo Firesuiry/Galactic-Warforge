@@ -45,9 +45,9 @@ export function scenarioPorts(kind: ScenarioKind): PlaywrightPorts {
   };
 }
 
-/** 申请（或复用）两个场景的端口与入口并写回环境；返回每个场景的端口组。 */
-export async function resolveScenarioPorts(kinds: readonly ScenarioKind[]): Promise<Record<ScenarioKind, PlaywrightPorts>> {
-  const result = {} as Record<ScenarioKind, PlaywrightPorts>;
+/** 申请（或复用）每个场景的端口与入口并写回环境；返回各场景的端口组。 */
+export async function resolveScenarioPorts(kinds: readonly ScenarioKind[]): Promise<Partial<Record<ScenarioKind, PlaywrightPorts>>> {
+  const result: Partial<Record<ScenarioKind, PlaywrightPorts>> = {};
   for (const kind of kinds) {
     const key = kind.toUpperCase();
     const current = scenarioPorts(kind);
