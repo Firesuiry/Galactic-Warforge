@@ -14,6 +14,7 @@ import { mechaSlotUsage, selectMyMecha } from '@/features/mecha/model';
 import { getItemDisplayName } from '@/features/planet-map/model';
 import { getFixtureScenario, isFixtureServerUrl, parseFixtureIdFromServerUrl } from '@/fixtures';
 import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { CreditsDialog } from '@/widgets/CreditsDialog';
 import { useShellAlerts } from '@/features/production-alerts-query';
 import { useApiClient } from '@/hooks/use-api-client';
 import { useSessionSnapshot } from '@/hooks/use-session';
@@ -41,6 +42,7 @@ export function TopNav() {
   const fixtureScenario = fixtureId ? getFixtureScenario(fixtureId) : null;
   const [saveMessage, setSaveMessage] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [audioMuted, setAudioMuted] = useState(() => isMuted());
   const [mix, setMixState] = useState<MixSettings>(() => getMix());
   const settingsRef = useRef<HTMLDivElement | null>(null);
@@ -315,6 +317,13 @@ export function TopNav() {
                 </div>
               ) : null}
               <button
+                className="top-nav__settings-credits"
+                type="button"
+                onClick={() => { setCreditsOpen(true); setSettingsOpen(false); }}
+              >
+                鸣谢（第三方素材与许可）
+              </button>
+              <button
                 className="secondary-button top-nav__logout"
                 type="button"
                 onClick={handleLogout}
@@ -325,6 +334,7 @@ export function TopNav() {
           ) : null}
         </div>
       </div>
+      {creditsOpen ? <CreditsDialog onClose={() => setCreditsOpen(false)} /> : null}
     </header>
   );
 }

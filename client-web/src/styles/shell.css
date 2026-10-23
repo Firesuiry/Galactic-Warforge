@@ -943,3 +943,123 @@
   margin-top: 4px;
   width: 100%;
 }
+
+/* 鸣谢弹窗（第 23 轮 3A models）：第三方素材署名 */
+.top-nav__settings-credits {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.top-nav__settings-credits:hover {
+  color: var(--accent);
+}
+
+.credits-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 10, 14, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.credits-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(84vh, 900px);
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-glow);
+  background: var(--popover-bg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.credits-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credits-dialog__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.credits-dialog__note {
+  margin: 6px 0 10px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.credits-dialog__body {
+  overflow-y: auto;
+  display: grid;
+  gap: 16px;
+  padding-right: 4px;
+}
+
+.credits-group__title {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+
+.credits-group__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credits-entry {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(120, 160, 180, 0.18);
+  background: rgba(12, 20, 26, 0.6);
+}
+
+.credits-entry__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+}
+
+.credits-entry__title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.credits-entry__license {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.credits-entry__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.credits-entry__changes {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
