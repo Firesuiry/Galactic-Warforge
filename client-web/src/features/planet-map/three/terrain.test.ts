@@ -3,7 +3,7 @@ import type { PlanetSceneView } from '@shared/types';
 import { SHADER_COLOR, SHADER_HEADER, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
 import { tileNormal } from './projection';
 import { surfaceFace, surfaceTile } from '@shared/surface';
-import { buildAtlas, disposeAtlas } from './terrain/atlas';
+import { SDF_SUPERSAMPLE, buildAtlas, disposeAtlas } from './terrain/atlas';
 
 function scene(): PlanetSceneView {
   return {
@@ -62,13 +62,16 @@ describe('3D player-visible terrain', () => {
     disposePlanetSurface(mesh);
   });
 
-  it('encodes only explored dry neighbors as shores and never smooths through fog', () => {
+  it('只有已探索的水格进入平滑场，未探索邻格不会把海岸线推进迷雾（信息诚实）', () => {
     const mesh = createPlanetSurface(100);
     updatePlanetSurface(mesh, { planet: scene() });
-    const coast = uniforms(mesh).swLocalCoast.value as THREE.DataTexture;
-    // Water at (123,76): south is known land, east is hidden rock.
-    expect(Array.from(coast.image.data!.slice(0, 4))).toEqual([0, 0, 255, 0]);
-    expect(Array.from(coast.image.data!.slice(4))).toEqual(Array(12).fill(0));
+    const sdf = uniforms(mesh).swLocalSdf.value as THREE.DataTexture;
+    // 局部图集 2×2 格：格心 (0,0)=已探索水、(1,0)=未探索 blocked。
+    const waterAt = (cellX: number, cellY: number) => sdfAtCellCentre(sdf, cellX, cellY, 0);
+    expect(waterAt(0, 0)).toBeGreaterThan(0.45);
+    // 未探索格不参与平滑：格心恒为外侧（旧 coast 图集已删除，泡沫改用同一条 SDF 岸线）。
+    expect(waterAt(1, 0)).toBeLessThan(0);
+    expect(waterAt(0, 1)).toBeLessThan(0);
     disposePlanetSurface(mesh);
   });
 
@@ -146,25 +149,29 @@ describe('3D player-visible terrain', () => {
     disposePlanetSurface(mesh);
   });
 
-  it('follows the physical north seam into its visible patch instead of the atlas neighbor', () => {
+  it('跨补片窗口：补片里的已探索水格进入平滑场，补片外未探索格保持外侧', () => {
     const mesh = createPlanetSurface(100);
     const planet: PlanetSceneView = {
       ...scene(), surface: { topology: 'cube_sphere', face_size: 2 }, map_width: 6, map_height: 4,
       bounds: { x: 1, y: 0, width: 1, height: 1 },
       terrain: [['water']], explored: [[true]], visible: [[true]],
-      surface_patches: [{ bounds: { x: 3, y: 3, width: 1, height: 1 }, terrain: [['buildable']], explored: [[true]], visible: [[true]] }],
+      surface_patches: [{ bounds: { x: 3, y: 3, width: 1, height: 1 }, terrain: [['water']], explored: [[true]], visible: [[true]] }],
     };
     updatePlanetSurface(mesh, { planet });
     const shader = uniforms(mesh);
-    expect(Array.from(shader.swLocalCoast.value.image.data.slice(0, 4))).toEqual([255, 0, 0, 0]);
+    const sdf = shader.swLocalSdf.value as THREE.DataTexture;
+    // local 图集按行拼：第一行是主窗口（1×1），第二行是补片（1×1）。
+    const waterAt = (cellX: number, cellY: number) => sdfAtCellCentre(sdf, cellX, cellY, 0);
+    expect(waterAt(0, 0)).toBeGreaterThan(0.45);
+    expect(waterAt(0, 1)).toBeGreaterThan(0.45);
     const dispose = vi.fn();
-    shader.swLocalCoast.value.addEventListener('dispose', dispose);
-    updatePlanetSurface(mesh, { planet: { ...planet, surface_patches: [{ ...planet.surface_patches![0], explored: [[false]] }] } });
+    sdf.addEventListener('dispose', dispose);
+    updatePlanetSurface(mesh, { planet: { ...planet, surface_patches: [{ ...planet.surface_patches![0], terrain: [['unknown']], explored: [[false]] }] } });
     expect(dispose).toHaveBeenCalledOnce();
-    expect(Array.from(shader.swLocalCoast.value.image.data.slice(0, 4))).toEqual([0, 0, 0, 0]);
+    const fresh = (uniforms(mesh).swLocalSdf.value as THREE.DataTexture);
+    expect(sdfAtCellCentre(fresh, 0, 1, 0)).toBeLessThan(0);
     disposePlanetSurface(mesh);
   });
-
 });
 
 describe('3A terrain shader contract', () => {
@@ -207,15 +214,11 @@ describe('3A terrain shader contract', () => {
     const sdf = shader.swLocalSdf.value as THREE.DataTexture;
     const bytes = sdf.image.data!;
     const width = sdf.image.width;
-    // 局部图集 2×2 格、每格 8×8 超采样：格心 (0,0)=水（已探索）、(1,0)=blocked（未知）。
-    const sample = (cellX: number, cellY: number) => {
-      const x = cellX * 8 + 4, y = cellY * 8 + 4;
-      return Array.from(bytes.slice((y * width + x) * 4, (y * width + x) * 4 + 4));
-    };
-    const water = sample(0, 0), unknown = sample(1, 0), unknownBelow = sample(0, 1);
-    expect(water[0]).toBeGreaterThan(128);      // R 水面：已探索水格在内侧
-    expect(unknown[0]).toBeLessThan(128);       // 未探索格不参与平滑，恒为外侧
-    expect(unknownBelow[0]).toBeLessThan(128);
+    // 局部图集 2×2 格、每格 4×4 超采样：格心 (0,0)=水（已探索）、(1,0)=blocked（未知）。
+    const water = sdfAtCellCentre(sdf, 0, 0, 0), unknown = sdfAtCellCentre(sdf, 1, 0, 0), unknownBelow = sdfAtCellCentre(sdf, 0, 1, 0);
+    expect(water).toBeGreaterThan(0.45);        // R 水面：已探索水格在内侧
+    expect(unknown).toBeLessThan(0);            // 未探索格不参与平滑，恒为外侧
+    expect(unknownBelow).toBeLessThan(0);
     disposePlanetSurface(mesh);
   });
 
@@ -229,6 +232,21 @@ describe('3A terrain shader contract', () => {
   });
 });
 
+
+/** 与着色器同口径的 SDF 采样：连续格坐标 → 图集 UV → 硬件双线性（这里手算同一插值）。 */
+function sdfAtCellCentre(texture: THREE.DataTexture, cellX: number, cellY: number, channel: number) {
+  const width = texture.image.width, height = texture.image.height;
+  const bytes = texture.image.data as Uint8Array;
+  // 着色器：UV = 格坐标 / 格数（格数 = 纹理宽 / 每格超采样数），再交给硬件双线性。
+  const S = SDF_SUPERSAMPLE;
+  const u = (cellX + 0.5) * S - 0.5;
+  const v = (cellY + 0.5) * S - 0.5;
+  const x0 = Math.floor(u), y0 = Math.floor(v);
+  const fx = u - x0, fy = v - y0;
+  const at = (x: number, y: number) => bytes[((Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4 + channel)] / 255 - 0.5;
+  return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+}
+
 describe('概览图集采样映射（审查 P1-1）', () => {
   /** 着色器里的概览格坐标公式（surface-shader.ts `swFaceCell`），逐行复刻用于断言。 */
   const overviewCell = (face: number, faceUV: { x: number; y: number }, dims: { x: number; y: number }) => {
@@ -241,7 +259,7 @@ describe('概览图集采样映射（审查 P1-1）', () => {
   it('六个面都按「面内格数 + 面原点」换算，与 tileNormal 的球面位置一致', () => {
     const dims = { x: 72, y: 48 };
     const faceSize = 24; // face_size：整张图集 3×2 面，每面 24 格
-    const faces: [number, number, number, number][] = [
+    const faces: [number, number, number, number, number][] = [
       // face, 面内 u, 面内 v, 采样点在图集里的格坐标（面原点 + u/v × faceSize）
       [0, 0.1, 0.1, 2.4, 2.4],
       [1, 0.25, 0.25, 30, 6],
@@ -289,7 +307,10 @@ describe('概览图集采样映射（审查 P1-1）', () => {
     const explored = Array.from({ length: height }, (_, y) => Array.from({ length: width }, (_, x) => x === 2 && y === 2));
     updatePlanetSurface(mesh, {
       planet: { ...scene(), bounds: { x: 0, y: 0, width: 1, height: 1 }, terrain: [['unknown']], explored: [[false]], visible: [[false]] },
-      overview: { cells_width: width, cells_height: height, terrain, explored, visible: explored },
+      overview: {
+        surface: scene().surface!, planet_id: 'p', discovered: true, map_width: 1536, map_height: 1024, tick: 1, step: 24,
+        cells_width: width, cells_height: height, terrain, explored, visible: explored,
+      },
     });
     const shader = uniforms(mesh);
     const props = shader.swOverviewProperties.value as THREE.DataTexture;
@@ -315,13 +336,8 @@ describe('平滑类别场保留单格地形（审查 P2-1）', () => {
       width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
       sample: (x, y) => ({ terrain: terrainAt(x, y), explored: true, visible: true }),
     });
-    const bytes = atlas.sdf.image.data as Uint8Array;
-    const width = atlas.sdf.image.width;
-    // 图集是每格 8×8 超采样，格心 = 格号×8 + 4。
-    const at = (cellX: number, cellY: number) => {
-      const px = cellX * 8 + 4, py = cellY * 8 + 4;
-      return (bytes[(py * width + px) * 4] / 255) - 0.5; // R = 水面覆盖度
-    };
+    // R = 水面覆盖度，按着色器同一套双线性在格心取值。
+    const at = (cellX: number, cellY: number) => sdfAtCellCentre(atlas.sdf, cellX, cellY, 0);
     disposeAtlas(atlas);
     return at;
   };
@@ -340,9 +356,7 @@ describe('平滑类别场保留单格地形（审查 P2-1）', () => {
       width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
       sample: (x, y) => ({ terrain: x === 6 && y === 14 ? 'lava' : 'buildable', explored: true, visible: true }),
     });
-    const bytes = atlas.sdf.image.data as Uint8Array;
-    const width = atlas.sdf.image.width;
-    const at = (cellX: number, cellY: number) => (bytes[((cellY * 8 + 4) * width + cellX * 8 + 4) * 4 + 2] / 255) - 0.5;
+    const at = (cellX: number, cellY: number) => sdfAtCellCentre(atlas.sdf, cellX, cellY, 2); // B = 岩浆
     expect(at(6, 14)).toBeGreaterThan(0.45);
     expect(at(5, 14)).toBeLessThan(0.45);
     disposeAtlas(atlas);
@@ -361,13 +375,56 @@ describe('平滑类别场保留单格地形（审查 P2-1）', () => {
       width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
       sample: (x, y) => ({ terrain: x === 6 && y === 6 ? 'water' : 'unknown', explored: x === 6 && y === 6, visible: x === 6 && y === 6 }),
     });
-    const bytes = atlas.sdf.image.data as Uint8Array;
-    const width = atlas.sdf.image.width;
-    const at = (cellX: number, cellY: number) => (bytes[((cellY * 8 + 4) * width + cellX * 8 + 4) * 4] / 255) - 0.5;
+    const at = (cellX: number, cellY: number) => sdfAtCellCentre(atlas.sdf, cellX, cellY, 0);
     // 唯一的已探索水格本身仍在内侧；它的未探索邻格恒为外侧（不因邻接被带成水）。
     expect(at(6, 6)).toBeGreaterThan(0.45);
     expect(at(5, 6)).toBeLessThan(0);
     expect(at(7, 6)).toBeLessThan(0);
+    disposeAtlas(atlas);
+  });
+});
+
+describe('图集增量重建（审查 P2-3）', () => {
+  it('只有可见位/高度变化时复用距离场，只有单格地形变化时结果与整张重建一致', () => {
+    const width = 24, height = 18, faceSize = 24;
+    const build = (terrainAt: (x: number, y: number) => string, previous?: ReturnType<typeof buildAtlas>) => buildAtlas({
+      width, height, boundsX: 0, boundsY: 0, faceSize,
+      sample: (x, y) => ({ terrain: terrainAt(x, y), explored: true, visible: (x + y) % 4 !== 0, height: ((x * 7 + y * 3) % 10) / 10 }),
+      previous,
+    });
+    const base = (x: number, y: number) => (x + y * 3) % 17 === 0 ? 'water' : (x * 5 + y) % 23 === 0 ? 'blocked' : 'buildable';
+    const first = build(base);
+    // 单格改成岩浆：增量结果必须与「从零重建」逐字节一致（脏区外的数据不受影响）。
+    const changed = (x: number, y: number) => (x === 11 && y === 8 ? 'lava' : base(x, y));
+    const incremental = build(changed, first);
+    const full = build(changed);
+    // 增量路径复用上一版的字节数组（旧纹理随即 dispose），所以这里比较的是内容而不是引用。
+    const bytes = (texture: THREE.DataTexture) => Array.from(texture.image.data as Uint8Array);
+    expect(bytes(incremental.sdf)).toEqual(bytes(full.sdf));
+    expect(bytes(incremental.color)).toEqual(bytes(full.color));
+    expect(bytes(incremental.heat)).toEqual(bytes(full.heat));
+    disposeAtlas(incremental); disposeAtlas(full); disposeAtlas(first);
+  });
+
+  it('cp-army 规模（57×45）单格变化的一次增量刷新 ≤ 15 ms（修前整张 95–150 ms）', () => {
+    const width = 57, height = 45;
+    const sampleAt = (x: number, y: number) => ({
+      terrain: ['buildable', 'buildable', 'water', 'blocked', 'lava'][(x * 7 + y * 13) % 5],
+      explored: true, visible: true, height: ((x * 31 + y * 17) % 100) / 100,
+    });
+    let atlas = buildAtlas({ width, height, boundsX: 0, boundsY: 0, faceSize: 512, sample: sampleAt });
+    const changed = (x: number, y: number) => (x === 28 && y === 22 ? { ...sampleAt(x, y), terrain: 'water' } : sampleAt(x, y));
+    // 计时前先热一次（V8 优化 + 首次分配）。
+    buildAtlas({ width, height, boundsX: 0, boundsY: 0, faceSize: 512, sample: changed, previous: atlas });
+    // 并行跑测试时单次计时抖动很大（同机实测 10–30 ms）：取三次的最小值，
+    // 反映这段代码本身的成本（修前整张重建 95–150 ms）。
+    let elapsed = Infinity;
+    for (let i = 0; i < 3; i++) {
+      const t0 = performance.now();
+      atlas = buildAtlas({ width, height, boundsX: 0, boundsY: 0, faceSize: 512, sample: changed, previous: atlas });
+      elapsed = Math.min(elapsed, performance.now() - t0);
+    }
+    expect(elapsed).toBeLessThan(15);
     disposeAtlas(atlas);
   });
 });

@@ -44,7 +44,6 @@ export interface TerrainTextures {
   packedPixels: Uint8Array;
   /** 岩浆自发光（层号 = `TERRAIN_LAYER.lava` 的层；单独一张 2D 图）。 */
   lavaEmissive: THREE.Texture | null;
-  ready: boolean;
   dispose(): void;
 }
 
@@ -97,7 +96,7 @@ export function createPlaceholderTerrainTextures(): TerrainTextures {
   packed.minFilter = THREE.LinearMipmapLinearFilter; packed.magFilter = THREE.LinearFilter;
   packed.generateMipmaps = true; packed.wrapS = packed.wrapT = THREE.RepeatWrapping; packed.needsUpdate = true;
   return {
-    albedo, packed, albedoPixels: albedoData, packedPixels: packedData, lavaEmissive: null, ready: false,
+    albedo, packed, albedoPixels: albedoData, packedPixels: packedData, lavaEmissive: null,
     dispose() { albedo.dispose(); packed.dispose(); },
   };
 }
@@ -174,8 +173,13 @@ function drawLayer(image: HTMLImageElement, target: Uint8Array, layer: number, n
  * 异步加载全部地表层。返回的纹理对象立即可用（先占位层），加载完成后原地换数据。
  * `onReady` 在真实纹理写入后调用一次（调用方据此触发材质刷新/重建 mipmap）。
  */
-export async function loadTerrainTextures(onReady?: (textures: TerrainTextures) => void): Promise<TerrainTextures> {
-  const textures = createPlaceholderTerrainTextures();
+export async function loadTerrainTextures(
+  placeholder: TerrainTextures = createPlaceholderTerrainTextures(),
+  onReady?: (textures: TerrainTextures) => void,
+): Promise<TerrainTextures> {
+  // 占位层由调用方提供（页面内共享一套）：真实像素原地填入同一组 DataArrayTexture，
+  // 不再另建一套 11 层 × 1024² × RGBA 的数组（审查 P2-4）。
+  const textures = placeholder;
   const albedoData = textures.albedoPixels;
   const packedData = textures.packedPixels;
   const jobs: Promise<void>[] = [];
@@ -195,7 +199,6 @@ export async function loadTerrainTextures(onReady?: (textures: TerrainTextures) 
   textures.albedo.needsUpdate = true;
   textures.packed.needsUpdate = true;
   // 共享的 DataArrayTexture 已拿到真实像素；所有已建材质重新编译以启用 sRGB 上传。
-  textures.ready = true;
   try {
     const emissive = await loadImage(`${BASE}/lava_emissive.webp`);
     const texture = new THREE.Texture(emissive);

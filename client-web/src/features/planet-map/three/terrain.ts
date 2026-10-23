@@ -20,14 +20,13 @@ export interface PlanetSurfaceData {
 interface SurfaceState {
   overview: AtlasSet;
   local: AtlasSet;
-  textures: TerrainTextures;
+  /** 单补片时的 local 图集本体（增量重建的上一版）；多补片为 undefined。 */
+  localPatches?: AtlasSet[];
   uniforms: {
     swOverviewColor: { value: THREE.DataTexture };
     swOverviewProperties: { value: THREE.DataTexture };
     swLocalColor: { value: THREE.DataTexture };
     swLocalProperties: { value: THREE.DataTexture };
-    swOverviewCoast: { value: THREE.DataTexture };
-    swLocalCoast: { value: THREE.DataTexture };
     swOverviewHeat: { value: THREE.DataTexture };
     swLocalHeat: { value: THREE.DataTexture };
     swOverviewSdf: { value: THREE.DataTexture };
@@ -61,9 +60,18 @@ const states = new WeakMap<PlanetSurface, SurfaceState>();
 /** 纹理库只加载一次（同一页面内所有星球/曲面共用同一组 DataArrayTexture）。 */
 let terrainTexturesPromise: Promise<TerrainTextures> | null = null;
 const textureListeners = new Set<(textures: TerrainTextures) => void>();
+/**
+ * 页面内共享的一套占位纹理：所有曲面从一开始就用它，真实像素加载完成后原地填入
+ * （同一组 DataArrayTexture，不需要换引用），所以每个场景不再各自占 92 MB（审查 P2-4）。
+ */
+let sharedPlaceholder: TerrainTextures | null = null;
+function placeholderTerrainTextures() {
+  if (!sharedPlaceholder) sharedPlaceholder = createPlaceholderTerrainTextures();
+  return sharedPlaceholder;
+}
 function sharedTerrainTextures() {
   if (!terrainTexturesPromise) {
-    terrainTexturesPromise = loadTerrainTextures((textures) => {
+    terrainTexturesPromise = loadTerrainTextures(placeholderTerrainTextures(), (textures) => {
       for (const listener of textureListeners) listener(textures);
     });
   }
@@ -97,13 +105,12 @@ function loadWaterNormal() {
 export function createPlanetSurface(radius: number): PlanetSurface {
   const empty = () => buildAtlas({ width: 1, height: 1, boundsX: 0, boundsY: 0, faceSize: 1, sample: () => ({ terrain: 'unknown', explored: false, visible: false }) });
   const overview = empty(), local = empty();
-  const textures = createPlaceholderTerrainTextures();
+  const textures = placeholderTerrainTextures();
   const uniforms = {
     swPatchBounds: { value: Array.from({ length: 7 }, () => new THREE.Vector4()) },
     swPatchUV: { value: Array.from({ length: 7 }, () => new THREE.Vector4()) },
     swOverviewColor: { value: overview.color }, swOverviewProperties: { value: overview.properties },
     swLocalColor: { value: local.color }, swLocalProperties: { value: local.properties },
-    swOverviewCoast: { value: overview.coast }, swLocalCoast: { value: local.coast },
     swOverviewHeat: { value: overview.heat }, swLocalHeat: { value: local.heat },
     swOverviewSdf: { value: overview.sdf }, swLocalSdf: { value: local.sdf },
     swAlbedoArray: { value: textures.albedo }, swPackedArray: { value: textures.packed },
@@ -185,14 +192,11 @@ export function createPlanetSurface(radius: number): PlanetSurface {
   mesh.receiveShadow = false;
   mesh.castShadow = false;
   mesh.name = 'player-visible-planet-surface';
-  const state: SurfaceState = { overview, local, textures, uniforms };
+  const state: SurfaceState = { overview, local, uniforms };
   states.set(mesh, state);
-  // 纹理异步加载：同一个 DataArrayTexture 原地换数据，不需要重建材质。
-  void sharedTerrainTextures().then((loaded) => {
-    state.textures = loaded;
-    uniforms.swAlbedoArray.value = loaded.albedo;
-    uniforms.swPackedArray.value = loaded.packed;
-    uniforms.swLavaEmissionMap.value = loaded.lavaEmissive;
+  // 纹理异步加载：同一个 DataArrayTexture 原地换数据，不需要重建材质，也不需要换引用。
+  void sharedTerrainTextures().then(() => {
+    uniforms.swLavaEmissionMap.value = sharedPlaceholder?.lavaEmissive ?? null;
     // 已编译的程序在下一次绘制时自动上传新数据（needsUpdate 已在加载器里置位）。
     material.needsUpdate = true;
   });
@@ -228,7 +232,8 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
     terrain: overview.terrain?.[y]?.[x] ?? 'unknown',
     explored: Boolean(overview.explored?.[y]?.[x]), visible: Boolean(overview.visible?.[y]?.[x]),
   } : unknown;
-  const globalAtlas = buildAtlas({ width: overviewWidth, height: overviewHeight, boundsX: 0, boundsY: 0, faceSize: overviewWidth / 3, sample: sampleOverview });
+  // 增量重建（审查 P2-3）：把上一版图集交给 buildAtlas，只重算变化格附近。
+  const globalAtlas = buildAtlas({ width: overviewWidth, height: overviewHeight, boundsX: 0, boundsY: 0, faceSize: overviewWidth / 3, sample: sampleOverview, previous: state.overview });
   const patches = [{ bounds, terrain: planet.terrain, explored: effectiveFog?.explored, visible: effectiveFog?.visible, height: planet.height }, ...('surface_patches' in planet ? planet.surface_patches ?? [] : [])].slice(0, 7);
   const localWidth = Math.max(1, ...patches.map(p => p.bounds.width));
   const localHeight = Math.max(1, patches.reduce((sum, p) => sum + p.bounds.height, 0));
@@ -236,9 +241,13 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   const packed = patches.map(p => { const result = { ...p, offset }; offset += p.bounds.height; return result; });
   const sampleLocal = localSampler(planet, effectiveFog);
   // 多补片窗口：每个补片单独建图集，再按行拼进一张 local 图集（通道语义相同）。
-  const localAtlases = packed.map((patch) => buildAtlas({
+  // 单补片且尺寸未变时复用上一版 local 图集做增量；多补片是拼接出来的新纹理，
+  // 每个补片图集单独建（成本本来就小），不做增量。
+  const previousLocal = state.localPatches && packed.length === 1 ? state.localPatches[0] : undefined;
+  const localAtlases = packed.map((patch, index) => buildAtlas({
     width: patch.bounds.width, height: patch.bounds.height, boundsX: patch.bounds.x, boundsY: patch.bounds.y,
     faceSize: planet.surface.face_size,
+    previous: index === 0 ? previousLocal : undefined,
     sample: (x, y) => {
       const row = y - patch.bounds.y;
       const terrain = patch.terrain?.[row]?.[x - patch.bounds.x] ?? 'unknown';
@@ -246,11 +255,11 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
       const visible = patch.visible ? Boolean(patch.visible[row]?.[x - patch.bounds.x]) : terrain !== 'unknown';
       return { terrain, explored, visible, height: patch.height?.[row]?.[x - patch.bounds.x] ?? sampleLocal(x, y).height };
     },
-    // 海岸标志要看到补片之外的邻格（例如北缝对面的补片），用全星取样器。
-    neighborSample: sampleLocal,
   }));
   const localAtlas = combineAtlases(localAtlases, packed, localWidth, localHeight);
-  for (const atlas of localAtlases) disposeAtlas(atlas);
+  // 单补片时 combineAtlases 直接返回补片图集本身：这时它就是 local，不能 dispose（审查 P2-2）。
+  if (localAtlas !== localAtlases[0]) for (const atlas of localAtlases) disposeAtlas(atlas);
+  state.localPatches = localAtlas === localAtlases[0] ? [localAtlas] : undefined;
   state.uniforms.swPatchBounds.value.forEach((v, i) => {
     const p = packed[i];
     if (!p) { v.set(0, 0, 0, 0); return; }
@@ -264,8 +273,6 @@ export function updatePlanetSurface(mesh: PlanetSurface, { planet, overview, fog
   state.uniforms.swOverviewProperties.value = globalAtlas.properties;
   state.uniforms.swLocalColor.value = localAtlas.color;
   state.uniforms.swLocalProperties.value = localAtlas.properties;
-  state.uniforms.swOverviewCoast.value = globalAtlas.coast;
-  state.uniforms.swLocalCoast.value = localAtlas.coast;
   state.uniforms.swOverviewHeat.value = globalAtlas.heat;
   state.uniforms.swLocalHeat.value = localAtlas.heat;
   state.uniforms.swOverviewSdf.value = globalAtlas.sdf;
@@ -308,7 +315,7 @@ function combineAtlases(atlases: AtlasSet[], packed: { offset: number; bounds: {
   };
   return {
     color: make(a => a.color, 1, false), properties: make(a => a.properties, 1, false),
-    coast: make(a => a.coast, 1, false), heat: make(a => a.heat, 1, false),
+    heat: make(a => a.heat, 1, false),
     sdf: make(a => a.sdf, SDF_SUPERSAMPLE, true),
   };
 }

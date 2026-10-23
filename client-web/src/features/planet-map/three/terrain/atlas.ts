@@ -4,8 +4,8 @@
  * 每格烘焙四张 RGBA8 图（全局 overview + 场景窗口 local，同一套通道语义）：
  * - `color`：宏观色（远景/纹理淡出时用，sRGB 编码）；
  * - `properties`：R 水、G 岩、B 已探索、A 可见（与旧版一致）；
- * - `coast`：四向「已知陆/水相邻」标志（跨面邻接，未知边界不出泡沫）；
- * - `heat`：R 到岩浆的归一化热度、G 到水的归一化距离、B 服务端 height、A 到未知区的格数渐变。
+ * - `heat`：R 到岩浆的归一化热度、G 到水的归一化距离、B 服务端 height、A 到未知区的格数渐变；
+ * - `sdf`：平滑类别场（R 水面 / G 岩性 / B 岩浆 / A 到未知区），格间边界靠它做亚格过渡。
  *
  * 所有值只由玩家可见的服务端数据推导；未知格的 terrain/height 从不写入。
  */
@@ -21,11 +21,17 @@ export type SampleAt = (x: number, y: number) => SurfaceSample;
 export interface AtlasSet {
   color: THREE.DataTexture;
   properties: THREE.DataTexture;
-  coast: THREE.DataTexture;
   heat: THREE.DataTexture;
   /** 平滑类别场（0 为等值线，范围 ±0.5）：R 水面、G 岩性、B 岩浆、A 到未知区。
    *  着色器用它做亚格边界：等值线被均值核磨圆、跨格连续，不再沿格边走方块（L15）。 */
   sdf: THREE.DataTexture;
+  /** 增量重建用：三个类别的格级掩码与平滑场（下次构建只重算变化格附近）。 */
+  masks?: CategoryMasks;
+  waterField?: Float32Array;
+  rockField?: Float32Array;
+  lavaField?: Float32Array;
+  /** 逐格原始数据与逐格字节（增量重建时按脏区拷贝/重算）。 */
+  raw?: AtlasRaw;
 }
 
 /** 宏观色（线性 0..1）：纹理未就绪/远景时使用；sRGB 编码写进图集。 */
@@ -56,6 +62,26 @@ const SOIL_ROCK_FRACTION: Record<string, number> = {
   buildable: 0.15, plains: 0.15, plain: 0.15, grass: 0.1, grassland: 0.1, forest: 0.2,
   desert: 0.3, sand: 0.2, ice: 0.3, snow: 0.3, swamp: 0.1,
 };
+
+/** 单个类别掩码（按格）；1 = 内侧。三个类别各一份，供平滑场与单格保留共用。 */
+interface CategoryMasks { water: Uint8Array; rock: Uint8Array; lava: Uint8Array }
+
+function categoryMasks(width: number, height: number, at: (x: number, y: number) => SurfaceSample, knownAt: (x: number, y: number) => boolean): CategoryMasks {
+  const water = new Uint8Array(width * height);
+  const rock = new Uint8Array(width * height);
+  const lava = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!knownAt(x, y)) continue;
+      const terrain = at(x, y).terrain;
+      const index = y * width + x;
+      water[index] = WATER_TERRAINS.has(terrain) ? 1 : 0;
+      rock[index] = finishFlags(terrain).rock >= 0.5 ? 1 : 0;
+      lava[index] = terrain === 'lava' ? 1 : 0;
+    }
+  }
+  return { water, rock, lava };
+}
 
 function srgbByte(value: number) {
   const linear = Math.min(1, Math.max(0, value));
@@ -119,55 +145,124 @@ export const SDF_SUPERSAMPLE = 8;
  * 为什么不用距离变换：距离变换忠实保留输入的形状——格子边界还是格子，只是给了距离。
  * 覆盖度场的 0 等值线则被均值核「磨圆」：拐角变圆角、单格凸起收成小半岛，这正是海岸线
  * 需要的圆润不规则（半径约 1 格），再叠着色器里的噪声弯折成自然的湾与岬。
+ *
+ * 增量更新（审查 P2-3）：传入上一次的掩码与场时，只重算变化格附近 ±3 格的带，
+ * 带外直接沿用旧场（那些像素的卷积支撑里没有任何变化格，值本来就相同）。
+ * 地形刷新通常只动几格，一次刷新从 ~120 ms 降到亚毫秒级；首帧/窗口变化时才整张重建。
  */
-function smoothField(width: number, height: number, mask: (x: number, y: number) => boolean) {
+function smoothField(
+  width: number, height: number, cells: Uint8Array,
+  previous?: { cells: Uint8Array; field: Float32Array },
+) {
   const S = SDF_SUPERSAMPLE;
   const w = width * S, h = height * S;
-  let field = new Float32Array(w * h);
+  const dirty = previous && previous.cells.length === cells.length
+    ? dirtyCellRange(width, height, cells, previous.cells) : null;
+  // 掩码没变：场原样复用（零成本）。
+  if (previous && !dirty && previous.field.length === w * h) return { data: previous.field, width: w, height: h, cells };
+  // 卷积的输入必须是「掩码种子」，不能是上一版卷积后的场。种子铺一遍是 O(w·h) 次写，
+  // 比卷积本身便宜一个量级；真正省掉的是「距离场/逐格字节」那些更贵的部分。
+  const seed = new Float32Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    field[y * w + x] = mask(Math.floor(x / S), Math.floor(y / S)) ? 1 : 0;
+    seed[y * w + x] = cells[Math.floor(y / S) * width + Math.floor(x / S)];
   }
-  // 两遍 [1 2 1]/4 分离卷积 ≈ σ ≈ 1 格：核宽正好让等值线圆润到「一个格子的尺度」。
-  const radius = S;
-  const pass = (axis: 'x' | 'y') => {
-    const out = new Float32Array(w * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      let sum = 0, weight = 0;
-      for (let d = -radius; d <= radius; d++) {
-        const nx = axis === 'x' ? x + d : x, ny = axis === 'y' ? y + d : y;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const k = radius + 1 - Math.abs(d);
-        sum += field[ny * w + nx] * k; weight += k;
+  const result = new Float32Array(w * h);
+  convolveInto(seed, result, w, h, S, { x0: 0, x1: w, y0: 0, y1: h });
+  return { data: result, width: w, height: h, cells };
+}
+
+/**
+ * 三角形核（两遍盒滤波，半径 S）的卷积：把 `input` 卷积后的结果写进 `out` 的矩形带，
+ * 带外保持 `out` 原值（增量路径里那里是上一版的最终值）。
+ *
+ * 盒滤波用滑动累加和：每像素 O(1)。带内每行/每列的窗口和从带起点用 O(S) 次加法起算，
+ * 所以重算成本只与带面积成正比（审查 P2-3）。
+ */
+function convolveInto(input: Float32Array, out: Float32Array, w: number, h: number, S: number, band: { x0: number; x1: number; y0: number; y1: number }) {
+  const half = S + 1; // 盒宽 2·half−1 = 2S+1
+  let source = input;
+  // 两遍 x、两遍 y，共四个缓冲区轮转（输入只读，最后一趟写回 out）。
+  const buffers = [new Float32Array(w * h), new Float32Array(w * h)];
+  const pass = (axis: 'x' | 'y', target: Float32Array) => {
+    const length = axis === 'x' ? w : h;
+    const stride = axis === 'x' ? 1 : w;
+    const lineStride = axis === 'x' ? w : 1;
+    const lines = axis === 'x' ? h : w;
+    const from = axis === 'x' ? band.x0 : band.y0;
+    const to = axis === 'x' ? band.x1 : band.y1;
+    // 带外沿用上一趟的结果（或 out 的旧值），带内重算。
+    target.set(axis === 'x' ? source : out);
+    for (let line = 0; line < lines; line++) {
+      const base = line * lineStride;
+      let sum = 0;
+      for (let d = from - half + 1; d <= from + half - 1; d++) sum += source[base + Math.min(length - 1, Math.max(0, d)) * stride];
+      for (let offset = from; offset < to; offset++) {
+        target[base + offset * stride] = sum / (2 * half - 1);
+        const add = Math.min(length - 1, offset + half);
+        const drop = Math.max(0, offset - half + 1);
+        sum += source[base + add * stride] - source[base + drop * stride];
       }
-      out[y * w + x] = sum / weight;
     }
-    field = out;
   };
-  pass('x'); pass('y');
-  for (let i = 0; i < field.length; i++) field[i] -= 0.5;
-  return { data: field, width: w, height: h };
+  // x 两遍 → 第一遍写 buf0，第二遍写 buf1；y 两遍 → 第三遍写 buf0，第四遍写 out。
+  pass('x', buffers[0]);
+  source = buffers[0];
+  pass('x', buffers[1]);
+  source = buffers[1];
+  pass('y', buffers[0]);
+  source = buffers[0];
+  pass('y', out);
+  // 减 0.5（只处理带内；带外 out 里已经是减过的最终值）。
+  for (let y = band.y0; y < band.y1; y++) for (let x = band.x0; x < band.x1; x++) out[y * w + x] -= 0.5;
+}
+
+/** 变化格的包围盒（含 0 格邻域的保守范围）；没有变化返回 null。 */
+function dirtyCellRange(width: number, height: number, cells: Uint8Array, previous: Uint8Array) {
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      if (cells[index] === previous[index]) continue;
+      if (x < x0) x0 = x;
+      if (y < y0) y0 = y;
+      if (x > x1) x1 = x;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
 }
 
 /**
  * 单格保留（审查 P2-1）：把「本格自身属于该类别」的格心强制推进内侧。
  *
  * 宽核均值（σ ≈ 1 格）会把孤立 1 格水/岩浆的格心压到 −0.19，着色器阈值 ±0.45
- * 判成外侧 → 服务端说水、画面画成可建造陆地。只抬格心、不动格边：
- * 格内其余位置仍由平滑场决定，所以亚格边界照样圆润；格心到格边的插值
- * （硬件线性过滤）让这一格读成「小水洼」，而不是一个方块。
+ * 判成外侧 → 服务端说水、画面画成可建造陆地。这里按格抬升（格心满覆盖、格边收回），
+ * 所以单格读成圆水洼/熔池而不是方块；着色器另有本格类别守卫兜住域噪声。
  */
-function keepOwnCells(field: { data: Float32Array; width: number; height: number }, own: (x: number, y: number) => boolean) {
+function keepOwnCells(field: { data: Float32Array; width: number; height: number }, mask: Uint8Array) {
   const S = SDF_SUPERSAMPLE;
-  for (let y = 0; y < field.height; y++) {
-    for (let x = 0; x < field.width; x++) {
-      if (!own(Math.floor(x / S), Math.floor(y / S))) continue;
-      const centreX = Math.floor(x / S) * S + S / 2, centreY = Math.floor(y / S) * S + S / 2;
-      const distance = Math.min(1, Math.hypot(x + 0.5 - centreX, y + 0.5 - centreY) / (S / 2));
-      // 格心 +0.5（满覆盖），向格边按 0.5 − 0.55·d² 收：孤立 1 格水/岩浆渲染成
-      // 半径约 0.9 半格的圆水洼（格心恒在内侧），相邻同类格之间仍由平滑场连成一片
-      // （两侧都是水时平滑场在格边本来就是满覆盖），1 格宽的河不会断成点。
-      const index = y * field.width + x;
-      field.data[index] = Math.max(field.data[index], 0.5 - 0.55 * distance * distance);
+  const cellsWide = field.width / S, cellsHigh = field.height / S;
+  // 格内径向核按格内偏移预计算一次（S² 项），内层循环只剩一次 max。
+  const kernel = new Float32Array(S * S);
+  for (let ty = 0; ty < S; ty++) {
+    for (let tx = 0; tx < S; tx++) {
+      const distance = Math.min(1, Math.hypot(tx + 0.5 - S / 2, ty + 0.5 - S / 2) / (S / 2));
+      // 格心 +0.5（满覆盖），向格边按 0.5 − 0.30·d² 收：格心一圈纹素在 0.46 以上
+      // （判定阈值 0.45），格角收回到 0.2 —— 孤立 1 格读成圆水洼而不是方块。
+      kernel[ty * S + tx] = 0.5 - 0.30 * distance * distance;
+    }
+  }
+  for (let cellY = 0; cellY < cellsHigh; cellY++) {
+    for (let cellX = 0; cellX < cellsWide; cellX++) {
+      if (!mask[cellY * cellsWide + cellX]) continue;
+      for (let ty = 0; ty < S; ty++) {
+        const row = (cellY * S + ty) * field.width + cellX * S;
+        for (let tx = 0; tx < S; tx++) {
+          const index = row + tx;
+          const lifted = kernel[ty * S + tx];
+          if (field.data[index] < lifted) field.data[index] = lifted;
+        }
+      }
     }
   }
 }
@@ -192,53 +287,111 @@ export interface AtlasOptions {
   boundsX: number; boundsY: number;
   faceSize: number;
   sample: SampleAt;
-  /** 跨补片/跨窗口的邻格取样（海岸标志用）：默认与 `sample` 相同。 */
-  neighborSample?: SampleAt;
+  /** 上一次构建的图集（尺寸相同）：只重算变化格附近的平滑场，其余沿用旧值。 */
+  previous?: AtlasSet;
 }
 
-export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, neighborSample = sample }: AtlasOptions): AtlasSet {
-  const colors = new Uint8Array(width * height * 4);
-  const properties = new Uint8Array(width * height * 4);
-  const coast = new Uint8Array(width * height * 4);
-  const heat = new Uint8Array(width * height * 4);
-  const lavaDistance = distanceField(width, height, boundsX, boundsY,
-    (x, y) => { const cell = sample(x, y); return cell.explored && cell.terrain === 'lava'; }, faceSize, 5);
-  const waterDistance = distanceField(width, height, boundsX, boundsY,
-    (x, y) => { const cell = sample(x, y); return cell.explored && WATER_TERRAINS.has(cell.terrain); }, faceSize, 5);
-  const edge = knownEdgeField(width, height, sample, boundsX, boundsY);
-  // 只有**已探索**的格参与平滑场；未知格恒为外侧，等值线停在探索前沿，
-  // 不会把地形色推进未探索区（信息诚实）。
-  const waterGrid = smoothField(width, height, (x, y) => {
-    const cell = sample(boundsX + x, boundsY + y);
-    return cell.explored && cell.terrain !== 'unknown' && WATER_TERRAINS.has(cell.terrain);
-  });
-  const rockGrid = smoothField(width, height, (x, y) => {
-    const cell = sample(boundsX + x, boundsY + y);
-    return cell.explored && cell.terrain !== 'unknown' && finishFlags(cell.terrain).rock >= 0.5;
-  });
-  const lavaGrid = smoothField(width, height, (x, y) => {
-    const cell = sample(boundsX + x, boundsY + y);
-    return cell.explored && cell.terrain !== 'unknown' && cell.terrain === 'lava';
-  });
-  // 单格保留（审查 P2-1）：宽核均值会把孤立 1 格水/岩浆的格心压到阈值以下
-  // （实测 1 格水格心 −0.19，着色器要 > 0.45 才算水），服务端说水、画面画成陆地。
-  // 这里把「本格自身类别」与平滑场取并集：本格是水/岩浆/岩石时，格心固定推进内侧
-  // （+0.5 的满覆盖度），平滑场仍负责格与格之间的圆润过渡与外侧衰减。
-  // 未探索格不参与（`known` 判定与平滑场一致），信息诚实不受影响。
-  const ownMask = (category: (terrain: string) => boolean) => (x: number, y: number) => {
-    const cell = sample(boundsX + x, boundsY + y);
-    return cell.explored && cell.terrain !== 'unknown' && category(cell.terrain);
-  };
-  keepOwnCells(waterGrid, ownMask(terrain => WATER_TERRAINS.has(terrain)));
-  keepOwnCells(rockGrid, ownMask(terrain => finishFlags(terrain).rock >= 0.5));
-  keepOwnCells(lavaGrid, ownMask(terrain => terrain === 'lava'));
-  // 编码：场值 ±0.5 → 0..255（0.5 = 0）。场本身是覆盖度，范围天然是 ±0.5。
-  const encodeSdf = (value: number) => Math.max(0, Math.min(255, Math.round((value + 0.5) * 255)));
-  const directionOrder: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
+/** 图集内部数据：增量重建时按脏区拷贝/重算。 */
+interface AtlasRaw {
+  /** 每格地形码（0 未知 / 1 土壤 / 2 水 / 3 岩 / 4 岩浆）。 */
+  codes: Uint8Array;
+  /** 每格状态位：1 已探索、2 可见。 */
+  states: Uint8Array;
+  /** 每格高度量化值（0..255，无 height 记 0）。 */
+  heights: Uint8Array;
+  colors: Uint8Array;
+  properties: Uint8Array;
+  heat: Uint8Array;
+  sdfBytes: Uint8Array;
+  edge: Float32Array;
+  lavaDistance: Uint8Array;
+  waterDistance: Uint8Array;
+}
+
+function terrainCode(terrain: string) {
+  if (terrain === 'unknown') return 0;
+  if (WATER_TERRAINS.has(terrain)) return 2;
+  if (terrain === 'lava') return 4;
+  if (ROCK_TERRAINS.has(terrain)) return 3;
+  return 1;
+}
+
+export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, previous }: AtlasOptions): AtlasSet {
+  // 取样器有跨面查表与对象分配，一次构建里会被调用十几次。先按格取一次缓存下来
+  // （审查 P2-3：这是这块最主要的成本）。
+  const cells: SurfaceSample[] = new Array(width * height);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) cells[y * width + x] = sample(boundsX + x, boundsY + y);
+  const at = (x: number, y: number) => cells[y * width + x];
+  const knownAt = (x: number, y: number) => { const cell = at(x, y); return cell.explored && cell.terrain !== 'unknown'; };
+
+  const codes = new Uint8Array(width * height);
+  const states = new Uint8Array(width * height);
+  const heights = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const cell = sample(boundsX + x, boundsY + y);
-      const known = cell.explored && cell.terrain !== 'unknown';
+      const cell = at(x, y);
+      const index = y * width + x;
+      codes[index] = terrainCode(cell.terrain);
+      states[index] = (cell.explored ? 1 : 0) | (cell.visible ? 2 : 0);
+      heights[index] = Math.round(255 * Math.min(1, Math.max(0, cell.height ?? 0.35)));
+    }
+  }
+
+  // 完全没变化（调用方签名比较漏掉的等价数据）：直接用上一版的字节重建纹理，不重算任何场。
+  if (previous?.raw && previous.raw.codes.length === width * height
+    && previous.sdf.image.width === width * SDF_SUPERSAMPLE && previous.sdf.image.height === height * SDF_SUPERSAMPLE) {
+    const same = previous.raw.codes.every((code, index) => code === codes[index])
+      && previous.raw.states.every((state, index) => state === states[index])
+      && previous.raw.heights.every((value, index) => value === heights[index]);
+    if (same) {
+      const raw = previous.raw;
+      return {
+        color: dataTexture(raw.colors, width, height),
+        properties: dataTexture(raw.properties, width, height),
+        heat: dataTexture(raw.heat, width, height),
+        sdf: dataTexture(raw.sdfBytes, previous.sdf.image.width, previous.sdf.image.height, true),
+        masks: previous.masks!, waterField: previous.waterField!, rockField: previous.rockField!, lavaField: previous.lavaField!,
+        raw,
+      };
+    }
+  }
+  // 增量（审查 P2-3）：尺寸一致且上一版数据可用时，只重算变化格及其邻域，
+  // 其余逐格字节直接沿用；整张重建只在首帧、窗口变化或尺寸变化时发生。
+  const raw = previous?.raw && previous.raw.codes.length === width * height
+    && previous.sdf.image.width === width * SDF_SUPERSAMPLE && previous.sdf.image.height === height * SDF_SUPERSAMPLE
+    ? previous.raw : null;
+  const dirty = raw ? dirtyCells(width, height, codes, states, heights, raw) : null;
+  // 有上一版就能走增量：dirty 为 null 表示数据完全没变（调用方签名相同一般已短路，
+  // 这里只重建纹理对象、不重算任何场）。
+  const incremental = raw !== null;
+  // 完全没变化时（理论上调用方已经短路）仍走整张重建，保证返回的纹理是独立对象。
+
+  const masks = categoryMasks(width, height, at, knownAt);
+  // 复用上一版的字节数组（旧纹理随后就 dispose；新纹理从同一块内存重新上传）。
+  const colors = incremental ? raw!.colors : new Uint8Array(width * height * 4);
+  const properties = incremental ? raw!.properties : new Uint8Array(width * height * 4);
+  const heat = incremental ? raw!.heat : new Uint8Array(width * height * 4);
+
+  // 距离场：BFS 是全图扩散，没法按脏区增量；但只在「本类别种子或已探索位变了」时才重跑。
+  const reuseEdge = incremental && (!dirty || (!dirty.codesChanged && !dirty.exploredChanged));
+  const reuseLava = incremental && (!dirty || (!dirty.lavaChanged && !dirty.exploredChanged));
+  const reuseWater = incremental && (!dirty || (!dirty.waterChanged && !dirty.exploredChanged));
+  const lavaDistance = reuseLava ? raw!.lavaDistance : distanceField(width, height, boundsX, boundsY,
+    (x, y) => { const cell = at(x - boundsX, y - boundsY); return cell.explored && cell.terrain === 'lava'; }, faceSize, 5);
+  const waterDistance = reuseWater ? raw!.waterDistance : distanceField(width, height, boundsX, boundsY,
+    (x, y) => { const cell = at(x - boundsX, y - boundsY); return cell.explored && WATER_TERRAINS.has(cell.terrain); }, faceSize, 5);
+  const reuseDistances = reuseLava && reuseWater;
+  const edge = reuseEdge ? raw!.edge : knownEdgeField(width, height, (x, y) => at(x - boundsX, y - boundsY), boundsX, boundsY);
+
+  // 逐格字节：距离场/前沿沿用旧值时只重算脏区；地形码或已探索位变了（距离场整张变了）
+  // 就整张重写——heat 的 R/G 与 A 通道都依赖全局距离场。
+  const localBytesOnly = incremental && reuseDistances && reuseEdge && dirty !== null;
+  const x0 = localBytesOnly ? Math.max(0, dirty!.x0) : 0, x1 = localBytesOnly ? Math.min(width, dirty!.x1 + 1) : width;
+  const y0 = localBytesOnly ? Math.max(0, dirty!.y0) : 0, y1 = localBytesOnly ? Math.min(height, dirty!.y1 + 1) : height;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const cell = at(x, y);
+      const known = knownAt(x, y);
       const color = known ? FINISH_COLORS[cell.terrain] ?? FINISH_COLORS.buildable : UNKNOWN_COLOR;
       const flags = finishFlags(cell.terrain);
       const i = (y * width + x) * 4;
@@ -247,41 +400,87 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, 
       properties[i + 1] = known ? Math.round(flags.rock * 255) : 0;
       properties[i + 2] = known ? 255 : 0;
       properties[i + 3] = known && cell.visible ? 255 : 0;
-      if (known && flags.water === 1) {
-        // Cardinal shore flags use real cube-sphere neighbors, including rotated face seams.
-        const flags4 = directionOrder.map((direction) => {
-          const { tile } = surfaceStep({ x: boundsX + x, y: boundsY + y }, direction, faceSize);
-          const neighbor = neighborSample(tile.x, tile.y);
-          return neighbor.explored && neighbor.terrain !== 'unknown' && !WATER_TERRAINS.has(neighbor.terrain) ? 255 : 0;
-        });
-        coast.set(flags4, i);
-      }
       const lavaD = lavaDistance[y * width + x];
       const waterD = waterDistance[y * width + x];
       heat[i] = known ? Math.round(255 * Math.max(0, 1 - (lavaD === 255 ? 5 : lavaD) / 5)) : 0;
       heat[i + 1] = known ? Math.round(255 * Math.max(0, 1 - (waterD === 255 ? 5 : waterD) / 5)) : 0;
-      heat[i + 2] = known ? Math.round(255 * Math.min(1, Math.max(0, cell.height ?? 0.35))) : 0;
+      heat[i + 2] = known ? heights[y * width + x] : 0;
       heat[i + 3] = known ? Math.round(255 * edge[y * width + x]) : 0;
     }
   }
-  // SDF 图是超采样分辨率（每格 4×4）：直接在它的格点上编码。
-  const sdf = new Uint8Array(waterGrid.width * waterGrid.height * 4);
-  for (let i = 0; i < waterGrid.data.length; i++) {
-    sdf[i * 4] = encodeSdf(waterGrid.data[i]);
-    sdf[i * 4 + 1] = encodeSdf(rockGrid.data[i]);
-    sdf[i * 4 + 2] = encodeSdf(lavaGrid.data[i]);
-    // A：到未知区的距离（已探索侧为正）：SDF 版本由 knownEdgeField 放大到超采样分辨率。
-    const gx = i % waterGrid.width, gy = Math.floor(i / waterGrid.width);
-    const cellEdge = edge[Math.min(height - 1, Math.floor(gy / SDF_SUPERSAMPLE)) * width + Math.min(width - 1, Math.floor(gx / SDF_SUPERSAMPLE))];
-    sdf[i * 4 + 3] = encodeSdf(cellEdge * 0.5 - 0.25);
+
+  // 平滑类别场（L15）：只有**已探索**的格参与；未知格恒为外侧，等值线停在探索前沿。
+  const reusable = raw && previous!.masks && previous!.waterField && previous!.rockField && previous!.lavaField
+    ? { masks: previous!.masks, water: previous!.waterField, rock: previous!.rockField, lava: previous!.lavaField } : undefined;
+  const waterGrid = smoothField(width, height, masks.water, reusable && { cells: reusable.masks.water, field: reusable.water });
+  const rockGrid = smoothField(width, height, masks.rock, reusable && { cells: reusable.masks.rock, field: reusable.rock });
+  const lavaGrid = smoothField(width, height, masks.lava, reusable && { cells: reusable.masks.lava, field: reusable.lava });
+  // 单格保留（审查 P2-1）：宽核均值会把孤立 1 格水/岩浆的格心压到阈值以下
+  // （实测 1 格水格心 −0.19，着色器要 > 0.45 才算水），服务端说水、画面画成陆地。
+  // 这里把「本格自身类别」与平滑场取并集：本格是水/岩浆/岩石时，格心固定推进内侧，
+  // 平滑场仍负责格与格之间的圆润过渡与外侧衰减。未探索格不参与（信息诚实不变）。
+  keepOwnCells(waterGrid, masks.water);
+  keepOwnCells(rockGrid, masks.rock);
+  keepOwnCells(lavaGrid, masks.lava);
+  // 编码：场值 ±0.5 → 0..255（0.5 = 0）。场本身是覆盖度，范围天然是 ±0.5。
+  const encodeSdf = (value: number) => Math.max(0, Math.min(255, Math.round((value + 0.5) * 255)));
+  // SDF 图是超采样分辨率（每格 8×8）：只重编码脏区（连同 smoothField 的 ±3 格边带）。
+  const sdf = raw ? raw.sdfBytes : new Uint8Array(waterGrid.width * waterGrid.height * 4);
+  const supersample = SDF_SUPERSAMPLE;
+  const sdfBand = incremental && dirty !== null && reuseDistances && reuseEdge;
+  const sx0 = sdfBand ? Math.max(0, dirty!.x0 - 3) * supersample : 0;
+  const sx1 = sdfBand ? Math.min(width, dirty!.x1 + 4) * supersample : waterGrid.width;
+  const sy0 = sdfBand ? Math.max(0, dirty!.y0 - 3) * supersample : 0;
+  const sy1 = sdfBand ? Math.min(height, dirty!.y1 + 4) * supersample : waterGrid.height;
+  for (let gy = sy0; gy < sy1; gy++) {
+    for (let gx = sx0; gx < sx1; gx++) {
+      const i = gy * waterGrid.width + gx;
+      sdf[i * 4] = encodeSdf(waterGrid.data[i]);
+      sdf[i * 4 + 1] = encodeSdf(rockGrid.data[i]);
+      sdf[i * 4 + 2] = encodeSdf(lavaGrid.data[i]);
+      // A：到未知区的距离（已探索侧为正）：SDF 版本由 knownEdgeField 放大到超采样分辨率。
+      const cellEdge = edge[Math.min(height - 1, Math.floor(gy / supersample)) * width + Math.min(width - 1, Math.floor(gx / supersample))];
+      sdf[i * 4 + 3] = encodeSdf(cellEdge * 0.5 - 0.25);
+    }
   }
   return {
     color: dataTexture(colors, width, height),
     properties: dataTexture(properties, width, height),
-    coast: dataTexture(coast, width, height),
     heat: dataTexture(heat, width, height),
     sdf: dataTexture(sdf, waterGrid.width, waterGrid.height, true),
+    masks,
+    waterField: waterGrid.data, rockField: rockGrid.data, lavaField: lavaGrid.data,
+    raw: { codes, states, heights, colors, properties, heat, sdfBytes: sdf, edge, lavaDistance, waterDistance },
   };
+}
+
+/**
+ * 与上一版相比发生变化的格包围盒（地形码 / 状态位 / 高度），并记下变化种类：
+ * - `codes` 变了 → 距离场/平滑场都要重算；
+ * - 只有 `explored` 变了 → 距离场与前沿要重算；
+ * - 只有 `visible`/`height` 变了 → 只重写逐格字节。
+ */
+function dirtyCells(width: number, height: number, codes: Uint8Array, states: Uint8Array, heights: Uint8Array, raw: AtlasRaw) {
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  let codesChanged = false, exploredChanged = false, lavaChanged = false, waterChanged = false;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      if (codes[index] === raw.codes[index] && states[index] === raw.states[index] && heights[index] === raw.heights[index]) continue;
+      if (codes[index] !== raw.codes[index]) {
+        codesChanged = true;
+        const before = raw.codes[index], now = codes[index];
+        if (before === 4 || now === 4) lavaChanged = true;
+        if (before === 2 || now === 2) waterChanged = true;
+      }
+      if ((states[index] & 1) !== (raw.states[index] & 1)) exploredChanged = true;
+      if (x < x0) x0 = x;
+      if (y < y0) y0 = y;
+      if (x > x1) x1 = x;
+      if (y > y1) y1 = y;
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1, codesChanged, exploredChanged, lavaChanged, waterChanged };
 }
 
 /** 场景窗口（含 surface_patches）的取样器与打包布局。 */
@@ -313,5 +512,5 @@ function terrainHeight(planet: PlanetRenderView, x: number, y: number) {
 }
 
 export function disposeAtlas(atlas: AtlasSet) {
-  atlas.color.dispose(); atlas.properties.dispose(); atlas.coast.dispose(); atlas.heat.dispose(); atlas.sdf.dispose();
+  atlas.color.dispose(); atlas.properties.dispose(); atlas.heat.dispose(); atlas.sdf.dispose();
 }

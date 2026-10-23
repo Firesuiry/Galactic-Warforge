@@ -17,8 +17,6 @@ export const SHADER_HEADER = /* glsl */`
   uniform sampler2D swOverviewProperties;
   uniform sampler2D swLocalColor;
   uniform sampler2D swLocalProperties;
-  uniform sampler2D swOverviewCoast;
-  uniform sampler2D swLocalCoast;
   uniform sampler2D swOverviewHeat;
   uniform sampler2D swLocalHeat;
   uniform sampler2D swOverviewSdf;
@@ -56,8 +54,8 @@ export const SHADER_HEADER = /* glsl */`
   float swWaterMetal = 0.02;
   vec3 swEastW = vec3(1.0, 0.0, 0.0);
   vec3 swSouthW = vec3(0.0, 0.0, 1.0);
-  /** 到水边的连续场（格为单位，跨面邻接）：图集 coast 四向标志与格内坐标算出，
-   *  水面深浅、泡沫线、岸边沙泥都用它，所以海岸线在格内是斜的、圆润的，不沿格边走方块。 */
+  /** 到水边的连续场（格为单位）：直接取水面距离场（SDF），水面深浅、泡沫线、
+   *  岸边沙泥都用它，所以海岸线在格内是斜的、圆润的，不沿格边走方块。 */
   float swShoreDistance = 1.0;
   /** 高度（bump 来源）采样用的 mip 级别：逐像素由「一个像素覆盖几个 texel」算出。 */
   float swHeightLod = 0.0;
@@ -119,9 +117,10 @@ export const SHADER_HEADER = /* glsl */`
 
   /** 一次图集采样结果：类别权重已做亚格双线性（未知格权重恒为 0）。 */
   struct SwAtlasSample {
+    /** 本格中心（未加权）的属性：R 水 / G 岩 / B 已探索 / A 可见。 */
+    vec4 own;
     vec4 props;
     vec3 color;
-    vec4 coast;
     vec4 heat;
     /** 有符号距离场（格，±4 编码到 0..1，0.5 = 0）：R 水面、G 岩性、B 岩浆、A 到未知区。
      *  双线性插值后等值线在格内是斜的、跨格连续——这就是 L15 的亚格边界。 */
@@ -139,7 +138,7 @@ export const SHADER_HEADER = /* glsl */`
    * 信息诚实：只有**已探索**的邻格参与加权（未知格权重为 0），并且 known 还要乘
    * 本格中心的已知位——域扭曲把采样点推进未知格时，那里依然是面纱而不是地形色。
    */
-  SwAtlasSample swSampleAtlas(sampler2D propsTex, sampler2D colorTex, sampler2D coastTex, sampler2D heatTex,
+  SwAtlasSample swSampleAtlas(sampler2D propsTex, sampler2D colorTex, sampler2D heatTex,
     sampler2D sdfTex, vec2 cellIndex, vec2 dims, vec4 rect) {
     vec2 p = cellIndex - 0.5;
     vec2 base = floor(p);
@@ -162,8 +161,6 @@ export const SHADER_HEADER = /* glsl */`
     s.props = (p00 * wk.x + p10 * wk.y + p01 * wk.z + p11 * wk.w) * norm;
     s.color = (texture2D(colorTex, uv00).rgb * wk.x + texture2D(colorTex, uv10).rgb * wk.y
       + texture2D(colorTex, uv01).rgb * wk.z + texture2D(colorTex, uv11).rgb * wk.w) * norm;
-    s.coast = (texture2D(coastTex, uv00) * wk.x + texture2D(coastTex, uv10) * wk.y
-      + texture2D(coastTex, uv01) * wk.z + texture2D(coastTex, uv11) * wk.w) * norm;
     s.heat = (texture2D(heatTex, uv00) * wk.x + texture2D(heatTex, uv10) * wk.y
       + texture2D(heatTex, uv01) * wk.z + texture2D(heatTex, uv11) * wk.w) * norm;
     // SDF 图是每格 4×4 的超采样距离场：按连续的格坐标直接取一个点，硬件线性过滤
@@ -171,8 +168,8 @@ export const SHADER_HEADER = /* glsl */`
     s.sdf = texture2D(sdfTex, clamp(cellIndex / dims, low, high));
     // 本格中心的已知位（未加权、未归一化）：域扭曲不能把地形色带进未探索格。
     vec2 ownUV = clamp((floor(cellIndex) + 0.5) / dims, low, high);
-    float own = step(0.5, texture2D(propsTex, ownUV).b);
-    s.known = smoothstep(0.18, 0.86, sum) * own;
+    s.own = texture2D(propsTex, ownUV);
+    s.known = smoothstep(0.18, 0.86, sum) * step(0.5, s.own.b);
     s.cellUV = fract(cellIndex);
     return s;
   }
@@ -222,11 +219,11 @@ export const SHADER_COLOR = /* glsl */`
   vec2 swWarp = vec2(swFbm(swCellSpace * 0.9 + 5.7), swFbm(swCellSpace * 1.7 + 17.3)) - 0.5;
   vec2 swCellCoord = swFaceCell + swWarp * (0.70 * swWarpFade);
   vec4 swOverviewRect = vec4(vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0), vec2(1.0) / vec2(3.0,2.0));
-  SwAtlasSample swAtlas = swSampleAtlas(swOverviewProperties, swOverviewColor, swOverviewCoast, swOverviewHeat,
+  SwAtlasSample swAtlas = swSampleAtlas(swOverviewProperties, swOverviewColor, swOverviewHeat,
     swOverviewSdf, swCellCoord, swOverviewDimensions, swOverviewRect);
+  vec4 swOwn = swAtlas.own;
   vec4 swProps = swAtlas.props;
   vec3 swAlbedo = swAtlas.color;
-  vec4 swCoast = swAtlas.coast;
   vec4 swHeat = swAtlas.heat;
   vec4 swSdf = swAtlas.sdf;
   vec2 swCellUV = swAtlas.cellUV;
@@ -249,11 +246,11 @@ export const SHADER_COLOR = /* glsl */`
       // 局部图集里 1 个纹素 = 1 格，所以补片内格偏移直接加到 rect 的格偏移上。
       vec2 localCell = clamp(swUV, bounds.xy, bounds.xy + bounds.zw) * swMapDimensions;
       vec2 packedCell = rect.xy * swLocalDimensions + (localCell - bounds.xy * swMapDimensions);
-      SwAtlasSample local = swSampleAtlas(swLocalProperties, swLocalColor, swLocalCoast, swLocalHeat,
+      SwAtlasSample local = swSampleAtlas(swLocalProperties, swLocalColor, swLocalHeat,
         swLocalSdf, packedCell + swWarp * (0.70 * swWarpFade), swLocalDimensions, rect);
+      swOwn = local.own;
       swProps = local.props;
       swAlbedo = local.color;
-      swCoast = local.coast;
       swHeat = local.heat;
       swSdf = local.sdf;
       swCellUV = local.cellUV;
@@ -294,6 +291,17 @@ export const SHADER_COLOR = /* glsl */`
   float swWater = smoothstep(-0.45, 0.45, swSdfWater + swCoastNoise);
   float swRock = smoothstep(-0.45, 0.45, swSdfRock + swRockNoise);
   float swLava = smoothstep(-0.40, 0.40, swSdfLava + swLavaNoise) * swKnown;
+  // 本格类别守卫（审查 P2-1）：宽核平滑会把孤立 1 格水/岩浆压到阈值以下，
+  // 服务端说水、画面画成陆地。这里用「本格中心属性」兜底：本格是水/岩/岩浆时，
+  // 以格心为圆心画一个半径约 0.6 格的圆形内核（格角仍交给平滑场），
+  // 所以单格读成圆水洼/熔池，不沿格边出方块；噪声只负责格与格之间的岸线形状。
+  float swOwnDistance = length(swCellUV - 0.5);
+  float swOwnKernel = 1.0 - smoothstep(0.30, 0.72, swOwnDistance);
+  swWater = max(swWater, step(0.5, swOwn.r) * swOwnKernel);
+  swRock = max(swRock, step(0.5, swOwn.g) * swOwnKernel);
+  // 岩浆在属性图里与阻挡格同为「岩性 = 1」，无法从 own 属性区分；用 keepOwnCells
+  // 抬过的岩浆 SDF（格心 ≥0.46、格角 0.2）配一条高于噪声底的阈值曲线兜底。
+  swLava = max(swLava, smoothstep(0.30, 0.40, swSdfLava) * swKnown);
   // 焦土：到岩浆格的连续距离场（heat.r 在 5 格内线性衰减），再乘 (1 - 岩浆本体)。
   float swLavaNear = smoothstep(0.02, 0.85, swHeat.r) * (1.0 - swLava);
   // 连续离岸距离（L15）：直接取水面距离场（含上面叠的噪声），
