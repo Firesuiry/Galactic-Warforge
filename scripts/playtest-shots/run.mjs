@@ -116,6 +116,8 @@ for (const shot of scene.shots) {
 if (stats.length) {
   console.log('[shots] 绘制统计：');
   for (const entry of stats) console.log(`  ${entry.name}: ${JSON.stringify(entry.stats)}`);
+  // 修前/修后对照要留原始数字：机位 + 绘制统计 + 帧率写进 outDir/stats.json（与 fixture-shots 同口径）。
+  fs.writeFileSync(path.join(outDir, 'stats.json'), JSON.stringify({ scene: sceneName, stats }, null, 2));
 }
 
 // ---- 2x 特写（裁剪整屏图中心再放大）----
