@@ -8,6 +8,9 @@
 import type { GameEventDetail } from '@shared/types';
 
 import { sfx } from '@/engine/audio';
+import { payloadAnchor } from '@/engine/battle-events';
+import { isPowerAlertType } from '@/features/notifications/event-toasts';
+import { spatialForTile } from '@/features/audio/spatial';
 
 /**
  * 建筑「完成态」判定：状态进入 running 且原因属于建成/恢复运转
@@ -48,15 +51,22 @@ function isDuplicateEvent(eventId: string): boolean {
  * - building_state_changed（完成态）→ 建造完成 chime
  * - research_completed → 研究完成琶音
  * - production_alert → 告警双脉冲
- * - rocket_launched → 发射音
+ * - rocket_launched → 导弹开火音
+ * - construction_paused / construction_resumed → 指令成功/失败短音
+ * - dark_fog_provoked / dark_fog_calmed → 告警 / 通知
+ * 带格坐标的事件（position/target_pos/from）按空间衰减播放。
  */
 export function playPlanetEventAudio(event: GameEventDetail): void {
   if (isDuplicateEvent(event.event_id)) {
     return;
   }
+  const payload = event.payload ?? {};
+  const spatial = spatialForTile(payloadAnchor(payload) ?? null);
+  // 超过 60 格（球面距离）的事件不播；没有坐标时按非空间音照播。
+  if (spatial && !spatial.audible) return;
   switch (event.event_type) {
     case 'building_state_changed':
-      if (isBuildingCompletionEvent(event.payload ?? {})) {
+      if (isBuildingCompletionEvent(payload)) {
         sfx.buildComplete();
       }
       break;
@@ -64,10 +74,30 @@ export function playPlanetEventAudio(event: GameEventDetail): void {
       sfx.researchComplete();
       break;
     case 'production_alert':
-      sfx.alert();
+      // 缺电告警（电力类）与普通产线告警用不同提示音，便于不看屏幕时分辨。
+      const alertType = typeof payload.alert_type === 'string'
+        ? payload.alert_type
+        : (payload.alert as { alert_type?: string } | undefined)?.alert_type;
+      if (isPowerAlertType(alertType)) {
+        sfx.alert();
+      } else {
+        sfx.notify();
+      }
       break;
     case 'rocket_launched':
-      sfx.fire();
+      sfx.fireMissile(spatial);
+      break;
+    case 'construction_paused':
+      sfx.commandFail();
+      break;
+    case 'construction_resumed':
+      sfx.commandOk();
+      break;
+    case 'dark_fog_provoked':
+      sfx.alert();
+      break;
+    case 'dark_fog_calmed':
+      sfx.notify();
       break;
     default:
       break;

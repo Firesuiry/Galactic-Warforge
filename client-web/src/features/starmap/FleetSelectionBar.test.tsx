@@ -18,6 +18,7 @@ const { mockClient, runCommandMock, sfxMock } = vi.hoisted(() => ({
   runCommandMock: vi.fn((input: WarCommandInput) => void input.execute()),
   sfxMock: {
     uiClick: vi.fn(),
+    uiHover: vi.fn(),
     commandOk: vi.fn(),
     commandFail: vi.fn(),
   },
@@ -95,6 +96,8 @@ describe('FleetSelectionBar', () => {
     expect(runCommandMock).toHaveBeenCalled();
   });
 
+  // 点击音由共用 Button 统一出（本文件不再手写 uiClick），这里断言按钮点击后
+  // 恰好响一声（不重复），而不是「FleetSelectionBar 自己调了 uiClick」。
   it('攻击目标：进入 attack 模式并聚焦舰队所在星系，且播 uiClick', async () => {
     const user = userEvent.setup();
     renderBar();

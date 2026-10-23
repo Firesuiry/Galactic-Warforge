@@ -60,6 +60,8 @@ import {
   getTechDisplayName,
 } from "@/features/planet-map/model";
 import { usePlanetRealtimeSync } from "@/features/planet-map/use-planet-realtime";
+import { resetTenseWindow, usePlanetAudioScene, type AudioSceneHandle } from "@/features/audio/use-planet-audio-scene";
+import { sfx } from "@/engine/audio";
 import { useShellAlerts } from "@/features/production-alerts-query";
 import { accumulateOwnEntities, createOwnEntityCache, ownEntitySnapshot } from "@/features/planet-map/own-entity-cache";
 import { indexUnitsById } from "@/features/planet-map/rts-commands";
@@ -142,6 +144,37 @@ export function PlanetPage() {
   const handleCanvasReady = useCallback((capture: PlanetMapCapture | null) => {
     captureRef.current = capture;
   }, []);
+  /**
+   * 音频空间化用的相机句柄（第 23 轮）：每 500ms 读一次中心格 + 高度 + 投影。
+   * 走 capture 的只读接口（getViewport / projectTile），不碰场景内部状态。
+   */
+  const audioSceneRef = useRef<AudioSceneHandle | null>(null);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const capture = captureRef.current;
+      const viewport = capture?.getViewport?.() ?? null;
+      audioSceneRef.current = capture && viewport
+        ? {
+          getCameraState: () => {
+            const next = capture.getViewport?.() ?? viewport;
+            return { center: next.center, altitude: next.altitude, tilt: next.tilt, groundView: next.altitude < 190 };
+          },
+          project: (tile) => capture.projectTile?.(tile) ?? null,
+          // 声相归一化口径与 project 一致（画布 CSS 尺寸，不是 window 尺寸）。
+          getViewport: () => {
+            const next = capture.getViewport?.() ?? null;
+            return next ? { width: next.width, height: next.height } : null;
+          },
+        }
+        : null;
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+  // ?freeze=1（截图/夹具确定性约定）下不播声床与配乐。
+  const audioFrozen = useMemo(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("freeze"),
+    [],
+  );
   // 3D 深链（R20-A ⑥）：分享链接里的 `tilt` / `zoom` 在 3D 视图打开时还原相机。
   // 3D 相机状态按需读取（调试面板打开/复制链接时经 capture.getViewport 拉）。
   const threeInitialTilt = parseTiltParam(searchParams.get("tilt"), 0.65);
@@ -205,7 +238,14 @@ export function PlanetPage() {
   // 抽屉打开时建造栏自动收起（覆盖式抽屉会压住右下角建造卡片）；关闭时不自动展开，
   // 尊重玩家手动收起的意图。buildBarDocked 是 store 状态，供 PlanetBuildBar 渲染把手。
   const toggleDrawer = useCallback((open: boolean) => {
-    setDrawerOpen(open);
+    setDrawerOpen((wasOpen) => {
+      // 抽屉开/关各一声（同一状态重复设置不响，避免选中实体时连续刷音）
+      if (open !== wasOpen) {
+        if (open) sfx.uiPanelOpen();
+        else sfx.uiPanelClose();
+      }
+      return open;
+    });
     if (open) {
       setBuildBarDocked(true);
     }
@@ -490,6 +530,8 @@ export function PlanetPage() {
     resetCommandStore(planetId);
     setActiveDetailPanel("workbench");
     toggleDrawer(false);
+    // 配乐「紧张」窗口按 tick 记，上一局的 until_tick 会一直压着新局，换局必须清。
+    resetTenseWindow();
   }, [gameIdentity, planetId, resetCommandStore, resetForPlanet]);
   const knownOwnUnits = useMemo(() => indexUnitsById(guideEntities.units), [guideEntities.units]);
   // 「家」按累积的己方实体算（不随镜头窗口丢失），供聚焦基地/回到基地共用。
@@ -737,6 +779,15 @@ export function PlanetPage() {
     markFullSync();
   }, [alertQuery.data, hydrateRecentAlerts, markFullSync]);
 
+  // 行星页音频场景（声床 + 配乐 + 空间化监听器）：必须在任何 early return 之前调用。
+  usePlanetAudioScene({
+    planet: sceneQuery.data,
+    runtime: runtimeQuery.data,
+    sceneRef: audioSceneRef,
+    playerId: session.playerId,
+    frozen: audioFrozen,
+    gameIdentity: currentGameQuery.data ? gameIdentityOf(currentGameQuery.data) : '',
+  });
   const isLoading = [
     sceneQuery.isLoading,
     runtimeQuery.isLoading,

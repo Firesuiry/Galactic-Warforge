@@ -1,7 +1,27 @@
 export type PlanetRenderQuality = 'low' | 'balanced' | 'high';
 
+/** 画质档位的持久化键（PlanetMapThree 的下拉与音频预载共用）。 */
+export const RENDER_QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+
 export function parseRenderQuality(value: string | null): PlanetRenderQuality {
   return value === 'low' || value === 'high' ? value : 'balanced';
+}
+
+/**
+ * 当前画质档位：URL `?quality=`（深链截图）优先，其次 localStorage，缺省 balanced。
+ * 唯一定义处（PlanetMapThree 与 features/audio/quality 都读这里）。
+ */
+export function readPlanetRenderQuality(): PlanetRenderQuality {
+  if (typeof window === 'undefined') return 'balanced';
+  const query = new URLSearchParams(window.location.search).get('quality');
+  if (query === 'low' || query === 'balanced' || query === 'high') return query;
+  try {
+    const saved = window.localStorage.getItem(RENDER_QUALITY_STORAGE_KEY);
+    if (saved === 'low' || saved === 'balanced' || saved === 'high') return saved;
+  } catch {
+    // 隐私模式下 localStorage 不可用：按缺省档
+  }
+  return 'balanced';
 }
 
 /** 环境光遮蔽：off 不渲染 GTAO；half = 半分辨率（降采样后合成）；full = 全分辨率。 */
@@ -18,7 +38,7 @@ export interface PlanetRenderSettings {
   grade: boolean;
   /** 太阳镜头光晕：只有 high 开。 */
   flare: boolean;
-  /** 软阴影：low 用硬阴影（PCF），balanced/high 用 VSM（带半径模糊）。 */
+  /** 软阴影：low 用硬阴影（PCF），balanced/high 用 PCF + shadowRadius（接触处柔和）。 */
   softShadows: boolean;
   /** 天空 IBL 的 PMREM 立方体边长（low 128、balanced 256、high 512）。 */
   envSize: number;
@@ -45,7 +65,7 @@ export function renderQualitySettings(quality: PlanetRenderQuality, width: numbe
     ao: quality === 'low' ? 'off' : quality === 'high' ? 'full' : 'half',
     grade: true,
     flare: quality === 'high',
-    // low 用硬阴影（PCF）；balanced/high 用 PCFSoft（接触处柔和、无 VSM 的漏光与粉刺）。
+    // low 用硬阴影（PCF）；balanced/high 用 PCF + shadowRadius（接触处柔和、无 VSM 的漏光与粉刺）。
     softShadows: quality !== 'low',
     envSize: quality === 'high' ? 512 : quality === 'low' ? 128 : 256,
   };

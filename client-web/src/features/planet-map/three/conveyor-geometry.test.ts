@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { surfaceStep, type SurfaceDirection } from '@shared/surface';
 import type { Building, BuildingFractionationState, BuildingSprayCoaterState, LogisticsStationState, PortDirection, SplitterConfig } from '@shared/types';
@@ -503,6 +503,64 @@ describe('conveyor rendering batches', () => {
     expect(renderer.group.children[0]).toBe(mesh);
     expect(renderer.refresh([],16)).toBe(true);
     expect(renderer.group.children).toHaveLength(0);
+    renderer.dispose();
+  });
+});
+
+const pbrState = vi.hoisted(() => ({ ready: false }));
+vi.mock('./industrial-materials', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./industrial-materials')>();
+  const THREE = await import('three');
+  const fake = () => new THREE.DataTexture(new Uint8Array(4), 1, 1);
+  return {
+    ...actual,
+    industrialMaterialsReady: () => pbrState.ready || actual.industrialMaterialsReady(),
+    // 贴图就绪后：结构件返回 PBR 材质（带法线贴图），带面拿到橡胶贴图组。
+    createPbrMaterial: (family: Parameters<typeof actual.createPbrMaterial>[0], color: string,
+      parameters: Parameters<typeof actual.createPbrMaterial>[2]) =>
+      pbrState.ready ? new THREE.MeshStandardMaterial({ ...parameters, color, normalMap: fake() }) : actual.createPbrMaterial(family, color, parameters),
+    materialTextures: (family: Parameters<typeof actual.materialTextures>[0]) =>
+      pbrState.ready ? { albedo: fake(), orm: fake(), normal: fake() } : actual.materialTextures(family),
+  };
+});
+
+describe('conveyor PBR upgrade (M3)', () => {
+  it('keeps the network geometry and swaps materials when textures arrive after construction', () => {
+    const renderer = new ConveyorGeometry();
+    const buildings = [belt('a', 8, 7), belt('b', 9, 7), belt('c', 10, 7)];
+    renderer.refresh(buildings, 16);
+    const before = [...renderer.group.children] as THREE.Mesh[];
+    expect(before.length).toBeGreaterThan(0);
+    const structure = before.filter(mesh => !mesh.name.startsWith('conveyor-deck'));
+    // 贴图未就绪（单测不发网络请求）：结构件是纯色材质，带面没有橡胶法线。
+    expect(structure[0].material).toBeInstanceOf(THREE.MeshStandardMaterial);
+    expect((structure[0].material as THREE.MeshStandardMaterial).normalMap).toBeNull();
+    const deck = before.find(mesh => mesh.name.startsWith('conveyor-deck')) as THREE.Mesh;
+    expect((deck.material as THREE.MeshStandardMaterial).normalMap).toBeNull();
+    // 未就绪时 upgrade 不换材质。
+    expect(renderer.upgradeMaterials()).toBe(false);
+    expect(renderer.group.children[0]).toBe(before[0]);
+    // 贴图就绪后再调：材质原地换掉、网格按缓存布局重建（同一批格、同一 draw 数）。
+    pbrState.ready = true;
+    try {
+      expect(renderer.upgradeMaterials()).toBe(true);
+      const after = renderer.group.children as THREE.Mesh[];
+      expect(after.length).toBe(before.length);
+      expect(after[0].material).not.toBe(before[0].material);
+      expect((after[0].material as THREE.MeshStandardMaterial).normalMap).toBeTruthy();
+      const upgradedDeck = after.find(mesh => mesh.name.startsWith('conveyor-deck')) as THREE.Mesh;
+      const deckMaterial = upgradedDeck.material as THREE.MeshStandardMaterial;
+      expect(deckMaterial.normalMap).toBeTruthy();
+      // 带面贴图是克隆副本：改 repeat 不污染共享贴图（审查 L8）。
+      expect(deckMaterial.roughnessMap).toBeTruthy();
+      expect(deckMaterial.roughnessMap).not.toBe(deckMaterial.normalMap);
+      expect(deckMaterial.normalMap!.repeat.x).toBe(1);
+      // 命中仍按格解析（重建没有丢 tileIndex）。
+      const mesh = after[0];
+      expect(mesh.geometry.getAttribute('tileIndex')).toBeTruthy();
+      // 已升级过：再调是幂等的。
+      expect(renderer.upgradeMaterials()).toBe(false);
+    } finally { pbrState.ready = false; }
     renderer.dispose();
   });
 });
