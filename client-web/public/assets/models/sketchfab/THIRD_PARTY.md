@@ -14,6 +14,7 @@
 - 剥蒙皮（烘进静止姿态）、合并材质、按位置减面到预算（英雄 40k / 单位 12k / 建筑炮塔 20k）；
 - 贴图缩到 1K（executor 2K 档）、**去饱和到 35%**、按均值拉到中灰、转 webp；
 - 坐标统一（Y 上、底面落 Y=0、水平居中、最长边 1），炮塔另把炮管转到 +Z 并拆出 `turret-barrel`；
+- specular-glossiness 材质转 MetalRough（`metalRough()`，worker 源文件用的是该扩展，three 不认）；
 - `EXT_meshopt_compression` 压缩；运行期按阵营重上色（底色乘阵营主色、发光件换阵营发光色）。
 
 个别模型另有旋转对齐（见下表「附加改动」）。

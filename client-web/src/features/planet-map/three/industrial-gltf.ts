@@ -4,7 +4,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 
 import type { UnitFaction } from '../rts-commands';
 
-import { FACTION, GLOW } from './palette';
+import { FACTION, GLOW, UNIT_PAINT } from './palette';
 
 /**
  * 现成 3D 模型库：两批素材。
@@ -30,18 +30,24 @@ import { FACTION, GLOW } from './palette';
 export interface GltfModelSpec {
   /** public/assets/models/ 下的相对路径。 */
   file: string;
-  /** 归一化之后的尺寸系数（默认 1）。 */
+  /** 归一化之后的尺寸系数（默认 1）。建筑按占地归一，单位按 `UNIT_HEIGHT` 归一，系数只做微调。 */
   scale?: number;
   /** 绕 Y 的朝向修正（弧度，默认 0）。 */
   yaw?: number;
-  /** 内置附挂件（士兵的步枪）：模板阶段用程序化几何挂上去，不额外加载 GLB。
-   * `at` 是主体包围盒的相对坐标（0..1），尺寸按主体高度换算。 */
-  attach?: 'rifle';
+  /** 内置附挂件：模板阶段用程序化几何挂上去，不额外加载 GLB（也不撑大归一化包围盒）。
+   * - `rifle`：士兵的步枪；
+   * - `hardhat`：工兵的安全帽 + 工具包（与士兵同框时靠轮廓区分，审查 P2 附带项）。 */
+  attach?: 'rifle' | 'hardhat';
   /**
    * 贴图已按本作口径预处理过（去饱和 + 均值归一，见 `develop_tools/sketchfab/normalize.mjs`）：
    * 底色直接乘阵营主色，而不是 Kenney 的「光乘系数」。
    */
   tinted?: 'palette';
+  /**
+   * 发光件的取色覆盖（sRGB）：默认按阵营取 `GLOW.<阵营>`。共用同一 GLB 的两个类型
+   * （`plasma_turret` / `sr_plasma_turret`）靠它 + `scale` 区分，模板也按它分开缓存。
+   */
+  glow?: string;
 }
 
 /**
@@ -89,7 +95,8 @@ export const BUILDING_GLTF: Record<string, GltfModelSpec> = {
   laser_turret: { file: 'sketchfab/laser_turret.glb', tinted: 'palette' },
   missile_turret: { file: 'sketchfab/missile_turret.glb', tinted: 'palette' },
   plasma_turret: { file: 'sketchfab/plasma_turret.glb', tinted: 'palette' },
-  sr_plasma_turret: { file: 'sketchfab/plasma_turret.glb', tinted: 'palette' },
+  // 与 plasma_turret 共用 GLB（同一份几何/材质）：放大 15% + 换成更亮的品青发光，读作更重的型号。
+  sr_plasma_turret: { file: 'sketchfab/plasma_turret.glb', scale: 1.15, glow: GLOW.plasmaHeavy, tinted: 'palette' },
   anti_air_turret: { file: 'sketchfab/anti_air_turret.glb', tinted: 'palette' },
 };
 
@@ -103,23 +110,48 @@ export const BUILDING_GLTF: Record<string, GltfModelSpec> = {
  */
 export const UNIT_GLTF: Record<string, GltfModelSpec> = {
   // —— Sketchfab CC-BY（第 23 轮 3A models 分支）——
-  // 尺寸系数按 plan2 §8 口径：executor 1.1 格、mecha 1.0、车辆 .8、步兵/工兵 .55、无人机 .5。
+  // 尺寸按 `UNIT_HEIGHT` 的**渲染高度**归一（不是水平最长边）：扁平载具/飞行器按水平边归一会被压到
+  // 0.14 格高，几乎看不见；按高度归一后每种单位的视觉体量稳定、俯视轮廓仍由模型自身的宽深决定。
   // 每个模型的「正面」由 `GltfModelSpec.yaw` 统一到 +Z（画廊与转台核对，见 tmp/3a-models/report2.md）。
-  executor: { file: 'sketchfab/executor.glb', scale: 1.1, tinted: 'palette' },
-  mecha: { file: 'sketchfab/mecha.glb', scale: 1.0, yaw: Math.PI / 2, tinted: 'palette' },
-  soldier: { file: 'sketchfab/soldier.glb', scale: 0.55, attach: 'rifle', tinted: 'palette' },
-  worker: { file: 'sketchfab/worker.glb', scale: 0.55, tinted: 'palette' },
-  scout: { file: 'sketchfab/scout.glb', scale: 0.8, tinted: 'palette' },
-  attack_drone: { file: 'sketchfab/attack_drone.glb', scale: 0.5, tinted: 'palette' },
-  artillery: { file: 'sketchfab/artillery.glb', scale: 0.8, tinted: 'palette' },
-  missile_vehicle: { file: 'sketchfab/missile_vehicle.glb', scale: 0.8, yaw: Math.PI / 2, tinted: 'palette' },
-  repair_vehicle: { file: 'sketchfab/repair_vehicle.glb', scale: 0.8, yaw: Math.PI, tinted: 'palette' },
-  supply_truck: { file: 'sketchfab/supply_truck.glb', scale: 0.8, yaw: Math.PI, tinted: 'palette' },
-  dark_fog: { file: 'sketchfab/dark_fog.glb', scale: 0.8, tinted: 'palette' },
+  executor: { file: 'sketchfab/executor.glb', tinted: 'palette' },
+  mecha: { file: 'sketchfab/mecha.glb', yaw: Math.PI / 2, tinted: 'palette' },
+  soldier: { file: 'sketchfab/soldier.glb', attach: 'rifle', tinted: 'palette' },
+  worker: { file: 'sketchfab/worker.glb', attach: 'hardhat', tinted: 'palette' },
+  scout: { file: 'sketchfab/scout.glb', tinted: 'palette' },
+  attack_drone: { file: 'sketchfab/attack_drone.glb', tinted: 'palette' },
+  artillery: { file: 'sketchfab/artillery.glb', tinted: 'palette' },
+  missile_vehicle: { file: 'sketchfab/missile_vehicle.glb', yaw: Math.PI / 2, tinted: 'palette' },
+  repair_vehicle: { file: 'sketchfab/repair_vehicle.glb', yaw: Math.PI, tinted: 'palette' },
+  supply_truck: { file: 'sketchfab/supply_truck.glb', yaw: Math.PI, tinted: 'palette' },
+  dark_fog: { file: 'sketchfab/dark_fog.glb', tinted: 'palette' },
   // 物流无人机/运输船在场景里统一按 `'ship'` 渲染（planet-three-scene 的 runtime.logistics_drones /
   // logistics_ships 共用一个类型），星图上的舰队标记用 `'cargo_ship'`。
-  ship: { file: 'sketchfab/ship.glb', scale: 0.8, tinted: 'palette' },
-  cargo_ship: { file: 'sketchfab/cargo_ship.glb', scale: 0.8, tinted: 'palette' },
+  ship: { file: 'sketchfab/ship.glb', tinted: 'palette' },
+  cargo_ship: { file: 'sketchfab/cargo_ship.glb', tinted: 'palette' },
+};
+
+/**
+ * 单位**渲染高度**（格，1 格 = 一个地块）。`fitUnit` 按它把模型等比缩放，所以这是每种单位
+ * 在画面里的体量口径，改这里就等于改全部同类单位的视觉尺寸。
+ *
+ * 取值依据（默认聚焦高度下轮廓可辨）：机甲最高（executor 0.81、mecha 0.73）、工兵略高于步兵
+ * （安全帽/工具包让它在同框里不被压住）、黑雾地面单位 = 士兵 × 1.4（压迫感，审查 P3 口径：
+ * 原先按水平边归一被放大到 1.3 格，是士兵的 2.5 倍）、车辆 0.14–0.24、飞行器 0.16–0.33。
+ */
+export const UNIT_HEIGHT: Record<string, number> = {
+  executor: 0.81,
+  mecha: 0.73,
+  soldier: 0.53,
+  worker: 0.6,
+  scout: 0.29,
+  attack_drone: 0.19,
+  artillery: 0.14,
+  missile_vehicle: 0.19,
+  repair_vehicle: 0.19,
+  supply_truck: 0.24,
+  dark_fog: 0.74,
+  ship: 0.16,
+  cargo_ship: 0.33,
 };
 
 const ROOT = '/assets/models/';
@@ -202,12 +234,41 @@ function rifleMesh(size: THREE.Vector3): THREE.Group {
 }
 
 /**
- * 模板准备：转成标准材质（Kenney Space Kit 是 unlit，进场景没有明暗会像贴纸）、
- * 按阵营乘底色、居中落地。只在加载时做一次。
- *
- * 同一个源材质在一份模板里只克隆一次：`batchStatic` 按材质归并，
- * 每个网格各克隆一份材质的话合并会失效，绘制调用会翻好几倍。
+ * 工兵的安全帽 + 工具包：按模板局部坐标拼（帽子是半球 + 帽檐，工具包是腰后的小方箱 + 背带）。
+ * 与士兵的步枪一样挂在**已缩放**的实例上，不参与归一化包围盒。
  */
+function hardHatMesh(size: THREE.Vector3): THREE.Group {
+  const kit = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), hatMaterial(0xffb04a));
+  shell.scale.set(size.y * 0.115, size.y * 0.085, size.y * 0.12);
+  shell.position.set(0, size.y * 0.905, size.y * 0.01);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.18, 16), hatMaterial(0xd99a3c));
+  brim.scale.set(size.y * 0.135, size.y * 0.02, size.y * 0.14);
+  brim.position.set(0, size.y * 0.9, size.y * 0.02);
+  // 工具包：腰后的小方箱 + 两条背带（深色，和白色机体拉开明暗）。
+  const box = new THREE.Mesh(rifleGeometry, hatMaterial(0x2b3a42));
+  box.scale.set(size.y * 0.2, size.y * 0.13, size.y * 0.09);
+  box.position.set(0, size.y * 0.44, -size.y * 0.2);
+  const strap = new THREE.Mesh(rifleGeometry, hatMaterial(0x2b3a42));
+  strap.scale.set(size.y * 0.05, size.y * 0.3, size.y * 0.03);
+  strap.position.set(size.y * 0.1, size.y * 0.62, -size.y * 0.12);
+  strap.rotation.z = 0.35;
+  kit.add(shell, brim, box, strap);
+  for (const mesh of kit.children) { mesh.castShadow = true; mesh.receiveShadow = true; }
+  return kit;
+}
+
+/** 安全帽/工具包共用材质（同色只建一次，合批后绘制调用不涨）。 */
+const hatMaterials = new Map<number, THREE.MeshStandardMaterial>();
+function hatMaterial(color: number): THREE.MeshStandardMaterial {
+  let material = hatMaterials.get(color);
+  if (!material) {
+    material = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.1 });
+    hatMaterials.set(color, material);
+  }
+  return material;
+}
+
 /**
  * 模板准备：转成标准材质（Kenney Space Kit 是 unlit，进场景没有明暗会像贴纸）、
  * 按阵营乘底色、居中落地。只在加载时做一次。
@@ -220,22 +281,26 @@ function rifleMesh(size: THREE.Vector3): THREE.Group {
  * 发光件取 `palette.GLOW`。贴图在规整阶段已去饱和到 35%、均值拉到中灰，所以这里
  * 是「乘主色」而不是 Kenney 的「光乘系数」。
  */
+/** 发光判定缓存（源材质 → 是否发光件）。同一 GLB 的 4 个阵营模板共用，只采样一次。 */
+const glowingSourceMaterials = new WeakMap<THREE.Material, boolean>();
+
 const PALETTE_TINT: Record<TintKey, { armor: string; glow: string }> = {
   'own-building': { armor: FACTION.own.ceramic, glow: GLOW.own },
   'enemy-building': { armor: FACTION.enemy.ceramic, glow: GLOW.enemy },
   own: { armor: FACTION.own.ceramic, glow: GLOW.own },
   enemy: { armor: FACTION.enemy.ceramic, glow: GLOW.enemy },
   fog_neutral: { armor: FACTION.fog.ceramic, glow: GLOW.fog },
-  // 黑雾敌对单位用暗红装甲（与 UNIT_PAINT.fog_hostile 同口径）。
-  fog_hostile: { armor: '#6e2228', glow: '#ff4444' },
+  // 黑雾敌对单位用暗红装甲（与 UNIT_PAINT.fog_hostile 同口径，取色从 palette 读）。
+  fog_hostile: { armor: UNIT_PAINT.fog_hostile.armor, glow: UNIT_PAINT.fog_hostile.light },
 };
 
-/** 发光件判定阈值：emissive 贴图 8×8 采样平均亮度 > 8 才算真发光件。
+/** 发光件判定阈值：emissive 贴图 **8×8 采样**的平均亮度 > 20 才算真发光件。
  * 很多作者把整张 albedo 塞进 emissive 槽（整张全黑或整张全亮），只按 `emissiveFactor > 0`
- * 判会把整机染成发光色（画廊里 accumulator / gauss_turret / missile_turret 踩过）。 */
+ * 判会把整机染成发光色（画廊里 accumulator / gauss_turret / missile_turret 踩过）；
+ * 阈值从 8 提到 20 是因为 dark_fog 躯体贴图均值 13.7，阈值 8 会把整台人形染成阵营发光色。 */
 const EMISSIVE_MEAN_THRESHOLD = 20;
 
-/** 4×4 采样 emissive 贴图的平均亮度（0–255）。跨域/未解码的贴图返回 0。 */
+/** 8×8 采样 emissive 贴图的平均亮度（0–255）。跨域/未解码的贴图返回 0。 */
 function emissiveMean(map: THREE.Texture): number {
   const image = map.image as (HTMLImageElement | ImageBitmap | undefined);
   if (!image || typeof document === 'undefined') return 0;
@@ -261,12 +326,13 @@ function emissiveMean(map: THREE.Texture): number {
  * 发光件判定见 `EMISSIVE_MEAN_THRESHOLD`：只有「有 emissive 贴图且确实亮」的材质才换发光色，
  * 其余一律上装甲色——否则作者把 albedo 塞进 emissive 槽的模型会整机染色。
  */
-function preparePalette(scene: THREE.Object3D, faction: TintKey): Prepared {
+function preparePalette(scene: THREE.Object3D, faction: TintKey, spec: GltfModelSpec): Prepared {
   const root = scene.clone(true);
   const host = new THREE.Box3().setFromObject(root);
   const size = host.getSize(new THREE.Vector3());
   const center = host.getCenter(new THREE.Vector3());
-  const { armor, glow } = PALETTE_TINT[faction];
+  const { armor } = PALETTE_TINT[faction];
+  const glow = spec.glow ?? PALETTE_TINT[faction].glow;
   const armorColor = new THREE.Color(armor);
   const glowColor = new THREE.Color(glow);
   const materials = new Map<THREE.Material, THREE.Material>();
@@ -282,8 +348,14 @@ function preparePalette(scene: THREE.Object3D, faction: TintKey): Prepared {
         // 底色一律是阵营装甲色：发光件只额外点亮自发光。整机换成发光色的话，
         // 贴图把发光面铺满全身的模型（dark_fog 的躯体、accumulator 的罐体）会整台变色。
         material.color.copy(armorColor);
-        const emissiveMap = (source as THREE.MeshStandardMaterial).emissiveMap;
-        const glowing = Boolean(emissiveMap) && emissiveMean(emissiveMap as THREE.Texture) > EMISSIVE_MEAN_THRESHOLD;
+        // 发光判定按**源材质**记忆化：同一材质在 4 个阵营里各跑一次 canvas 采样的话，
+        // executor 的 15 个材质会做 60 次 `getImageData`（同步阻塞首帧）。
+        const glowing = glowingSourceMaterials.has(source) ? glowingSourceMaterials.get(source)! : (() => {
+          const emissiveMap = (source as THREE.MeshStandardMaterial).emissiveMap;
+          const value = Boolean(emissiveMap) && emissiveMean(emissiveMap as THREE.Texture) > EMISSIVE_MEAN_THRESHOLD;
+          glowingSourceMaterials.set(source, value);
+          return value;
+        })();
         if (glowing) {
           material.emissive.copy(glowColor);
           material.emissiveIntensity = 2.2;
@@ -395,19 +467,29 @@ function prepare(scene: THREE.Object3D, tint: readonly [number, number, number],
   return { group: wrapper, size };
 }
 
-/** 模板键：主体文件 + 附挂件（同主体不同附挂件要分开缓存，否则士兵会拿到工兵的模板）。 */
-function templateKey(spec: GltfModelSpec) {
-  return spec.attach ? `${spec.file}+${spec.attach}` : spec.file;
+/** 模板键：主体文件 + 附挂件 + 发光色覆盖（同主体不同附挂件/发光色要分开缓存，
+ * 否则士兵会拿到工兵的模板、sr_plasma 会拿到 plasma 的发光色）。 */
+export function templateKey(spec: GltfModelSpec) {
+  return [spec.file, spec.attach, spec.glow].filter(Boolean).join('+');
 }
+
+/** 同一文件只加载一次：`plasma_turret` / `sr_plasma_turret` 共用 GLB，但模板键不同（发光色不同），
+ * 文件级缓存让两者共享同一份 `loadAsync` 结果（解析后的场景仍按阵营各克隆一次）。 */
+const loadedScenes = new Map<string, Promise<THREE.Object3D>>();
 
 async function prepareSpec(spec: GltfModelSpec, building: boolean) {
   const key = templateKey(spec);
   if (templates.has(key)) return;
-  const scene = (await loader.loadAsync(ROOT + spec.file)).scene;
+  let pending = loadedScenes.get(spec.file);
+  if (!pending) {
+    pending = loader.loadAsync(ROOT + spec.file).then((gltf) => gltf.scene);
+    loadedScenes.set(spec.file, pending);
+  }
+  const scene = await pending;
   const variants = new Map<TintKey, Prepared>();
   for (const faction of FACTION_KEYS) {
     // Sketchfab 素材：贴图已预处理，直接按调色板乘阵营主色。
-    if (spec.tinted === 'palette') { variants.set(faction, preparePalette(scene, faction)); continue; }
+    if (spec.tinted === 'palette') { variants.set(faction, preparePalette(scene, faction, spec)); continue; }
     // 只有己方**建筑**提亮暗部（屋顶在俯视时是主视觉面）；敌方/黑雾与单位保持原本的明暗对比。
     variants.set(faction, prepare(scene, TINT[faction].body, building && faction === 'own'));
   }
@@ -424,7 +506,13 @@ export function preloadIndustrialGltf(): Promise<void> {
     const specs = new Map<string, { spec: GltfModelSpec; building: boolean }>();
     for (const spec of Object.values(BUILDING_GLTF)) specs.set(templateKey(spec), { spec, building: true });
     for (const spec of Object.values(UNIT_GLTF)) specs.set(templateKey(spec), { spec, building: false });
-    loading = Promise.all([...specs.values()].map(({ spec, building }) => prepareSpec(spec, building))).then(() => undefined);
+    // `allSettled`：单个 GLB 失败只影响它自己的类型（`templates` 里没有该键 → 实例化返回 null →
+    // 回退程序化模型），其余模型照常加载。29 个文件 21 MB，单文件失败的概率比 Kenney 高。
+    loading = Promise.allSettled([...specs.values()].map(({ spec, building }) => prepareSpec(spec, building)))
+      .then((results) => {
+        const failed = results.filter((result) => result.status === 'rejected');
+        if (failed.length) console.warn(`[industrial-gltf] ${failed.length} 个模型加载失败，相关类型回退程序化`, failed.map((result) => (result as PromiseRejectedResult).reason));
+      });
   }
   return loading;
 }
@@ -442,12 +530,18 @@ function fit(prepared: Prepared, spec: GltfModelSpec, width: number, depth: numb
   return group;
 }
 
-/** 单位按「最长边」归一化到 1 cell 的 `.62`（现有程序化单位约 0.6×0.55，见 gallery 比例尺），
- * 再乘 `spec.scale` 微调：人形小、飞行器长。 */
-function fitUnit(prepared: Prepared, spec: GltfModelSpec): THREE.Group {
+/** 单位缩放系数：把模型包围盒高度缩到 `UNIT_HEIGHT[type]`（再乘 `spec.scale` 微调）。
+ * 与建筑不同，单位**不按水平边**归一：扁平载具/飞行器按水平边会矮到读不出轮廓，
+ * 而按高度归一时同类的俯视轮廓仍由模型自身的宽深比决定。 */
+export function unitScale(sizeY: number, type: string, spec?: GltfModelSpec): number {
+  const height = UNIT_HEIGHT[type] ?? 0.5;
+  return height / Math.max(sizeY, 1e-4) * (spec?.scale ?? 1);
+}
+
+/** 单位实例：按渲染高度归一（见 `UNIT_HEIGHT`），再按 `spec.yaw` 对齐正面。 */
+function fitUnit(prepared: Prepared, spec: GltfModelSpec, type: string): THREE.Group {
   const group = prepared.group.clone(true);
-  const scale = 0.62 / Math.max(prepared.size.x, prepared.size.z, 1e-4) * (spec.scale ?? 1);
-  group.scale.setScalar(scale);
+  group.scale.setScalar(unitScale(prepared.size.y, type, spec));
   if (spec.yaw) group.rotateY(spec.yaw);
   return group;
 }
@@ -481,8 +575,9 @@ export function instantiateUnit(type: string, faction: UnitFaction): THREE.Group
   const spec = UNIT_GLTF[type];
   const prepared = spec && templates.get(templateKey(spec))?.get(faction);
   if (!spec || !prepared) return null;
-  const group = fitUnit(prepared, spec);
+  const group = fitUnit(prepared, spec, type);
   group.name = `gltf-unit-${type}`;
   if (spec.attach === 'rifle') group.add(rifleMesh(prepared.size));
+  if (spec.attach === 'hardhat') group.add(hardHatMesh(prepared.size));
   return group;
 }

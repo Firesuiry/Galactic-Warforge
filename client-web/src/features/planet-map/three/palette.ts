@@ -59,6 +59,8 @@ export const GLOW = {
   enemy: '#e0662a',
   fog: '#ff2a6a',
   warning: '#ffb04a',
+  /** `sr_plasma_turret`（与 `plasma_turret` 共用 GLB）：更亮的品青，靠发光色区分两者。 */
+  plasmaHeavy: '#9f6bff',
 } as const;
 
 /** 状态灯三态（`status-lights.ts`）：运行青、空闲/缺料琥珀、缺电红。 */
