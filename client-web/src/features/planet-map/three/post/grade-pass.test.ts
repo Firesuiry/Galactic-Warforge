@@ -11,11 +11,12 @@ import { GradePass } from './grade-pass';
  * - 非冻结：每次 render 递增，观感（颗粒闪动）不变。
  */
 function fakeRenderer() {
-  return {
+  const renderer = {
     targets: [] as unknown[],
-    setRenderTarget(target: unknown) { this.targets.push(target); },
+    setRenderTarget(target: unknown) { renderer.targets.push(target); },
     render() { /* 不画，只看 uniform */ },
-  } as unknown as Parameters<GradePass['render']>[0] & { targets: unknown[] };
+  };
+  return renderer as unknown as Parameters<GradePass['render']>[0];
 }
 
 const WRITE = {} as Parameters<GradePass['render']>[1];
