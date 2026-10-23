@@ -273,6 +273,25 @@ describe('SorterRigs', () => {
     ghost.dispose();
   });
 
+  it('staticPose pins the arm and stops the motion timeline (thumbnail mode)', () => {
+    // 缩略图用：摆臂收拢在取货端、夹爪抬起，`animate` 不推进（同一张图每次渲染都一致）。
+    const rigs = new SorterRigs({ staticPose: { swing: 0, lift: 1, carrying: false } });
+    rigs.refresh([sorter(8, 8, 90, 3, 'running', 'a')], [belt('west', 7, 8), belt('east', 9, 8)], FACE, 100, 10);
+    const first = rigs.inspect('a')!.arm;
+    rigs.animate(1.5, true);
+    const after = rigs.inspect('a')!.arm;
+    expect(after.wrist.x).toBeCloseTo(first.wrist.x, 6);
+    expect(after.wrist.y).toBeCloseTo(first.wrist.y, 6);
+    // 取货端（局部 −X）抬起：腕轴在左半边、高于横轴。
+    expect(first.wrist.x).toBeLessThan(0);
+    expect(first.wrist.y).toBeGreaterThan(SORTER_PIVOT_Y);
+    // 换个静态姿势（摆到头顶）会立刻写进实例矩阵。
+    const overhead = new SorterRigs({ staticPose: { swing: .5, lift: 1, carrying: false } });
+    overhead.refresh([sorter(8, 8, 90, 3, 'running', 'a')], [belt('west', 7, 8), belt('east', 9, 8)], FACE, 100, 10);
+    expect(overhead.inspect('a')!.arm.wrist.y).toBeGreaterThan(first.wrist.y);
+    rigs.dispose(); overhead.dispose();
+  });
+
   it('dispose removes the group and disposes resources', () => {
     const rigs = new SorterRigs(), world = new THREE.Group();
     world.add(rigs.group);
