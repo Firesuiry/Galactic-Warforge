@@ -192,7 +192,14 @@ interface Rig {
   tile: TilePoint;
 }
 
-export interface SorterRigOptions { ghost?: boolean }
+export interface SorterRigOptions {
+  ghost?: boolean;
+  /**
+   * 静态姿势：只给缩略图/画廊这类不跑时间轴的地方用（`develop_tools/three_assets/render.mjs`）。
+   * 设置后 `poseOf` 恒返回它，`animate` 不再推进搬运节拍。
+   */
+  staticPose?: SorterPose;
+}
 
 export class SorterRigs {
   readonly group = new THREE.Group();
@@ -311,7 +318,7 @@ export class SorterRigs {
 
   /** 逐帧：推进节拍并写动态件。`active=false`（冻结/减弱动效）时保持原姿态。 */
   animate(delta: number, active = true) {
-    if (!this.rigs.length) return;
+    if (!this.rigs.length || this.options.staticPose) return;
     if (this.options.ghost) this.ghostTime += active ? delta : 0;
     else for (const rig of this.rigs) rig.motion.advance(delta, active && rig.building.runtime?.state === 'running');
     this.writeDynamic();
@@ -340,6 +347,7 @@ export class SorterRigs {
   }
 
   private poseOf(rig: Rig): SorterPose {
+    if (this.options.staticPose) return this.options.staticPose;
     return this.options.ghost ? poseAt((this.ghostTime / 1.6) % 1) : rig.motion.pose();
   }
 
