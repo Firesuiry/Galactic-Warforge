@@ -8,6 +8,7 @@
 | 28 | `400 {"type":"invalid_request_error","code":"","message":"invalid request error trace_id: …"}` |
 | 10 | `400 {"code":11133,…"model_param_invalid"}` |
 | 5 | `500 upstream error: do request failed` |
+| 2（2026-10-23 起） | `400 The \`content[].thinking\` in the thinking mode must be passed back to the API` |
 
 Claude Code 把 400 当客户端错误、不重试，子代理当场结束，只能靠主代理再派或说「继续」。
 本代理夹在 Claude Code 和网关之间：上游回这几类 400 或 5xx 时，在任何字节回给客户端之前原样重发
@@ -19,7 +20,7 @@ Claude Code 把 400 当客户端错误、不重试，子代理当场结束，只
 | 错误 | 重试用尽后交回 | 理由 |
 |---|---|---|
 | `11128`（原文要求重新发送） | **503** + `x-should-retry: true` | 明确是临时的，让 Claude Code 再按 5xx 自己重试（默认最多 10 次，每次又经过本代理） |
-| `11133 model_param_invalid`、`invalid_request_error code:""` | 原样 400 | 可能是请求本身固定会错，尽快失败、重派；看 `retry.log` 的 `giveup` 行积累数据后再决定要不要也改 503 |
+| `11133 model_param_invalid`、`invalid_request_error code:""`、`thinking must be passed back` | 原样 400 | 可能是请求本身固定会错，尽快失败、重派；看 `retry.log` 的 `giveup` 行积累数据后再决定要不要也改 503 |
 | 5xx / 连不上 | 原样 5xx / 502 | Claude Code 本来就会重试 |
 
 不用 529：Claude Code 对 529 有特殊处理（Opus 连续 3 次就停），比普通 5xx 重试得少。

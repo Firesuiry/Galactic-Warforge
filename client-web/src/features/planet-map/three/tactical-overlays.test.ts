@@ -145,8 +145,10 @@ describe('3D 战术叠加层纯函数（R20-B）', () => {
     overlay.dispose();
   });
 
-  it('样式常量对齐契约：线宽 .06 格、线不透明度 .55、进度色 #7df7b0、脉冲 1.6s、进度条 .8×.08 格', () => {
-    expect(RANGE_CIRCLE_WIDTH_TILES).toBe(.06);
+  it('样式常量对齐契约：线宽 ≤ .06 格、线不透明度 .55（R20-B）、进度色 #7df7b0、脉冲 1.6s、进度条 .8×.08 格', () => {
+    // 3A 画质起射程圈与补给光环共用细虚线画法：线宽 ≤ .06 格（硬约束），填充改为径向渐变
+    // （中心 0 → 边缘 .05）；不透明度保持 R20-B 定下的 .55，不随画法改动（审查 L5）。
+    expect(RANGE_CIRCLE_WIDTH_TILES).toBeLessThanOrEqual(.06);
     expect(RANGE_CIRCLE_OPACITY).toBe(.55);
     expect(CONSTRUCTION_BAR_FG).toBe('#7df7b0');
     expect(DETECTION_PULSE_SECONDS).toBe(1.6);

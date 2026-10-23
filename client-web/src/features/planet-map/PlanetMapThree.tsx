@@ -760,6 +760,10 @@ export function PlanetMapThree(props: Props) {
       },
       // 绘制调用统计（模型素材验收用）：getter 不会被 bindSceneMethods 绑上，这里显式取一次。
       renderStats: () => target.renderStats,
+      // 3A 画质 VFX 夹具钩子（仅测试构建）：固定位置注入合成特效，按相位定格。
+      // 见 `three/vfx/fixture-hooks.ts`（动态导入，不进生产 bundle）；真机不使用。
+      vfxPhase: (phase: string, seconds?: number) => target.applyVfxFixturePhase(phase, seconds),
+      vfxStats: () => target.vfxStats(),
       // 画面调试探针（3A 画质迭代用，只读）：天空 / 雾 / 环境光的当前取值。
       lightingDebug: () => target.lightingDebug(),
       // AO 探针（审查 P1-3 验收）：读 GTAO 降噪贴图的统计，默认全屏，可传归一化区域。
