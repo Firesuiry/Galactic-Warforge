@@ -641,8 +641,11 @@ async function normalizeOne(type, role) {
     material.setMetallicFactor(Math.min(material.getMetallicFactor(), 0.35));
     material.setRoughnessFactor(Math.min(Math.max(material.getRoughnessFactor(), 0.45), 0.75));
     // 自发光强度收敛：作者常把整张 albedo 也塞进 emissive 槽，强度 1 会让模型在暗处自亮。
+    // 但**只有 emissiveFactor 的材质**（thermal_power_plant 的蓝色核心、worker 的红色指示灯）
+    // 是作者的真实意图，保留；只清「亮度高到会整块发白」的（> 0.6，matrix_lab 那种 albedo 复制）。
     const emissive = material.getEmissiveFactor();
-    if (emissive.some((value) => value > 0.05) && !material.getEmissiveTexture()) material.setEmissiveFactor([0, 0, 0]);
+    const emissiveLuma = 0.2126 * emissive[0] + 0.7152 * emissive[1] + 0.0722 * emissive[2];
+    if (emissiveLuma > 0.6 && !material.getEmissiveTexture()) material.setEmissiveFactor([0, 0, 0]);
   }
   // 材质收敛到 1–3 个：贴图完全相同的材质合并（dedup 只处理属性相同的对象，
   // 大量「同一张贴图、不同名字」的材质要靠 palette 之外的显式合并）。
