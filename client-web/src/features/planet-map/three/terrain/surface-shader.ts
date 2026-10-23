@@ -54,6 +54,11 @@ export const SHADER_HEADER = /* glsl */`
   float swWaterMetal = 0.02;
   vec3 swEastW = vec3(1.0, 0.0, 0.0);
   vec3 swSouthW = vec3(0.0, 0.0, 1.0);
+  /** 到水边的连续场（格为单位，跨面邻接）：图集 coast 四向标志与格内坐标算出，
+   *  水面深浅、泡沫线、岸边沙泥都用它，所以海岸线在格内是斜的、圆润的，不沿格边走方块。 */
+  float swShoreDistance = 1.0;
+  /** 高度（bump 来源）采样用的 mip 级别：逐像素由「一个像素覆盖几个 texel」算出。 */
+  float swHeightLod = 0.0;
   float swHeightField = 0.0;
   vec3 swLavaEmissive = vec3(0.0);
 
@@ -92,9 +97,12 @@ export const SHADER_HEADER = /* glsl */`
     vec4 ax = texture2D(swAlbedoArray, vec3(p.zy, layer));
     vec4 ay = texture2D(swAlbedoArray, vec3(p.xz, layer));
     vec4 az = texture2D(swAlbedoArray, vec3(p.xy, layer));
-    vec4 px = texture2D(swPackedArray, vec3(p.zy, layer));
-    vec4 py = texture2D(swPackedArray, vec3(p.xz, layer));
-    vec4 pz = texture2D(swPackedArray, vec3(p.xy, layer));
+    // 高度（bump 来源）按 swHeightLod 采样：贴地时纹理被放大到 1–2 texel/像素，
+    // 逐像素高度差全是纹素级噪声，直接求导会得到逐像素乱跳的法线（L14 亮点）。
+    // 至少滤到 2 texel 以上，bump 才是一条连续的表面起伏。
+    vec4 px = textureLod(swPackedArray, vec3(p.zy, layer), swHeightLod);
+    vec4 py = textureLod(swPackedArray, vec3(p.xz, layer), swHeightLod);
+    vec4 pz = textureLod(swPackedArray, vec3(p.xy, layer), swHeightLod);
     SwSurface s;
     s.albedo = ax.rgb * blend.x + ay.rgb * blend.y + az.rgb * blend.z;
     s.height = px.a * blend.x + py.a * blend.y + pz.a * blend.z;
@@ -105,6 +113,60 @@ export const SHADER_HEADER = /* glsl */`
   /** 高度混合：两层按各自的纹理高度互相「顶开」，得到自然的边界而不是线性糊。 */
   float swHeightBlend(float heightA, float heightB, float weightA, float weightB, float noise) {
     return smoothstep(-0.16, 0.16, (heightA - heightB) * 2.2 + (weightA - weightB) * 2.4 + (noise - 0.5) * 0.5);
+  }
+
+  /** 一次图集采样结果：类别权重已做亚格双线性（未知格权重恒为 0）。 */
+  struct SwAtlasSample {
+    vec4 props;
+    vec3 color;
+    vec4 coast;
+    vec4 heat;
+    /** 已探索度 0..1：只在已探索格内部上升，未探索格恒为 0（信息诚实）。 */
+    float known;
+    /** 格内坐标（0..1，含域扭曲），用于测绘网格与泡沫线。 */
+    vec2 cellUV;
+  };
+
+  /**
+   * 图集双线性采样（第 23 轮第二轮 L15）：四邻格按格心插值，让水/陆、阻挡/可建造、
+   * 岩浆/可建造三类边界都是亚格过渡，不再沿格子走方块锯齿。
+   *
+   * 信息诚实：只有**已探索**的邻格参与加权（未知格权重为 0），并且 known 还要乘
+   * 本格中心的已知位——域扭曲把采样点推进未知格时，那里依然是面纱而不是地形色。
+   */
+  SwAtlasSample swSampleAtlas(sampler2D propsTex, sampler2D colorTex, sampler2D coastTex, sampler2D heatTex,
+    vec2 cellIndex, vec2 dims, vec4 rect) {
+    vec2 p = cellIndex - 0.5;
+    vec2 base = floor(p);
+    vec2 f = clamp(p - base, 0.0, 1.0);
+    vec2 halfTexel = 0.5 / dims;
+    vec2 low = rect.xy + halfTexel;
+    vec2 high = rect.xy + rect.zw - halfTexel;
+    vec2 uv00 = clamp((base + vec2(0.5, 0.5)) / dims, low, high);
+    vec2 uv10 = clamp((base + vec2(1.5, 0.5)) / dims, low, high);
+    vec2 uv01 = clamp((base + vec2(0.5, 1.5)) / dims, low, high);
+    vec2 uv11 = clamp((base + vec2(1.5, 1.5)) / dims, low, high);
+    vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    vec4 p00 = texture2D(propsTex, uv00), p10 = texture2D(propsTex, uv10);
+    vec4 p01 = texture2D(propsTex, uv01), p11 = texture2D(propsTex, uv11);
+    vec4 known4 = step(vec4(0.5), vec4(p00.b, p10.b, p01.b, p11.b));
+    vec4 wk = w * known4;
+    float sum = dot(wk, vec4(1.0));
+    float norm = 1.0 / max(sum, 0.0001);
+    SwAtlasSample s;
+    s.props = (p00 * wk.x + p10 * wk.y + p01 * wk.z + p11 * wk.w) * norm;
+    s.color = (texture2D(colorTex, uv00).rgb * wk.x + texture2D(colorTex, uv10).rgb * wk.y
+      + texture2D(colorTex, uv01).rgb * wk.z + texture2D(colorTex, uv11).rgb * wk.w) * norm;
+    s.coast = (texture2D(coastTex, uv00) * wk.x + texture2D(coastTex, uv10) * wk.y
+      + texture2D(coastTex, uv01) * wk.z + texture2D(coastTex, uv11) * wk.w) * norm;
+    s.heat = (texture2D(heatTex, uv00) * wk.x + texture2D(heatTex, uv10) * wk.y
+      + texture2D(heatTex, uv01) * wk.z + texture2D(heatTex, uv11) * wk.w) * norm;
+    // 本格中心的已知位（未加权、未归一化）：域扭曲不能把地形色带进未探索格。
+    vec2 ownUV = clamp((floor(cellIndex) + 0.5) / dims, low, high);
+    float own = step(0.5, texture2D(propsTex, ownUV).b);
+    s.known = smoothstep(0.18, 0.86, sum) * own;
+    s.cellUV = fract(cellIndex);
+    return s;
   }
 
   vec3 swSaturate(vec3 color, float amount) {
@@ -128,16 +190,30 @@ export const SHADER_COLOR = /* glsl */`
     swFaceUV = vec2(swP.x, swP.y >= 0.0 ? swP.z : -swP.z) / swA.y;
   }
   swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
-  vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + clamp(swFaceUV,0.000001,0.999999)) / vec2(3.0,2.0);
-  vec2 swFaceOrigin = vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0);
-  vec2 swOverviewHalfTexel = 0.5 / swOverviewDimensions;
-  vec2 swOverviewUV = clamp(swUV, swFaceOrigin + swOverviewHalfTexel,
-    swFaceOrigin + 1.0 / vec2(3.0,2.0) - swOverviewHalfTexel);
-  vec4 swProps = texture2D(swOverviewProperties, swOverviewUV);
-  vec3 swAlbedo = texture2D(swOverviewColor, swOverviewUV).rgb;
-  vec4 swCoast = texture2D(swOverviewCoast, swOverviewUV);
-  vec4 swHeat = texture2D(swOverviewHeat, swOverviewUV);
-  vec2 swCellUV = fract(swUV * swOverviewDimensions);
+  vec2 swFaceCell = clamp(swFaceUV,0.000001,0.999999) * swOverviewDimensions;
+  // 亚格边界（L15）：格内坐标先做域扭曲（幅度 ≤ .35 格、确定性、与时间无关），
+  // 再在四邻格之间双线性混合类别权重——海岸线圆润不规则，不再沿格子走方块锯齿。
+  // 频率按「格」定：贴地时一格 ≈ 0.3 世界单位，所以 8–20 的球面频率约 2–6 格一个起伏；
+  // 再高就会让岸线变成细锯齿（噪声本身就是逐像素的高频）。
+  float swTwistNoise = swFbm(swP * 9.0 + 5.7) - 0.5;
+  float swTwistNoise2 = swFbm(swP * 15.0 + 17.3) - 0.5;
+  // 世界尺度（单位 = 行星半径 100；贴地时一格约 0.3 单位）：岸线的弯折尺度。
+  vec3 swCellSpace = swSurfacePosition * (swMapDimensions.x / 3.3321622036);
+  float swCoastTwist = swFbm(swCellSpace * 0.10 + 21.3) - 0.5;
+  float swCoastTwist2 = swFbm(swCellSpace * 0.23 + 4.1) - 0.5;
+  vec2 swCellCoord = swFaceCell + vec2(swTwistNoise, swTwistNoise2) * 2.4;
+  vec4 swOverviewRect = vec4(vec2(mod(swFace,3.0),floor(swFace/3.0)) / vec2(3.0,2.0), vec2(1.0) / vec2(3.0,2.0));
+  SwAtlasSample swAtlas = swSampleAtlas(swOverviewProperties, swOverviewColor, swOverviewCoast, swOverviewHeat,
+    swCellCoord, swOverviewDimensions, swOverviewRect);
+  vec4 swProps = swAtlas.props;
+  vec3 swAlbedo = swAtlas.color;
+  vec4 swCoast = swAtlas.coast;
+  vec4 swHeat = swAtlas.heat;
+  vec2 swCellUV = swAtlas.cellUV;
+  vec2 swUV = (vec2(mod(swFace,3.0),floor(swFace/3.0)) + swFaceUV) / vec2(3.0,2.0);
+  // 已探索度取「本次实际采样的那张图集」（全局 overview 或场景窗口 local）：
+  // 大行星的局部曲面只覆盖场景窗口，全局图集在窗口里可能还是占位（全未探索）。
+  float swAtlasKnown = swAtlas.known;
   // Fog boundary glow: an unknown cell that touches an explored cell in the local
   // scene window. Sampled from the same atlas the surface reads, so a fog edge can
   // never imply undiscovered terrain data.
@@ -149,13 +225,20 @@ export const SHADER_COLOR = /* glsl */`
     if(all(greaterThanEqual(uv,vec2(0))) && all(lessThanEqual(uv,vec2(1)))) {
       vec4 rect = swPatchUV[i];
       vec2 texel = 0.5 / swLocalDimensions;
-      vec2 packedUV = clamp(rect.xy+uv*rect.zw, rect.xy+texel, rect.xy+rect.zw-texel);
-      swProps = texture2D(swLocalProperties,packedUV);
-      swAlbedo = texture2D(swLocalColor,packedUV).rgb;
-      swCoast = texture2D(swLocalCoast,packedUV);
-      swHeat = texture2D(swLocalHeat,packedUV);
-      swCellUV = fract(swUV * swMapDimensions);
-      if(swProps.b < 0.5) {
+      // 局部窗口：格内坐标换成该补片自己的行列，再做同一套域扭曲 + 双线性。
+      // 局部图集里 1 个纹素 = 1 格，所以补片内格偏移直接加到 rect 的格偏移上。
+      vec2 localCell = clamp(swUV, bounds.xy, bounds.xy + bounds.zw) * swMapDimensions;
+      vec2 packedCell = rect.xy * swLocalDimensions + (localCell - bounds.xy * swMapDimensions);
+      SwAtlasSample local = swSampleAtlas(swLocalProperties, swLocalColor, swLocalCoast, swLocalHeat,
+        packedCell + vec2(swTwistNoise, swTwistNoise2) * 2.4, swLocalDimensions, rect);
+      swProps = local.props;
+      swAlbedo = local.color;
+      swCoast = local.coast;
+      swHeat = local.heat;
+      swCellUV = local.cellUV;
+      swAtlasKnown = local.known;
+      vec2 packedUV = clamp(rect.xy + uv * rect.zw, rect.xy + texel, rect.xy + rect.zw - texel);
+      if(local.props.b < 0.5) {
         vec2 low = rect.xy+texel, high = rect.xy+rect.zw-texel;
         for(int dy=-1;dy<=1;dy++) {
           for(int dx=-1;dx<=1;dx++) {
@@ -170,13 +253,25 @@ export const SHADER_COLOR = /* glsl */`
   float swMapWidth = swMapDimensions.x;
   float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
   // 已探索边界软化：heat.a 是「本格到未知区的格数」渐变，只在已探索格内部生效，
-  // 未探索格永远不会因为插值露出地形色。
-  float swKnown = min(smoothstep(0.05,0.95,swProps.b), smoothstep(0.02, 0.98, swHeat.a));
+  // 未探索格永远不会因为插值露出地形色（双线性权重也只累加已探索邻格）。
+  float swKnown = min(swAtlasKnown, smoothstep(0.02, 0.98, swHeat.a));
   float swWater = smoothstep(0.15, 0.85, swProps.r);
   float swRock = swProps.g;
   float swLava = smoothstep(0.72, 0.98, swHeat.r) * swKnown;
   float swLavaNear = smoothstep(0.02, 0.85, swHeat.r) * (1.0 - swLava);
   float swShoreNear = smoothstep(0.02, 0.9, swHeat.g);
+  // 连续离岸距离（L15）：coast 的四向标志给出本格哪些边挨着已探索陆地，
+  // 格内坐标给出到这些边的连续距离；再叠一点域扭曲让岸线不规则。
+  // 已知陆/水相邻才写标志（未知边界不参与），所以这里不会泄露未探索地形。
+  vec2 swEdgeDistance = vec2(min(swCellUV.x, 1.0 - swCellUV.x), min(swCellUV.y, 1.0 - swCellUV.y));
+  float swShoreFromEdges = min(
+    mix(1.0, swEdgeDistance.y, clamp(swCoast.r + swCoast.b, 0.0, 1.0)),
+    mix(1.0, swEdgeDistance.x, clamp(swCoast.g + swCoast.a, 0.0, 1.0)));
+  // 离岸距离再按格尺度的域扭曲偏移：水面/陆地的分界被推成不规则的曲线，
+  // 而不是沿格心插值出来的折线（折线本身已经比方块前进了一步，但仍有明显的斜边）。
+  // 水面这一侧的离岸距离再往前推 0.5 格：双线性把「水」的权重推到邻格中心附近，
+  // 水域实际已经越过了格边——岸线要跟着移动，否则会在水面上留下一条方格状的暗边。
+  swShoreDistance = max(0.0, swShoreFromEdges + (swCoastTwist * 0.9 + swCoastTwist2 * 0.45) + swWater * 0.5);
   float swContinental = swFbm(swP * 8.0);
   float swPixelFootprint = length(fwidth(swSurfacePosition));
   float swMicroDetail = 1.0 - smoothstep(0.09, 0.42, swPixelFootprint);
@@ -188,6 +283,13 @@ export const SHADER_COLOR = /* glsl */`
   // 远景（全球视角）只剩图集宏观色，避免摩尔纹闪烁。
   float swTexScale = 1.0 / max(0.0001, swTileWorldSize * 3.0);
   float swTexDetail = 1.0 - smoothstep(0.25, 1.1, swPixelFootprint / max(0.0001, swTileWorldSize));
+  // 法线（bump）的尺度：地表纹理一张 1024² 铺 3 格，所以 1 texel = swTexelWorld。
+  // - 一个像素覆盖的 texel 数决定高度该取哪级 mip：贴地 1–2 texel/像素时至少滤到 2 texel；
+  // - bump 强度按同一尺度衰减：像素跨过 2–7 texel 后高度差已是纹素噪声，再参与光照就是闪烁。
+  float swTexelWorld = swTileWorldSize * 3.0 / 1024.0;
+  float swTexelsPerPixel = swPixelFootprint / max(0.000001, swTexelWorld);
+  swHeightLod = clamp(log2(max(swTexelsPerPixel, 1.0)), 0.0, 8.0);
+  float swBumpDetail = 1.0 - smoothstep(1.5, 7.0, swTexelsPerPixel);
   // 近景用第二尺度采样打散平铺重复感（低频大块 + 细节层）。
   float swTexMacro = 1.0 / max(0.0001, swTileWorldSize * 11.0);
   vec3 swTriW = swTriplanarWeights(swSurfacePosition);
@@ -201,10 +303,7 @@ export const SHADER_COLOR = /* glsl */`
 
   if (swKnown > 0.001) {
     if (swWater > 0.5) {
-      // 水面：深青底 + 近岸浅色（海岸距离来自跨面邻接的 coast 通道，未知边界不出泡沫）。
-      vec4 swEdgeDistance = vec4(swCellUV.y, 1.0-swCellUV.x, 1.0-swCellUV.y, swCellUV.x);
-      vec4 swCoastDistance = mix(vec4(1.0), swEdgeDistance, swCoast);
-      float swShoreDistance = min(min(swCoastDistance.x,swCoastDistance.y),min(swCoastDistance.z,swCoastDistance.w));
+      // 水面：深青底 + 近岸浅色（离岸距离是连续场，浅滩沿真实海岸线渐变）。
       float swDepth = smoothstep(0.0, 0.55, swShoreDistance);
       vec3 swDeep = vec3(0.008, 0.038, 0.055);
       vec3 swShallow = vec3(0.020, 0.100, 0.110);
@@ -237,8 +336,8 @@ export const SHADER_COLOR = /* glsl */`
       float swWaveCrest = swRipple * 3.2 + (swWaveA * swWaveB) * 0.08 * swWaveDetail;
       swSurfaceAlbedo = swWaterAlbedo * (0.92 + swWaveCrest * 0.18);
       swSurfaceAlbedo += vec3(0.06, 0.10, 0.115) * max(0.0, swWaveCrest) * 0.45 * swWaveDetail;
-      // 泡沫线：只在已知陆/水相邻处出现（跨面邻接规则不变）。
-      float swFoamEdge = 0.035 + 0.010 * swWaveA;
+      // 泡沫线：只在已知陆/水相邻处出现（跨面邻接规则不变），沿连续岸线走。
+      float swFoamEdge = 0.045 + 0.012 * swWaveA;
       float swFoamAA = max(fwidth(swShoreDistance), 0.003);
       float swFoam = (1.0-smoothstep(swFoamEdge,swFoamEdge+swFoamAA,swShoreDistance)) * swKnown;
       swSurfaceAlbedo += vec3(0.10, 0.17, 0.17) * swFoam * (0.6 + swWaveB * 0.2);
@@ -298,75 +397,96 @@ export const SHADER_COLOR = /* glsl */`
       swSurfaceHeight = (swCrustMask * 0.34 + swSeam * 0.12) * swTileWorldSize * 0.004;
       swLavaMask = swKnown;
     } else {
-      // 陆地：按权重取两种纹理做高度混合。
-      float swLayerA; float swLayerB; float swWeightA; float swWeightB;
-      if (swRock > 0.5) {
-        swLayerA = 6.0; swLayerB = 7.0;
-        swWeightA = 0.55 + swBiomeNoise * 0.45;
-        swWeightB = 1.0 - swWeightA;
-      } else if (swBiomeIce > 0.5) {
-        // 雪 / 蓝冰 / 裸岩：三个权重归一化后取前两名，避免同分时选层不稳定。
-        float wSnow = swSoilWeights.x * (0.5 + swBiomeNoise * 0.7);
-        float wBare = swSoilWeights.y * (0.5 + (1.0 - swBiomeNoise) * 0.5);
-        float wIce = swSoilWeights.z * (0.6 + swBiomeNoise2 * 0.6);
-        float total = wSnow + wBare + wIce;
-        wSnow /= total; wBare /= total; wIce /= total;
-        float wTop = max(wSnow, max(wBare, wIce));
-        swWeightA = wTop;
-        swWeightB = 1.0 - wTop;
-        if (wTop == wSnow) { swLayerA = 8.0; swLayerB = wIce >= wBare ? 9.0 : 7.0; }
-        else if (wTop == wIce) { swLayerA = 9.0; swLayerB = wSnow >= wBare ? 8.0 : 7.0; }
-        else { swLayerA = 7.0; swLayerB = wSnow >= wIce ? 8.0 : 9.0; }
-      } else {
-        // 苔草 / 火山土 / 碎石：大尺度噪声决定区块，纹理高度决定交界。
-        float wMoss = swSoilWeights.x * (0.45 + swBiomeNoise * 0.9);
-        float wSoil = swSoilWeights.y * (0.35 + swBiomeNoise2 * 0.9);
-        float wGravel = swSoilWeights.z * (0.4 + (1.0 - swBiomeNoise) * 0.8);
-        float total = wMoss + wSoil + wGravel;
-        wMoss /= total; wSoil /= total; wGravel /= total;
-        float wTop = max(wMoss, max(wSoil, wGravel));
-        swWeightA = wTop;
-        swWeightB = 1.0 - wTop;
-        if (wTop == wMoss) { swLayerA = 0.0; swLayerB = wSoil >= wGravel ? 2.0 : 3.0; }
-        else if (wTop == wSoil) { swLayerA = 2.0; swLayerB = wMoss >= wGravel ? 0.0 : 3.0; }
-        else { swLayerA = 3.0; swLayerB = wMoss >= wSoil ? 0.0 : 2.0; }
-      }
-      // 贴地极近时一格占满半屏，同一张贴图重复次数太多会闪成高频噪点：
-      // 按像素脚印把采样尺度在 0.72–1.25 之间收放（近处纹理放大、远处略缩），
-      // 远处仍按距离淡出到宏观色。
+      // 陆地：苔草 / 火山土 / 碎石按噪声混合；岩性权重（swRock）双线性后是连续场，
+      // 在 0.28–0.72 之间与玄武岩/地衣岩交叉淡化——阻挡格边界不再是沿格线的硬切方块（L15）。
+      float swRockMix = smoothstep(0.28, 0.72, swRock);
       float swTexLod = clamp(swPixelFootprint / max(0.0001, swTileWorldSize), 0.6, 2.6);
       float swTexScaleLod = swTexScale * mix(0.72, 1.25, (swTexLod - 0.6) / 2.0);
-      SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScaleLod);
-      SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScaleLod);
-      // 宏观尺度再采一次主层（另一相位），用低频权重混合，破坏同一张贴图的周期性重复。
-      SwSurface swMacro = swSampleLayer(swLayerA, swSurfacePosition + vec3(0.37, 0.11, 0.53), swTriW, swTexMacro);
-      // 第三层：不同旋转相位的中尺度采样，进一步打散「同一朵花纹重复出现」的观感。
-      vec3 swRotated = swSurfacePosition * swTexScaleLod;
-      swRotated = vec3(swRotated.z * 0.94 + swRotated.x * 0.34, swRotated.y, -swRotated.x * 0.34 + swRotated.z * 0.94) + vec3(5.1, 3.7, 8.9);
-      vec3 swMacroTint = texture2D(swAlbedoArray, vec3(swRotated.xz, swLayerA)).rgb * 0.5
-        + texture2D(swAlbedoArray, vec3(swRotated.zy, swLayerA)).rgb * 0.5;
-      float swMacroMix = 0.30 + 0.18 * swBiomeNoise2;
-      float swBlend = swHeightBlend(swA.height, swB.height, swWeightA, swWeightB, swBiomeNoise2);
-      // 群落交界处打散成 1–3 格宽的斑块，而不是沿噪声等值线的整片边界。
-      swBlend = smoothstep(0.22, 0.78, swBlend + (swBiomeNoise2 - 0.5) * 0.55);
-      vec3 swTextured = mix(swB.albedo, swA.albedo, swBlend);
-      swTextured = mix(swTextured, swTextured * (swMacro.albedo * 2.1 + 0.45), swMacroMix * swTexDetail);
-      // 中尺度调制：只改明暗（约 ±12%），不引入第二种颜色，避免近景发花。
-      swTextured *= mix(vec3(1.0), 0.82 + swMacroTint * 0.36, swTexDetail * 0.35);
-      float swRoughTextured = mix(swB.rough, swA.rough, swBlend);
-      // 潮湿度：低洼（height 小）更湿、颜色偏冷偏暗；高处更干更亮。
-      float swWet = (1.0 - swElevation) * (0.35 + swBiomeNoise * 0.35);
-      swTextured *= mix(1.0, 0.78, swWet) * mix(0.92, 1.10, swElevation);
-      swTextured = mix(swTextured, swTextured * vec3(0.86, 0.94, 1.0), swWet * 0.5);
+      vec3 swTextured = vec3(0.0);
+      float swRoughTextured = 0.9;
+      float swLandHeight = 0.0;
+      if (swRockMix < 0.999) {
+        // 按权重取两种纹理做高度混合。
+        float swLayerA; float swLayerB; float swWeightA; float swWeightB;
+        if (swBiomeIce > 0.5) {
+          // 雪 / 蓝冰 / 裸岩：三个权重归一化后取前两名，避免同分时选层不稳定。
+          float wSnow = swSoilWeights.x * (0.5 + swBiomeNoise * 0.7);
+          float wBare = swSoilWeights.y * (0.5 + (1.0 - swBiomeNoise) * 0.5);
+          float wIce = swSoilWeights.z * (0.6 + swBiomeNoise2 * 0.6);
+          float total = wSnow + wBare + wIce;
+          wSnow /= total; wBare /= total; wIce /= total;
+          float wTop = max(wSnow, max(wBare, wIce));
+          swWeightA = wTop;
+          swWeightB = 1.0 - wTop;
+          if (wTop == wSnow) { swLayerA = 8.0; swLayerB = wIce >= wBare ? 9.0 : 7.0; }
+          else if (wTop == wIce) { swLayerA = 9.0; swLayerB = wSnow >= wBare ? 8.0 : 7.0; }
+          else { swLayerA = 7.0; swLayerB = wSnow >= wIce ? 8.0 : 9.0; }
+        } else {
+          // 苔草 / 火山土 / 碎石：大尺度噪声决定区块，纹理高度决定交界。
+          float wMoss = swSoilWeights.x * (0.45 + swBiomeNoise * 0.9);
+          float wSoil = swSoilWeights.y * (0.35 + swBiomeNoise2 * 0.9);
+          float wGravel = swSoilWeights.z * (0.4 + (1.0 - swBiomeNoise) * 0.8);
+          float total = wMoss + wSoil + wGravel;
+          wMoss /= total; wSoil /= total; wGravel /= total;
+          float wTop = max(wMoss, max(wSoil, wGravel));
+          swWeightA = wTop;
+          swWeightB = 1.0 - wTop;
+          if (wTop == wMoss) { swLayerA = 0.0; swLayerB = wSoil >= wGravel ? 2.0 : 3.0; }
+          else if (wTop == wSoil) { swLayerA = 2.0; swLayerB = wMoss >= wGravel ? 0.0 : 3.0; }
+          else { swLayerA = 3.0; swLayerB = wMoss >= wSoil ? 0.0 : 2.0; }
+        }
+        // 贴地极近时一格占满半屏，同一张贴图重复次数太多会闪成高频噪点：
+        // 按像素脚印把采样尺度在 0.72–1.25 之间收放（近处纹理放大、远处略缩），
+        // 远处仍按距离淡出到宏观色。
+        SwSurface swA = swSampleLayer(swLayerA, swSurfacePosition, swTriW, swTexScaleLod);
+        SwSurface swB = swSampleLayer(swLayerB, swSurfacePosition, swTriW, swTexScaleLod);
+        // 宏观尺度再采一次主层（另一相位），用低频权重混合，破坏同一张贴图的周期性重复。
+        SwSurface swMacro = swSampleLayer(swLayerA, swSurfacePosition + vec3(0.37, 0.11, 0.53), swTriW, swTexMacro);
+        // 第三层：不同旋转相位的中尺度采样，进一步打散「同一朵花纹重复出现」的观感。
+        vec3 swRotated = swSurfacePosition * swTexScaleLod;
+        swRotated = vec3(swRotated.z * 0.94 + swRotated.x * 0.34, swRotated.y, -swRotated.x * 0.34 + swRotated.z * 0.94) + vec3(5.1, 3.7, 8.9);
+        vec3 swMacroTint = texture2D(swAlbedoArray, vec3(swRotated.xz, swLayerA)).rgb * 0.5
+          + texture2D(swAlbedoArray, vec3(swRotated.zy, swLayerA)).rgb * 0.5;
+        float swMacroMix = 0.30 + 0.18 * swBiomeNoise2;
+        float swBlend = swHeightBlend(swA.height, swB.height, swWeightA, swWeightB, swBiomeNoise2);
+        // 群落交界处打散成 1–3 格宽的斑块，而不是沿噪声等值线的整片边界。
+        swBlend = smoothstep(0.22, 0.78, swBlend + (swBiomeNoise2 - 0.5) * 0.55);
+        swTextured = mix(swB.albedo, swA.albedo, swBlend);
+        swTextured = mix(swTextured, swTextured * (swMacro.albedo * 2.1 + 0.45), swMacroMix * swTexDetail);
+        // 中尺度调制：只改明暗（约 ±12%），不引入第二种颜色，避免近景发花。
+        swTextured *= mix(vec3(1.0), 0.82 + swMacroTint * 0.36, swTexDetail * 0.35);
+        swRoughTextured = mix(swB.rough, swA.rough, swBlend);
+        // 潮湿度：低洼（height 小）更湿、颜色偏冷偏暗；高处更干更亮。
+        float swWet = (1.0 - swElevation) * (0.35 + swBiomeNoise * 0.35);
+        swTextured *= mix(1.0, 0.78, swWet) * mix(0.92, 1.10, swElevation);
+        swTextured = mix(swTextured, swTextured * vec3(0.86, 0.94, 1.0), swWet * 0.5);
+        swLandHeight = (swA.height * swBlend + swB.height * (1.0 - swBlend) - 0.5) * 0.02;
+      }
+      if (swRockMix > 0.001) {
+        // 玄武岩 / 地衣岩：同一套三平面与高度混合，边界处与土壤交叉淡化。
+        SwSurface swRockA = swSampleLayer(6.0, swSurfacePosition, swTriW, swTexScaleLod);
+        SwSurface swRockB = swSampleLayer(7.0, swSurfacePosition, swTriW, swTexScaleLod);
+        float swRockWeight = 0.55 + swBiomeNoise * 0.45;
+        float swRockBlend = smoothstep(0.22, 0.78, swHeightBlend(swRockA.height, swRockB.height, swRockWeight, 1.0 - swRockWeight, swBiomeNoise2));
+        vec3 swRockAlbedo = mix(swRockB.albedo, swRockA.albedo, swRockBlend);
+        float swRockRough = mix(swRockB.rough, swRockA.rough, swRockBlend);
+        float swRockHeight = (swRockA.height * swRockBlend + swRockB.height * (1.0 - swRockBlend) - 0.5) * 0.02;
+        swTextured = mix(swTextured, swRockAlbedo, swRockMix);
+        swRoughTextured = mix(swRoughTextured, swRockRough, swRockMix);
+        swLandHeight = mix(swLandHeight, swRockHeight, swRockMix);
+      }
       // 近景至少保留 72% 纹理，宏观色只做色相底；否则近景会被旧图集色压回「纯色平面」。
       swSurfaceAlbedo = mix(swAlbedo, swTextured, mix(0.72, 1.0, swTexDetail));
-      swSurfaceRough = mix(0.92, swRoughTextured, swTexDetail);
-      swSurfaceHeight = mix(0.0, (swA.height * swBlend + swB.height * (1.0 - swBlend) - 0.5) * 0.02, swTexDetail);
-      // 临水一圈沙泥；临岩浆一圈焦土/火山灰。两者都来自已探索邻格的烘焙距离。
-      float swSand = swShoreNear * (1.0 - swRock);
+      // 陆地粗糙度：纹理 B 通道在 0.0–0.7（苔草只有 .27），直接当 PBR 粗糙度会把太阳镜面
+      // 打成一颗颗亮斑。重映射到 0.84–1.0：只保留「哪里更潮更亮」的相对差异，不再有镜面。
+      swSurfaceRough = mix(0.92, mix(0.84, 1.0, clamp(swRoughTextured, 0.0, 1.0)), swTexDetail);
+      swSurfaceHeight = mix(0.0, swLandHeight, swTexDetail * swBumpDetail);
+      // 临水一圈沙泥；临岩浆一圈焦土/火山灰。两者都来自连续距离场（见 swShoreCells / heat.r），
+      // 边界随海岸线圆润过渡，不沿格线走方块。
+      float swSand = swShoreNear;
       vec3 swSandAlbedo = swSampleLayer(5.0, swSurfacePosition, swTriW, swTexScale).albedo;
       swSurfaceAlbedo = mix(swSurfaceAlbedo, swSandAlbedo, clamp(swSand * 0.75, 0.0, 1.0));
-      float swScorch = swLavaNear * (1.0 - swRock);
+      float swScorch = swLavaNear;
       swSurfaceAlbedo = mix(swSurfaceAlbedo, swSurfaceAlbedo * vec3(0.30, 0.26, 0.24), clamp(swScorch * 0.85, 0.0, 1.0));
     }
     // 群落偏色（按星球种子）：只微调色相/饱和/明度，不改变纹理结构。
@@ -421,7 +541,7 @@ export const SHADER_COLOR = /* glsl */`
   swAlbedo = mix(swAlbedo, swAlbedo * vec3(0.72, 0.86, 0.92), swWaterMask * 0.55);
   swAlbedo = mix(swAlbedo * vec3(0.71, 0.78, 0.86), swAlbedo, mix(0.4, 1.0, swProps.a));
   diffuseColor.rgb *= swAlbedo;
-  swHeightField = mix(swSurfaceHeight + swGrain * 0.004 + swFine * 0.001 + swRidges * swRock * 0.010, swSurfaceHeight, swWater) * swKnown;
+  swHeightField = mix(swSurfaceHeight + (swGrain * 0.004 + swFine * 0.001 + swRidges * swRock * 0.010) * swBumpDetail, swSurfaceHeight, swWater) * swKnown;
   // Unknown cells keep a shallow tile-scale relief so the close ground view has
   // horizon/relief cues (gated by (1 - swKnown), never leaks explored terrain).
   swHeightField += swVeilRelief * 0.010 * (1.0 - swKnown) * swFog;

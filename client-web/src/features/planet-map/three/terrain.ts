@@ -122,11 +122,15 @@ export function createPlanetSurface(radius: number): PlanetSurface {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nswSurfacePosition = position;\nswSurfaceWorldNormal = normal;');
     shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\n' + SHADER_HEADER)
       .replace('#include <map_fragment>', SHADER_COLOR)
-      // 每像素粗糙度：陆地取纹理粗糙度，水 0.075（清晰的环境反射），岩浆 0.62（硬壳）。
+      // 每像素粗糙度（L14）：陆地 1.0、水 0.075（清晰的环境反射）、岩浆 0.62（硬壳）。
+      // 陆地为什么给满：苔草/碎石的 albedo 纹理逐像素就有 ±60 的明暗，任何 < 1 的粗糙度都会
+      // 把太阳镜面乘在这层明暗上，近景成一颗颗孤立亮点、远景叠成一片白斑（修前实测 5000+ 个）。
+      // 干土/草/碎石本来就是纯漫反射介质，粗糙度 1.0 + 镜面清零才是对的观感。
       .replace('#include <roughnessmap_fragment>', /* glsl */`
         #include <roughnessmap_fragment>
         roughnessFactor = mix(mix(0.94, swSurfaceRough, swKnown), swSurfaceRough, swWaterMask);
         roughnessFactor = mix(roughnessFactor, 0.62, swLavaMask);
+        roughnessFactor = mix(roughnessFactor, 1.0, 1.0 - max(swWaterMask, swLavaMask));
       `)
       .replace('#include <metalnessmap_fragment>', /* glsl */`
         #include <metalnessmap_fragment>
@@ -139,9 +143,9 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         // 会把整片水映成程序化房间的亮斑（indirectSpecular 在 lights_fragment_end 里清零）。
         totalEmissiveRadiance += swLavaEmissive + swWaterSky * swWaterMask;
       `)
-      // 水面：物理镜面项关掉（粗糙球面 + 程序化环境会糊成一片亮斑），太阳高光由
-      // map_fragment 段的解析式 swWaterSky 提供。
-      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= mix(1.0, 0.0, swWaterMask);')
+      // 物理镜面项：陆地清零（同上，纯漫反射），水面清零（太阳高光由 map_fragment 段的
+      // 解析式 swWaterSky 提供），只有岩浆硬壳保留。
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.specularColor *= swLavaMask;')
       .replace('#include <lights_fragment_end>', /* glsl */`
         #include <lights_fragment_end>
         // 水面反射：用解析天空色替换环境镜面（陆地保持原环境光照）。
@@ -157,6 +161,8 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         vec3 swR1 = cross(swDy, normal), swR2 = cross(normal, swDx);
         float swDet = dot(swDx, swR1);
         vec3 swGradient = sign(swDet) * (dFdx(swHeightField) * swR1 + dFdy(swHeightField) * swR2);
+        // 远处法线强度随像素覆盖衰减：一个像素跨越多格时，bump 只是噪声。
+        swGradient *= swBumpDetail;
         normal = normalize(abs(swDet) * normal - swGradient);
         // 水面：两层滚动法线在世界空间扰动球面法线（保留球面光照与太阳高光）。
         if (swWaterMask > 0.001) {

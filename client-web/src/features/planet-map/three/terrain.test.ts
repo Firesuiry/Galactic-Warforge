@@ -131,8 +131,10 @@ describe('3D player-visible terrain', () => {
     // The frontier glow is derived from the same properties atlas the surface
     // samples: unknown cells (b < 0.5) inspect their 8 atlas neighbours' known bit
     // and never read hidden terrain/colour data.
-    const edgeBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('if(swProps.b < 0.5)'), SHADER_COLOR.indexOf('float swMapWidth'));
-    expect(edgeBlock).toContain('swProps.b < 0.5');
+    // 局部补片里「本格未知」用补片自己的属性图集判定（local.props.b），不再读 swProps：
+    // 双线性采样后 swProps 是四邻加权，不能用来判断「这一格本身是否未知」。
+    const edgeBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('if(local.props.b < 0.5)'), SHADER_COLOR.indexOf('float swMapWidth'));
+    expect(edgeBlock).toContain('local.props.b < 0.5');
     expect(edgeBlock).toContain('swLocalProperties');
     expect(edgeBlock).not.toContain('swLocalColor');
     expect(SHADER_COLOR).toContain('swKnownEdge *');
@@ -184,8 +186,13 @@ describe('3A terrain shader contract', () => {
   it('岩浆与水相邻、岩浆与建筑相邻不穿帮：焦土圈来自已探索邻格的距离场', () => {
     expect(SHADER_COLOR).toContain('swLavaNear');
     expect(SHADER_COLOR).toContain('swScorch');
-    // 焦土只在陆地上生效（岩石不叠焦土），水体按 swWater 分支独立着色。
-    expect(SHADER_COLOR).toContain('swLavaNear * (1.0 - swRock)');
+    // 焦土由连续的「到岩浆格距离」场（heat.r）驱动，不再乘 (1 - swRock)：
+    // 岩性权重双线性后是连续场，硬阈值会在岩石/土壤交界重新切出格线（L15）。
+    // 水体走 swWater 分支独立着色，陆地的焦土只在这个分支里叠加。
+    expect(SHADER_COLOR).toContain('float swScorch = swLavaNear;');
+    const landBlock = SHADER_COLOR.slice(SHADER_COLOR.indexOf('} else {\n      // 陆地'));
+    expect(landBlock).toContain('swScorch');
+    expect(SHADER_COLOR).not.toContain('swLavaNear * (1.0 - swRock)');
   });
 
   it('未探索格没有草/岩石/矿脉几何（装饰只按 explored 生成）', () => {
