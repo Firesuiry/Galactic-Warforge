@@ -541,6 +541,47 @@ function stripDocument(doc) {
   for (const scene of rootNode.listScenes()) for (const child of [...scene.listChildren()]) dropEmpty(child);
 }
 
+/** 量化后把炮管几何的 XZ 中心挪到节点原点（= 转轴）。
+ *
+ * meshopt 的量化在 `io.write` 阶段才执行（延迟到写文件），量化后的顶点是「相对场景包围盒」的整数
+ * 坐标、节点原点也随之漂移，转轴因此偏 0.05–0.3 格（laser 最明显，绕 rotation.y 转时炮管甩离底座，
+ * 审查 P1）。这里在**写完文件后**重读，把 `turret-barrel` 的 XZ 顶点整体平移 `-(min+max)/2`
+ * （量化整数直接相减，等价于平移几何），Y 不动（pivot 高度由拆塔时的节点平移表示）。
+ * 只改数组不重跑 transform，写回时 meshopt 按现有整数数组重新编码，不会再量化一次。 */
+async function recenterTurretPivot(file) {
+  const doc = await io.read(file);
+  const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
+  const barrel = scene?.listChildren().find((node) => node.getName() === 'turret-barrel');
+  const mesh = barrel?.getMesh();
+  if (!barrel || !mesh) return;
+  for (const prim of mesh.listPrimitives()) {
+    const position = prim.getAttribute('POSITION');
+    if (!position) continue;
+    const array = position.getArray();
+    const count = position.getCount();
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < count; i++) {
+      for (let k = 0; k < 3; k++) {
+        const value = array[i * 3 + k];
+        min[k] = Math.min(min[k], value); max[k] = Math.max(max[k], value);
+      }
+    }
+    const shift = [Math.round((min[0] + max[0]) / 2), 0, Math.round((min[2] + max[2]) / 2)];
+    if (!shift[0] && !shift[2]) continue;
+    for (let i = 0; i < count; i++) {
+      array[i * 3] -= shift[0];
+      array[i * 3 + 2] -= shift[2];
+    }
+    position.setArray(array);
+    // 量化是整数坐标：min/max 元数据同步平移，避免写出时 recompute 出错。
+    if (typeof position.setMin === 'function') {
+      position.setMin(min.map((value, k) => value - shift[k]));
+      position.setMax(max.map((value, k) => value - shift[k]));
+    }
+  }
+  await io.write(file, doc);
+}
+
 /** 材质收敛到 1–3 个：这里只做去重（dedup）+ 清理未引用，贴图相同的材质自动合并。 */
 async function normalizeOne(type, role) {
   const entry = SELECTION[type]?.[role];
@@ -695,7 +736,13 @@ async function normalizeOne(type, role) {
   // 炮管自己的包围盒中心（laser_turret 偏 0.3 格，绕 rotation.y 转时炮管与支架整体甩离底座）。
   // 'scene' 让全部 mesh 共用一套量化变换，节点原点保持拆塔时设的转轴。
   await doc.transform(meshopt({ encoder: MeshoptEncoder, quantizationVolume: 'scene' }));
+  // 量化会把顶点改写成「相对场景包围盒」的量化坐标，节点原点随之漂移（missile 约 0.05 格）。
+  // 拆塔后按**最终**顶点再对一次：炮管节点的 XZ 原点 = 炮管包围盒世界中心（= 转轴），
+  // 这样无论量化怎么改顶点，转 90° 时炮管都原地转、不甩离支架。
+  // 注意：必须在 `io.write` 之后再做——meshopt 的量化是**写文件时**才执行的（延迟到写阶段），
+  // 在 transform 之后调用的任何「按顶点算」的修正都会被随后的量化覆盖掉。
   await io.write(resolve(outDir, outName), doc);
+  if (config.turret) await recenterTurretPivot(resolve(outDir, outName));
   const after = triangleCount(doc.getRoot());
   return { type, role, out: outName, trisBefore: before, trisMerged: finalMerged, meshes: meshCount, trisAfter: after, size: fitted?.size, animated: doc.getRoot().listAnimations().length > 0, skins: doc.getRoot().listSkins().length };
 }
