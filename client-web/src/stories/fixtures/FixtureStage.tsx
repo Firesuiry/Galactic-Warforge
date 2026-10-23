@@ -94,7 +94,9 @@ export function FixtureStage({ fixture, view }: { fixture: Fixture; view: Camera
         if (view.altitude != null) scene.setAltitude(view.altitude);
         else if (view.zoom !== 1) scene.zoom(view.zoom);
         const landed = scene.getCenterTile();
-        if (landed && landed.x === view.focus.x && landed.y === view.focus.y) {
+        // `focus()` 落位后 getCenterTile() 是取整后的格；机位焦点允许带小数（如 56.5），
+        // 按容差比较，否则非整数焦点的故事永远等不到「落位」、vfxPhase 注入不了。
+        if (landed && Math.abs(view.focus.x - landed.x) <= 0.75 && Math.abs(view.focus.y - landed.y) <= 0.75) {
           // 机位落位后注入特效试验场相位（只做一次；scene 内部按固定相位定格）。
           if (view.vfxPhase && !injected) {
             injected = true;
