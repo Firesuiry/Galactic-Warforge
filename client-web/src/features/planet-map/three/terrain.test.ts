@@ -3,6 +3,7 @@ import type { PlanetSceneView } from '@shared/types';
 import { SHADER_COLOR, SHADER_HEADER, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
 import { tileNormal } from './projection';
 import { surfaceFace, surfaceTile } from '@shared/surface';
+import { buildAtlas, disposeAtlas } from './terrain/atlas';
 
 function scene(): PlanetSceneView {
   return {
@@ -303,5 +304,70 @@ describe('概览图集采样映射（审查 P1-1）', () => {
     const cell = overviewCell(1, { x: 0.1, y: 0.1 }, { x: width, y: height });
     expect(knownAt(Math.floor(cell.x), Math.floor(cell.y))).toBe(0);
     disposePlanetSurface(mesh);
+  });
+});
+
+describe('平滑类别场保留单格地形（审查 P2-1）', () => {
+  /** 20×20 全已探索窗口，只有给定格是水/岩浆，返回格心 SDF（着色器口径：>0.45 才算内侧）。 */
+  const centreSdf = (terrainAt: (x: number, y: number) => string) => {
+    const size = 20;
+    const atlas = buildAtlas({
+      width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
+      sample: (x, y) => ({ terrain: terrainAt(x, y), explored: true, visible: true }),
+    });
+    const bytes = atlas.sdf.image.data as Uint8Array;
+    const width = atlas.sdf.image.width;
+    // 图集是每格 8×8 超采样，格心 = 格号×8 + 4。
+    const at = (cellX: number, cellY: number) => {
+      const px = cellX * 8 + 4, py = cellY * 8 + 4;
+      return (bytes[(py * width + px) * 4] / 255) - 0.5; // R = 水面覆盖度
+    };
+    disposeAtlas(atlas);
+    return at;
+  };
+
+  it('孤立 1 格水：格心在平滑场里仍是内侧（旧实现 −0.19 → 陆地）', () => {
+    const at = centreSdf((x, y) => (x === 10 && y === 10 ? 'water' : 'buildable'));
+    expect(at(10, 10)).toBeGreaterThan(0.45);
+    // 周围仍是陆地。
+    expect(at(9, 10)).toBeLessThan(0.45);
+    expect(at(11, 10)).toBeLessThan(0.45);
+  });
+
+  it('孤立 1 格岩浆：格心是内侧', () => {
+    const size = 20;
+    const atlas = buildAtlas({
+      width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
+      sample: (x, y) => ({ terrain: x === 6 && y === 14 ? 'lava' : 'buildable', explored: true, visible: true }),
+    });
+    const bytes = atlas.sdf.image.data as Uint8Array;
+    const width = atlas.sdf.image.width;
+    const at = (cellX: number, cellY: number) => (bytes[((cellY * 8 + 4) * width + cellX * 8 + 4) * 4 + 2] / 255) - 0.5;
+    expect(at(6, 14)).toBeGreaterThan(0.45);
+    expect(at(5, 14)).toBeLessThan(0.45);
+    disposeAtlas(atlas);
+  });
+
+  it('斜向 1 格宽的河：每一格格心都在内侧（旧实现 20 格里 18 格画成陆地）', () => {
+    const at = centreSdf((x, y) => (y === x ? 'water' : 'buildable'));
+    let inside = 0;
+    for (let i = 1; i < 19; i++) if (at(i, i) > 0.45) inside += 1;
+    expect(inside).toBe(18);
+  });
+
+  it('未探索格即使 terrain 是水也不参与平滑（信息诚实）', () => {
+    const size = 12;
+    const atlas = buildAtlas({
+      width: size, height: size, boundsX: 0, boundsY: 0, faceSize: size,
+      sample: (x, y) => ({ terrain: x === 6 && y === 6 ? 'water' : 'unknown', explored: x === 6 && y === 6, visible: x === 6 && y === 6 }),
+    });
+    const bytes = atlas.sdf.image.data as Uint8Array;
+    const width = atlas.sdf.image.width;
+    const at = (cellX: number, cellY: number) => (bytes[((cellY * 8 + 4) * width + cellX * 8 + 4) * 4] / 255) - 0.5;
+    // 唯一的已探索水格本身仍在内侧；它的未探索邻格恒为外侧（不因邻接被带成水）。
+    expect(at(6, 6)).toBeGreaterThan(0.45);
+    expect(at(5, 6)).toBeLessThan(0);
+    expect(at(7, 6)).toBeLessThan(0);
+    disposeAtlas(atlas);
   });
 });

@@ -148,6 +148,30 @@ function smoothField(width: number, height: number, mask: (x: number, y: number)
   return { data: field, width: w, height: h };
 }
 
+/**
+ * 单格保留（审查 P2-1）：把「本格自身属于该类别」的格心强制推进内侧。
+ *
+ * 宽核均值（σ ≈ 1 格）会把孤立 1 格水/岩浆的格心压到 −0.19，着色器阈值 ±0.45
+ * 判成外侧 → 服务端说水、画面画成可建造陆地。只抬格心、不动格边：
+ * 格内其余位置仍由平滑场决定，所以亚格边界照样圆润；格心到格边的插值
+ * （硬件线性过滤）让这一格读成「小水洼」，而不是一个方块。
+ */
+function keepOwnCells(field: { data: Float32Array; width: number; height: number }, own: (x: number, y: number) => boolean) {
+  const S = SDF_SUPERSAMPLE;
+  for (let y = 0; y < field.height; y++) {
+    for (let x = 0; x < field.width; x++) {
+      if (!own(Math.floor(x / S), Math.floor(y / S))) continue;
+      const centreX = Math.floor(x / S) * S + S / 2, centreY = Math.floor(y / S) * S + S / 2;
+      const distance = Math.min(1, Math.hypot(x + 0.5 - centreX, y + 0.5 - centreY) / (S / 2));
+      // 格心 +0.5（满覆盖），向格边按 0.5 − 0.55·d² 收：孤立 1 格水/岩浆渲染成
+      // 半径约 0.9 半格的圆水洼（格心恒在内侧），相邻同类格之间仍由平滑场连成一片
+      // （两侧都是水时平滑场在格边本来就是满覆盖），1 格宽的河不会断成点。
+      const index = y * field.width + x;
+      field.data[index] = Math.max(field.data[index], 0.5 - 0.55 * distance * distance);
+    }
+  }
+}
+
 /** 到未知区（未探索/无数据）的格数渐变：只在已探索格上有值，未探索格恒为 0。 */
 function knownEdgeField(width: number, height: number, sample: SampleAt, boundsX: number, boundsY: number) {
   const distance = distanceField(width, height, boundsX, boundsY,
@@ -196,6 +220,18 @@ export function buildAtlas({ width, height, boundsX, boundsY, faceSize, sample, 
     const cell = sample(boundsX + x, boundsY + y);
     return cell.explored && cell.terrain !== 'unknown' && cell.terrain === 'lava';
   });
+  // 单格保留（审查 P2-1）：宽核均值会把孤立 1 格水/岩浆的格心压到阈值以下
+  // （实测 1 格水格心 −0.19，着色器要 > 0.45 才算水），服务端说水、画面画成陆地。
+  // 这里把「本格自身类别」与平滑场取并集：本格是水/岩浆/岩石时，格心固定推进内侧
+  // （+0.5 的满覆盖度），平滑场仍负责格与格之间的圆润过渡与外侧衰减。
+  // 未探索格不参与（`known` 判定与平滑场一致），信息诚实不受影响。
+  const ownMask = (category: (terrain: string) => boolean) => (x: number, y: number) => {
+    const cell = sample(boundsX + x, boundsY + y);
+    return cell.explored && cell.terrain !== 'unknown' && category(cell.terrain);
+  };
+  keepOwnCells(waterGrid, ownMask(terrain => WATER_TERRAINS.has(terrain)));
+  keepOwnCells(rockGrid, ownMask(terrain => finishFlags(terrain).rock >= 0.5));
+  keepOwnCells(lavaGrid, ownMask(terrain => terrain === 'lava'));
   // 编码：场值 ±0.5 → 0..255（0.5 = 0）。场本身是覆盖度，范围天然是 ±0.5。
   const encodeSdf = (value: number) => Math.max(0, Math.min(255, Math.round((value + 0.5) * 255)));
   const directionOrder: SurfaceDirection[] = ['north', 'east', 'south', 'west'];
