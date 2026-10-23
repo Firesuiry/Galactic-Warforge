@@ -38,7 +38,7 @@ type ThreeTestScene = {
   zoom(factor: number): void;
   setAltitude(altitude: number): void;
   getCenterTile(): { x: number; y: number } | null;
-  vfxPhase?(phase: string, seconds?: number): number;
+  vfxPhase?(phase: string, seconds?: number): number | Promise<number>;
 };
 
 /**

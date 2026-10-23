@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 
 import { ribbonGeometry } from '../surface-ribbon';
-import { tileFrame, tileNormal, surfaceTileSize } from '../projection';
+import { tileFrame, surfaceTileSize } from '../projection';
 import type { TilePoint } from '../../model';
 
 /** 颜色语义（与场景旧口径一致）。 */
@@ -24,8 +24,7 @@ export const SELECTION_COLORS = {
   hover: '#5ef7dc',
 } as const;
 
-/** 线宽（格）与括号臂长（格，占一格的比例）。 */
-export const SELECTION_LINE_TILES = 0.055;
+/** 括号臂长（格，占一格的比例）。 */
 export const BRACKET_ARM = 0.22;
 /** 括号相对建筑模型的外扩（模型按占地 ×.86 建，括号略外一圈才不贴模型边）。 */
 export const BRACKET_SPAN = 0.9;
@@ -261,7 +260,13 @@ export class SelectionOverlay {
     }
   }
 
-  /** 收拢动画：括号从满格向内收（0 → 1，220ms），冻结时直接收拢完成。 */
+  /**
+   * 收拢动画：括号从满格向内收（0 → 1，220ms），冻结时直接收拢完成。
+   *
+   * `seconds` 必须与 `sync()` 的 `now` 同一个时钟（场景传 `VfxLayer.currentTime`）。
+   * 用两套时基（页面时间 vs 场景累计 dt）会让 `seconds - born` 恒为负，括号永远停在
+   * 0.95 × 0.55 的最暗态、收拢从不播放（审查 H2）。
+   */
   animate(seconds: number, frozen: boolean): void {
     for (const entry of this.entries.values()) {
       if (entry.kind !== 'building') continue;

@@ -12,7 +12,6 @@
 import * as THREE from 'three';
 
 import { ribbonGeometry } from '../surface-ribbon';
-import { tileFrame } from '../projection';
 
 /** 虚线环参数（格）。 */
 export const DASH_RING = {
@@ -120,13 +119,4 @@ export const SUPPLY_AURA_COLORS = {
 /** 虚线流动相位（0..1，冻结时由调用方给固定值）。 */
 export function dashFlowPhase(seconds: number, frozen: boolean): number {
   return frozen ? 0.25 : (seconds * DASH_RING.flow) % 1;
-}
-
-/**
- * 贴球面虚线环的「流动」：绕环心轴旋转一个小于一个 dash 周期的角度。
- * 返回可直接 `quaternion.premultiply` 的旋转（轴 = 该格法线）。
- */
-export function flowRotation(tile: { x: number; y: number }, faceSize: number, phase: number): THREE.Quaternion {
-  const { normal } = tileFrame(tile, faceSize);
-  return new THREE.Quaternion().setFromAxisAngle(normal, phase * (DASH_RING.dash + DASH_RING.gap) * 0.9 * Math.PI * 2 / 6);
 }

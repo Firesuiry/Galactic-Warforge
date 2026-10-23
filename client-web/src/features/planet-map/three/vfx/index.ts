@@ -20,7 +20,6 @@ import { CameraShake, shakeFromExplosion } from '../camera-shake';
 import { collectActivity, type ActivitySource } from '../industrial-activity';
 import type { PlanetThreeData } from '../../planet-three-scene';
 import { getBuildingFootprint } from '../../model';
-import { surfaceTileSize } from '../projection';
 import { VFX_QUALITY, type VfxQualitySettings } from './common';
 import { ParticleSystem } from './particles';
 import { CombatVfx } from './combat-vfx';
@@ -30,7 +29,6 @@ import { ConstructionFlash, ConstructionHolo, HoloMaterials, type HoloTask } fro
 import { SelectionOverlay, type SelectionItem } from './selection';
 import { SupplyAuraLayer, supplyAurasFrom, type SupplyAuraItem } from './supply-aura';
 import { ensureAtlas } from './atlas';
-import { applyFixturePhase, type FixtureContext } from './fixture-hooks';
 
 /** 冻结下的固定时间（秒）：所有动画停在这个相位。 */
 export const FROZEN_TIME = 1.35;
@@ -71,13 +69,13 @@ export class VfxLayer {
   /** 上一帧的相机高度（夹具推进短命对象时沿用，避免淡出距离跳变）。 */
   private lastCameraHeight = 1;
 
-  constructor(private readonly parent: THREE.Object3D, options: VfxLayerOptions) {
+  constructor(parent: THREE.Object3D, options: VfxLayerOptions) {
     this.settings = VFX_QUALITY[options.quality];
     this.frozen = options.frozen;
     this.reducedMotion = options.reducedMotion;
     ensureAtlas();
     this.particles = new ParticleSystem(parent, this.settings, this.frozen);
-    this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights, options.scale);
+    this.combat = new CombatVfx(parent, this.particles, this.settings.dynamicLights, options.scale, this.settings.decals);
     this.shake = new CameraShake(options.shakeEnabled ?? (() => !options.frozen && !options.reducedMotion));
     this.emitters = new IndustryEmitters(this.particles, this.settings, options.scale, options.radius, options.normalOf, options.footprintOf);
     this.constructionFlash = new ConstructionFlash(parent, options.radius, options.scale);
@@ -118,8 +116,13 @@ export class VfxLayer {
     return this.sources;
   }
 
+  /** 直接喂活动源（切档重建后恢复用：场景已按图层过滤过一遍）。 */
+  setSources(sources: ActivitySource[]): void {
+    this.sources = sources;
+  }
+
   /** 战斗事件 → 视觉（保持 `specsFromCombatEvent` 的事件口径）。 */
-  combatEvent(event: BattleEvent, resolve: (id: string | undefined | null) => CombatPointLike | null, camera: THREE.Camera, center: THREE.Vector3): void {
+  combatEvent(event: BattleEvent, resolve: (id: string | undefined | null) => CombatPointLike | null, center: THREE.Vector3): void {
     const specs = combatVfxFromEvent(event, resolve);
     // 冻结（`?freeze=1` / 截图夹具）下战斗事件不演出：画面必须是时间的纯函数，
     // 否则每来一条事件就多一批永久存在的粒子（实测冻结夹具里粒子池被灌满）。
@@ -132,7 +135,6 @@ export class VfxLayer {
       const strength = shakeFromExplosion(wave.size, distance, 26);
       if (strength > 0.02) this.shake.add(strength, 320 + wave.size * 90);
     }
-    void camera;
   }
 
   /** 世界尺度：粒子尺寸（格）→ 屏幕像素的换算系数。 */
@@ -161,8 +163,6 @@ export class VfxLayer {
     this.shake.update(dt);
     this.holo.setTime(this.time);
     this.constructionFlash.update(this.frozen ? 0 : dt);
-    // 夹具排错：粒子批是否可见/时间/纹理。
-    (this as unknown as { _debug?: unknown })._debug = this.particles.debugInfo();
     this.selection.animate(this.time, this.frozen);
     this.auras.animate(this.time, this.frozen);
     this.emitters.update(this.sources, dt, this.time, faceSize, this.frozen);
@@ -189,10 +189,6 @@ export class VfxLayer {
     this.holo.setTime(seconds);
   }
 
-  /** 夹具：按相位注入合成特效（见 `fixture-hooks.ts`）。 */
-  applyFixturePhase(phase: string, seconds: number | undefined, context: FixtureContext): number {
-    return applyFixturePhase(this, phase, seconds, context);
-  }
 
   /** 当前时间（秒，冻结下固定）。 */
   get currentTime(): number { return this.time; }
@@ -201,6 +197,9 @@ export class VfxLayer {
   stats() {
     return { time: this.time, particles: this.particles.counts(), combat: this.combat.counts(), emitters: this.emitters.activeEmitters, sources: this.sources.length, debug: this.particles.debugInfo() };
   }
+
+  /** 诊断：活动源集合（切档重建后核对用）。 */
+  get activitySources(): readonly ActivitySource[] { return this.sources; }
 
   dispose(): void {
     this.combat.dispose();
@@ -211,7 +210,5 @@ export class VfxLayer {
     this.auras.dispose();
     this.holo.dispose();
     this.shake.clear();
-    void this.parent;
-    void surfaceTileSize;
   }
 }

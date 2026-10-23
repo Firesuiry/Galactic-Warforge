@@ -76,11 +76,3 @@ export function ensureAtlas(): void {
     },
   );
 }
-
-/** 释放（场景 destroy；再次构造会重新加载）。 */
-export function disposeAtlas(): void {
-  texture?.dispose();
-  texture = null;
-  pending = false;
-  listeners.clear();
-}

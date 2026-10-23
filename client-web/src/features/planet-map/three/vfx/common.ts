@@ -44,16 +44,14 @@ export interface VfxQualitySettings {
   emissionScale: number;
   /** 枪口/爆炸点光源上限（0 = 不启用）。 */
   dynamicLights: number;
-  /** 是否用序列帧图集（false = 用程序生成的柔和点）。 */
-  atlas: boolean;
   /** 工业氛围发射器是否开启。 */
   industry: boolean;
-  /** 地面焦痕贴花上限。 */
+  /** 地面焦痕贴花上限（战斗焦痕池容量）。 */
   decals: number;
 }
 
 export const VFX_QUALITY: Record<PlanetRenderQuality, VfxQualitySettings> = {
-  low: { particleLimit: 900, emissionScale: 0.45, dynamicLights: 0, atlas: false, industry: true, decals: 12 },
-  balanced: { particleLimit: 2600, emissionScale: 0.8, dynamicLights: 2, atlas: true, industry: true, decals: 24 },
-  high: { particleLimit: 5000, emissionScale: 1, dynamicLights: 4, atlas: true, industry: true, decals: 32 },
+  low: { particleLimit: 900, emissionScale: 0.45, dynamicLights: 0, industry: true, decals: 12 },
+  balanced: { particleLimit: 2600, emissionScale: 0.8, dynamicLights: 2, industry: true, decals: 24 },
+  high: { particleLimit: 5000, emissionScale: 1, dynamicLights: 4, industry: true, decals: 32 },
 };

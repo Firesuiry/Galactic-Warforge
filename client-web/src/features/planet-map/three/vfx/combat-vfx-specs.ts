@@ -13,7 +13,7 @@
 import type { BattleEvent } from '@/engine/battle-events';
 
 import type { FireTone, HitTone, Vec3Like } from '../combat-effects';
-import { rand, randSigned } from './common';
+import { rand } from './common';
 import { PARTICLE_STYLES, type ParticleStyle } from './particles';
 
 export type CombatPointLike = Vec3Like & { owner: 'own' | 'enemy' | 'darkfog'; kind: 'building' | 'unit' };
@@ -64,6 +64,12 @@ export interface VfxDebris { at: Vec3Like; normal: Vec3Like; count: number; size
 /** 曳光条（拉伸 billboard，从 from 到 to）。`width` 单位是格。 */
 export interface VfxTracer { from: Vec3Like; to: Vec3Like; color: number; life: number; width: number }
 
+/** 残骸冒烟源（击毁后残骸在 `life` 秒内周期性冒烟）。 */
+export interface VfxWreck { at: Vec3Like; normal: Vec3Like; life: number; seed: number }
+
+/** 护盾命中：菲涅尔气泡（`size` 是半径，格）。 */
+export interface VfxShield { at: Vec3Like; normal: Vec3Like; size: number; life: number }
+
 export interface CombatVfxSpecs {
   bursts: VfxBurst[];
   decals: VfxDecal[];
@@ -71,12 +77,16 @@ export interface CombatVfxSpecs {
   shockwaves: VfxShockwave[];
   tracers: VfxTracer[];
   debris: VfxDebris[];
+  wrecks: VfxWreck[];
+  shields: VfxShield[];
 }
 
-const EMPTY: CombatVfxSpecs = { bursts: [], decals: [], lights: [], shockwaves: [], tracers: [], debris: [] };
+const EMPTY: CombatVfxSpecs = {
+  bursts: [], decals: [], lights: [], shockwaves: [], tracers: [], debris: [], wrecks: [], shields: [],
+};
 
 function specs(): CombatVfxSpecs {
-  return { bursts: [], decals: [], lights: [], shockwaves: [], tracers: [], debris: [] };
+  return { bursts: [], decals: [], lights: [], shockwaves: [], tracers: [], debris: [], wrecks: [], shields: [] };
 }
 
 function normalOf(point: Vec3Like): { x: number; y: number; z: number } {
@@ -169,7 +179,9 @@ export function combatVfxFromEvent(
     out.decals.push({ at: add(target, normal, 0.005), normal, size: 0.42, life: 2.6 });
     const shieldAbsorbed = typeof payload.shield_absorbed === 'number' ? payload.shield_absorbed : 0;
     if (shieldAbsorbed > 0) {
-      // 护盾：菲涅尔气泡的视觉由 shader 网格负责（scene 侧），这里给一层青色能量散点。
+      // 护盾：菲涅尔气泡网格（`CombatVfx` 的护盾池）+ 一层青色能量散点。
+      // 只有服务端真的报了 shield_absorbed > 0 才演出（不凭空护盾）。
+      out.shields.push({ at: add(target, normal, 0.18), normal, size: 0.62, life: 0.42 });
       out.bursts.push({
         style: PARTICLE_STYLES.holo,
         at: add(target, normal, 0.32),
@@ -227,13 +239,15 @@ export function combatVfxFromEvent(
   out.lights.push({ at: add(target, normal, 0.6), color: 0xffb066, intensity: 26 * scale, life: 0.28, distance: 6 * scale });
   // 地面焦痕：深色、边缘柔和、8s 淡出（`CombatVfx` 的贴图本身就是柔边焦痕）。
   out.decals.push({ at: add(target, normal, 0.004), normal, size: target.kind === 'building' ? 1.5 : 0.8, life: 8 });
+  // 残骸冒烟：击毁后 4.2s 内由 `CombatVfx` 周期性发射（残骸存在期间才有，不是永久烟柱）。
+  out.wrecks.push({ at: add(target, normal, 0.06), normal, life: 4.2, seed: seed + 7 });
   return out;
 }
 
 /** 爆炸烟的色调（乘在 `smoke` 样式的线性色上，落成 #3a3530 量级的深灰）。 */
 export const EXPLOSION_SMOKE_TINT: [number, number, number] = [0.16, 0.15, 0.13];
 
-/** 残骸冒烟：随时间衰减的烟（残骸存在期间周期性发射）。 */
+/** 残骸冒烟：随时间衰减的烟（残骸存在期间周期性发射；由 `CombatVfx` 的残骸池调用）。 */
 export function wreckSmoke(at: Vec3Like, normal: Vec3Like, seed: number, age: number): VfxBurst | null {
   if (age > 4.2) return null;
   const fade = 1 - age / 4.2;
@@ -244,18 +258,4 @@ export function wreckSmoke(at: Vec3Like, normal: Vec3Like, seed: number, age: nu
     count: 2, life: 1.4 + fade, scale: 0.7 + (1 - fade) * 0.6, spread: 0.5,
     seed: seed + Math.floor(age * 10), tint: [0.4, 0.4, 0.4],
   };
-}
-
-/** 确定性抖动（单位方向的小扰动，供枪口/命中点使用）。 */
-export function jitterDirection(normal: Vec3Like, seed: number, amount: number): Vec3Like {
-  const [t1, t2] = tangentBasis(normal);
-  const a = randSigned(seed, 11) * amount, b = randSigned(seed, 12) * amount;
-  const x = normal.x + t1.x * a + t2.x * b, y = normal.y + t1.y * a + t2.y * b, z = normal.z + t1.z * a + t2.z * b;
-  const length = Math.hypot(x, y, z) || 1;
-  return { x: x / length, y: y / length, z: z / length };
-}
-
-/** 随机方向（供测试核对确定性）。 */
-export function deterministicSample(seed: number): number {
-  return rand(seed, 3);
 }

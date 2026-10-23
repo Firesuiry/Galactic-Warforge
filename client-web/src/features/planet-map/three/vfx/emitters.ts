@@ -10,10 +10,10 @@
 
 import * as THREE from 'three';
 
-import { surfaceOffset } from '@shared/surface';
 import type { ActivitySource } from '../industrial-activity';
 import { tileFrame, tileNormal } from '../projection';
-import { rand, smoothstep, type VfxQualitySettings } from './common';
+import { footprintCenterTile } from '../tactical-overlays';
+import { rand, type VfxQualitySettings } from './common';
 import { PARTICLE_STYLES, type ParticleBurst, type ParticleStyle, type ParticleSystem } from './particles';
 
 /**
@@ -36,6 +36,7 @@ export const EMITTER_OFFSETS: Record<string, EmitterOffset> = {
   mini_fusion_power_plant: { x: 0, y: 0.9, z: -0.1 },
   // 化工 / 炼油：塔顶白色蒸汽。
   chemical_plant: { x: 0, y: 0.95, z: 0 },
+  quantum_chemical_plant: { x: 0, y: 0.95, z: 0 },
   oil_refinery: { x: 0.1, y: 1.0, z: -0.05 },
   // 采矿机：钻头下方扬尘（贴地）。
   mining_machine: { x: 0, y: 0.45, z: 0.1 },
@@ -44,8 +45,10 @@ export const EMITTER_OFFSETS: Record<string, EmitterOffset> = {
   assembling_machine_mk1: { x: 0.2, y: 0.9, z: 0.2 },
   assembling_machine_mk2: { x: 0.2, y: 0.9, z: 0.2 },
   assembling_machine_mk3: { x: 0.2, y: 0.9, z: 0.2 },
-  // 研究站：全息塔顶。
+  recomposing_assembler: { x: 0.2, y: 0.9, z: 0.2 },
+  // 研究站：全息塔顶（`research_station` 是旧目录 id，保留兜底）。
   matrix_lab: { x: 0, y: 0.9, z: 0 },
+  self_evolution_lab: { x: 0, y: 0.9, z: 0 },
   research_station: { x: 0, y: 0.9, z: 0 },
 };
 
@@ -80,12 +83,16 @@ export const INDUSTRY_PROFILES: Record<string, IndustryProfile> = {
   ),
 };
 
-/** 化工/炼油的白色蒸汽：用 heat 的活动源但换样式（类型区分）。 */
-const STEAM_TYPES = /chemical_plant|oil_refinery|fractionator|spray_coater/;
+/**
+ * 建筑类型 → 表现的三张表（只对 `process` 活动源生效；熔炉/发电/采矿走各自的 kind）。
+ * 服务端没有 `production` 模块的类型（分馏塔、喷涂机）不会产出 `process` 源，不列入。
+ */
+/** 化工/炼油的白色蒸汽。 */
+const STEAM_TYPES = /chemical_plant|oil_refinery/;
 /** 装配台焊花。 */
-const ASSEMBLER_TYPES = /assembling_machine/;
+const ASSEMBLER_TYPES = /assembling_machine|recomposing_assembler/;
 /** 研究站全息光粒。 */
-const RESEARCH_TYPES = /matrix_lab|research_station/;
+const RESEARCH_TYPES = /matrix_lab|research_station|self_evolution_lab/;
 
 /** 一次发射的时间窗（秒）：同一活动源在窗口内只发一次，相位由 seed 决定（冻结可复现）。 */
 export const INDUSTRY_INTERVAL = 0.28;
@@ -135,19 +142,27 @@ export class IndustryEmitters {
 
   /** 设备类型 → 发射口偏移（格）；未登记的类型返回 null（不发射，宁缺毋滥）。 */
   static offsetFor(type: string): EmitterOffset | null {
-    return EMITTER_OFFSETS[type] ?? null;
+    return Object.prototype.hasOwnProperty.call(EMITTER_OFFSETS, type) ? EMITTER_OFFSETS[type] : null;
   }
 
-  /** 某种建筑的工业表现（按活动源 kind 与建筑类型细化）。 */
+  /**
+   * 某种建筑的工业表现：先按**活动源 kind**（能量/采集/熔炉）选，再按**建筑类型**细分
+   * `process`（制造台焊花 / 化工炼油蒸汽 / 研究站光粒）。
+   *
+   * `process` 由 `collectActivity` 为「running 且配方在跑」的非熔炉生产建筑，以及
+   * 研究模式下（未设配方）的研究站产出——所以这里的类型分流是可达的；
+   * 未登记的类型返回 null（宁缺毋滥，不凭空冒烟）。
+   */
   static profileFor(kind: ActivitySource['kind'], buildingType: string): IndustryProfile | null {
-    if (kind === 'heat') {
-      if (STEAM_TYPES.test(buildingType)) {
-        return profile({ style: PARTICLE_STYLES.steam, count: 3, life: 2.0, scale: 2.4, speed: 0.7, tint: [1, 1, 1] });
-      }
-      return INDUSTRY_PROFILES.heat;
-    }
+    // 非生产建筑（仓储 / 防御 / 物流）即使有 energy 源也不冒烟：只认发射口表里的类型。
+    if (!IndustryEmitters.offsetFor(buildingType)) return null;
     if (kind === 'energy') return INDUSTRY_PROFILES.energy;
     if (kind === 'mining') return INDUSTRY_PROFILES.mining;
+    if (kind === 'heat') return INDUSTRY_PROFILES.heat;
+    if (kind !== 'process') return null;
+    if (STEAM_TYPES.test(buildingType)) {
+      return { rate: 2.2, styles: [{ style: PARTICLE_STYLES.steam, count: 3, life: 2.0, scale: 2.4, speed: 0.7, tint: [1, 1, 1] }] };
+    }
     if (ASSEMBLER_TYPES.test(buildingType)) {
       return { rate: 1.1, styles: [{ style: PARTICLE_STYLES.weld, count: 3, life: 0.45, scale: 1.6, speed: 1.4, tint: [1, 1, 1] }] };
     }
@@ -240,8 +255,10 @@ export class IndustryEmitters {
     // 发射点必须落在**该建筑所占格**上：活动源给的是锚点格，多格建筑的炉口在占地中心，
     // 直接用锚点法线会把烟柱甩到隔壁格（vfx 分支实测）。
     const footprint = this.footprintOf(source.buildingId ?? '') ?? buildingFootprints.get(source.buildingId ?? '');
+    // 占地中心与选中括号/射程圈同一算法（`footprintCenterTile`）：`surfaceOffset` 只接受整数步，
+    // 2×2 占地的 0.5 会被当成 1 格，发射口偏半格（审查 L8）。
     const center = footprint && (footprint.width > 1 || footprint.height > 1)
-      ? surfaceOffset(source.position, (footprint.width - 1) / 2, (footprint.height - 1) / 2, faceSize)
+      ? footprintCenterTile(source.position, footprint, faceSize)
       : source.position;
     // 发射口的世界坐标必须用**场景的 `normal(x, y)`**（含局部曲面/图集偏移），
     // 不能用 `tileNormal` 的原始球面法线——后者与场景里模型的位置差几格，
@@ -258,7 +275,9 @@ export class IndustryEmitters {
       const burst: ParticleBurst = {
         position: base,
         normal: new THREE.Vector3(normal.x, normal.y, normal.z),
-        velocity: new THREE.Vector3(normal.x, normal.y, normal.z).multiplyScalar(style.speed * tileSize),
+        // 单位契约：`ParticleBurst.velocity` 是**格/秒**，由 `ParticleSystem.emit` 统一乘格宽换算成
+        // 世界单位。这里再乘一次 tileSize 会让 16 面快 ~7 倍、288 面慢 ~2.5 倍（审查 H3）。
+        velocity: new THREE.Vector3(normal.x, normal.y, normal.z).multiplyScalar(style.speed),
         count: Math.max(1, Math.round(style.count * jitter)),
         life: style.life,
         scale: style.scale,
@@ -290,10 +309,4 @@ function hashString(value: string): number {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
   return hash >>> 0;
-}
-
-/** 确定性发射相位（冻结时用：给定活动源与时间窗，返回 [0,1) 的固定相位）。 */
-export function emitterPhase(seed: number, time: number, interval: number): number {
-  const raw = (time / interval + rand(seed, 0) * 7) % 1;
-  return smoothstep(0, 1, raw);
 }

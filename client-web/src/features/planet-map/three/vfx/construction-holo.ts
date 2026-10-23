@@ -22,10 +22,6 @@ export const HOLO_SCANLINES = 26;
 /** 全息材质工厂：按建筑类型缓存（几何由 `IndustrialModels` 共享，材质在这里共享）。 */
 export class HoloMaterials {
   private readonly materials = new Map<string, THREE.ShaderMaterial>();
-  private readonly flashMaterial = new THREE.MeshBasicMaterial({
-    color: HOLO_EDGE, transparent: true, opacity: 0, depthWrite: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
-  });
 
   /**
    * 按建筑类型取全息材质（同一个类型全场共享一个材质实例）。
@@ -45,6 +41,8 @@ export class HoloMaterials {
         uColor: { value: HOLO_COLOR.clone() },
         uEdge: { value: HOLO_EDGE.clone() },
         uScan: { value: HOLO_SCANLINES },
+        // 溶解高度（格）：每个任务按克隆模型的包围盒写一次（见 `ConstructionHolo.create`）。
+        uHeight: { value: 0.62 },
       },
       vertexShader: HOLO_VERTEX,
       fragmentShader: HOLO_FRAGMENT,
@@ -54,15 +52,6 @@ export class HoloMaterials {
     if (key === type) material.userData.shared = true;
     this.materials.set(key, material);
     return material;
-  }
-
-  /** 完工闪光材质（叠加混合，由场景按时序改 opacity）。 */
-  get flash(): THREE.MeshBasicMaterial { return this.flashMaterial; }
-
-  /** 按实例键写进度（0..1）。 */
-  setProgress(key: string, progress: number): void {
-    const material = this.materials.get(key);
-    if (material) material.uniforms.uProgress.value = Math.min(1, Math.max(0, progress));
   }
 
   /** 释放某个实例的材质（施工完成/取消）。共享键（= 类型）不释放。 */
@@ -80,7 +69,6 @@ export class HoloMaterials {
   dispose(): void {
     for (const material of this.materials.values()) material.dispose();
     this.materials.clear();
-    this.flashMaterial.dispose();
   }
 }
 
@@ -108,14 +96,15 @@ const HOLO_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform vec3 uEdge;
   uniform float uScan;
+  uniform float uHeight;
 
   varying vec3 vNormal;
   varying vec3 vView;
   varying vec3 vLocal;
 
   void main() {
-    // 模型局部单位 = 1 格，机身高度约 0.6 格（模型组已在场景侧按占地缩放）。
-    float height = clamp(vLocal.y / 0.62, 0.0, 1.0);
+    // 模型局部单位 = 1 格；高度按该任务的包围盒归一（uHeight，3×3 约 1.6 格、5×5 约 3.4 格）。
+    float height = clamp(vLocal.y / max(uHeight, 0.05), 0.0, 1.0);
     // 显形前沿：进度线下方实心，上方溶解；前沿 0.08 宽度做柔化。
     float reveal = smoothstep(height, height + 0.08, uProgress);
     if (reveal <= 0.001) discard;
@@ -269,20 +258,35 @@ export class ConstructionHolo {
     }
   }
 
+  /**
+   * 全息分身：克隆**整棵模型树**（保留根 `scale`、嵌套 Group 与旋转件的偏移），只把网格材质
+   * 换成共享的全息材质。
+   *
+   * 旧实现把每个 mesh 拍平到 holder 下，丢了根 `scale = (w×.86, …, d×.86)`：3×3 装配台的全息
+   * 包围盒只有实物的 ~half，5×5 基站差近 3 倍（审查 M1）。溶解高度改为按**克隆后的包围盒**
+   * 归一（`uHeight` uniform），不再写死 0.62 格。
+   */
   private create(task: HoloTask): { holder: THREE.Group; material: THREE.ShaderMaterial; task: HoloTask } {
     const holder = new THREE.Group();
     const model = this.models.building(task.buildingType, task.width * 0.86, task.height * 0.86, true);
     const material = this.materials.get(task.buildingType, `task:${task.id}`);
-    // 模型是共享缓存的：这里克隆一份网格树，只换材质，不碰原模型的几何/材质。
-    model.traverse((object) => {
+    // 模型是共享缓存的：克隆整棵树，只换材质，不碰原模型的几何/材质。
+    const clone = model.clone(true);
+    clone.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      const mesh = new THREE.Mesh(object.geometry, material);
-      mesh.position.copy(object.position);
-      mesh.quaternion.copy(object.quaternion);
-      mesh.scale.copy(object.scale);
-      holder.add(mesh);
+      object.material = material;
+      object.renderOrder = 14;
     });
-    holder.renderOrder = 14;
+    holder.add(clone);
+    // 溶解高度：着色器里的 `vLocal` 是**根 scale 之前**的模型空间（`IndustrialModels.batchStatic`
+    // 把各部件矩阵烘进几何、再恢复根 scale），所以量包围盒时也要把根 scale 归一成 1。
+    const rootScale = clone.scale.clone();
+    clone.scale.setScalar(1);
+    clone.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(clone);
+    clone.scale.copy(rootScale);
+    clone.updateMatrixWorld(true);
+    material.uniforms.uHeight.value = Math.max(0.05, box.max.y);
     this.group.add(holder);
     return { holder, material, task };
   }

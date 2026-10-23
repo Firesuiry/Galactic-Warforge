@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { ParticleSystem, PARTICLE_STYLES } from './particles';
+import { MAX_BURSTS_PER_FRAME, ParticleSystem, PARTICLE_STYLES } from './particles';
 import { VFX_QUALITY } from './common';
 
 function burst(count: number, seed = 1) {
@@ -74,5 +74,22 @@ describe('GPU 粒子系统（ParticleSystem）', () => {
     };
     expect(make(0.5)).toBeCloseTo(1, 6);
     expect(make(1)).toBeCloseTo(2, 6);
+  });
+});
+
+describe('单帧发射预算（MAX_BURSTS_PER_FRAME）', () => {
+  it('超出预算的批次被丢弃，下一次 setTime 后恢复', () => {
+    const system = new ParticleSystem(new THREE.Group(), VFX_QUALITY.high);
+    const perBurst = 2;
+    let accepted = 0;
+    for (let i = 0; i < MAX_BURSTS_PER_FRAME + 50; i++) {
+      if (system.emit(PARTICLE_STYLES.spark, burst(perBurst, i + 1)) > 0) accepted += 1;
+    }
+    expect(accepted).toBe(MAX_BURSTS_PER_FRAME);
+    expect(system.counts().total).toBeLessThanOrEqual(MAX_BURSTS_PER_FRAME * perBurst);
+    // 新的一帧（setTime 清空预算）后可以继续发射。
+    system.setTime(1);
+    expect(system.emit(PARTICLE_STYLES.spark, burst(1))).toBe(1);
+    system.dispose();
   });
 });

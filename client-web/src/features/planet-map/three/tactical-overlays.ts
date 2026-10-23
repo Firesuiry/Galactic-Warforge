@@ -23,9 +23,11 @@ import { DASH_RING, dashFlowPhase, dashedRingGeometry, radialDiscGeometry } from
 /**
  * 射程圈线宽（格）与不透明度：与补给光环同一画法（细虚线 + 极淡径向渐变）。
  * 3A 画质起射程圈与补给光环共用 `vfx/range-ring` 的虚线参数（线宽 ≤ .06 格）。
+ *
+ * 不透明度是 R20-B 已定的契约（`.55`），3A 分支只换画法、不改既定口径（审查 L5 / 步骤 22）。
  */
 export const RANGE_CIRCLE_WIDTH_TILES = DASH_RING.width;
-export const RANGE_CIRCLE_OPACITY = 0.62;
+export const RANGE_CIRCLE_OPACITY = 0.55;
 export const RANGE_CIRCLE_FILL_OPACITY = DASH_RING.fillEdge;
 
 /** 侦测点圆环配色、脉冲周期（秒）与尺寸（格）。 */

@@ -46,7 +46,10 @@ export interface ParticleBurst {
   position: THREE.Vector3;
   /** 表面法线（单位向量）。 */
   normal: THREE.Vector3;
-  /** 平均速度（格/秒，沿 normal 与切向）。 */
+  /**
+   * 平均速度（**格/秒**，沿 normal 与切向）。
+   * `ParticleSystem.emit` 是唯一乘格宽的地方（换算成世界单位/秒）；调用方不要再乘一次。
+   */
   velocity: THREE.Vector3;
   /** 速度抖动倍率（叠加 style.spread）。 */
   spread?: number;
@@ -62,7 +65,7 @@ export interface ParticleBurst {
   tint?: [number, number, number];
 }
 
-const MAX_BURSTS_PER_FRAME = 512;
+export const MAX_BURSTS_PER_FRAME = 512;
 
 /** 单批（一个混合模式）的 GPU 缓冲与材质。 */
 class ParticleBatch {
@@ -506,11 +509,6 @@ export const PARTICLE_STYLES = {
     opacity: 0.55, gravity: 0, drag: 3.5, spread: 0.1, surface: true,
   } satisfies ParticleStyle,
 } as const;
-
-/** 归一化年龄（测试/调试：粒子在 t 时刻是否还活着）。 */
-export function particleAlive(age: number, life: number): boolean {
-  return age >= 0 && age < life;
-}
 
 /** 供测试使用：把 age 映射到不透明度（与 shader 同一条曲线）。 */
 export function particleOpacity(t: number): number {

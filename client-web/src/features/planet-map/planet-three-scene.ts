@@ -16,7 +16,7 @@ import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } fro
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
-import { IndustrialActivity } from './three/industrial-activity';
+import { IndustrialActivity, type ActivitySource } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { ConveyorGeometry } from './three/conveyor-geometry';
@@ -38,7 +38,7 @@ import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
 import { VfxLayer } from './three/vfx';
 import { buildSelectionItems, buildHoloTasks, buildSupplyAuras } from './three/vfx/scene-bridge';
-import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
+import { ribbonGeometry } from './three/surface-ribbon';
 import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
 import { buildingCoveringTile } from './three/pick-targets';
 import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
@@ -168,7 +168,9 @@ export class PlanetThreeScene {
    * 3A 画质 VFX 层（vfx 分支）：GPU 粒子、战斗演出、工业氛围、施工全息、选中反馈、
    * 补给光环、镜头震动。全部由这一处接入，场景其余部分只调它的几个入口。
    */
-  private readonly vfx: VfxLayer;
+  private vfx: VfxLayer;
+  /** 上一帧的 VFX 数据（切档重建 VFX 层时用来恢复活动源/选中/施工，不丢一帧状态）。 */
+  private lastVfxActivity: ActivitySource[] = [];
   /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次）。 */
   private lastBattleSeq = 0;
   /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
@@ -282,20 +284,7 @@ export class PlanetThreeScene {
     this.scene.add(rim);
     const { sky, atmosphere } = createSpace(RADIUS, this.sunlight.position.clone().sub(this.sunlight.target.position).normalize());
     this.scene.add(sky); this.world.add(atmosphere);
-    this.vfx = new VfxLayer(this.world, {
-      radius: RADIUS,
-      scale: () => this.tileScale(),
-      models: this.industrial,
-      normalOf: (tile) => this.data ? this.normal(tile.x, tile.y) : new THREE.Vector3(0, 0, 1),
-      footprintOf: (buildingId) => {
-        const building = this.data?.planet.buildings?.[buildingId];
-        return building ? getBuildingFootprint(building) : undefined;
-      },
-      quality: this.quality,
-      frozen: this.frozen,
-      reducedMotion: this.reducedMotion.matches,
-      shakeEnabled: () => !this.frozen && !this.reducedMotion.matches,
-    });
+    this.vfx = this.createVfxLayer(this.quality);
     this.vfx.setCamera(this.camera);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
@@ -334,9 +323,17 @@ export class PlanetThreeScene {
    * 夹具：按 `?vfxPhase=` 在固定位置注入合成特效并定格到指定相位。
    * 只在测试构建（`window.__planetThree` 存在）里由故事壳调用；真机不触发。
    * 返回注入的指令条数（测试用）。
+   *
+   * `fixture-hooks` 是**动态导入**：静态导入会把 `fx-target` / `fx-construction` 打进
+   * 生产 bundle（审查 L4）。调用方在 `exposeTestHook()` 分支里才会走到这里。
    */
-  applyVfxFixturePhase(phase: string, seconds?: number): number {
-    return this.vfx.applyFixturePhase(phase, seconds, {
+  async applyVfxFixturePhase(phase: string, seconds?: number): Promise<number> {
+    // 构建期常量门控：生产构建里下面整个分支被常量折叠删掉，动态 import 的 chunk
+    // 也就不会产出（`dist/` 里 grep 不到 `fx-target`，审查 L4）。
+    if (!import.meta.env.DEV && import.meta.env.VITE_E2E !== '1') return 0;
+    if (this.destroyed) return 0;
+    const { applyFixturePhase } = await import('./three/vfx/fixture-hooks');
+    return applyFixturePhase(this.vfx, phase, seconds, {
       normal: (x, y) => this.normal(x, y),
       radius: RADIUS,
       scale: this.tileScale(),
@@ -363,8 +360,40 @@ export class PlanetThreeScene {
   }
 
   setQuality(quality: PlanetRenderQuality) {
+    const changed = quality !== this.quality;
     this.quality = quality;
     this.resize();
+    // 档位表（粒子上限 / 发射率 / 点光源 / 焦痕池）在 VFX 层构造时固化：
+    // 切档必须重建整层，否则 UI 里切 high→low 后这些上限都不变（审查 M2）。
+    if (changed) this.rebuildVfxLayer();
+  }
+
+  private createVfxLayer(quality: PlanetRenderQuality): VfxLayer {
+    return new VfxLayer(this.world, {
+      radius: RADIUS,
+      scale: () => this.tileScale(),
+      models: this.industrial,
+      normalOf: (tile) => this.data ? this.normal(tile.x, tile.y) : new THREE.Vector3(0, 0, 1),
+      footprintOf: (buildingId) => {
+        const building = this.data?.planet.buildings?.[buildingId];
+        return building ? getBuildingFootprint(building) : undefined;
+      },
+      quality,
+      frozen: this.frozen,
+      reducedMotion: this.reducedMotion.matches,
+      shakeEnabled: () => !this.frozen && !this.reducedMotion.matches,
+    });
+  }
+
+  /** 切档：销毁旧层、按新档位重建，并恢复活动源与（下一帧 updateMarks 会重算的）选中/光环。 */
+  private rebuildVfxLayer(): void {
+    if (this.destroyed) return;
+    this.vfx.dispose();
+    this.vfx = this.createVfxLayer(this.quality);
+    this.vfx.setCamera(this.camera);
+    this.vfx.setSources(this.lastVfxActivity);
+    this.syncVfxSelection();
+    this.syncTacticalOverlays();
   }
 
   private updateQuality() {
@@ -436,12 +465,16 @@ export class PlanetThreeScene {
   }
 
   /**
-   * 粒子尺寸（格）→ 屏幕像素的换算：格宽 × (视口高/2) / tan(fov/2)。
-   * 与旧工业光点的 650 同量纲（RADIUS=100、16 格面、1000px 高时约 650）。
+   * 粒子尺寸（格）→ 屏幕像素的换算：格宽 × (绘制缓冲高/2) / tan(fov/2)。
+   *
+   * `gl_PointSize` 的单位是**绘制缓冲像素**，不是 CSS 像素：HiDPI 屏（pixelRatio 上限 2）
+   * 不乘 DPR 会让粒子与曳光的像素下限只有一半尺寸（审查 M5）。用 `clientHeight ×
+   * renderer.getPixelRatio()` 而不是 drawingBufferHeight（后者在 resize 当帧可能还没更新）。
    */
   private particlePixelScale() {
     const fov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
-    return this.tileScale() * (this.host.clientHeight / 2) / Math.max(0.0001, Math.tan(fov));
+    const bufferHeight = this.host.clientHeight * this.renderer.getPixelRatio();
+    return this.tileScale() * (bufferHeight / 2) / Math.max(0.0001, Math.tan(fov));
   }
 
   private tileScale() {
@@ -569,7 +602,7 @@ export class PlanetThreeScene {
     }
     this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
     // 工业氛围只认权威活动源（暂停/缺电/矿点枯竭时源不存在 → 不发射）。
-    this.vfx.setActivity({ ...this.data!, planet }, {
+    this.lastVfxActivity = this.vfx.setActivity({ ...this.data!, planet }, {
       buildings: this.interaction?.layers.buildings,
       power: this.interaction?.layers.power,
     });
@@ -910,7 +943,6 @@ export class PlanetThreeScene {
     this.vfx.combatEvent(
       event,
       (entityId) => this.resolveCombatPoint(entityId),
-      this.camera,
       this.camera.position.clone().normalize().multiplyScalar(RADIUS),
     );
   }
@@ -1242,10 +1274,12 @@ export class PlanetThreeScene {
   private syncVfxSelection() {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
+    // 收拢动画的时间基必须与 `SelectionOverlay.animate` 同一个时钟（`VfxLayer.currentTime`），
+    // 否则页面时间（几十秒）与场景累计 dt 恒差一个 t0，括号永远停在最暗、收拢不播（审查 H2）。
     this.vfx.syncSelection(
-      buildSelectionItems(data, interaction, this.frozen || this.reducedMotion.matches),
+      buildSelectionItems(data, interaction),
       data.planet.surface.face_size,
-      performance.now() / 1000,
+      this.vfx.currentTime,
     );
   }
 

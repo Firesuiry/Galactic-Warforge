@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
+import * as THREE from 'three';
+
 import { buildHoloTasks, buildSelectionItems, buildSupplyAuras } from './scene-bridge';
 import { FROZEN_TIME } from './index';
 import { VFX_QUALITY, rand, randSigned, hash01 } from './common';
 import { ATLAS_FRAMES } from './atlas';
 import { COMBAT_FX_LIMITS } from '../combat-effects';
 import { combatVfxFromEvent } from './combat-vfx-specs';
-import { INDUSTRY_PROFILES, IndustryEmitters, EMITTER_OFFSETS, INDUSTRY_INTERVAL } from './emitters';
+import { CombatVfx, COMBAT_VFX_LIMITS } from './combat-vfx';
+import { IndustryEmitters, INDUSTRY_INTERVAL } from './emitters';
+import { collectActivity } from '../industrial-activity';
 import { SHAKE_SOURCES, CameraShake, shakeFromExplosion } from '../camera-shake';
-import { PARTICLE_STYLES, particleOpacity } from './particles';
+import { ParticleSystem, PARTICLE_STYLES, particleOpacity } from './particles';
 import type { PlanetThreeData } from '../../planet-three-scene';
 import type { BattleEvent } from '@/engine/battle-events';
 
@@ -55,7 +59,7 @@ describe('VFX 场景桥接（纯函数）', () => {
     const items = buildSelectionItems(data(), {
       selected: { kind: 'building', id: 'b-base', position: { x: 10, y: 10, z: 0 } }, hoveredTile: null,
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
-    }, true);
+    });
     expect(items).toHaveLength(1);
     const bracket = items[0];
     expect(bracket.kind).toBe('building');
@@ -81,7 +85,7 @@ describe('VFX 场景桥接（纯函数）', () => {
     const select = (dataSet: PlanetThreeData) => buildSelectionItems(dataSet, {
       selected: { kind: 'building', id: 'b-x', position: { x: 6, y: 8, z: 0 } }, hoveredTile: null,
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
-    }, true);
+    });
     expect(select(withBuilding(1, 1))[0].tile).toEqual({ x: 6, y: 8 });
     expect(select(withBuilding(5, 5))[0].tile).toEqual({ x: 8, y: 10 });
     expect(select(withBuilding(5, 5))[0].footprintSize).toEqual({ width: 5, height: 5 });
@@ -91,7 +95,7 @@ describe('VFX 场景桥接（纯函数）', () => {
     const items = buildSelectionItems(data(), {
       selected: { kind: 'unit', id: 'u-1', position: { x: 11, y: 10, z: 0 } }, selectedUnits: ['u-1'], hoveredTile: { x: 3, y: 3 },
       interactionMode: { kind: 'inspect' }, layers: { selection: true, logistics: true, buildings: true },
-    }, true);
+    });
     const unit = items.find((item) => item.kind === 'unit');
     expect(unit?.direction).toBeDefined();
     expect(items.some((item) => item.kind === 'hover')).toBe(true);
@@ -99,9 +103,9 @@ describe('VFX 场景桥接（纯函数）', () => {
 
   it('建造/攻击模式不画悬停细环（沿用绿/红色带）；选中图层关闭时为空', () => {
     const base = { selected: null, hoveredTile: { x: 3, y: 3 }, layers: { selection: true, logistics: true, buildings: true } };
-    expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'build' } }, true)).toHaveLength(0);
-    expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'attack' } }, true)).toHaveLength(0);
-    expect(buildSelectionItems(data(), { ...base, selected: { kind: 'unit', id: 'u-1', position: { x: 11, y: 10, z: 0 } }, interactionMode: { kind: 'inspect' }, layers: { ...base.layers, selection: false } }, true)).toHaveLength(0);
+    expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'build' } })).toHaveLength(0);
+    expect(buildSelectionItems(data(), { ...base, interactionMode: { kind: 'attack' } })).toHaveLength(0);
+    expect(buildSelectionItems(data(), { ...base, selected: { kind: 'unit', id: 'u-1', position: { x: 11, y: 10, z: 0 } }, interactionMode: { kind: 'inspect' }, layers: { ...base.layers, selection: false } })).toHaveLength(0);
   });
 
   it('施工全息：进度取 remaining/total，带子/分拣器不画，未探索格过滤', () => {
@@ -129,39 +133,61 @@ describe('VFX 边界用例', () => {
   const resolve = (id: string | undefined | null) => (id === 't' ? { x: 0, y: 0, z: 100, owner: 'own' as const, kind: 'building' as const } : null);
   const event = (payload: Record<string, unknown>): BattleEvent => ({ seq: 1, at: 0, type: 'damage_applied', payload, eventId: 'e', tick: 1 });
 
-  it('粒子池满：容量上限生效，继续发射不抛错、不增长', () => {
-    const settings = VFX_QUALITY.low;
-    expect(settings.particleLimit).toBeLessThan(VFX_QUALITY.high.particleLimit);
-    expect(VFX_QUALITY.high.particleLimit).toBe(5000);
-    // 环形缓冲：live 计数不超过容量（由 ParticleBatch 内部保证；这里校验档位表口径）。
-    expect(VFX_QUALITY.low.emissionScale).toBeLessThan(VFX_QUALITY.high.emissionScale);
-    expect(VFX_QUALITY.low.dynamicLights).toBe(0);
+  it('粒子池满：驱动真实 ParticleSystem，环形缓冲覆盖最旧、计数不增长、继续发射不抛错', () => {
+    const parent = new THREE.Group();
+    const system = new ParticleSystem(parent, VFX_QUALITY.low);
+    const capacity = VFX_QUALITY.low.particleLimit;
+    for (let i = 0; i < 40; i++) {
+      system.emit(PARTICLE_STYLES.smoke, {
+        position: new THREE.Vector3(0, 0, 100), normal: new THREE.Vector3(0, 0, 1),
+        velocity: new THREE.Vector3(0, 0, 1), count: 500, life: 1, spread: 1, seed: i + 1,
+      });
+    }
+    expect(system.counts().total).toBeLessThanOrEqual(capacity);
+    expect(() => system.emit(PARTICLE_STYLES.fire, {
+      position: new THREE.Vector3(0, 0, 100), normal: new THREE.Vector3(0, 0, 1),
+      velocity: new THREE.Vector3(0, 0, 1), count: 10, life: 1, spread: 1, seed: 1,
+    })).not.toThrow();
+    system.dispose();
+    expect(parent.children).toHaveLength(0);
   });
 
-  it('设备暂停/缺电/矿点枯竭：不发射（活动源不存在 → 发射器空转）', () => {
-    // 发射器只认 `collectActivity` 的 active 源；heat 只在 production.remaining_ticks > 0 时出现。
+  it('设备暂停/缺电/矿点枯竭：驱动真实 IndustryEmitters，不发射', () => {
+    const calls: number[] = [];
+    const system = {
+      emit: (_style: unknown, burst: { count: number }) => { calls.push(burst.count); return burst.count; },
+    } as unknown as ParticleSystem;
+    const emitters = new IndustryEmitters(system, VFX_QUALITY.high, () => 0.4, 100, () => new THREE.Vector3(0, 0, 1));
+    // 缺电的熔炉：`collectActivity` 只产出 active=false 的 cargo 源，没有 heat 源。
     const building = {
       id: 'b', type: 'arc_smelter', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
       runtime: { state: 'no_power', functions: { production: { throughput: 1 } } },
       production: { remaining_ticks: 5 },
     };
-    const source = { id: 'b:heat', kind: 'heat' as const, position: { x: 1, y: 1 }, active: building.runtime.state === 'running', color: '#ff9856', buildingId: 'b' };
-    expect(source.active).toBe(false);
-    expect(IndustryEmitters.offsetFor('arc_smelter')).toEqual(EMITTER_OFFSETS.arc_smelter);
+    const data = { planet: { surface: { face_size: FACE }, buildings: { b: building }, resources: [], units: {} }, catalog: { buildings: [] } } as unknown as PlanetThreeData;
+    const sources = collectActivity(data);
+    expect(sources.filter((source) => source.kind === 'heat' || source.kind === 'process')).toHaveLength(0);
+    emitters.update(sources, 0.5, 1, FACE, false);
+    expect(calls).toHaveLength(0);
     expect(IndustryEmitters.offsetFor('conveyor_belt_mk1')).toBeNull();
-    expect(IndustryEmitters.profileFor('heat', 'arc_smelter')).toBe(INDUSTRY_PROFILES.heat);
-    expect(IndustryEmitters.profileFor('heat', 'chemical_plant')?.styles[0].style.kind).toBe('smoke');
     expect(INDUSTRY_INTERVAL).toBeGreaterThan(0);
   });
 
-  it('同一帧 ≥200 条战斗事件：事件口径不变（每条的指令数有界），上限常量存在', () => {
-    let bursts = 0;
-    for (let i = 0; i < 200; i++) {
-      const specs = combatVfxFromEvent(event({ attacker_id: 't', target_id: 't', damage: 1 }), resolve);
-      bursts += specs.bursts.length;
-    }
-    // 单条伤害事件的粒子批次有界（枪口 2 + 命中 2 + 焦痕 1 = 5），不会随事件数超线性增长。
-    expect(bursts).toBe(200 * 4);
+  it('同一帧 ≥200 条战斗事件：驱动真实 CombatVfx，发射预算与池上限生效', () => {
+    const parent = new THREE.Group();
+    const particles = new ParticleSystem(parent, VFX_QUALITY.high);
+    const combat = new CombatVfx(parent, particles, VFX_QUALITY.high.dynamicLights, () => 0.4, VFX_QUALITY.high.decals);
+    const damage = event({ attacker_id: 't', target_id: 't', damage: 1 });
+    for (let i = 0; i < 200; i++) combat.spawn(combatVfxFromEvent({ ...damage, seq: i + 1 }, resolve));
+    const counts = combat.counts();
+    // 曳光池上限 48（池满顶掉最旧）；粒子批次预算在同一个 `setTime` 窗口内生效。
+    expect(counts.tracers).toBeLessThanOrEqual(COMBAT_VFX_LIMITS.tracers);
+    expect(counts.decals).toBeLessThanOrEqual(VFX_QUALITY.high.decals);
+    // 单帧预算：200 条事件 × 每条 4 批 > MAX_BURSTS_PER_FRAME，粒子系统只接受预算内的批次。
+    expect(counts.particles.total).toBeLessThanOrEqual(VFX_QUALITY.high.particleLimit);
+    expect(() => combat.update(0.016, 0.016, 10)).not.toThrow();
+    combat.dispose();
+    particles.dispose();
     expect(COMBAT_FX_LIMITS.damageFloats).toBe(24);
   });
 

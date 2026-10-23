@@ -15,16 +15,24 @@
 import * as THREE from 'three';
 
 import { clamp01, rand, randSigned } from './common';
-import { ParticleSystem, type ParticleStyle } from './particles';
-import type { CombatVfxSpecs, VfxBurst, VfxDebris, VfxDecal, VfxLight, VfxShockwave, VfxTracer } from './combat-vfx-specs';
+import { ParticleSystem } from './particles';
+import {
+  wreckSmoke,
+  type CombatVfxSpecs, type VfxBurst, type VfxDebris, type VfxDecal, type VfxLight,
+  type VfxShield, type VfxShockwave, type VfxTracer, type VfxWreck,
+} from './combat-vfx-specs';
 
 export const COMBAT_VFX_LIMITS = {
   tracers: 48,
-  decals: 32,
   shockwaves: 16,
   lights: 4,
   debris: 96,
+  shields: 12,
+  wrecks: 10,
 } as const;
+
+/** 残骸冒烟的发射间隔（秒）：同一具残骸 0.45s 冒一次，共 4.2s。 */
+export const WRECK_SMOKE_INTERVAL = 0.45;
 
 /** 曳光宽度：远景（相机高度 > `TRACER_PIXEL_FLOOR_ALTITUDE`）不再加宽，按像素下限保持。 */
 export const TRACER_WIDTH_TILES = 0.2;
@@ -53,6 +61,8 @@ interface ShockwaveFx extends Timed { mesh: THREE.Mesh; size: number }
 interface LightFx extends Timed { light: THREE.PointLight; base: number; active: boolean }
 interface DebrisFx { mesh: THREE.Mesh; elapsed: number; duration: number; origin: THREE.Vector3; velocity: THREE.Vector3; normal: THREE.Vector3; spin: THREE.Vector3; size: number }
 interface DelayedBurst { burst: VfxBurst; remaining: number }
+interface ShieldFx extends Timed { mesh: THREE.Mesh; size: number }
+interface WreckFx extends Timed { at: THREE.Vector3; normal: THREE.Vector3; seed: number; next: number }
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -74,18 +84,26 @@ export class CombatVfx {
   private readonly debris: DebrisFx[] = [];
   private readonly freeDebris: DebrisFx[] = [];
   private readonly delayed: DelayedBurst[] = [];
+  private readonly shields: ShieldFx[] = [];
+  private readonly freeShields: ShieldFx[] = [];
+  private readonly wrecks: WreckFx[] = [];
   private readonly tracerGeometry = new THREE.PlaneGeometry(1, 1);
   private readonly decalGeometry = new THREE.CircleGeometry(1, 28);
   // 冲击波是**细环**（环宽 = 半径的 4%，配合 spec.size ≤ 3 格 → 环宽 ≤ .12 格）。
   private readonly shockGeometry = new THREE.RingGeometry(0.96, 1, 72);
   /** 碎块：一个共享的小八面体（暗色、不发光）。 */
   private readonly debrisGeometry = new THREE.OctahedronGeometry(1, 0);
+  /** 护盾气泡：单位球，菲涅尔 shader（边缘亮、正面几乎透明）。 */
+  private readonly shieldGeometry = new THREE.SphereGeometry(1, 24, 16);
+  private readonly shieldMaterial = makeShieldMaterial();
   private readonly debrisMaterial = new THREE.MeshStandardMaterial({ color: 0x2f2a24, roughness: 0.92, metalness: 0.08, flatShading: true });
   private readonly decalTexture: THREE.CanvasTexture;
   private readonly decalMaterial: THREE.MeshBasicMaterial;
   private readonly shockMaterial: THREE.MeshBasicMaterial;
   private readonly tracerMaterials = new Map<number, THREE.MeshBasicMaterial>();
   private readonly maxLights: number;
+  /** 焦痕池容量（按档位：low 12 / balanced 24 / high 32）。 */
+  private readonly maxDecals: number;
 
   constructor(
     parent: THREE.Object3D,
@@ -93,9 +111,11 @@ export class CombatVfx {
     maxLights: number = COMBAT_VFX_LIMITS.lights,
     /** 一格的世界长度：贴花/冲击波/曳光尺寸以「格」给出，落成 mesh 时要换算。 */
     private readonly tileScale: () => number = () => 1,
+    maxDecals = 32,
   ) {
     this.particles = particles;
     this.maxLights = maxLights;
+    this.maxDecals = Math.max(0, maxDecals);
     this.group.name = 'combat-vfx';
     parent.add(this.group);
     this.decalTexture = makeDecalTexture();
@@ -103,9 +123,11 @@ export class CombatVfx {
       map: this.decalTexture, color: 0x1a1712, transparent: true, opacity: 0.5,
       depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
     });
-    // 冲击波：亮橙白的 additive 细环，不写深度、不挡地面。
+    // 冲击波：**亮橙白**的 additive 细环，不写深度、不挡地面。
+    // 旧色 0xffa860 是橙（R:G:B = 1 : .66 : .38），additive 叠在绿地上会读成土黄（审查步骤 23）；
+    // 提到接近 #ffd8a8 的暖白、并把整体亮度抬过 bloom 的 luminanceThreshold(.45 线性) 才有辉光。
     this.shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffa860, transparent: true, opacity: 0.9, depthWrite: false,
+      color: 0xffd8a8, transparent: true, opacity: 1, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
     });
   }
@@ -122,11 +144,41 @@ export class CombatVfx {
     for (const wave of specs.shockwaves) this.spawnShockwave(wave);
     for (const light of specs.lights) this.flashLight(light);
     for (const debris of specs.debris) this.spawnDebris(debris);
+    for (const shield of specs.shields) this.spawnShield(shield);
+    for (const wreck of specs.wrecks) this.spawnWreck(wreck);
   }
 
-  /** 直接发射一批粒子（工业氛围等其它来源共用粒子系统）。 */
-  emit(style: ParticleStyle, burst: Parameters<ParticleSystem['emit']>[1]): void {
-    this.particles.emit(style, burst);
+  /** 护盾命中：菲涅尔气泡（池化，上限 `shields`）。 */
+  private spawnShield(spec: VfxShield): void {
+    if (this.shields.length >= COMBAT_VFX_LIMITS.shields) {
+      const oldest = this.shields.shift()!;
+      oldest.mesh.removeFromParent();
+      this.freeShields.push(oldest);
+    }
+    const fx = this.freeShields.pop() ?? {
+      mesh: new THREE.Mesh(this.shieldGeometry, this.shieldMaterial),
+      size: 1, elapsed: 0, duration: spec.life,
+    };
+    const normal = new THREE.Vector3(spec.normal.x, spec.normal.y, spec.normal.z).normalize();
+    fx.mesh.position.set(spec.at.x, spec.at.y, spec.at.z);
+    fx.mesh.quaternion.setFromUnitVectors(Z_AXIS, normal);
+    fx.mesh.renderOrder = 13;
+    fx.size = spec.size * this.tileScale();
+    fx.mesh.scale.setScalar(fx.size);
+    fx.elapsed = 0;
+    fx.duration = spec.life;
+    this.group.add(fx.mesh);
+    this.shields.push(fx);
+  }
+
+  /** 残骸冒烟：登记一具残骸，`update` 里按间隔从 `wreckSmoke` 取烟。 */
+  private spawnWreck(spec: VfxWreck): void {
+    if (this.wrecks.length >= COMBAT_VFX_LIMITS.wrecks) this.wrecks.shift();
+    this.wrecks.push({
+      at: new THREE.Vector3(spec.at.x, spec.at.y, spec.at.z),
+      normal: new THREE.Vector3(spec.normal.x, spec.normal.y, spec.normal.z).normalize(),
+      seed: spec.seed, elapsed: 0, duration: spec.life, next: 0,
+    });
   }
 
   private emitBurst(spec: VfxBurst): void {
@@ -212,7 +264,8 @@ export class CombatVfx {
   }
 
   private spawnDecal(spec: VfxDecal): void {
-    if (this.decals.length >= COMBAT_VFX_LIMITS.decals) this.releaseDecal(this.decals.shift()!);
+    if (this.maxDecals <= 0) return;
+    if (this.decals.length >= this.maxDecals) this.releaseDecal(this.decals.shift()!);
     const fx = this.freeDecals.pop() ?? {
       mesh: new THREE.Mesh(this.decalGeometry, this.decalMaterial.clone()),
       size: 1, elapsed: 0, duration: spec.life, opacity: 0.62,
@@ -257,6 +310,7 @@ export class CombatVfx {
     fx.elapsed = 0;
     fx.duration = spec.life;
     fx.mesh.scale.setScalar(fx.size * 0.15);
+    (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 1.0;
     this.group.add(fx.mesh);
     this.shockwaves.push(fx);
   }
@@ -365,9 +419,17 @@ export class CombatVfx {
     this.advance(this.shockwaves, step, (fx) => { fx.mesh.removeFromParent(); this.freeShockwaves.push(fx); }, (fx, t) => {
       // 半径从 .15 扩到 1（spec.size 已是最终半径），亮度同步淡到 0。
       fx.mesh.scale.setScalar(fx.size * (0.15 + t * 0.85));
-      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - t) ** 1.8;
+      // 亮度：前 35% 保持满亮（读得出「冲击」），之后淡到 0；additive 下 opacity 直接就是加色量。
+      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 1.0 * (1 - t) ** 1.5;
     });
     this.advanceDebris(step);
+    this.advance(this.shields, step, (fx) => { fx.mesh.removeFromParent(); this.freeShields.push(fx); }, (fx, t) => {
+      // 气泡扩张 + 淡出：菲涅尔强度由 shader 按视线夹角给，这里只调整体透明度与半径。
+      const material = fx.mesh.material as THREE.ShaderMaterial;
+      material.uniforms.uOpacity.value = (1 - t) ** 1.4;
+      fx.mesh.scale.setScalar(fx.size * (0.9 + t * 0.35));
+    });
+    this.advanceWrecks(step);
     for (const fx of this.lights) {
       if (!fx.active) continue;
       fx.elapsed += step;
@@ -409,6 +471,19 @@ export class CombatVfx {
     }
   }
 
+  /** 残骸冒烟：按 `WRECK_SMOKE_INTERVAL` 从 `wreckSmoke` 取一批烟，寿命到了就停。 */
+  private advanceWrecks(dt: number): void {
+    for (let i = this.wrecks.length - 1; i >= 0; i--) {
+      const wreck = this.wrecks[i];
+      wreck.elapsed += dt;
+      if (wreck.elapsed >= wreck.duration) { this.wrecks.splice(i, 1); continue; }
+      if (wreck.elapsed < wreck.next) continue;
+      wreck.next = wreck.elapsed + WRECK_SMOKE_INTERVAL;
+      const burst = wreckSmoke(wreck.at, wreck.normal, wreck.seed, wreck.elapsed);
+      if (burst) this.emitBurst(burst);
+    }
+  }
+
   private readonly debrisTangent = new THREE.Vector3();
   private readonly debrisPosition = new THREE.Vector3();
 
@@ -430,6 +505,8 @@ export class CombatVfx {
       shockwaves: this.shockwaves.length,
       lights: this.lights.filter((fx) => fx.active).length,
       debris: this.debris.length,
+      shields: this.shields.length,
+      wrecks: this.wrecks.length,
       delayed: this.delayed.length,
       particles: this.particles.counts(),
     };
@@ -439,9 +516,12 @@ export class CombatVfx {
 
   dispose(): void {
     for (const fx of this.tracers) fx.mesh.removeFromParent();
-    // 焦痕材质是逐实例克隆（透明度独立淡出），必须逐个释放。
-    for (const fx of this.decals) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
-    for (const fx of this.shockwaves) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
+    // 焦痕材质是逐实例克隆（透明度独立淡出），必须逐个释放——**包括池里空闲的**（审查 L7）。
+    for (const fx of [...this.decals, ...this.freeDecals]) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
+    for (const fx of [...this.shockwaves, ...this.freeShockwaves]) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
+    for (const fx of [...this.shields, ...this.freeShields]) fx.mesh.removeFromParent();
+    this.wrecks.length = 0;
+    this.shields.length = 0; this.freeShields.length = 0;
     for (const fx of this.lights) fx.light.removeFromParent();
     for (const fx of this.debris) fx.mesh.removeFromParent();
     this.tracers.length = 0; this.decals.length = 0; this.shockwaves.length = 0; this.lights.length = 0;
@@ -451,6 +531,8 @@ export class CombatVfx {
     this.tracerGeometry.dispose();
     this.decalGeometry.dispose();
     this.shockGeometry.dispose();
+    this.shieldGeometry.dispose();
+    this.shieldMaterial.dispose();
     this.decalTexture.dispose();
     this.decalMaterial.dispose();
     this.shockMaterial.dispose();
@@ -458,6 +540,38 @@ export class CombatVfx {
     this.tracerMaterials.clear();
     this.group.removeFromParent();
   }
+}
+
+/** 护盾气泡材质：菲涅尔边缘光（视空间法线 · 视线），正面近乎透明。 */
+function makeShieldMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uColor: { value: new THREE.Color('#7fe9ff') }, uOpacity: { value: 1 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = -mv.xyz;
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.6);
+        // 边缘一圈亮环 + 极淡的整体填充：读起来是「能量罩」，不是一颗实心球。
+        float alpha = (rim * 0.85 + 0.05) * uOpacity;
+        if (alpha <= 0.004) discard;
+        gl_FragColor = vec4(uColor * (0.7 + rim * 0.8), alpha);
+      }
+    `,
+  });
 }
 
 /** 焦痕贴图：中心深、边缘碎（程序生成，无第三方素材）。 */

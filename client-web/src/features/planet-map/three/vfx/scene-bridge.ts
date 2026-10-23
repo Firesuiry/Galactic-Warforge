@@ -36,7 +36,6 @@ function facingOf(rotation: unknown): { x: number; y: number } {
 export function buildSelectionItems(
   data: PlanetThreeData,
   interaction: SelectionInteraction,
-  _frozen: boolean,
 ): SelectionItem[] {
   const items: SelectionItem[] = [];
   if (!interaction.layers.selection) return items;

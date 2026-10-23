@@ -15,6 +15,7 @@ function event(type: string, payload: Record<string, unknown>, seq = 1): BattleE
 
 const destroy = (target: string, seq = 1) => event('entity_destroyed', { entity_id: target }, seq);
 const hit = (attacker: string, target: string, seq = 1) => event('damage_applied', { attacker_id: attacker, target_id: target, damage: 5 }, seq);
+const shielded = (attacker: string, target: string, seq = 1) => event('damage_applied', { attacker_id: attacker, target_id: target, damage: 5, shield_absorbed: 3 }, seq);
 
 describe('爆炸演出规格（步骤 14–15）', () => {
   it('冲击波半径按规模：小爆炸 1.5 格、大爆炸 3 格，寿命 0.35s', () => {
@@ -75,5 +76,18 @@ describe('曳光宽度（步骤 16）', () => {
     }
     expect(debris).toBeLessThanOrEqual(200 * 12);
     expect(COMBAT_VFX_LIMITS.debris).toBeLessThan(debris);
+  });
+});
+
+describe('残骸冒烟与护盾气泡（步骤 21：只由真实事件触发）', () => {
+  it('击毁事件登记一具残骸冒烟源；伤害事件不产生残骸', () => {
+    expect(combatVfxFromEvent(destroy('t'), resolve({ t: enemyUnit })).wrecks).toHaveLength(1);
+    expect(combatVfxFromEvent(destroy('t'), resolve({ t: enemyUnit })).wrecks[0].life).toBeGreaterThan(1);
+    expect(combatVfxFromEvent(hit('a', 't'), resolve({ a: own, t: enemyUnit })).wrecks).toHaveLength(0);
+  });
+
+  it('护盾气泡只在 shield_absorbed > 0 时出现', () => {
+    expect(combatVfxFromEvent(shielded('a', 't'), resolve({ a: own, t: enemyUnit })).shields).toHaveLength(1);
+    expect(combatVfxFromEvent(hit('a', 't'), resolve({ a: own, t: enemyUnit })).shields).toHaveLength(0);
   });
 });

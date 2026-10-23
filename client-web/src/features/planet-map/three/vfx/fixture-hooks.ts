@@ -55,12 +55,6 @@ function pointAt(ctx: FixtureContext, x: number, y: number, lift = 0): CombatPoi
   return { x: position.x, y: position.y, z: position.z, owner: 'own', kind: 'unit' };
 }
 
-/** 相位 → 秒（夹具固定时间；场景冻结时用同一个值）。 */
-export const FIXTURE_SECONDS: Record<string, number> = {
-  explosion: 0.25 * 0.72,
-  turretfire: 0.4 * 0.24,
-};
-
 /** 爆炸定格在爆发后多久（秒）：火球已铺开、烟/碎片成形。 */
 const EXPLOSION_AGE = 0.2;
 /** 曳光定格在开火后多久（秒）：弹道行至半程。 */

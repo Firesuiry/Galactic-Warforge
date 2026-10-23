@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 
-import { BRACKET_SPAN, bracketGeometry, type BracketFootprint } from './selection';
+import { BRACKET_SNAP_SECONDS, BRACKET_SPAN, SelectionOverlay, bracketGeometry, type BracketFootprint } from './selection';
 import { surfaceCoordinate, surfaceFace, surfaceOffset } from '@shared/surface';
 import { footprintCenterTile } from '../tactical-overlays';
 
@@ -90,5 +90,56 @@ describe('选中四角括号（步骤 13：中心 = 占地中心）', () => {
       sum + Math.min(...corners.map((corner) => Math.hypot(point.x - corner.x, point.y - corner.y)))
     ), 0);
     expect(toCorners(closed)).toBeLessThan(toCorners(open) * 0.5);
+  });
+});
+
+describe('括号收拢动画（步骤 19：与 VFX 时钟同一时间基）', () => {
+  const FACE_SIZE = 16;
+
+  it('非冻结：sync(now) 后随时间透明度上升（不再恒为最暗）', () => {
+    const overlay = new SelectionOverlay(new THREE.Group(), RADIUS, () => 0.4);
+    overlay.sync([{
+      key: 'selected:b', tile: { x: 6, y: 6 }, color: '#ffd166', kind: 'building', opacity: 0.95,
+      footprint: Array.from({ length: 9 }, (_, i) => ({ x: 5 + (i % 3), y: 5 + Math.floor(i / 3) })),
+      footprintSize: { width: 3, height: 3 },
+    }], FACE_SIZE, 0);
+    const mesh = overlay.group.children[0] as THREE.Mesh;
+    const opacity = () => (mesh.material as THREE.MeshBasicMaterial).opacity;
+    overlay.animate(0, false);
+    const atZero = opacity();
+    overlay.animate(BRACKET_SNAP_SECONDS * 0.5, false);
+    const atHalf = opacity();
+    overlay.animate(BRACKET_SNAP_SECONDS, false);
+    const done = opacity();
+    expect(atHalf).toBeGreaterThan(atZero);
+    expect(done).toBeGreaterThan(atHalf);
+    // 起点就是最暗的 0.95 × 0.55，终点是 0.95（全亮）。
+    expect(atZero).toBeCloseTo(0.95 * 0.55, 6);
+    expect(done).toBeCloseTo(0.95, 6);
+    overlay.dispose();
+  });
+
+  it('冻结：直接收拢完成（夹具截图固定）', () => {
+    const overlay = new SelectionOverlay(new THREE.Group(), RADIUS, () => 0.4);
+    overlay.sync([{
+      key: 'selected:b', tile: { x: 6, y: 6 }, color: '#ffd166', kind: 'building', opacity: 0.95,
+      footprintSize: { width: 1, height: 1 },
+    }], FACE_SIZE, 12);
+    overlay.animate(12, true);
+    const mesh = overlay.group.children[0] as THREE.Mesh;
+    expect((mesh.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.95, 6);
+    overlay.dispose();
+  });
+
+  it('时钟倒退（两套时基）时 clamp 到 0，不会出现负透明度', () => {
+    const overlay = new SelectionOverlay(new THREE.Group(), RADIUS, () => 0.4);
+    overlay.sync([{
+      key: 'selected:b', tile: { x: 6, y: 6 }, color: '#ffd166', kind: 'building', opacity: 0.95,
+      footprintSize: { width: 1, height: 1 },
+    }], FACE_SIZE, 30);
+    overlay.animate(1, false);
+    const mesh = overlay.group.children[0] as THREE.Mesh;
+    expect((mesh.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.95 * 0.55, 6);
+    overlay.dispose();
   });
 });
