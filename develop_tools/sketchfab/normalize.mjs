@@ -295,7 +295,7 @@ function fitToUnit(doc) {
     node.setScale([1, 1, 1]);
     node.setRotation([0, 0, 0, 1]);
   }
-  return { size: size.map((value) => +(value * scale).toFixed(3)) };
+  return { size: size.map((value) => +(value * scale).toFixed(3)), scale };
 }
 
 /** 把炮塔拆成「底座 + turret-barrel」两个节点：按三角面重心高度切，pivot 以上归炮管组。
@@ -598,11 +598,15 @@ async function normalizeOne(type, role) {
   // 坐标：居中落地（Y 上、正面 +Z 由原模型决定，yaw 在映射表里修）
   // 坐标：居中落地 + 缩到最长边 1。join/flatten 之后顶点已是世界坐标（节点变换为单位阵），
   // 所以直接改顶点数组——按节点缩放会在嵌套层级上累乘（scout 被压到 0.002）。
-  // 炮塔拆分放在 fit 之前：拆分按 pivot 比例切，两者都在未缩放坐标下做。
-  if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45);
+  // 归一化必须在拆炮塔**之前**：`fitToUnit` 末尾会清零所有节点变换，而拆出来的
+  // `turret-barrel` 靠节点平移表示转轴；先拆后归一，转轴会被清零（炮管飞到底座上方）。
+  // 归一化是逐顶点缩放 + 平移，对炮塔拆分没有影响，反过来做才自洽。
   const fitted = fitToUnit(doc);
-  const outName = role === 'primary' ? `${type}.glb` : `${type}-alt.glb`;
-  const outDir = role === 'primary' ? OUT : ALT_OUT;
+  if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45);
+  // `selection.json` 的 `chosen` 指定该槽位最终用首选还是备选（主代理换选型时只改这一个字段）。
+  const chosenRole = SELECTION[type]?.chosen ?? 'primary';
+  const outName = role === chosenRole ? `${type}.glb` : `${type}-alt.glb`;
+  const outDir = role === chosenRole ? OUT : ALT_OUT;
   await mkdir(outDir, { recursive: true });
   // meshopt 压缩：GLTFLoader 需 MeshoptDecoder（已在场景侧配置）。
   await doc.transform(meshopt({ encoder: MeshoptEncoder }));
@@ -612,7 +616,7 @@ async function normalizeOne(type, role) {
 }
 
 const argv = process.argv.slice(2);
-const only = argv.flatMap((a, i) => (a === '--only' ? [argv[i + 1]] : []));
+const only = argv.flatMap((a, i) => (a === '--only' ? argv[i + 1].split(',') : []));
 const roleFilter = argv.includes('--role') ? argv[argv.indexOf('--role') + 1] : null;
 
 const results = [];

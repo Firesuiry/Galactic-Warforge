@@ -41,7 +41,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-c4465bbc0aaf4eb19b8da339cf5b8969",
       "source": "mecha#3"
-    }
+    },
+    "chosen": "fallback"
   },
   "soldier": {
     "primary": {
@@ -107,7 +108,8 @@
       "animated": true,
       "viewerUrl": "https://sketchfab.com/3d-models/none-74ee92cf4d224af4bacfb234b41d6708",
       "source": "scout#6"
-    }
+    },
+    "chosen": "fallback"
   },
   "attack_drone": {
     "primary": {
@@ -151,7 +153,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-a3cb343f3bf8486c8a0482df5b753c38",
       "source": "missile_vehicle#4"
-    }
+    },
+    "chosen": "fallback"
   },
   "repair_vehicle": {
     "primary": {
@@ -195,7 +198,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-5d19c751b12849eeb390d637b2b686a1",
       "source": "supply_truck#2"
-    }
+    },
+    "chosen": "fallback"
   },
   "dark_fog": {
     "primary": {
@@ -361,7 +365,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-9818bd406a9b499395ac51ec47a0aeca",
       "source": "plasma_turret#6"
-    }
+    },
+    "chosen": "fallback"
   },
   "anti_air_turret": {
     "primary": {
