@@ -55,10 +55,14 @@ const CONFIG = {
   ship: { tris: 12000, texture: 1024 },
   cargo_ship: { tris: 12000, texture: 1024 },
   battlefield_analysis_base: { tris: 20000, texture: 1024 },
-  gauss_turret: { tris: 20000, texture: 1024, turret: true },
+  // `turretYaw`：原模型的炮管指向（度，俯视逆时针）。归一化时整模绕 Y 转这个角度，
+  // 让炮管在局部空间朝 +Z——场景的炮塔瞄准按 `atan2(local.x, local.z)` 写 `turret-barrel.rotation.y`，
+  // 炮管几何不朝 +Z 的话会瞄偏。
+  gauss_turret: { tris: 20000, texture: 1024, turret: true, turretYaw: 90 },
+  // laser_turret 原模型炮口已朝 +Z，不用转。
   laser_turret: { tris: 20000, texture: 1024, turret: true },
   missile_turret: { tris: 20000, texture: 1024, turret: true },
-  plasma_turret: { tris: 20000, texture: 1024, turret: true },
+  plasma_turret: { tris: 20000, texture: 1024, turret: true, turretYaw: -90 },
   anti_air_turret: { tris: 20000, texture: 1024, turret: true },
   em_rail_ejector: { tris: 20000, texture: 1024 },
   barracks: { tris: 20000, texture: 1024 },
@@ -296,6 +300,37 @@ function fitToUnit(doc) {
     node.setRotation([0, 0, 0, 1]);
   }
   return { size: size.map((value) => +(value * scale).toFixed(3)), scale };
+}
+
+/** 整模绕 Y 轴旋转（顶点层面；节点变换保持单位阵）。模型已水平居中，绕原点转即可。 */
+function rotateY(doc, angle) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const position = prim.getAttribute('POSITION');
+      if (!position) continue;
+      const count = position.getCount();
+      const out = new Float32Array(count * 3);
+      for (let v = 0; v < count; v++) {
+        const [x, y, z] = position.getElement(v, []);
+        out[v * 3] = x * cos + z * sin;
+        out[v * 3 + 1] = y;
+        out[v * 3 + 2] = -x * sin + z * cos;
+      }
+      position.setArray(out);
+      const normal = prim.getAttribute('NORMAL');
+      if (normal) {
+        const nOut = new Float32Array(count * 3);
+        for (let v = 0; v < count; v++) {
+          const [x, y, z] = normal.getElement(v, []);
+          nOut[v * 3] = x * cos + z * sin;
+          nOut[v * 3 + 1] = y;
+          nOut[v * 3 + 2] = -x * sin + z * cos;
+        }
+        normal.setArray(nOut);
+      }
+    }
+  }
 }
 
 /** 把炮塔拆成「底座 + turret-barrel」两个节点：按三角面重心高度切，pivot 以上归炮管组。
@@ -602,6 +637,8 @@ async function normalizeOne(type, role) {
   // `turret-barrel` 靠节点平移表示转轴；先拆后归一，转轴会被清零（炮管飞到底座上方）。
   // 归一化是逐顶点缩放 + 平移，对炮塔拆分没有影响，反过来做才自洽。
   const fitted = fitToUnit(doc);
+  // 炮管朝 +Z（见 CONFIG.turretYaw）：整模绕 Y 旋转，再拆炮塔，底座与炮管保持同一朝向。
+  if (config.turretYaw) rotateY(doc, config.turretYaw * Math.PI / 180);
   if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45);
   // `selection.json` 的 `chosen` 指定该槽位最终用首选还是备选（主代理换选型时只改这一个字段）。
   const chosenRole = SELECTION[type]?.chosen ?? 'primary';
