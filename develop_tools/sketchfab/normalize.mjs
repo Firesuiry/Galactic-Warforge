@@ -20,7 +20,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import {
-  dedup, flatten, join, prune, weld, simplify, meshopt, normals,
+  dedup, flatten, join, prune, weld, simplify, meshopt, normals, metalRough,
 } from '@gltf-transform/functions';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -334,8 +334,15 @@ function rotateY(doc, angle) {
 }
 
 /** 把炮塔拆成「底座 + turret-barrel」两个节点：按三角面重心高度切，pivot 以上归炮管组。
- * 炮管节点原点是转轴（水平居中、pivot 高度），几何相对它偏移，场景写 rotation.y 即绕轴转。 */
-function splitTurret(doc, pivotRatio) {
+ *
+ * 炮管节点原点是**转轴**：炮管组自身的水平包围盒中心 + pivot 高度（`turretAxis` 可覆盖）。
+ * 几何相对它偏移，场景写 `rotation.y` 即绕轴转。转轴必须落在炮管组自己的旋转中心：用底座中心的话，
+ * 偏轴装配的炮管（laser_turret 的炮管挂在支架后端的球铰上，离底座中心 0.3）会绕底座画圈、与支架脱开。
+ *
+ * 注意：后面的 meshopt 量化必须用 `quantizationVolume: 'scene'`。默认的 `'mesh'` 会把每个 mesh
+ * 顶点移到自身包围盒中心、再把该中心写回父节点平移（`transformMeshParents`），转轴因此被改写
+ * （laser 偏 0.3、gauss 偏 0.055、missile 偏 0.058 模型单位）。 */
+function splitTurret(doc, pivotRatio, axis = null) {
   const root = doc.getRoot();
   const scene = root.getDefaultScene() ?? root.listScenes()[0];
   let minY = Infinity, maxY = -Infinity;
@@ -352,7 +359,7 @@ function splitTurret(doc, pivotRatio) {
   if (!Number.isFinite(minY)) return;
   const pivotY = minY + (maxY - minY) * pivotRatio;
   const base = doc.createNode('turret-base');
-  const barrel = doc.createNode('turret-barrel').setTranslation([0, pivotY, 0]);
+  const barrel = doc.createNode('turret-barrel');
   scene.addChild(base);
   scene.addChild(barrel);
   for (const mesh of [...root.listMeshes()]) {
@@ -391,6 +398,7 @@ function splitTurret(doc, pivotRatio) {
             const value = source.getElement(vertex, []);
             for (let k = 0; k < size; k++) {
               const component = value[k];
+              // 炮管组几何先只把 Y 平移到 pivot 高度；X/Z 等量完炮管包围盒再定（见下）。
               data[slot * size + k] = semantic === 'POSITION' && isBarrel && k === 1 ? component - pivotY : component;
             }
           });
@@ -409,6 +417,32 @@ function splitTurret(doc, pivotRatio) {
     if (!mesh.getName().endsWith('-upper') && !mesh.getName().endsWith('-lower')) continue;
     (mesh.getName().endsWith('-upper') ? barrel : base).setMesh(mesh);
   }
+  // 转轴 = 炮管组的水平包围盒中心（几何按它平移，节点原点再放到这里）。
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const prim of barrel.getMesh()?.listPrimitives() ?? []) {
+    const position = prim.getAttribute('POSITION');
+    if (!position) continue;
+    for (let v = 0; v < position.getCount(); v++) {
+      const [x, , z] = position.getElement(v, []);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+    }
+  }
+  const [axisX, axisZ] = axis ?? [
+    Number.isFinite(minX) ? (minX + maxX) / 2 : 0,
+    Number.isFinite(minZ) ? (minZ + maxZ) / 2 : 0,
+  ];
+  if (axisX !== 0 || axisZ !== 0) {
+    for (const prim of barrel.getMesh()?.listPrimitives() ?? []) {
+      const position = prim.getAttribute('POSITION');
+      if (!position) continue;
+      for (let v = 0; v < position.getCount(); v++) {
+        const [x, y, z] = position.getElement(v, []);
+        position.setElement(v, [x - axisX, y, z - axisZ]);
+      }
+    }
+  }
+  barrel.setTranslation([axisX, pivotY, axisZ]);
   for (const node of root.listNodes()) {
     if (node !== base && node !== barrel && node !== scene) node.dispose();
   }
@@ -530,6 +564,13 @@ async function normalizeOne(type, role) {
   // 剥蒙皮必须在 flatten/join **之前**：这两个变换会重排节点层级，蒙皮的关节链与
   // 世界矩阵就对不上了（之前烘出来的顶点被放大到几十万倍）。
   if (!config.keepSkin) stripSkins(doc);
+  // `KHR_materials_pbrSpecularGlossiness` → MetalRough：three 的 GLTFLoader 不认 specGloss
+  // （只认 clearcoat/specular/transmission/emissive_strength 等），源文件用它的话
+  // diffuse/specular 全部被忽略、成品是纯白块（worker 就是这样，441 KB 贴图也成孤儿）。
+  // 必须在 prune 之前转：metalRough 需要读 diffuse / specularGlossiness 两张贴图。
+  if (doc.getRoot().listExtensionsUsed().some((ext) => ext.extensionName === 'KHR_materials_pbrSpecularGlossiness')) {
+    await doc.transform(metalRough());
+  }
   await doc.transform(prune(), dedup(), flatten(), join({ keepNamed: false }));
   // flatten 之后仍有残留节点变换（LoadingCrane 这类带 2.27 缩放的零件，gltf-transform
   // 只清理能安全合并的部分）。这里自己把每个 mesh 节点的世界矩阵烘进顶点，
@@ -639,7 +680,7 @@ async function normalizeOne(type, role) {
   const fitted = fitToUnit(doc);
   // 炮管朝 +Z（见 CONFIG.turretYaw）：整模绕 Y 旋转，再拆炮塔，底座与炮管保持同一朝向。
   if (config.turretYaw) rotateY(doc, config.turretYaw * Math.PI / 180);
-  if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45);
+  if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45, config.turretAxis ?? null);
   // `selection.json` 的 `chosen` 指定该槽位最终用首选还是备选（主代理换选型时只改这一个字段）。
   const chosenRole = SELECTION[type]?.chosen ?? 'primary';
   // `chosen: "none"` = 主代理决定该槽位不用 Sketchfab 模型（保持程序化 / Kenney），
@@ -649,7 +690,11 @@ async function normalizeOne(type, role) {
   const outDir = role === chosenRole ? OUT : ALT_OUT;
   await mkdir(outDir, { recursive: true });
   // meshopt 压缩：GLTFLoader 需 MeshoptDecoder（已在场景侧配置）。
-  await doc.transform(meshopt({ encoder: MeshoptEncoder }));
+  // `quantizationVolume: 'scene'`：默认的 `'mesh'` 会把每个 mesh 顶点移到**自身包围盒中心**
+  // 再把中心写回父节点平移（transformMeshParents），炮塔的 `turret-barrel` 节点原点因此被挪到
+  // 炮管自己的包围盒中心（laser_turret 偏 0.3 格，绕 rotation.y 转时炮管与支架整体甩离底座）。
+  // 'scene' 让全部 mesh 共用一套量化变换，节点原点保持拆塔时设的转轴。
+  await doc.transform(meshopt({ encoder: MeshoptEncoder, quantizationVolume: 'scene' }));
   await io.write(resolve(outDir, outName), doc);
   const after = triangleCount(doc.getRoot());
   return { type, role, out: outName, trisBefore: before, trisMerged: finalMerged, meshes: meshCount, trisAfter: after, size: fitted?.size, animated: doc.getRoot().listAnimations().length > 0, skins: doc.getRoot().listSkins().length };
