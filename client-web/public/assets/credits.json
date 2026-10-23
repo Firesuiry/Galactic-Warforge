@@ -1,0 +1,509 @@
+{
+  "note": "本作使用以下第三方素材。CC-BY 素材已按许可标注作者与改动；CC0 素材无需署名，这里一并列出便于核对。",
+  "groups": [
+    {
+      "id": "sketchfab",
+      "title": "3D 模型（Sketchfab，CC BY 4.0）",
+      "entries": [
+        {
+          "type": "accumulator",
+          "title": "Sci-Fi Batteries",
+          "author": "DanielCardonaArt",
+          "authorUrl": "https://sketchfab.com/DanielCardonaArt",
+          "modelUrl": "https://sketchfab.com/3d-models/sci-fi-batteries-88a6ae64f3874c57aa5d008ed1d1c5d9",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "airfield",
+          "title": "Airfield base",
+          "author": "rakshaan",
+          "authorUrl": "https://sketchfab.com/rakshaan",
+          "modelUrl": "https://sketchfab.com/3d-models/airfield-base-f77e37ea3db44ff5afdc92a1554c1e71",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "anti_air_turret",
+          "title": "AA turret",
+          "author": "kirikom9000",
+          "authorUrl": "https://sketchfab.com/kirikom9000",
+          "modelUrl": "https://sketchfab.com/3d-models/aa-turret-a2c5ebb07a6b434f88880f31522e07b6",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；整模绕 Y 旋转 180°（炮管朝 +Z）"
+        },
+        {
+          "type": "artificial_star",
+          "title": "Sci-Fi Reactor Core",
+          "author": "yewonkim0621",
+          "authorUrl": "https://sketchfab.com/yewonkim0621",
+          "modelUrl": "https://sketchfab.com/3d-models/sci-fi-reactor-core-a996292bc068406590b4ddd045f7bd19",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "artillery",
+          "title": "Death Crawler Tank",
+          "author": "Herrsher",
+          "authorUrl": "https://sketchfab.com/Herrsher",
+          "modelUrl": "https://sketchfab.com/3d-models/death-crawler-tank-26a0ef2d8b8b4b8ca4dc9a2bd27ea810",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "attack_drone",
+          "title": "K07 Drone",
+          "author": "klaus5",
+          "authorUrl": "https://sketchfab.com/klaus5",
+          "modelUrl": "https://sketchfab.com/3d-models/k07-drone-ca849f95d9874d58a19324eec223ccdf",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "cargo_ship",
+          "title": "SPACESHIP - CARGO",
+          "author": "Keremz",
+          "authorUrl": "https://sketchfab.com/Keremz",
+          "modelUrl": "https://sketchfab.com/3d-models/spaceship-cargo-e9faa887c3684271b67be00649e11dcf",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "dark_fog",
+          "title": "Free - Biomechanical Mutant",
+          "author": "Game-Ready",
+          "authorUrl": "https://sketchfab.com/Game-Ready",
+          "modelUrl": "https://sketchfab.com/3d-models/free-biomechanical-mutant-bdb9c9cfcf9c4a5eafec9f58b170bf98",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "executor",
+          "title": "XR-88 Mecha",
+          "author": "rafadurand",
+          "authorUrl": "https://sketchfab.com/rafadurand",
+          "modelUrl": "https://sketchfab.com/3d-models/xr-88-mecha-94cbf12e92c4490ba2ea5739221e7252",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "gauss_turret",
+          "title": "Sci-fi Turret 3",
+          "author": "everlastinggrey",
+          "authorUrl": "https://sketchfab.com/everlastinggrey",
+          "modelUrl": "https://sketchfab.com/3d-models/sci-fi-turret-3-28fb90b851b5454589f5170b08c8c66d",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；整模绕 Y 旋转 90°（炮管朝 +Z）"
+        },
+        {
+          "type": "laser_turret",
+          "title": "Mounted Laser Cannon",
+          "author": "cosmiccobra",
+          "authorUrl": "https://sketchfab.com/cosmiccobra",
+          "modelUrl": "https://sketchfab.com/3d-models/mounted-laser-cannon-93a6929ad9ee45bd977637fcfde5abbd",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "mecha",
+          "title": "Markhor Heavy Gunner",
+          "author": "jw202471",
+          "authorUrl": "https://sketchfab.com/jw202471",
+          "modelUrl": "https://sketchfab.com/3d-models/markhor-heavy-gunner-c4465bbc0aaf4eb19b8da339cf5b8969",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；映射表里绕 Y 旋转 90° 对齐正面 +Z"
+        },
+        {
+          "type": "missile_turret",
+          "title": "WEAPONS: MISSILE TURRET",
+          "author": "Nayo3D",
+          "authorUrl": "https://sketchfab.com/Nayo3D",
+          "modelUrl": "https://sketchfab.com/3d-models/weapons-missile-turret-c5504e5ca6d742008eda50e9bfd942f4",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "missile_vehicle",
+          "title": "Shaanxi SX2190 Missile Launcher",
+          "author": "MirzaArrafiERV_45",
+          "authorUrl": "https://sketchfab.com/MirzaArrafiERV_45",
+          "modelUrl": "https://sketchfab.com/3d-models/shaanxi-sx2190-missile-launcher-a3cb343f3bf8486c8a0482df5b753c38",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；映射表里绕 Y 旋转 90° 对齐正面 +Z"
+        },
+        {
+          "type": "oil_extractor",
+          "title": "Oil Pumpjack - Animated",
+          "author": "felhamard",
+          "authorUrl": "https://sketchfab.com/felhamard",
+          "modelUrl": "https://sketchfab.com/3d-models/oil-pumpjack-animated-7c5fdd845bf54d3e80d954bd4b08c5b5",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "oil_refinery",
+          "title": "Rare Earth Element Refinery",
+          "author": "novusod",
+          "authorUrl": "https://sketchfab.com/novusod",
+          "modelUrl": "https://sketchfab.com/3d-models/rare-earth-element-refinery-41fc8f48094f4e74ae5cf9c1e915dead",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "plasma_turret",
+          "title": "Heavy Turbolaser Cannon V3",
+          "author": "ademis",
+          "authorUrl": "https://sketchfab.com/ademis",
+          "modelUrl": "https://sketchfab.com/3d-models/heavy-turbolaser-cannon-v3-9818bd406a9b499395ac51ec47a0aeca",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；整模绕 Y 旋转 90°（炮管朝 +Z）"
+        },
+        {
+          "type": "ray_receiver",
+          "title": "Satellite Dish",
+          "author": "JordieLitt",
+          "authorUrl": "https://sketchfab.com/JordieLitt",
+          "modelUrl": "https://sketchfab.com/3d-models/satellite-dish-3d1668dc014e4ff3b5205773b7940e71",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "repair_vehicle",
+          "title": "1955 Sci-Fi | Africa Tow Truck",
+          "author": "dougitougi123",
+          "authorUrl": "https://sketchfab.com/dougitougi123",
+          "modelUrl": "https://sketchfab.com/3d-models/1955-sci-fi-africa-tow-truck-a96241f8fbcf400d92eb7ea4aaaa37c6",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；映射表里绕 Y 旋转 180° 对齐正面 +Z"
+        },
+        {
+          "type": "scout",
+          "title": "Hoverbike",
+          "author": "Nixak",
+          "authorUrl": "https://sketchfab.com/Nixak",
+          "modelUrl": "https://sketchfab.com/3d-models/hoverbike-74ee92cf4d224af4bacfb234b41d6708",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "ship",
+          "title": "Futuristic Cargo Drone",
+          "author": "johndarrenmagturo",
+          "authorUrl": "https://sketchfab.com/johndarrenmagturo",
+          "modelUrl": "https://sketchfab.com/3d-models/futuristic-cargo-drone-00ae2c7c273448338d84b45fc35d3f9c",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "soldier",
+          "title": "Robo-soldier",
+          "author": "efforya",
+          "authorUrl": "https://sketchfab.com/efforya",
+          "modelUrl": "https://sketchfab.com/3d-models/robo-soldier-e5ce9b92325d45d6b75799716a28844e",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "storage_tank",
+          "title": "Black vertical storage tank",
+          "author": "Gertol",
+          "authorUrl": "https://sketchfab.com/Gertol",
+          "modelUrl": "https://sketchfab.com/3d-models/black-vertical-storage-tank-a9d52429810644fbafdd435b7f698bd1",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "supply_truck",
+          "title": "Military Truck 1/2 Ton",
+          "author": "andrewswihart",
+          "authorUrl": "https://sketchfab.com/andrewswihart",
+          "modelUrl": "https://sketchfab.com/3d-models/military-truck-12-ton-5d19c751b12849eeb390d637b2b686a1",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）；映射表里绕 Y 旋转 180° 对齐正面 +Z"
+        },
+        {
+          "type": "tesla_tower",
+          "title": "Tesla Coil",
+          "author": "pretendlabs",
+          "authorUrl": "https://sketchfab.com/pretendlabs",
+          "modelUrl": "https://sketchfab.com/3d-models/tesla-coil-ebf82bbb494e43388fee954d8359011e",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "thermal_power_plant",
+          "title": "SCIFI GENERATOR",
+          "author": "LordCinn",
+          "authorUrl": "https://sketchfab.com/LordCinn",
+          "modelUrl": "https://sketchfab.com/3d-models/scifi-generator-bf2e1a087adb4628a376ffbed17c41ff",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "vehicle_factory",
+          "title": "Vehicle_Factory",
+          "author": "rakshaan",
+          "authorUrl": "https://sketchfab.com/rakshaan",
+          "modelUrl": "https://sketchfab.com/3d-models/vehicle-factory-62c4768df1334909a3d206dcf610ea7e",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "vertical_launching_silo",
+          "title": "Low Poly Space Launch Station",
+          "author": "anais.fernandez",
+          "authorUrl": "https://sketchfab.com/anais.fernandez",
+          "modelUrl": "https://sketchfab.com/3d-models/low-poly-space-launch-station-cbe59336373c40f98fb1695359928395",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        },
+        {
+          "type": "worker",
+          "title": "Worker ROBOT",
+          "author": "NickBorovik",
+          "authorUrl": "https://sketchfab.com/NickBorovik",
+          "modelUrl": "https://sketchfab.com/3d-models/worker-robot-c6f928098b0d417e80cdde71231d328d",
+          "license": "CC BY 4.0",
+          "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+          "changes": "减面到预算、贴图缩到 1K 并去饱和 35% + 均值归一、合并材质、去相机/灯/特效面片、meshopt 压缩、按阵营重上色（底色乘阵营主色、发光件换阵营发光色）"
+        }
+      ]
+    },
+    {
+      "id": "kenney",
+      "title": "3D 模型（Kenney，CC0）",
+      "entries": [
+        {
+          "type": "city-kit-industrial",
+          "title": "City Kit (Industrial) 2.0",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/city-kit-industrial",
+          "modelUrl": "https://kenney.nl/assets/city-kit-industrial",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "只用映射表引用的子集"
+        },
+        {
+          "type": "space-kit",
+          "title": "Space Kit 2.0",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/space-kit",
+          "modelUrl": "https://kenney.nl/assets/space-kit",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "只用映射表引用的子集"
+        }
+      ]
+    },
+    {
+      "id": "audio",
+      "title": "音频（Kenney / OpenGameArt，CC0）",
+      "entries": [
+        {
+          "type": "kenney_sci-fi-sounds",
+          "title": "kenney_sci-fi-sounds",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/sci-fi-sounds",
+          "modelUrl": "https://kenney.nl/assets/sci-fi-sounds",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "kenney_impact-sounds",
+          "title": "kenney_impact-sounds",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/impact-sounds",
+          "modelUrl": "https://kenney.nl/assets/impact-sounds",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "kenney_interface-sounds",
+          "title": "kenney_interface-sounds",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/interface-sounds",
+          "modelUrl": "https://kenney.nl/assets/interface-sounds",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "kenney_ui-audio",
+          "title": "kenney_ui-audio",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/ui-audio",
+          "modelUrl": "https://kenney.nl/assets/ui-audio",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "kenney_digital-audio",
+          "title": "kenney_digital-audio",
+          "author": "Kenney",
+          "authorUrl": "https://kenney.nl/assets/digital-audio",
+          "modelUrl": "https://kenney.nl/assets/digital-audio",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_space_wind",
+          "title": "oga_space_wind",
+          "author": "aquinn",
+          "authorUrl": "https://opengameart.org/content/space-winds",
+          "modelUrl": "https://opengameart.org/content/space-winds",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_wind",
+          "title": "oga_wind",
+          "author": "Bashar3A",
+          "authorUrl": "https://opengameart.org/content/mild-wind-background-noise",
+          "modelUrl": "https://opengameart.org/content/mild-wind-background-noise",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_factory",
+          "title": "oga_factory",
+          "author": "yd",
+          "authorUrl": "https://opengameart.org/content/factory-ambiance",
+          "modelUrl": "https://opengameart.org/content/factory-ambiance",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_calm",
+          "title": "oga_calm",
+          "author": "Tozan",
+          "authorUrl": "https://opengameart.org/content/deep-space-array",
+          "modelUrl": "https://opengameart.org/content/deep-space-array",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_tense",
+          "title": "oga_tense",
+          "author": "TinyWorlds",
+          "authorUrl": "https://opengameart.org/content/space-graveyard-ambient-track",
+          "modelUrl": "https://opengameart.org/content/space-graveyard-ambient-track",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        },
+        {
+          "type": "oga_combat",
+          "title": "oga_combat",
+          "author": "buttons",
+          "authorUrl": "https://opengameart.org/content/last-stand-in-space-looped",
+          "modelUrl": "https://opengameart.org/content/last-stand-in-space-looped",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "转码为 Opus 48 kHz + 响度归一"
+        }
+      ]
+    },
+    {
+      "id": "textures",
+      "title": "工业材质贴图（ambientCG，CC0）",
+      "entries": [
+        {
+          "type": "painted_metal",
+          "title": "Paint004",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=Paint004",
+          "modelUrl": "https://ambientcg.com/view?id=Paint004",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        },
+        {
+          "type": "brushed_metal",
+          "title": "Metal010",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=Metal010",
+          "modelUrl": "https://ambientcg.com/view?id=Metal010",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        },
+        {
+          "type": "plate_metal",
+          "title": "MetalPlates001",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=MetalPlates001",
+          "modelUrl": "https://ambientcg.com/view?id=MetalPlates001",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        },
+        {
+          "type": "diamond_plate",
+          "title": "DiamondPlate004",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=DiamondPlate004",
+          "modelUrl": "https://ambientcg.com/view?id=DiamondPlate004",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        },
+        {
+          "type": "rubber",
+          "title": "Rubber001",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=Rubber001",
+          "modelUrl": "https://ambientcg.com/view?id=Rubber001",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        },
+        {
+          "type": "plastic",
+          "title": "Plastic013A",
+          "author": "ambientCG（Lennart Demes）",
+          "authorUrl": "https://ambientcg.com/view?id=Plastic013A",
+          "modelUrl": "https://ambientcg.com/view?id=Plastic013A",
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "changes": "JPG 转 webp 1K + 打包 ORM"
+        }
+      ]
+    }
+  ]
+}

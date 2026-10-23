@@ -1,0 +1,19 @@
+{
+  "name": "siliconworld-sketchfab-tools",
+  "private": true,
+  "type": "module",
+  "description": "Sketchfab 模型下载与规整（不进 client-web 运行时依赖）",
+  "scripts": {
+    "normalize": "node normalize.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/cli": "4.5.1",
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "draco3d": "1.5.7",
+    "meshoptimizer": "0.24.0",
+    "sharp": "0.34.4",
+    "three": "0.186.0"
+  }
+}
