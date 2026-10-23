@@ -642,6 +642,9 @@ async function normalizeOne(type, role) {
   if (config.turret) splitTurret(doc, config.turretPivot ?? 0.45);
   // `selection.json` 的 `chosen` 指定该槽位最终用首选还是备选（主代理换选型时只改这一个字段）。
   const chosenRole = SELECTION[type]?.chosen ?? 'primary';
+  // `chosen: "none"` = 主代理决定该槽位不用 Sketchfab 模型（保持程序化 / Kenney），
+  // 产物不写进 client-web/public（备选仍留在 tmp 供以后复查）。
+  if (chosenRole === 'none') return { type, role, out: null, skipped: true, trisAfter: triangleCount(doc.getRoot()) };
   const outName = role === chosenRole ? `${type}.glb` : `${type}-alt.glb`;
   const outDir = role === chosenRole ? OUT : ALT_OUT;
   await mkdir(outDir, { recursive: true });
@@ -663,6 +666,7 @@ for (const type of Object.keys(CONFIG)) {
     if (roleFilter && role !== roleFilter) continue;
     const result = await normalizeOne(type, role);
     if (!result) continue;
+    if (result.skipped) { console.log(`- ${type}/${role}: chosen=none，跳过产物`); continue; }
     results.push(result);
     if (result.error) console.log(`✗ ${type}/${role}: ${result.error}`);
     else console.log(`✓ ${type}/${role} → ${result.out} tris ${result.trisBefore} → ${result.trisAfter}（合并后 ${result.trisMerged}）size ${(result.size ?? []).join('×')}`);

@@ -277,7 +277,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-bea991112295424a9c16b9cf92eb4357",
       "source": "battlefield_analysis_base#3"
-    }
+    },
+    "chosen": "none"
   },
   "gauss_turret": {
     "primary": {
@@ -400,7 +401,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-5fe560f4d97a476b9bbd8d5c01f65464",
       "source": "em_rail_ejector#5"
-    }
+    },
+    "chosen": "none"
   },
   "barracks": {
     "primary": {
@@ -412,7 +414,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-84977830bf5940ee9b491febaadd2456",
       "source": "barracks#2"
-    }
+    },
+    "chosen": "none"
   },
   "vehicle_factory": {
     "primary": {
@@ -496,7 +499,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-1d18e751219345e88ba29138303b9a87",
       "source": "mining_machine#2"
-    }
+    },
+    "chosen": "none"
   },
   "tesla_tower": {
     "primary": {
@@ -544,7 +548,8 @@
       "animated": false,
       "viewerUrl": "https://sketchfab.com/3d-models/none-e84fd3405b34421095c70b0e09cc3111",
       "source": "matrix_lab#4"
-    }
+    },
+    "chosen": "none"
   },
   "oil_refinery": {
     "primary": {

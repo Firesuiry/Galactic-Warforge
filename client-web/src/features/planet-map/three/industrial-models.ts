@@ -645,7 +645,15 @@ export class IndustrialModels {
     const light: Finish = own ? 'blue' : 'orange';
     // 现成 GLB（异步加载完才有）：直接用它，比例在 instantiateBuilding 里按占地归一化。
     const ready = instantiateBuilding(type, width, depth, own);
-    if (ready) { this.batchStatic(ready); return this.remember(key, ready); }
+    if (ready) {
+      // Sketchfab 炮塔的 GLB 自带 `turret-barrel` 子节点（炮管朝 +Z）：登记成独立旋转组，
+      // 合批时跳过整棵子树（StaticBatches / DynamicBatches 都按这个标记拆分），
+      // 场景再按最近敌人逐帧写 `rotation.y`（speed=0，不自动转）。
+      const barrel = ready.getObjectByName('turret-barrel');
+      if (barrel) this.registerRotation(barrel, 'y', 0);
+      this.batchStatic(ready);
+      return this.remember(key, ready);
+    }
     const group = new THREE.Group(); group.name = `industrial-${type}`;
     const armor: Finish = own ? 'ceramic' : 'hostile';
     // 分拣器（sorter-rig）与带子一样直接贴地，不铺方形地基。

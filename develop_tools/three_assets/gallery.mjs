@@ -156,13 +156,17 @@ try {
         let material = materials.get(source);
         if (!material) {
           material = source.clone();
-          // 发光件判定：有 emissive 贴图**且**贴图确实亮（很多作者的 emissive 贴图整张全黑，
-          // 只是个占位）。其余材质一律上阵营装甲色。
-          const glowPart = Boolean(source.emissiveMap) && (source.userData.galleryEmissiveMean ?? 0) > 8;
-          material.color.copy(glowPart ? glowColor : armorColor);
+          // 与 `industrial-gltf.ts` 的 `preparePalette` 同口径：底色一律是阵营装甲色；
+          // 发光件（有 emissive 贴图**且** 8×8 采样均值 > 20）只额外点亮自发光。
+          // 阈值 8 太低——dark_fog 的躯体贴图均值 13.7，会把整台染成发光色。
+          material.color.copy(armorColor);
+          const glowPart = Boolean(source.emissiveMap) && (source.userData.galleryEmissiveMean ?? 0) > 20;
           if (glowPart) {
             material.emissive.copy(glowColor);
             material.emissiveIntensity = 2.2;
+          } else {
+            material.emissive.setRGB(0, 0, 0);
+            material.emissiveIntensity = 0;
           }
           if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
           materials.set(source, material);
