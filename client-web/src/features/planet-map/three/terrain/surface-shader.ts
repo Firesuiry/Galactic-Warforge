@@ -198,7 +198,13 @@ export const SHADER_COLOR = /* glsl */`
     swFaceUV = vec2(swP.x, swP.y >= 0.0 ? swP.z : -swP.z) / swA.y;
   }
   swFaceUV = atan(swFaceUV) / 1.57079632679 + 0.5;
-  vec2 swFaceCell = clamp(swFaceUV,0.000001,0.999999) * swOverviewDimensions;
+  // 概览图集的格坐标（P1-1）：面内 0..1 坐标先按**单面**格数换算（swFaceSize = 总宽/3），
+  // 再加上该面在 3×2 图集里的原点格；直接乘整张图集的格数会让 6 个面全部错位
+  // （只有面 0 的左上角恰好在原点时才对齐）。与 shared-client/surface.ts 的
+  // surfaceNormal / surfaceCoordinate 同一口径：面内 u 线性对应格坐标，格心在 +0.5。
+  vec2 swFaceSize = swOverviewDimensions / vec2(3.0, 2.0);
+  vec2 swFaceOrigin = vec2(mod(swFace, 3.0), floor(swFace / 3.0)) * swFaceSize;
+  vec2 swFaceCell = swFaceOrigin + clamp(swFaceUV, 0.000001, 0.999999) * swFaceSize;
   // 像素脚印（世界单位）：分类之前就要用（域扭曲按它淡出），后面纹理细节也用同一个值。
   float swPixelFootprintEarly = length(fwidth(swSurfacePosition));
   // 每格世界尺寸：格边界的双线性只在已探索格之间生效，所以邻格查表要跨面（atan 面内坐标）。

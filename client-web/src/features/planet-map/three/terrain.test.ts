@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { PlanetSceneView } from '@shared/types';
 import { SHADER_COLOR, SHADER_HEADER, createPlanetSurface, disposePlanetSurface, setPlanetSurfaceFog, updatePlanetSurface } from './terrain';
+import { tileNormal } from './projection';
+import { surfaceFace, surfaceTile } from '@shared/surface';
 
 function scene(): PlanetSceneView {
   return {
@@ -222,6 +224,84 @@ describe('3A terrain shader contract', () => {
     const bytes = (uniforms(mesh).swLocalProperties.value as THREE.DataTexture).image.data!;
     // 全部未探索：properties 的 B（已探索）通道全为 0。
     for (let i = 0; i < bytes.length; i += 4) expect(bytes[i + 2]).toBe(0);
+    disposePlanetSurface(mesh);
+  });
+});
+
+describe('概览图集采样映射（审查 P1-1）', () => {
+  /** 着色器里的概览格坐标公式（surface-shader.ts `swFaceCell`），逐行复刻用于断言。 */
+  const overviewCell = (face: number, faceUV: { x: number; y: number }, dims: { x: number; y: number }) => {
+    const faceSize = { x: dims.x / 3, y: dims.y / 2 };
+    const origin = { x: (face % 3) * faceSize.x, y: Math.floor(face / 3) * faceSize.y };
+    const clamp = (v: number) => Math.min(0.999999, Math.max(0.000001, v));
+    return { x: origin.x + clamp(faceUV.x) * faceSize.x, y: origin.y + clamp(faceUV.y) * faceSize.y };
+  };
+
+  it('六个面都按「面内格数 + 面原点」换算，与 tileNormal 的球面位置一致', () => {
+    const dims = { x: 72, y: 48 };
+    const faceSize = 24; // face_size：整张图集 3×2 面，每面 24 格
+    const faces: [number, number, number, number][] = [
+      // face, 面内 u, 面内 v, 采样点在图集里的格坐标（面原点 + u/v × faceSize）
+      [0, 0.1, 0.1, 2.4, 2.4],
+      [1, 0.25, 0.25, 30, 6],
+      [2, 0.9, 0.9, 69.6, 21.6],
+      [3, 0.5, 0.5, 12, 36],
+      [4, 0.05, 0.95, 25.2, 46.8],
+      [5, 0.75, 0.35, 66, 32.4],
+    ];
+    for (const [face, u, v, cx, cy] of faces) {
+      const cell = overviewCell(face, { x: u, y: v }, dims);
+      expect(cell.x).toBeCloseTo(cx, 6);
+      expect(cell.y).toBeCloseTo(cy, 6);
+      // 反推回球面：图集格坐标 → 该面内的格 → 图集全局格，再用 tileNormal 投影回格心。
+      const local = { x: Math.floor(cell.x - (face % 3) * faceSize), y: Math.floor(cell.y - Math.floor(face / 3) * faceSize) };
+      expect(local.x).toBe(Math.floor(u * faceSize));
+      expect(local.y).toBe(Math.floor(v * faceSize));
+      const tile = { x: local.x + (face % 3) * faceSize, y: local.y + Math.floor(face / 3) * faceSize };
+      expect(surfaceFace(tile, faceSize)).toBe(face);
+      // 格心的法线投影回来必须还是同一格（着色位置 = 数据位置）。
+      const normal = tileNormal(tile, faceSize, face);
+      expect(surfaceTile(normal, faceSize)).toEqual(tile);
+    }
+  });
+
+  it('面内坐标不再直接乘整张图集格数（旧实现会让面 0 的右下角全采到同一格）', () => {
+    const dims = { x: 72, y: 48 };
+    const wrong = (u: number, v: number) => ({ x: u * dims.x, y: v * dims.y });
+    const fixed = overviewCell(0, { x: 0.9, y: 0.9 }, dims);
+    expect(wrong(0.9, 0.9).x).not.toBeCloseTo(fixed.x, 1);
+    expect(fixed.x).toBeCloseTo(21.6, 6);
+    expect(fixed.y).toBeCloseTo(21.6, 6);
+    // 面 0 的两个不同面内点必须落在不同格（旧实现 0.5..1 会夹到同一格）。
+    const a = overviewCell(0, { x: 0.55, y: 0.55 }, dims);
+    const b = overviewCell(0, { x: 0.95, y: 0.95 }, dims);
+    expect(Math.floor(a.x)).not.toBe(Math.floor(b.x));
+    expect(SHADER_COLOR).toContain('swFaceOrigin + clamp(swFaceUV');
+    expect(SHADER_COLOR).not.toContain('clamp(swFaceUV,0.000001,0.999999) * swOverviewDimensions');
+  });
+
+  it('概览图集只把已探索格写成已知，未探索格的四邻权重恒为 0（信息诚实）', () => {
+    const mesh = createPlanetSurface(100);
+    // 概览 72×48（每面 24 格）：只在 face0 的 (2,2) 已探索。
+    const width = 72, height = 48;
+    const terrain = Array.from({ length: height }, (_, y) => Array.from({ length: width }, (_, x) => (x === 2 && y === 2 ? 'water' : 'unknown')));
+    const explored = Array.from({ length: height }, (_, y) => Array.from({ length: width }, (_, x) => x === 2 && y === 2));
+    updatePlanetSurface(mesh, {
+      planet: { ...scene(), bounds: { x: 0, y: 0, width: 1, height: 1 }, terrain: [['unknown']], explored: [[false]], visible: [[false]] },
+      overview: { cells_width: width, cells_height: height, terrain, explored, visible: explored },
+    });
+    const shader = uniforms(mesh);
+    const props = shader.swOverviewProperties.value as THREE.DataTexture;
+    const bytes = props.image.data!;
+    const knownAt = (x: number, y: number) => bytes[(y * width + x) * 4 + 2];
+    expect(knownAt(2, 2)).toBe(255);
+    // 面 0 的其它格、以及其它五个面都必须是未知（旧实现会在这附近读到错位数据）。
+    for (const [x, y] of [[3, 3], [23, 23], [24, 2], [48, 2], [2, 24], [60, 40]]) {
+      expect(knownAt(x, y)).toBe(0);
+    }
+    // 面 1 的面内 (0.1,0.1) → 图集格 (24+2.4, 2.4) = (26,2)：旧实现会读到 (7,4) 的错位数据。
+    const cell = overviewCell(1, { x: 0.1, y: 0.1 }, { x: width, y: height });
+    expect(knownAt(Math.floor(cell.x), Math.floor(cell.y))).toBe(0);
     disposePlanetSurface(mesh);
   });
 });
