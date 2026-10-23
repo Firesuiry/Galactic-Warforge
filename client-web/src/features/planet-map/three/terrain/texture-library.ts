@@ -121,16 +121,17 @@ function loadImage(url: string): Promise<HTMLImageElement> {
  * 纹理只贡献「起伏与斑驳」。
  */
 const LAYER_TARGET: Partial<Record<TerrainLayerName, [number, number, number]>> = {
-  // 可建造地：苔草橄榄为主（#5d6b3a，H≈78°），草地略亮更黄，火山土与碎石都压暗、去黄。
-  moss_grass: [0.400, 0.455, 0.235],
-  grass: [0.430, 0.490, 0.230],
-  volcanic_soil: [0.228, 0.206, 0.185],
-  gravel: [0.305, 0.295, 0.278],
-  mud: [0.215, 0.192, 0.152],
-  sand_mud: [0.415, 0.388, 0.325],
-  // 阻挡格：玄武岩近黑带冷调，地衣岩是暗橄榄灰（不要黄）。
-  basalt: [0.170, 0.168, 0.180],
-  lichen_rock: [0.225, 0.240, 0.198],
+  // 可建造地：苔草橄榄为主（H≈80°，L17 定色、L19 整体提亮一档），草地略亮更黄；
+  // 火山土是暖褐灰而不是黑（L19：真机里原先接近纯黑，士兵会融进地面）。
+  moss_grass: [0.591, 0.665, 0.364],
+  grass: [0.631, 0.710, 0.358],
+  volcanic_soil: [0.414, 0.378, 0.324],
+  gravel: [0.460, 0.445, 0.418],
+  mud: [0.375, 0.337, 0.272],
+  sand_mud: [0.568, 0.531, 0.449],
+  // 阻挡格：玄武岩仍是最暗的一档（冷调），但不再掉进纯黑；地衣岩是暗橄榄灰（不要黄）。
+  basalt: [0.261, 0.259, 0.275],
+  lichen_rock: [0.336, 0.358, 0.298],
 };
 
 const srgbToLinear = (value: number) => (value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4));
