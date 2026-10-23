@@ -3,8 +3,9 @@ import * as THREE from 'three';
 /**
  * 太阳镜头光晕（第 23 轮 3A 画质，`flare` 档 = high）。
  *
- * 常用机位（贴地俯仰 0.55–1.1）太阳在画面上方偏左，**入画**——所以用屏幕空间的自绘 sprite 组，
- * 而不是只画在天空 shader 里（天空的太阳圆盘仍然保留，两者叠在一起是「天空 + 镜头」的效果）。
+ * 太阳仰角约 40°，常用机位里只有**接近地平线（tilt ≳ 1.05）**时才会进入前半球；默认聚焦机位
+ * （tilt 0.55–0.95）太阳在相机背后，光晕不出现（这是几何决定的，不是 bug；见报告「太阳入画机位」）。
+ * 入画时用屏幕空间的自绘 sprite 组（天空 shader 的太阳圆盘仍在，两者叠成「天空 + 镜头」效果）。
  *
  * - 太阳在相机前方、且没被星球挡住（射线不与球面相交）才显示；
  * - 一组 ghost（沿「太阳 → 画面中心」连线排布）+ 一圈星芒 + 一个柔光晕；
@@ -45,6 +46,8 @@ export class SunFlare {
   private readonly worldSun = new THREE.Vector3();
   /** 相机朝向（每帧复用，避免逐帧分配，审查 P3-4）。 */
   private readonly cameraForward = new THREE.Vector3();
+  /** 本帧太阳方向与相机朝向的点积（调试探针用）。 */
+  private facing = 0;
   private readonly ray = new THREE.Ray();
   private readonly sphere = new THREE.Sphere(new THREE.Vector3(), 100);
   enabled = true;
@@ -103,6 +106,7 @@ export class SunFlare {
     this.worldSun.copy(this.sunDirection).normalize();
     this.camera.getWorldDirection(this.cameraForward);
     const facing = this.worldSun.dot(this.cameraForward);
+    this.facing = facing;
     this.sunScreen.copy(this.camera.position).addScaledVector(this.worldSun, 1500);
     this.sunScreen.project(this.camera);
     const onScreen = facing > 0 && Math.abs(this.sunScreen.x) < 1.25 && Math.abs(this.sunScreen.y) < 1.25;
@@ -135,6 +139,16 @@ export class SunFlare {
       const material = ghost.sprite.material as THREE.SpriteMaterial;
       material.opacity = ghost.base * edgeFade;
     }
+  }
+
+  /** 调试探针（只读）：本帧的太阳朝向与屏幕投影，画面验收 / 报告用。 */
+  debug() {
+    return {
+      visible: this.group.visible,
+      facing: Number(this.facing.toFixed(3)),
+      screen: [Number(this.sunScreen.x.toFixed(3)), Number(this.sunScreen.y.toFixed(3))],
+      inScene: this.group.parent !== null && this.camera.parent !== null,
+    };
   }
 
   setEnabled(enabled: boolean) {

@@ -519,6 +519,7 @@ export class PlanetThreeScene {
         grade: this.grade.enabled,
         smaa: this.smaa.enabled,
         flare: this.flare.enabled,
+        flareDebug: this.flare.debug(),
       },
       shellVisible: this.atmosphereShell.mesh.visible,
       shellSunLocal: this.atmosphereShell.sunDirectionLocal.toArray().map(v => Number(v.toFixed(3))),
