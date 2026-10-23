@@ -331,9 +331,9 @@ export class PlanetThreeScene {
     gtao.blendIntensity = .85;
     this.gtao.enabled = quality.ao !== 'off';
     this.composer.addPass(this.gtao);
-    // Bloom（3A 第二轮 §16）：只有发光件（HDR > 1.2）泛光；radius 从 .6 收到 .42（≈ −30%），
-    // 近景基站的发光条不再糊成一团。
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .42, 1.2);
+    // Bloom（3A 第二轮 §16）：只有发光件（HDR > 1.2）泛光；radius .6 → .42（−30%），
+    // strength 再收 .45 → .38，近景基站的发光条不糊成一团（发光件本体仍保留柔和泛光）。
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .38, .42, 1.2);
     this.bloom.enabled = quality.bloom;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
