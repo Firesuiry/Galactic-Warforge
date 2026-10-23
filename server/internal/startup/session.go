@@ -355,6 +355,9 @@ func (rt *Runtime) assemble(cfg *config.Config) (*Session, error) {
 	if maps == nil || maps.PrimaryPlanet() == nil {
 		return nil, fmt.Errorf("%w: map config produces no planets", ErrInvalidNewGame)
 	}
+	if err := gamecore.ValidateScenarioBootstrap(cfg, maps); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidNewGame, err)
+	}
 	store := newSnapshotStore(rt.serverCfg)
 	q := queue.New()
 	bus := gamecore.NewEventBus()
