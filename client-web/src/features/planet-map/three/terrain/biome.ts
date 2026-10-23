@@ -52,19 +52,8 @@ export function biomeProfile(kind: string | undefined, planetId: string): BiomeP
 /** 服务端 terrain 字符串 → 渲染分类（与 terrain.ts 的 FINISHES 同一口径）。 */
 export const ROCK_TERRAINS = new Set(['blocked', 'rock', 'mountain', 'mountains']);
 export const WATER_TERRAINS = new Set(['water', 'sea', 'ocean']);
-export const LAVA_TERRAINS = new Set(['lava']);
 export const SOIL_TERRAINS = new Set(['buildable', 'plains', 'plain', 'grass', 'grassland', 'forest', 'desert', 'sand']);
 
 export function isRock(terrain: string) { return ROCK_TERRAINS.has(terrain); }
-export function isWater(terrain: string) { return WATER_TERRAINS.has(terrain); }
-export function isLava(terrain: string) { return LAVA_TERRAINS.has(terrain); }
 export function isSoil(terrain: string) { return SOIL_TERRAINS.has(terrain); }
 
-/**
- * 着色器里的层号（与 texture-library.ts 的 TERRAIN_LAYER_NAMES 顺序一致）。
- * 0 苔草 / 1 草地 / 2 火山土 / 3 碎石 / 4 泥 / 5 沙泥 / 6 玄武岩 / 7 地衣岩 / 8 雪 / 9 冰 / 10 岩浆
- */
-export const LAYER = {
-  mossGrass: 0, grass: 1, volcanicSoil: 2, gravel: 3, mud: 4, sandMud: 5,
-  basalt: 6, lichenRock: 7, snow: 8, ice: 9, lava: 10,
-} as const;

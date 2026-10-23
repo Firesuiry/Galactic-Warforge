@@ -4,7 +4,6 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { IndustrialSurfaces } from './industrial-surfaces';
 import { preloadIndustrialMaterials } from './industrial-materials';
 import { instantiateBuilding, instantiateUnit, preloadIndustrialGltf } from './industrial-gltf';
-import { createOreDeposit } from './ore-deposits';
 import type { UnitFaction } from '../rts-commands';
 import type { SurfaceKey } from './industrial-surfaces';
 
@@ -805,14 +804,6 @@ export class IndustrialModels {
    * 已经发出去的实例继续持有自己的几何/材质（dispose() 统一释放），这里只清模板表。 */
   reloadTemplates(): void {
     this.templates.clear();
-  }
-
-  /**
-   * 矿脉露头：实现已迁到 `ore-deposits.ts`（第 23 轮 3A 画质地表分支）。
-   * 保留这个入口让系统视图等调用点不必改；新场景直接调 `createOreDeposit()`。
-   */
-  resource(kind: string): THREE.Group {
-    return createOreDeposit(kind);
   }
 
   /** Merge static pieces by finish: detailed models cost a handful of draws, not one per bolt.

@@ -1,6 +1,7 @@
 # 地表纹理（3A 画质地表分支）
 
 全部来自 [ambientCG](https://ambientcg.com/)，许可 **CC0 1.0**（Public Domain，无需署名；此处仍记录来源）。
+ambientCG 的资产由 Lennart Demes 制作并发布（站内统一署名为 ambientCG / Lennart Demes）。
 均为 1K JPG 原图 → 1024² webp 重编码（albedo sRGB q86；packed q88）。
 打包贴图通道：**R = 法线 x，G = 法线 y（OpenGL 约定），B = 粗糙度，A = 高度（AO 0.65 + 位移 0.35）**。
 

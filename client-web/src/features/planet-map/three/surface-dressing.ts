@@ -133,10 +133,13 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
   // 冰原不长草：用低矮的碎冰/卵石代替（草预算并入卵石，保证冰面也有近景层次）。
   const ice = profile.kind === 'ice';
   // 预算分配：草占 70%，岩石 22%，卵石 8%；没有草的星球把份额给岩石。
+  // 冰原的碎冰从岩石份额里切（不再额外加 55%）：三个预算之和恒等于档位上限（审查 P3）。
   const grassShare = grassCells.length ? 0.70 : 0;
   const grassBudget = Math.floor(budget * grassShare);
   const rockBudget = Math.floor(budget * (grassCells.length ? 0.22 : 0.9));
-  const pebbleBudget = budget - grassBudget - rockBudget + (ice ? Math.floor(budget * 0.55) : 0);
+  const iceShare = ice ? Math.floor(rockBudget * 0.5) : 0;
+  const rockShare = rockBudget - iceShare;
+  const pebbleBudget = budget - grassBudget - rockShare;
   const dummy = new THREE.Object3D();
   const normal = new THREE.Vector3();
   const twist = new THREE.Quaternion();
@@ -177,7 +180,7 @@ export function createSurfaceDressing({ planet, fog }: PlanetSurfaceData, radius
     return new THREE.Color('#5d6b3a').lerp(new THREE.Color('#7d8a4a'), variation * 0.7).multiplyScalar(0.9 + variation * 0.2);
   });
   // 岩石：blocked 格，每格 3–5 块，大小明显大于草。
-  const rocks = collect(rockCells, rockBudget, 4, 0.10, 0.22, 120);
+  const rocks = collect(rockCells, rockShare, 4, 0.10, 0.22, 120);
   const rockColors = rocks.transforms.map((_, index) => {
     const variation = (index * 0.38196601125) % 1;
     return new THREE.Color('#6a6f68').lerp(new THREE.Color('#9a9c92'), variation * 0.6);

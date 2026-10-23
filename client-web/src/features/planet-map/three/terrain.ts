@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { FogMapView, PlanetOverviewView, PlanetSceneView } from '@shared/types';
 import { getFogState, getTerrainTile, type PlanetRenderView } from '../model';
 import { SHADER_COLOR, SHADER_HEADER } from './terrain/surface-shader';
-import { buildAtlas, disposeAtlas, localSampler, SDF_SUPERSAMPLE, UNKNOWN_COLOR, type AtlasSet } from './terrain/atlas';
+import { buildAtlas, disposeAtlas, localSampler, SDF_SUPERSAMPLE, type AtlasSet } from './terrain/atlas';
 import { biomeProfile } from './terrain/biome';
 import { loadTerrainTextures, createPlaceholderTerrainTextures, type TerrainTextures } from './terrain/texture-library';
 
@@ -138,8 +138,7 @@ export function createPlanetSurface(radius: number): PlanetSurface {
       // 干土/草/碎石本来就是纯漫反射介质，粗糙度 1.0 + 镜面清零才是对的观感。
       .replace('#include <roughnessmap_fragment>', /* glsl */`
         #include <roughnessmap_fragment>
-        roughnessFactor = mix(mix(0.94, swSurfaceRough, swKnown), swSurfaceRough, swWaterMask);
-        roughnessFactor = mix(roughnessFactor, 0.62, swLavaMask);
+        // 陆地/未探索固定 1.0（见上），水与岩浆用逐像素值；最后一行的 mix 直接覆盖前两行。
         roughnessFactor = mix(roughnessFactor, 1.0, 1.0 - max(swWaterMask, swLavaMask));
       `)
       .replace('#include <metalnessmap_fragment>', /* glsl */`
@@ -164,8 +163,6 @@ export function createPlanetSurface(radius: number): PlanetSurface {
         reflectedLight.directSpecular *= mix(1.0, 0.0, swWaterMask);
       `)
       .replace('#include <normal_fragment_maps>', /* glsl */`
-        #ifdef SW_WATER_TEST_FLAT
-        #endif
         #include <normal_fragment_maps>
         vec3 swDx = dFdx(-vViewPosition), swDy = dFdy(-vViewPosition);
         vec3 swR1 = cross(swDy, normal), swR2 = cross(normal, swDx);

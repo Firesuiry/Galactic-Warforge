@@ -460,6 +460,10 @@ export function disposeOreDeposits() {
   for (const assets of assetCache.values()) {
     assets.baseGeometry.dispose();
     assets.accentGeometry.dispose();
+    // 矿座材质挂了 neutralizedDetail 生成的 CanvasTexture（material.map），
+    // 只 dispose 材质不会释放它（审查 P3）。
+    assets.base.map?.dispose();
+    assets.accent.map?.dispose();
     assets.base.dispose();
     assets.accent.dispose();
   }
@@ -468,4 +472,3 @@ export function disposeOreDeposits() {
   depletedCache.clear();
 }
 
-export { UP as ORE_UP };

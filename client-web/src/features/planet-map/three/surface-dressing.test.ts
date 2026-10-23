@@ -93,3 +93,26 @@ describe('dressing boundaries (3A terrain contract)', () => {
     }
   });
 });
+
+describe('实例预算上限（审查 P3）', () => {
+  it.each([
+    ['low', 4000], ['balanced', 15000], ['high', 40000],
+  ] as const)('冰原 %s 档实例总数不超过 %i', (quality, cap) => {
+    const planet = {
+      planet_id: 'ice-1', kind: 'ice', map_width: 96, map_height: 64,
+      surface: { topology: 'cube_sphere' as const, face_size: 32 },
+      bounds: { x: 0, y: 0, width: 96, height: 64 },
+      terrain: Array.from({ length: 64 }, (_, y) => Array.from({ length: 96 }, (_, x) => ((x + y) % 5 === 0 ? 'blocked' : 'buildable'))),
+      explored: Array.from({ length: 64 }, () => Array.from({ length: 96 }, () => true)),
+      visible: Array.from({ length: 64 }, () => Array.from({ length: 96 }, () => true)),
+    };
+    const group = createSurfaceDressing({ planet } as never, 100, { quality });
+    let instances = 0;
+    group.traverse(object => {
+      if ((object as THREE.InstancedMesh).isInstancedMesh) instances += (object as THREE.InstancedMesh).count;
+    });
+    expect(instances).toBeGreaterThan(0);
+    expect(instances).toBeLessThanOrEqual(cap);
+    group.traverse(object => (object as THREE.Mesh).geometry?.dispose?.());
+  });
+});
