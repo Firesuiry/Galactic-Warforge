@@ -1,4 +1,3 @@
-import { resolveSelectionPosition } from './model';
 import { surfaceFace, surfaceOffset } from '@shared/surface';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -25,7 +24,7 @@ import { ghostArrowGeometry, ghostArrowTransform, sorterGhostArrowGeometry } fro
 import { SORTER_GHOST_COLOR, SorterRigs, groundBuildingMap } from './three/sorter-rig';
 import { createSurfaceDressing } from './three/surface-dressing';
 import { createLocalSurface } from './three/local-surface';
-import { IndustrialActivity } from './three/industrial-activity';
+import { IndustrialActivity, type ActivitySource } from './three/industrial-activity';
 import { StaticBatches } from './three/static-batches';
 import { DynamicBatches } from './three/dynamic-batches';
 import { StatusLights } from './three/status-lights';
@@ -47,7 +46,9 @@ import { FACTION_COLOR, unitFaction, type UnitFaction } from './rts-commands';
 import { describeAutoHaul, haulPhaseLabel, transportCargo, transportHaulMode, transportHaulTask } from './transport-haul';
 import { subscribeCommandMarkers } from './command-markers';
 import { CommandMarkerMeshes } from './three/command-marker-meshes';
-import { circleLoop, discGeometry, ribbonGeometry } from './three/surface-ribbon';
+import { VfxLayer } from './three/vfx';
+import { buildSelectionItems, buildHoloTasks, buildSupplyAuras } from './three/vfx/scene-bridge';
+import { ribbonGeometry } from './three/surface-ribbon';
 import { ConstructionProgressOverlay, DetectionOverlay, RangeCircleOverlay, constructionBarProgress, footprintCenterTile, type RangeCircleItem } from './three/tactical-overlays';
 import { buildingCoveringTile } from './three/pick-targets';
 import { resolveGhostRangeCircles, resolveSelectedCombatRange } from './range-circles';
@@ -207,6 +208,13 @@ export class PlanetThreeScene {
   private quality = parseRenderQuality(new URLSearchParams(window.location.search).get('quality'));
   /** C2 战斗演出：弹道/枪口/命中/飘字/护盾波纹/爆炸/残骸（挂 world 随星球旋转）。 */
   private readonly combat = new CombatEffects(this.world, () => this.tileScale());
+  /**
+   * 3A 画质 VFX 层（vfx 分支）：GPU 粒子、战斗演出、工业氛围、施工全息、选中反馈、
+   * 补给光环、镜头震动。全部由这一处接入，场景其余部分只调它的几个入口。
+   */
+  private vfx: VfxLayer;
+  /** 上一帧的 VFX 数据（切档重建 VFX 层时用来恢复活动源/选中/施工，不丢一帧状态）。 */
+  private lastVfxActivity: ActivitySource[] = [];
   /** 战斗事件总线 seq 去重（StrictMode 双挂载/多重转发只演出一次）。 */
   private lastBattleSeq = 0;
   /** 炮塔转向跟踪：模型拆出的独立炮管组 + 当前/目标偏航角。 */
@@ -227,8 +235,6 @@ export class PlanetThreeScene {
   private haulRouteSignature = '';
   /** 阶段胶囊标签：随机器人移动每帧重贴位置（只重建于路线签名变化时）。 */
   private haulLabels: { sprite: THREE.Sprite; unitId: string }[] = [];
-  /** 补给光环材质：动画循环里做缓慢呼吸。 */
-  private readonly auraMaterials = new Set<THREE.MeshBasicMaterial>();
   /** 右键/军团命令落点反馈（涟漪/准星）。 */
   private readonly commandMarkers = new CommandMarkerMeshes(this.world, tile => this.data ? this.normal(tile.x, tile.y) : null, RADIUS, () => this.tileScale());
   private readonly unsubscribeCommandMarkers = subscribeCommandMarkers(spec => { if (!this.destroyed) this.commandMarkers.spawn(spec); });
@@ -394,6 +400,9 @@ export class PlanetThreeScene {
     this.flare.setEnabled(quality.flare);
     // 光晕 sprite 挂在相机下：相机必须进场景，子节点才会被渲染（审查 P1-4 第 2 条）。
     this.scene.add(this.camera);
+    // 3A 画质 VFX 层（vfx 分支）：粒子/战斗/工业/全息/选中/光环/震动。
+    this.vfx = this.createVfxLayer(this.quality);
+    this.vfx.setCamera(this.camera);
     this.updateCamera();
     this.press = new PointerPress(this.renderer.domElement, (event, tap) => {
       // 松手惯性（3A §9）：拖动结束后按最后一段的角速度继续转 ~300ms。
@@ -433,6 +442,35 @@ export class PlanetThreeScene {
   }
 
   getQuality() { return this.quality; }
+
+  /**
+   * 夹具：按 `?vfxPhase=` 在固定位置注入合成特效并定格到指定相位。
+   * 只在测试构建（`window.__planetThree` 存在）里由故事壳调用；真机不触发。
+   * 返回注入的指令条数（测试用）。
+   *
+   * `fixture-hooks` 是**动态导入**：静态导入会把 `fx-target` / `fx-construction` 打进
+   * 生产 bundle（审查 L4）。调用方在 `exposeTestHook()` 分支里才会走到这里。
+   */
+  async applyVfxFixturePhase(phase: string, seconds?: number): Promise<number> {
+    // 构建期常量门控：生产构建里下面整个分支被常量折叠删掉，动态 import 的 chunk
+    // 也就不会产出（`dist/` 里 grep 不到 `fx-target`，审查 L4）。
+    if (!import.meta.env.DEV && import.meta.env.VITE_E2E !== '1') return 0;
+    if (this.destroyed) return 0;
+    const { applyFixturePhase } = await import('./three/vfx/fixture-hooks');
+    return applyFixturePhase(this.vfx, phase, seconds, {
+      normal: (x, y) => this.normal(x, y),
+      radius: RADIUS,
+      scale: this.tileScale(),
+      faceSize: this.data?.planet.surface.face_size ?? 16,
+      buildings: this.data?.planet.buildings,
+      catalog: this.data?.catalog,
+    });
+  }
+
+  /** 夹具/诊断：VFX 层计数（粒子、战斗对象、发射器）。 */
+  vfxStats() {
+    return this.vfx.stats();
+  }
 
   /**
    * 重建天空 IBL：只含天空的临时场景 → `PMREMGenerator.fromScene`。
@@ -545,8 +583,40 @@ export class PlanetThreeScene {
   }
 
   setQuality(quality: PlanetRenderQuality) {
+    const changed = quality !== this.quality;
     this.quality = quality;
     this.resize();
+    // 档位表（粒子上限 / 发射率 / 点光源 / 焦痕池）在 VFX 层构造时固化：
+    // 切档必须重建整层，否则 UI 里切 high→low 后这些上限都不变（审查 M2）。
+    if (changed) this.rebuildVfxLayer();
+  }
+
+  private createVfxLayer(quality: PlanetRenderQuality): VfxLayer {
+    return new VfxLayer(this.world, {
+      radius: RADIUS,
+      scale: () => this.tileScale(),
+      models: this.industrial,
+      normalOf: (tile) => this.data ? this.normal(tile.x, tile.y) : new THREE.Vector3(0, 0, 1),
+      footprintOf: (buildingId) => {
+        const building = this.data?.planet.buildings?.[buildingId];
+        return building ? getBuildingFootprint(building) : undefined;
+      },
+      quality,
+      frozen: this.frozen,
+      reducedMotion: this.reducedMotion.matches,
+      shakeEnabled: () => !this.frozen && !this.reducedMotion.matches,
+    });
+  }
+
+  /** 切档：销毁旧层、按新档位重建，并恢复活动源与（下一帧 updateMarks 会重算的）选中/光环。 */
+  private rebuildVfxLayer(): void {
+    if (this.destroyed) return;
+    this.vfx.dispose();
+    this.vfx = this.createVfxLayer(this.quality);
+    this.vfx.setCamera(this.camera);
+    this.vfx.setSources(this.lastVfxActivity);
+    this.syncVfxSelection();
+    this.syncTacticalOverlays();
   }
 
   private updateQuality() {
@@ -631,6 +701,19 @@ export class PlanetThreeScene {
 
   private tileFromNormal(n: THREE.Vector3): TilePoint | null {
     return this.data ? normalTile(n, this.data.planet.surface.face_size) : null;
+  }
+
+  /**
+   * 粒子尺寸（格）→ 屏幕像素的换算：格宽 × (绘制缓冲高/2) / tan(fov/2)。
+   *
+   * `gl_PointSize` 的单位是**绘制缓冲像素**，不是 CSS 像素：HiDPI 屏（pixelRatio 上限 2）
+   * 不乘 DPR 会让粒子与曳光的像素下限只有一半尺寸（审查 M5）。用 `clientHeight ×
+   * renderer.getPixelRatio()` 而不是 drawingBufferHeight（后者在 resize 当帧可能还没更新）。
+   */
+  private particlePixelScale() {
+    const fov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const bufferHeight = this.host.clientHeight * this.renderer.getPixelRatio();
+    return this.tileScale() * (bufferHeight / 2) / Math.max(0.0001, Math.tan(fov));
   }
 
   private tileScale() {
@@ -781,6 +864,11 @@ export class PlanetThreeScene {
       if (model) model.userData.industryActive = building.runtime?.state === 'running';
     }
     this.groundMap = groundBuildingMap(visibleBuildings, planet.surface.face_size);
+    // 工业氛围只认权威活动源（暂停/缺电/矿点枯竭时源不存在 → 不发射）。
+    this.lastVfxActivity = this.vfx.setActivity({ ...this.data!, planet }, {
+      buildings: this.interaction?.layers.buildings,
+      power: this.interaction?.layers.power,
+    });
     this.sorterRigs.refresh(sorters, this.groundMap, planet.surface.face_size, RADIUS, ('tick' in planet ? planet.tick : runtime?.tick) ?? 0);
     this.layer('buildings').add(this.sorterRigs.group);
     // 炮塔转向跟踪（C2）：重建可转向炮管列表（保留已有偏航角，模型重建时不跳变）。
@@ -806,17 +894,8 @@ export class PlanetThreeScene {
         return group;
       });
     }
-    for (const task of runtime?.construction_tasks ?? []) {
-      if (!this.known(task.position)) continue;
-      // 施工脚手架只画在**已探索**格：未探索区域连地形都没有，立柱会浮在测绘面纱上。
-      retain(`construction:${task.id}`, [task.position.x, task.position.y, task.building_type, this.known(task.position)], () => {
-        if (!this.known(task.position)) return null;
-        const group = new THREE.Group();
-        for (let x = -1; x <= 1; x += 2) for (let z = -1; z <= 1; z += 2) this.part(group, 'box', '#ffc46b', [0.035, 0.65, 0.035], [x * 0.35, 0.35, z * 0.35], true);
-        this.place(group, task.position, 'construction');
-        return group;
-      });
-    }
+    // 施工：3A 画质起不再画四角脚手架，改由 VFX 层的全息分身表达（`syncConstruction`，
+    // 目标模型 + 青色全息 + 按进度自下而上溶解）；进度条 billboard 仍由 tactical-overlays 画。
     for (const [key, entry] of this.staticEntities) {
       if (!staticKeys.has(key)) { this.removeModel(entry.group); this.staticEntities.delete(key); }
     }
@@ -1127,6 +1206,12 @@ export class PlanetThreeScene {
     if (event.seq <= this.lastBattleSeq) return;
     this.lastBattleSeq = event.seq;
     this.combat.spawnSpecs(specsFromCombatEvent(event, (entityId) => this.resolveCombatPoint(entityId)));
+    // 3A 画质：同一批事件展开成粒子/曳光/焦痕/冲击波/点光源（事件口径不变）。
+    this.vfx.combatEvent(
+      event,
+      (entityId) => this.resolveCombatPoint(entityId),
+      this.camera.position.clone().normalize().multiplyScalar(RADIUS),
+    );
   }
 
   /** 实体 id → 战斗演出锚点（建筑取模型位置，单位取平滑后的实时位置；小队未在 3D 渲染，解析为 null）。 */
@@ -1240,15 +1325,13 @@ export class PlanetThreeScene {
   }
 
   /** 地表标记共享材质（userData.shared：清理标记时只释放几何）。 */
-  private markMaterial(color: string, opacity: number, aura = false) {
-    const key = `${color}:${opacity}:${aura}`;
+  private markMaterial(color: string, opacity: number) {
+    const key = `${color}:${opacity}`;
     let material = this.markMaterials.get(key);
     if (!material) {
       material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
       material.userData.shared = true;
-      material.userData.baseOpacity = opacity;
       this.markMaterials.set(key, material);
-      if (aura) this.auraMaterials.add(material);
     }
     return material;
   }
@@ -1280,34 +1363,14 @@ export class PlanetThreeScene {
   /** 补给光环与网格：只在其输入变化时重建（hover/选中变化不触发）。 */
   private updateStaticMarks() {
     const data = this.data!, layers = this.interaction!.layers;
-    const auras: { x: number; y: number; radius: number; color: string }[] = [];
-    if (layers.logistics) {
-      for (const b of Object.values(data.planet.buildings ?? {})) {
-        const radius = data.catalog?.buildings?.find(d => d.id === b.type)?.supply_radius ?? 0;
-        if (b.owner_id === data.playerId && b.hp > 0 && radius > 0) auras.push({ x: b.position.x, y: b.position.y, radius, color: b.runtime?.state === 'running' ? '#5ff0b0' : '#e0727f' });
-      }
-      for (const u of Object.values(data.planet.units ?? {})) {
-        const radius = data.catalog?.world_units?.find(d => d.id === u.type)?.supply_radius ?? 0;
-        if (u.owner_id === data.playerId && u.hp > 0 && u.type === 'supply_truck' && radius > 0) auras.push({ x: Math.round(u.position.x), y: Math.round(u.position.y), radius, color: '#7dc5f4' });
-      }
-    }
+    // 3A 画质：补给光环改由 VFX 层的 `SupplyAuraLayer` 画（细虚线 + 极淡渐变），
+    // 这里不再生成粗色带；签名只保留网格，避免无谓重建。
     const grids = layers.grid && 'bounds' in data.planet ? [data.planet.bounds, ...(data.planet.surface_patches ?? []).map(p => p.bounds)] : [];
     const size = data.planet.surface.face_size;
-    const signature = JSON.stringify([size, auras, grids]);
+    const signature = JSON.stringify([size, grids]);
     if (signature === this.staticMarksSignature) return;
     this.staticMarksSignature = signature;
     this.clearMarks(this.staticMarks);
-    const ts = this.tileScale();
-    for (const aura of auras) {
-      // 补给光环：粗色带外圈（呼吸）+ 极淡填充，远景也能一眼看出覆盖范围。
-      const center = this.normal(aura.x, aura.y);
-      const { east, south } = tileFrame(aura, size);
-      const loop = circleLoop(center, east, south, aura.radius * ts / RADIUS, 96);
-      const fill = new THREE.Mesh(discGeometry(loop, center, RADIUS + ts * .05), this.markMaterial(aura.color, .07));
-      const edge = new THREE.Mesh(ribbonGeometry(loop, RADIUS + ts * .09, Math.max(ts * .16, .02)), this.markMaterial(aura.color, .85, true));
-      fill.renderOrder = 10; edge.renderOrder = 11;
-      this.staticMarks.add(fill, edge);
-    }
     for (const b of grids) {
       const stride = Math.max(1, Math.ceil(Math.max(b.width, b.height) / 64));
       const points: THREE.Vector3[] = [];
@@ -1378,27 +1441,9 @@ export class PlanetThreeScene {
         this.marks.add(mesh);
       }
     }
-    const selectedPosition = resolveSelectionPosition(this.data.planet, this.interaction.selected);
-    if (this.interaction.layers.selection && selectedPosition) add(selectedPosition, '#fff1a8');
-    // 多选单位：每个单位一个选中标记（主选中环之外追加）
-    if (this.interaction.layers.selection) {
-      for (const unitId of this.interaction.selectedUnits ?? []) {
-        if (this.interaction.selected?.kind === 'unit' && this.interaction.selected.id === unitId) continue;
-        const unit = this.data.planet.units?.[unitId];
-        if (unit) add({ x: Math.round(unit.position.x), y: Math.round(unit.position.y) }, '#9ef7c9');
-      }
-    }
-    // 选中建筑：按**整个占地**画选中框（细分网格后 3×3/5×5 建筑必须整块高亮，
-    // 只框左上 1 cell 会让玩家以为选错了格）。
-    if (this.interaction.layers.selection && this.interaction.selected?.kind === 'building') {
-      const building = this.data.planet.buildings?.[this.interaction.selected.id];
-      if (building) {
-        const footprint = getBuildingFootprint(building);
-        for (let dy = 0; dy < footprint.height; dy++) for (let dx = 0; dx < footprint.width; dx++) {
-          add(surfaceOffset(building.position, dx, dy, this.data.planet.surface.face_size), '#ffd166');
-        }
-      }
-    }
+    // 3A 画质：选中/悬停反馈由 VFX 层画（建筑 = 四角括号 + 地面光晕，单位 = 细环 + 方向三角），
+    // 不再用每格一条粗色带。颜色语义沿用旧口径（SELECTION_COLORS）。
+    this.syncVfxSelection();
     // 运输机器人：选中时画起点→终点虚线（可一次多选，同一路线只画一条）。
     this.updateHaulRoutes();
     if (this.interaction.hoveredTile) {
@@ -1412,7 +1457,7 @@ export class PlanetThreeScene {
           const p = surfaceOffset(tile, dx, dy, this.data.planet.surface.face_size);
           add(p, assessment?.buildable && this.visible(p) ? '#5ef7a1' : '#ff6666');
         }
-      } else add(tile, this.interaction.interactionMode.kind === 'attack' ? '#ff6666' : '#5ef7dc');
+      } else if (this.interaction.interactionMode.kind === 'attack') add(tile, '#ff6666');
     }
     this.updateBuildGhost();
     this.syncTacticalOverlays();
@@ -1429,6 +1474,8 @@ export class PlanetThreeScene {
   private syncTacticalOverlays() {
     const data = this.data, interaction = this.interaction;
     if (!data || !interaction) return;
+    // 补给光环不参与下面的签名短路：图层/数据变化（运行/停机）必须立刻反映到环上。
+    this.vfx.syncAuras(interaction.layers.logistics ? buildSupplyAuras(data) : [], data.planet.surface.face_size);
     const faceSize = data.planet.surface.face_size;
     const mode = interaction.interactionMode;
     const hovered = interaction.hoveredTile;
@@ -1481,6 +1528,26 @@ export class PlanetThreeScene {
       progress: constructionBarProgress(task),
     })).filter(bar => this.known(bar.tile));
     this.constructionBars.sync(interaction.layers.construction ? bars : [], faceSize);
+    // 施工全息（目标模型 + 按进度溶解）：与进度条同一份 tasks/进度口径。
+    this.vfx.syncConstruction(
+      interaction.layers.construction
+        ? buildHoloTasks(data.runtime?.available ? data.runtime.construction_tasks ?? [] : [], data.catalog, faceSize, task => this.known(task.position))
+        : [],
+      faceSize,
+    );
+  }
+
+  /** 选中/悬停反馈（VFX 层）：括号/细环/方向三角，颜色沿用旧语义。 */
+  private syncVfxSelection() {
+    const data = this.data, interaction = this.interaction;
+    if (!data || !interaction) return;
+    // 收拢动画的时间基必须与 `SelectionOverlay.animate` 同一个时钟（`VfxLayer.currentTime`），
+    // 否则页面时间（几十秒）与场景累计 dt 恒差一个 t0，括号永远停在最暗、收拢不播（审查 H2）。
+    this.vfx.syncSelection(
+      buildSelectionItems(data, interaction),
+      data.planet.surface.face_size,
+      this.vfx.currentTime,
+    );
   }
 
   /**
@@ -2057,10 +2124,11 @@ export class PlanetThreeScene {
         this.commandMarkers.update(dt * 1000);
         this.updateTurretAims(dt, time);
       }
+      // 3A 画质 VFX：粒子/工业氛围/施工全息/选中/补给光环（冻结时内部固定相位）。
+      this.vfx.setWorldScale(this.particlePixelScale(), this.tileScale());
+      this.vfx.update(dt, this.altitude, this.data?.planet.surface.face_size ?? 16);
+      this.rangeCircles.animate(time / 1000, this.frozen || reducedMotion);
       this.detectionMarks.animate(time / 1000, this.frozen || reducedMotion);
-      // 补给光环缓慢呼吸（2.4s 周期），减弱运动时保持常亮。
-      const breath = this.frozen || reducedMotion ? 1 : .78 + .22 * Math.sin(time / 1000 * 2.6);
-      for (const material of this.auraMaterials) material.opacity = material.userData.baseOpacity * breath;
       // 单位沿球面平滑趋近目标位置（复用临时向量，交战时几百个单位每帧不产生垃圾对象）。
       const amount = 1 - Math.exp(-dt * 12);
       const { from, to, up, rotation, identity } = this.motionScratch;
@@ -2082,7 +2150,9 @@ export class PlanetThreeScene {
       // 绑死其中一块会在 swap 后读到全 0 → AO 全灭，审查 P1-3）。
       if (this.gtao.enabled) bindAoDepth(this.gtao, this.composer);
       this.renderer.info.reset();
+      const restoreShake = this.vfx.shake.apply(this.camera);
       this.composer.render();
+      restoreShake();
     }
     this.frame = requestAnimationFrame(this.animate);
   };
@@ -2113,6 +2183,7 @@ export class PlanetThreeScene {
     this.constructionBars.dispose();
     disposeLogisticsTextures();
     this.combat.dispose();
+    this.vfx.dispose();
     this.spriteMaterials.forEach((material) => { material.map?.dispose(); material.dispose(); });
     this.spriteMaterials.clear();
     const geometries = new Set<THREE.BufferGeometry>();

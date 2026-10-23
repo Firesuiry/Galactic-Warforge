@@ -77,6 +77,29 @@ describe('authoritative industrial activity', () => {
     data.fog!.visible![1][1] = false;
     expect(collectActivity(data)).toEqual([]);
   });
+  it('process 源：running 且配方在跑的非熔炉建筑、研究模式的研究站才有；暂停/缺电没有', () => {
+    const data = fixture();
+    data.planet.buildings = {
+      assembler: { id: 'assembler', type: 'assembling_machine_mk1', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
+        runtime: { state: 'running', functions: { production: { throughput: 1 } } },
+        production: { recipe_id: 'gear', remaining_ticks: 20 } },
+      assemblerIdle: { id: 'assemblerIdle', type: 'assembling_machine_mk1', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
+        runtime: { state: 'running', functions: { production: { throughput: 1 } } },
+        production: { recipe_id: 'gear', remaining_ticks: 0 } },
+      assemblerPaused: { id: 'assemblerPaused', type: 'assembling_machine_mk1', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
+        runtime: { state: 'no_power', functions: { production: { throughput: 1 } } },
+        production: { recipe_id: 'gear', remaining_ticks: 20 } },
+      lab: { id: 'lab', type: 'matrix_lab', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
+        runtime: { state: 'running', functions: { production: { throughput: 1 }, research: { research_per_tick: 1 } } },
+        production: { mode: 'speed' } },
+      labOff: { id: 'labOff', type: 'matrix_lab', position: { x: 1, y: 1, z: 0 }, owner_id: 'p1',
+        runtime: { state: 'no_power', functions: { production: { throughput: 1 }, research: { research_per_tick: 1 } } },
+        production: { mode: 'speed' } },
+    } as unknown as PlanetThreeData['planet']['buildings'];
+    const process = collectActivity(data).filter(source => source.kind === 'process').map(source => source.id).sort();
+    expect(process).toEqual(['assembler:process', 'lab:process']);
+  });
+
   it('never invents conveyor inventory or idle logistics flights', () => {
     const data = fixture(); const building = factory(); building.conveyor!.buffer = [];
     data.planet.buildings!.b = building;
