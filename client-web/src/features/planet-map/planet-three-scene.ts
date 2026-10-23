@@ -1833,10 +1833,14 @@ export class PlanetThreeScene {
     this.sky.setAltitude(this.altitude);
     this.fog.setAltitude(this.altitude);
     // 散射壳：全球视角与中空视角都可见（贴地时相机在壳内，壳会盖住地表）。
-    // 中空（altitude 60）时壳的边缘正好落在地平线弧上（3A 第二轮 §15）：细而亮的蓝色
-    // 大气光带；此时圆盘上的薄大气减弱，免得把已探索地表刷成蓝色。
-    this.atmosphereShell.mesh.visible = !this.groundView || this.altitude > 60;
-    this.atmosphereShell.setVeilStrength(THREE.MathUtils.smoothstep(this.altitude, 40, 120));
+    // 中空（altitude ≥ 60）时相机已在壳外（壳半径 102.5、高度 60 → 距球心 160），
+    // 壳的边缘正好落在地平线弧上（3A 第二轮 §15）：细而亮的蓝色大气光带；
+    // 此时圆盘上的薄大气按 `setVeilStrength` 减弱，免得把已探索地表刷成蓝色。
+    // 阈值用 `>=`：中空机位的高度正好是 60，以前写成 `> 60` 导致这一档壳完全不可见。
+    this.atmosphereShell.mesh.visible = !this.groundView || this.altitude >= 60;
+    // 中空（60–120）也要有薄大气：以前从 40 起才渐入，60 处只有 0.1，圆盘整片接太空；
+    // 现在 45 起渐入、100 到满，中空 60 约 0.28（远处地表有轻微空气透视、圆盘不发蓝）。
+    this.atmosphereShell.setVeilStrength(THREE.MathUtils.smoothstep(this.altitude, 45, 100));
     this.syncAtmosphereSun();
     this.camera.updateMatrixWorld();
   }
