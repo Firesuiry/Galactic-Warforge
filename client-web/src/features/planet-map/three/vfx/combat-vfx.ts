@@ -5,7 +5,8 @@
  * - 粒子：交给共享的 `ParticleSystem`（火焰/烟/火花/闪光/碎屑）；
  * - 曳光：细长拉伸 billboard（面向相机的四边形），短命；
  * - 焦痕：贴地深色圆盘，随时间淡出；
- * - 冲击波：贴地扩散的细环；
+ * - 冲击波：贴地扩散的细环（半径按规模 1.5–3 格，环宽 ≤ .12 格，0.35s 淡出）；
+ * - 碎片：暗色小块抛物线飞出、落地淡出（实例化共享几何）；
  * - 点光源：池化（上限由档位决定，low 档 0 个），只做极短促的照明。
  *
  * 所有对象池化、几何共享；池满时顶掉最旧（不抛错、不增长内存）。
@@ -13,16 +14,22 @@
 
 import * as THREE from 'three';
 
-import { clamp01 } from './common';
+import { clamp01, rand, randSigned } from './common';
 import { ParticleSystem, type ParticleStyle } from './particles';
-import type { CombatVfxSpecs, VfxBurst, VfxDecal, VfxLight, VfxShockwave, VfxTracer } from './combat-vfx-specs';
+import type { CombatVfxSpecs, VfxBurst, VfxDebris, VfxDecal, VfxLight, VfxShockwave, VfxTracer } from './combat-vfx-specs';
 
 export const COMBAT_VFX_LIMITS = {
   tracers: 48,
   decals: 32,
   shockwaves: 16,
   lights: 4,
+  debris: 96,
 } as const;
+
+/** 曳光宽度：远景（相机高度 > `TRACER_PIXEL_FLOOR_ALTITUDE`）不再加宽，按像素下限保持。 */
+export const TRACER_WIDTH_TILES = 0.2;
+export const TRACER_PIXEL_FLOOR_ALTITUDE = 20;
+export const TRACER_MIN_PIXELS = 1.5;
 
 /** 把 VfxBurst 的 at/normal/velocity 换算成粒子系统需要的 Vector3。 */
 function burstFrom(spec: VfxBurst) {
@@ -41,9 +48,11 @@ function burstFrom(spec: VfxBurst) {
 
 interface Timed { elapsed: number; duration: number }
 interface TracerFx extends Timed { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; width: number; direction: THREE.Vector3 }
-interface DecalFx extends Timed { mesh: THREE.Mesh; size: number }
+interface DecalFx extends Timed { mesh: THREE.Mesh; size: number; opacity: number }
 interface ShockwaveFx extends Timed { mesh: THREE.Mesh; size: number }
 interface LightFx extends Timed { light: THREE.PointLight; base: number; active: boolean }
+interface DebrisFx { mesh: THREE.Mesh; elapsed: number; duration: number; origin: THREE.Vector3; velocity: THREE.Vector3; normal: THREE.Vector3; spin: THREE.Vector3; size: number }
+interface DelayedBurst { burst: VfxBurst; remaining: number }
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -62,10 +71,16 @@ export class CombatVfx {
   private readonly shockwaves: ShockwaveFx[] = [];
   private readonly freeShockwaves: ShockwaveFx[] = [];
   private readonly lights: LightFx[] = [];
+  private readonly debris: DebrisFx[] = [];
+  private readonly freeDebris: DebrisFx[] = [];
+  private readonly delayed: DelayedBurst[] = [];
   private readonly tracerGeometry = new THREE.PlaneGeometry(1, 1);
   private readonly decalGeometry = new THREE.CircleGeometry(1, 28);
-  // 冲击波是**细环**：0.86→1 的厚度在半屏大的半径下会变成一条宽带，抢掉火球/碎片的层次。
-  private readonly shockGeometry = new THREE.RingGeometry(0.94, 1, 72);
+  // 冲击波是**细环**（环宽 = 半径的 4%，配合 spec.size ≤ 3 格 → 环宽 ≤ .12 格）。
+  private readonly shockGeometry = new THREE.RingGeometry(0.96, 1, 72);
+  /** 碎块：一个共享的小八面体（暗色、不发光）。 */
+  private readonly debrisGeometry = new THREE.OctahedronGeometry(1, 0);
+  private readonly debrisMaterial = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.85, metalness: 0.15, flatShading: true });
   private readonly decalTexture: THREE.CanvasTexture;
   private readonly decalMaterial: THREE.MeshBasicMaterial;
   private readonly shockMaterial: THREE.MeshBasicMaterial;
@@ -85,22 +100,28 @@ export class CombatVfx {
     parent.add(this.group);
     this.decalTexture = makeDecalTexture();
     this.decalMaterial = new THREE.MeshBasicMaterial({
-      map: this.decalTexture, color: 0x10100e, transparent: true, opacity: 0.55,
+      map: this.decalTexture, color: 0x1a1712, transparent: true, opacity: 0.62,
       depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
     });
+    // 冲击波：亮橙白的 additive 细环，不写深度、不挡地面。
     this.shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffc78a, transparent: true, opacity: 0.45, depthWrite: false,
+      color: 0xffd9a8, transparent: true, opacity: 0.7, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
     });
   }
 
   /** 应用一条事件的全部视觉指令。 */
   spawn(specs: CombatVfxSpecs): void {
-    for (const burst of specs.bursts) this.emitBurst(burst);
+    for (const burst of specs.bursts) {
+      // 延迟发射（爆炸的烟接在火球之后）：进队列，由 `update` 按时间放出。
+      if (burst.delay && burst.delay > 0) this.delayed.push({ burst, remaining: burst.delay });
+      else this.emitBurst(burst);
+    }
     for (const tracer of specs.tracers) this.spawnTracer(tracer);
     for (const decal of specs.decals) this.spawnDecal(decal);
     for (const wave of specs.shockwaves) this.spawnShockwave(wave);
     for (const light of specs.lights) this.flashLight(light);
+    for (const debris of specs.debris) this.spawnDebris(debris);
   }
 
   /** 直接发射一批粒子（工业氛围等其它来源共用粒子系统）。 */
@@ -155,19 +176,35 @@ export class CombatVfx {
     fx.mesh.position.copy(fx.from).addScaledVector(fx.direction, 0.5);
     // Billboard 长条：局部 +Y 对齐弹道方向，平面法线尽量朝向相机（否则斜视角下是一条线）。
     fx.direction.normalize();
-    const toCamera = this.camera
-      ? this.camera.position.clone().sub(fx.mesh.position).normalize()
-      : new THREE.Vector3(0, 0, 1);
-    const side = new THREE.Vector3().crossVectors(fx.direction, toCamera);
-    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
-    side.normalize();
-    const normal = new THREE.Vector3().crossVectors(side, fx.direction).normalize();
-    fx.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, fx.direction, normal));
-    const width = fx.width * this.tileScale() * (1 - t * 0.35);
+    this.tracerCamera.copy(this.camera ? this.camera.position : Y_AXIS);
+    this.tracerCamera.sub(fx.mesh.position).normalize();
+    this.tracerSide.crossVectors(fx.direction, this.tracerCamera);
+    if (this.tracerSide.lengthSq() < 1e-6) this.tracerSide.set(1, 0, 0);
+    this.tracerSide.normalize();
+    this.tracerNormal.crossVectors(this.tracerSide, fx.direction).normalize();
+    this.tracerBasis.makeBasis(this.tracerSide, fx.direction, this.tracerNormal);
+    fx.mesh.quaternion.setFromRotationMatrix(this.tracerBasis);
+    // 宽度（格 → 世界）。远景（相机高度 > 20）不再继续加宽，改按像素下限保持 ≥ 1.5px：
+    // 曳光的像素宽 ≈ 世界宽 × uPixelScale / 视距，这里用场景给的 pixelScale 反推世界宽下限。
+    const tile = this.tileScale();
+    let width = fx.width * tile * (1 - t * 0.35);
+    if (this.cameraHeight > TRACER_PIXEL_FLOOR_ALTITUDE && this.pixelScale > 0) {
+      const distance = this.camera ? this.camera.position.distanceTo(fx.mesh.position) : this.cameraHeight;
+      const minWorld = (TRACER_MIN_PIXELS * distance) / this.pixelScale;
+      width = Math.max(width, minWorld);
+    }
     fx.mesh.scale.set(width, length, 1);
     (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95 * (1 - t);
-    void Z_AXIS;
   }
+
+  private readonly tracerCamera = new THREE.Vector3();
+  private readonly tracerSide = new THREE.Vector3();
+  private readonly tracerNormal = new THREE.Vector3();
+  private readonly tracerBasis = new THREE.Matrix4();
+  /** 相机高度与粒子像素换算系数（由 `update` 传入，曳光的像素下限用）。 */
+  private cameraHeight = 0;
+  private pixelScale = 0;
+  setPixelScale(scale: number): void { this.pixelScale = Math.max(0, scale); }
 
   private releaseTracer(fx: TracerFx): void {
     fx.mesh.removeFromParent();
@@ -177,8 +214,8 @@ export class CombatVfx {
   private spawnDecal(spec: VfxDecal): void {
     if (this.decals.length >= COMBAT_VFX_LIMITS.decals) this.releaseDecal(this.decals.shift()!);
     const fx = this.freeDecals.pop() ?? {
-      mesh: new THREE.Mesh(this.decalGeometry, this.decalMaterial),
-      size: 1, elapsed: 0, duration: spec.life,
+      mesh: new THREE.Mesh(this.decalGeometry, this.decalMaterial.clone()),
+      size: 1, elapsed: 0, duration: spec.life, opacity: 0.62,
     };
     const normal = new THREE.Vector3(spec.normal.x, spec.normal.y, spec.normal.z).normalize();
     fx.mesh.position.set(spec.at.x, spec.at.y, spec.at.z);
@@ -187,6 +224,7 @@ export class CombatVfx {
     fx.size = spec.size * this.tileScale();
     fx.elapsed = 0;
     fx.duration = spec.life;
+    fx.opacity = this.decalMaterial.opacity;
     fx.mesh.scale.setScalar(fx.size);
     this.group.add(fx.mesh);
     this.decals.push(fx);
@@ -197,6 +235,10 @@ export class CombatVfx {
     this.freeDecals.push(fx);
   }
 
+  /**
+   * 冲击波：`spec.size` 是**最终半径（格）**，环几何是半径 1 的细环，缩放即半径。
+   * 0.35s 内从 .15 扩到 1、亮度淡到 0；不写深度、不挡地面。
+   */
   private spawnShockwave(spec: VfxShockwave): void {
     if (this.shockwaves.length >= COMBAT_VFX_LIMITS.shockwaves) {
       const oldest = this.shockwaves.shift()!;
@@ -214,9 +256,53 @@ export class CombatVfx {
     fx.size = spec.size * this.tileScale();
     fx.elapsed = 0;
     fx.duration = spec.life;
-    fx.mesh.scale.setScalar(fx.size * 0.35);
+    fx.mesh.scale.setScalar(fx.size * 0.15);
     this.group.add(fx.mesh);
     this.shockwaves.push(fx);
+  }
+
+  /**
+   * 碎片：暗色小块沿抛物线飞出、落地后停住并淡出（池化，上限 `debris`）。
+   * 只做刚体位移 + 自转，不参与光照计算以外的东西。
+   */
+  private spawnDebris(spec: VfxDebris): void {
+    const normal = new THREE.Vector3(spec.normal.x, spec.normal.y, spec.normal.z).normalize();
+    const tangentA = new THREE.Vector3().crossVectors(normal, new THREE.Vector3(0, 1, 0));
+    if (tangentA.lengthSq() < 1e-6) tangentA.set(1, 0, 0);
+    tangentA.normalize();
+    const tangentB = new THREE.Vector3().crossVectors(normal, tangentA).normalize();
+    const tile = this.tileScale();
+    for (let i = 0; i < spec.count; i++) {
+      if (this.debris.length >= COMBAT_VFX_LIMITS.debris) {
+        const oldest = this.debris.shift()!;
+        oldest.mesh.removeFromParent();
+        this.freeDebris.push(oldest);
+      }
+      const seed = spec.seed + i * 613;
+      const angle = rand(seed, 1) * Math.PI * 2;
+      const speed = (0.8 + rand(seed, 2) * 2.4) * tile;
+      const fx = this.freeDebris.pop() ?? {
+        mesh: new THREE.Mesh(this.debrisGeometry, this.debrisMaterial),
+        elapsed: 0, duration: spec.life, origin: new THREE.Vector3(), velocity: new THREE.Vector3(),
+        normal: new THREE.Vector3(), spin: new THREE.Vector3(), size: 1,
+      };
+      fx.mesh.material = this.debrisMaterial;
+      fx.origin.set(spec.at.x, spec.at.y, spec.at.z).addScaledVector(normal, tile * 0.05);
+      fx.normal.copy(normal);
+      // 初速：切向 + 沿法线的上抛（沿法线 = 远离地面，落回时由重力拉回）。
+      fx.velocity.copy(tangentA).multiplyScalar(Math.cos(angle) * speed)
+        .addScaledVector(tangentB, Math.sin(angle) * speed)
+        .addScaledVector(normal, (0.7 + rand(seed, 3) * 1.2) * tile);
+      fx.spin.set(randSigned(seed, 4) * 9, randSigned(seed, 5) * 9, randSigned(seed, 6) * 9);
+      fx.size = spec.size * tile * (0.7 + rand(seed, 7) * 0.7);
+      fx.mesh.scale.setScalar(fx.size);
+      fx.mesh.position.copy(fx.origin);
+      fx.mesh.renderOrder = 10;
+      fx.elapsed = 0;
+      fx.duration = spec.life;
+      this.group.add(fx.mesh);
+      this.debris.push(fx);
+    }
   }
 
   /** 点光源池：超限时顶掉最旧的；low 档 maxLights=0 直接跳过（不进池）。 */
@@ -256,19 +342,32 @@ export class CombatVfx {
   update(dt: number, time: number, cameraHeight: number): void {
     this.particles.setTime(time);
     this.particles.setCamera(cameraHeight);
+    this.cameraHeight = cameraHeight;
     const step = Math.max(0, dt);
+    // 延迟发射的批次（爆炸烟接在火球之后）。
+    if (this.delayed.length) {
+      for (let i = this.delayed.length - 1; i >= 0; i--) {
+        this.delayed[i].remaining -= step;
+        if (this.delayed[i].remaining > 0) continue;
+        this.emitBurst(this.delayed[i].burst);
+        this.delayed.splice(i, 1);
+      }
+    }
     this.advance(this.tracers, step, (fx) => this.releaseTracer(fx), (fx, t) => this.poseTracer(fx, t));
     // 相机变化后重定向曳光（billboard）；只在有曳光时做，平时零开销。
     if (this.camera && this.tracers.length) for (const fx of this.tracers) this.poseTracer(fx, Math.min(fx.elapsed / fx.duration, 1));
     this.advance(this.decals, step, (fx) => this.releaseDecal(fx), (fx, t) => {
       fx.mesh.scale.setScalar(fx.size * (1 + t * 0.12));
       const material = fx.mesh.material as THREE.MeshBasicMaterial;
-      material.opacity = 0.55 * (1 - t) ** 1.4;
+      // 焦痕 8s 淡出：前 70% 基本保留，最后 30% 收干净。
+      material.opacity = fx.opacity * (1 - clamp01((t - 0.7) / 0.3)) ** 1.2;
     });
     this.advance(this.shockwaves, step, (fx) => { fx.mesh.removeFromParent(); this.freeShockwaves.push(fx); }, (fx, t) => {
-      fx.mesh.scale.setScalar(fx.size * (0.25 + t * 1.15));
-      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.6;
+      // 半径从 .15 扩到 1（spec.size 已是最终半径），亮度同步淡到 0。
+      fx.mesh.scale.setScalar(fx.size * (0.15 + t * 0.85));
+      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - t) ** 1.5;
     });
+    this.advanceDebris(step);
     for (const fx of this.lights) {
       if (!fx.active) continue;
       fx.elapsed += step;
@@ -277,6 +376,41 @@ export class CombatVfx {
       if (t >= 1) { fx.active = false; fx.light.intensity = 0; }
     }
   }
+
+  /** 碎片：解析抛物线（沿法线的上抛 + 表面重力），落地后贴地停住并淡出。 */
+  private advanceDebris(dt: number): void {
+    if (!this.debris.length) return;
+    const tile = this.tileScale();
+    const gravity = 9.5 * tile;
+    for (let i = this.debris.length - 1; i >= 0; i--) {
+      const fx = this.debris[i];
+      fx.elapsed += dt;
+      const t = fx.elapsed;
+      const normalSpeed = fx.velocity.dot(fx.normal);
+      // 切向速度：从初速里去掉法线分量（`tangent` 是速度向量，长度即切向速度）。
+      this.debrisTangent.copy(fx.velocity).addScaledVector(fx.normal, -normalSpeed);
+      const tangentialSpeed = this.debrisTangent.length();
+      const landAt = normalSpeed > 0 ? (2 * normalSpeed) / gravity : 0;
+      const flown = Math.min(t, landAt);
+      const lift = Math.max(0, normalSpeed * flown - 0.5 * gravity * flown * flown);
+      this.debrisPosition.copy(fx.origin)
+        .addScaledVector(this.debrisTangent, tangentialSpeed > 1e-6 ? flown : 0)
+        .addScaledVector(fx.normal, lift);
+      fx.mesh.position.copy(this.debrisPosition);
+      fx.mesh.rotation.set(fx.spin.x * flown, fx.spin.y * flown, fx.spin.z * flown);
+      // 落地后 40% 寿命内缩掉（不留一地带子）。
+      const fade = clamp01((fx.elapsed - fx.duration * 0.6) / (fx.duration * 0.4));
+      fx.mesh.scale.setScalar(fx.size * (1 - fade * 0.7));
+      if (fx.elapsed >= fx.duration) {
+        fx.mesh.removeFromParent();
+        this.debris.splice(i, 1);
+        this.freeDebris.push(fx);
+      }
+    }
+  }
+
+  private readonly debrisTangent = new THREE.Vector3();
+  private readonly debrisPosition = new THREE.Vector3();
 
   private advance<T extends Timed>(list: T[], dt: number, release: (fx: T) => void, step: (fx: T, t: number) => void): T[] {
     return list.filter((fx) => {
@@ -295,6 +429,8 @@ export class CombatVfx {
       decals: this.decals.length,
       shockwaves: this.shockwaves.length,
       lights: this.lights.filter((fx) => fx.active).length,
+      debris: this.debris.length,
+      delayed: this.delayed.length,
       particles: this.particles.counts(),
     };
   }
@@ -303,10 +439,15 @@ export class CombatVfx {
 
   dispose(): void {
     for (const fx of this.tracers) fx.mesh.removeFromParent();
-    for (const fx of this.decals) fx.mesh.removeFromParent();
+    // 焦痕材质是逐实例克隆（透明度独立淡出），必须逐个释放。
+    for (const fx of this.decals) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
     for (const fx of this.shockwaves) { fx.mesh.removeFromParent(); (fx.mesh.material as THREE.Material).dispose(); }
     for (const fx of this.lights) fx.light.removeFromParent();
+    for (const fx of this.debris) fx.mesh.removeFromParent();
     this.tracers.length = 0; this.decals.length = 0; this.shockwaves.length = 0; this.lights.length = 0;
+    this.debris.length = 0; this.freeDebris.length = 0; this.delayed.length = 0;
+    this.debrisGeometry.dispose();
+    this.debrisMaterial.dispose();
     this.tracerGeometry.dispose();
     this.decalGeometry.dispose();
     this.shockGeometry.dispose();

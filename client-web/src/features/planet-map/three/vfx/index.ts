@@ -138,6 +138,8 @@ export class VfxLayer {
   /** 世界尺度：粒子尺寸（格）→ 屏幕像素的换算系数。 */
   setWorldScale(pixelScale: number, tileSize: number): void {
     this.particles.setWorldScale(pixelScale, tileSize);
+    // 曳光的远景像素下限用同一换算系数。
+    this.combat.setPixelScale(pixelScale);
   }
 
   /** 相机（曳光 billboard 用）；场景在构造后与 resize 时各调一次即可。 */
