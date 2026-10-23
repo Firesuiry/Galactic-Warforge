@@ -16,6 +16,7 @@ import { CameraMotion, type MotionOutput } from './three/camera-motion';
 import { GradePass } from './three/post/grade-pass';
 import { SunFlare } from './three/post/sun-flare';
 import { aoDepthBoundToReadBuffer, bindAoDepth } from './three/post/ao-depth';
+import { useDeterministicAoNoise } from './three/post/ao-noise';
 import { AoProbe, type AoStats } from './three/post/ao-probe';
 import { parseRenderQuality, renderQualitySettings, type PlanetRenderQuality, type PlanetRenderSettings } from './three/render-quality';
 import { tileNormal, tileQuad, normalTile, tileFrame, surfaceTileSize } from './three/projection';
@@ -321,6 +322,10 @@ export class PlanetThreeScene {
     };
     gtao.updateGtaoMaterial({ radius: .55, distanceExponent: 1.2, thickness: 1.0, distanceFallOff: 1.0, scale: 1.0 });
     gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    // 降噪噪声换成固定种子（`fix/3a-freeze-determinism`）：GTAOPass 构造时用 Math.random()
+    // 填 SimplexNoise 的置乱表，同一场景跨两次运行截图会差 2–18% 像素。冻结下画面必须是
+    // 时间的纯函数；非冻结时观感不变（噪声只决定降噪采样的逐像素旋转角，图案不可见）。
+    useDeterministicAoNoise(this.gtao as unknown as Parameters<typeof useDeterministicAoNoise>[0]);
     // 法线从深度重建（NORMAL_VECTOR_TYPE=0，同 three 自带 SSAOPass 的做法）：GTAO 不再需要
     // 自己那趟「法线 + 深度」预渲染，直接吃 RenderPass 的深度纹理。平直地表上重建法线足够，
     // 且与深度缓冲严格一致、不会漏 AO 缝。GTAOPass 没有公开参数，直接改它内部材质。
