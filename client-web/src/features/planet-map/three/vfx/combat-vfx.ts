@@ -80,7 +80,7 @@ export class CombatVfx {
   private readonly shockGeometry = new THREE.RingGeometry(0.96, 1, 72);
   /** 碎块：一个共享的小八面体（暗色、不发光）。 */
   private readonly debrisGeometry = new THREE.OctahedronGeometry(1, 0);
-  private readonly debrisMaterial = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.85, metalness: 0.15, flatShading: true });
+  private readonly debrisMaterial = new THREE.MeshStandardMaterial({ color: 0x2f2a24, roughness: 0.92, metalness: 0.08, flatShading: true });
   private readonly decalTexture: THREE.CanvasTexture;
   private readonly decalMaterial: THREE.MeshBasicMaterial;
   private readonly shockMaterial: THREE.MeshBasicMaterial;
@@ -100,12 +100,12 @@ export class CombatVfx {
     parent.add(this.group);
     this.decalTexture = makeDecalTexture();
     this.decalMaterial = new THREE.MeshBasicMaterial({
-      map: this.decalTexture, color: 0x1a1712, transparent: true, opacity: 0.62,
+      map: this.decalTexture, color: 0x1a1712, transparent: true, opacity: 0.5,
       depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
     });
     // 冲击波：亮橙白的 additive 细环，不写深度、不挡地面。
     this.shockMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffd9a8, transparent: true, opacity: 0.7, depthWrite: false,
+      color: 0xffa860, transparent: true, opacity: 0.9, depthWrite: false,
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false,
     });
   }
@@ -365,7 +365,7 @@ export class CombatVfx {
     this.advance(this.shockwaves, step, (fx) => { fx.mesh.removeFromParent(); this.freeShockwaves.push(fx); }, (fx, t) => {
       // 半径从 .15 扩到 1（spec.size 已是最终半径），亮度同步淡到 0。
       fx.mesh.scale.setScalar(fx.size * (0.15 + t * 0.85));
-      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - t) ** 1.5;
+      (fx.mesh.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - t) ** 1.8;
     });
     this.advanceDebris(step);
     for (const fx of this.lights) {

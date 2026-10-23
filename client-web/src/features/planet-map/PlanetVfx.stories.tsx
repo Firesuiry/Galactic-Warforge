@@ -16,7 +16,7 @@ import armyShowcaseFixture from '@/stories/fixtures/army-showcase-scene.json';
  * - TurretFire：从 (54,144) 打向 (60,132)，相位 .4
  * - Construction：格 (46,132) 3×3 装配台 ghost，进度 .55
  * - Industry：熔炉 (62,140) 附近，看烟/火花
- * - Selection：选中基站 (54,144) + 士兵 2 个
+ * - Selection：选中基站 (54,144)（5×5，中心 (56,146)）+ 士兵 2 个
  */
 const fixture = armyShowcaseFixture as unknown as Fixture;
 
@@ -57,5 +57,5 @@ export const Construction: Story = storyWith({ focus: { x: 46, y: 132 }, tilt: 0
 /** 工业氛围：熔炉 (62,140) 的烟/火花。 */
 export const Industry: Story = storyWith({ focus: { x: 62, y: 140 }, tilt: 0.9, zoom: 2.4, vfxPhase: 'Industry' });
 
-/** 选中：基站 (54,144) + 士兵 2 个（括号 / 细环 / 方向三角）。 */
-export const Selection: Story = storyWith({ focus: { x: 54, y: 142 }, tilt: 0.6, zoom: 1.1, vfxPhase: 'Selection' });
+/** 选中：基站 (54,144)（5×5，占地中心 (56,146)）+ 士兵 2 个（括号 / 细环 / 方向三角）。 */
+export const Selection: Story = storyWith({ focus: { x: 56, y: 146 }, tilt: 0.6, zoom: 0.85, vfxPhase: 'Selection' });

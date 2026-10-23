@@ -26,7 +26,7 @@ export const SELECTION_COLORS = {
 
 /** 线宽（格）与括号臂长（格，占一格的比例）。 */
 export const SELECTION_LINE_TILES = 0.055;
-export const BRACKET_ARM = 0.34;
+export const BRACKET_ARM = 0.22;
 /** 括号相对建筑模型的外扩（模型按占地 ×.86 建，括号略外一圈才不贴模型边）。 */
 export const BRACKET_SPAN = 0.9;
 /** 收拢动画时长（秒）。 */
@@ -54,7 +54,7 @@ export function bracketGeometry(
   const width = Math.max(1, footprint.width), height = Math.max(1, footprint.height);
   const halfW = width * 0.5 * BRACKET_SPAN * tileAngle;
   const halfH = height * 0.5 * BRACKET_SPAN * tileAngle;
-  // 臂长按较小边缩放：1×1 = .34 格、3×3 ≈ 1 格，大建筑不会只缩成一个小角。
+  // 臂长按较小边缩放：1×1 = .22 格、5×5 ≈ 1.1 格；太长会连成一个整框、读不出「四角括号」。
   const arm = Math.max(0.06, Math.min(width, height) * BRACKET_ARM * (1 - inset)) * tileAngle;
   const at = (u: number, v: number) => normal.clone()
     .addScaledVector(east, u).addScaledVector(south, v).normalize();

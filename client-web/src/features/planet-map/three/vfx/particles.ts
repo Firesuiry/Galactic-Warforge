@@ -468,7 +468,7 @@ export const PARTICLE_STYLES = {
   /** 烟：深灰 → 浅灰，缓慢上升并扩散（alpha 混合）。 */
   smoke: {
     kind: 'smoke', blend: 'alpha', size: 0.55, growth: 3.0, colorFrom: [0.3, 0.3, 0.32], colorTo: [0.66, 0.68, 0.7],
-    opacity: 0.5, gravity: -0.9, drag: 0.9, spread: 0.35, surface: true,
+    opacity: 0.5, gravity: -0.55, drag: 0.9, spread: 0.35, surface: true,
   } satisfies ParticleStyle,
   /** 白色蒸汽：比烟更亮、更快消散。 */
   steam: {

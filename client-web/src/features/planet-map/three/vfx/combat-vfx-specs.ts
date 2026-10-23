@@ -188,7 +188,7 @@ export function combatVfxFromEvent(
   out.bursts.push({
     style: PARTICLE_STYLES.fire, at: add(target, normal, 0.12), normal,
     velocity: { x: normal.x * 0.5, y: normal.y * 0.5, z: normal.z * 0.5 },
-    count: Math.round(44 * scale), life: 0.85, scale: scale * 0.6, spread: 2.4, seed, tint: [1, 1, 1],
+    count: Math.round(38 * scale), life: 0.8, scale: scale * 0.56, spread: 2.4, seed, tint: [1, 1, 1],
   });
   out.bursts.push({
     style: PARTICLE_STYLES.flash, at: add(target, normal, 0.14), normal,
@@ -199,21 +199,21 @@ export function combatVfxFromEvent(
   // 旧版是两层浅灰 additive-ish 的大烟团，和火球同帧出现，画面糊成一片暖色。
   out.bursts.push({
     style: PARTICLE_STYLES.smoke, at: add(target, normal, 0.2), normal,
-    velocity: { x: normal.x * 0.55, y: normal.y * 0.55, z: normal.z * 0.55 },
-    count: Math.round(22 * scale), life: 1.6, scale: scale * 1.15, spread: 1.1, seed: seed + 1,
+    velocity: { x: normal.x * 0.3, y: normal.y * 0.3, z: normal.z * 0.3 },
+    count: Math.round(22 * scale), life: 1.6, scale: scale * 1.0, spread: 1.0, seed: seed + 1,
     tint: EXPLOSION_SMOKE_TINT, delay: 0.06,
   });
   out.bursts.push({
     style: PARTICLE_STYLES.smoke, at: add(target, normal, 0.26), normal,
-    velocity: { x: normal.x * 0.7, y: normal.y * 0.7, z: normal.z * 0.7 },
-    count: Math.round(12 * scale), life: 2.4, scale: scale * 1.9, spread: 0.8, seed: seed + 6,
+    velocity: { x: normal.x * 0.38, y: normal.y * 0.38, z: normal.z * 0.38 },
+    count: Math.round(12 * scale), life: 2.4, scale: scale * 1.45, spread: 0.7, seed: seed + 6,
     tint: EXPLOSION_SMOKE_TINT, delay: 0.2,
   });
   // 碎片：6–12 片暗色小块，抛物线落地（由 CombatVfx 的实例化碎块池负责运动）。
   out.debris.push({
     at: add(target, normal, 0.12), normal,
     count: Math.min(12, Math.max(6, Math.round(8 * scale))),
-    size: 0.09 * scale, life: 1.5, seed: seed + 2,
+    size: 0.035 * scale, life: 1.5, seed: seed + 2,
   });
   // 中心闪光只留一点：爆炸的层次靠火球/烟/碎片，一个大白球会把它们全糊掉。
   out.bursts.push({
@@ -226,7 +226,7 @@ export function combatVfxFromEvent(
   out.shockwaves.push({ at: add(target, normal, 0.04), normal, size: target.kind === 'building' ? 3 : 1.5, life: 0.35 });
   out.lights.push({ at: add(target, normal, 0.6), color: 0xffb066, intensity: 26 * scale, life: 0.28, distance: 6 * scale });
   // 地面焦痕：深色、边缘柔和、8s 淡出（`CombatVfx` 的贴图本身就是柔边焦痕）。
-  out.decals.push({ at: add(target, normal, 0.004), normal, size: 1.15 * scale, life: 8 });
+  out.decals.push({ at: add(target, normal, 0.004), normal, size: target.kind === 'building' ? 1.5 : 0.8, life: 8 });
   return out;
 }
 
