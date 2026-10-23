@@ -62,13 +62,22 @@ fs.mkdirSync(outDir, { recursive: true });
 
 // ---- 读档：只有当前局来源不是这个存档点时才重读 ----
 const game = await api.game().catch(() => null);
-if (game?.source_checkpoint !== scene.checkpoint) {
+// `reload: true`：该场景依赖「读档后的确定局面」（例如要先快进到敌军抵达），
+// 当前局即使已经来自同一存档点也要重读，否则第二次跑会从被上一轮推进过的局面开始。
+if (scene.reload || game?.source_checkpoint !== scene.checkpoint) {
   console.log(`[shots] 当前局来源=${game?.source_checkpoint || '(新局)'}，读档 ${scene.checkpoint}`);
   await api.load(scene.checkpoint);
   const tick = await waitTicks(api, scene.settleTicks ?? 50);
   console.log(`[shots] 读档完成，已到 tick ${tick}`);
 } else {
   console.log(`[shots] 当前局已是 ${scene.checkpoint}（tick ${game.tick}），不再重读`);
+}
+
+// ---- 场景准备（可选）：读档后、拍照前把局面推到目标状态（如快进到敌军抵达）----
+if (typeof scene.prepare === 'function') {
+  console.log('[shots] 场景准备 …');
+  const info = await scene.prepare(api);
+  if (info) console.log(`[shots] 场景准备完成：${JSON.stringify(info)}`);
 }
 
 // ---- 驱动就绪 ----
