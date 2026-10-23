@@ -267,13 +267,9 @@ export const SHADER_COLOR = /* glsl */`
   }
   float swMapWidth = swMapDimensions.x;
   float swTileWorldSize = 3.3321622036 * length(swSurfacePosition) / swMapWidth;
-  // 已探索边界软化：heat.a 是「本格到未知区的格数」渐变，只在已探索格内部生效，
-  // 未探索格永远不会因为插值露出地形色（双线性权重也只累加已探索邻格）。
-  // 已探索但不可见：heat.a 是「本格到未知区的格数」渐变（0..1，已探索格内部），
-  // 它只作用在**边缘那一格**（2.5 格内），不会在整片探索区里切出方格——用来把探索前沿
-  // 压暗成柔和的过渡带（L15 的「已探索但不可见压暗区不得沿格走方块」）。
+  // 已探索度直接取平滑场的 known（只在已探索格内部上升，未知格恒为 0）：
+  // 已探索/未探索的过渡由面纱的 swKnown 混合完成，没有沿格走的压暗方块（L15）。
   float swKnown = swAtlasKnown;
-  float swFrontier = 1.0 - smoothstep(0.02, 0.98, swHeat.a);
   // 分类权重（L15）：双线性后是 0..1 的连续场，用较宽的 smoothstep 交叉，
   // 让水/陆、阻挡/可建造、岩浆/可建造三类边界都在**格内部**完成过渡（而不是在格边硬切）。
   // 平滑场解码：0.5 = 等值线；值是覆盖度（0..1 之间），乘以 8 换算成「格」的量级，
