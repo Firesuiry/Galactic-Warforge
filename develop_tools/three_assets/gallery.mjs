@@ -64,6 +64,8 @@ try {
   // three 的 examples 在仓库根的 node_modules 下（client-web 没有自己的 node_modules），
   // 用 vite 的 /@fs 绝对路径导入 meshopt 解码器。
   await page.evaluate((libs) => { window.__threeLibs = libs; }, resolve(root, 'node_modules/three/examples/jsm/libs'));
+  // 备选模型在 tmp/ 下（不入产物），vite 只服务 client-web/public，所以走 /@fs 绝对路径。
+  await page.evaluate((dir) => { window.__altDir = dir; }, resolve(root, 'tmp/3a-models/alt'));
   await page.evaluate(async () => {
     const THREE = await import('/@id/three');
     const { RoomEnvironment } = await import('/@id/three/examples/jsm/environments/RoomEnvironment.js');
@@ -119,9 +121,9 @@ try {
     };
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const templates = new Map();
-    const loadModel = async (name) => {
+    const loadModel = async (name, url) => {
       if (!templates.has(name)) {
-        const gltf = await loader.loadAsync(`/assets/models/sketchfab/${name}.glb`);
+        const gltf = await loader.loadAsync(url ?? `/assets/models/sketchfab/${name}.glb`);
         gltf.scene.traverse((object) => {
           if (!object.isMesh) return;
           const material = object.material;
@@ -200,6 +202,13 @@ try {
       return image;
     };
 
+    /** 首选 + 备选（--alt）：备选 GLB 在 tmp/3a-models/alt/，经 vite 的 /@fs 读，不能走 public 路径。 */
+    const variantsFor = (type, withAlt) => {
+      const variants = [{ name: type, suffix: '', url: `/assets/models/sketchfab/${type}.glb` }];
+      if (withAlt) variants.push({ name: `${type}-alt`, suffix: '-alt', url: `/@fs${window.__altDir}/${type}-alt.glb` });
+      return variants;
+    };
+
     window.gallery = async ({ buildings, units, withAlt }) => {
       const models = new IndustrialModels();
       await IndustrialModels.preload();
@@ -208,11 +217,9 @@ try {
       const FACTION_KEYS = ['own', 'enemy', 'fog'];
       for (const [type, w, d] of buildings) {
         const span = Math.max(w * 0.86, d * 0.86) * 2.6 + 0.6;
-        const variants = [{ name: type, suffix: '' }];
-        if (withAlt) variants.push({ name: `${type}-alt`, suffix: '-alt' });
-        for (const variant of variants) {
+        for (const variant of variantsFor(type, withAlt)) {
           let template;
-          try { template = await loadModel(variant.name); } catch { continue; }
+          try { template = await loadModel(variant.name, variant.url); } catch { continue; }
           for (const view of ['top', 'iso', 'side']) {
             for (const faction of FACTION_KEYS) {
               const clone = template.clone(true);
@@ -226,11 +233,9 @@ try {
       }
       for (const [type, scale] of units) {
         const span = 2.4 * scale;
-        const variants = [{ name: type, suffix: '' }];
-        if (withAlt) variants.push({ name: `${type}-alt`, suffix: '-alt' });
-        for (const variant of variants) {
+        for (const variant of variantsFor(type, withAlt)) {
           let template;
-          try { template = await loadModel(variant.name); } catch { continue; }
+          try { template = await loadModel(variant.name, variant.url); } catch { continue; }
           for (const view of ['top', 'iso', 'side']) {
             for (const faction of FACTION_KEYS) {
               const clone = template.clone(true);
