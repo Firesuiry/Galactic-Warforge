@@ -36,24 +36,60 @@ export interface FogUniforms {
 }
 
 /**
- * 贴地雾的默认参数：聚焦高度（7.7）下画面中心建筑 < 5%，地平线（球面切点，约 40 单位）约 60%。
+ * 贴地雾的默认参数（步骤 4 契约：中心建筑 < 5%、地平线 50–70%）。
  *
- * 注意距离口径：贴地机位的相机离地只有 7.7 个世界单位，可见地表在 3–40 单位之间
+ * 距离口径：贴地机位的相机离地只有 7.7 个世界单位，可见地表在 3–40 单位之间
  * （地平线是球面切点，d ≈ sqrt(2·R·altitude) ≈ 39），不是平面地图上的上百单位。
- * 所以浓度按这个量级取：d=39 → 1-exp(-(0.0245·39)²) ≈ 0.60；d=8（中心建筑）→ 3.8%。
+ * 按 `1 - exp(-(density·d)²)`：
+ * - d=8（中心建筑）：1 - exp(-(0.0245·8)²) = 3.8%（< 5% ✔）
+ * - d=39（地平线）：1 - exp(-(0.0245·39)²) = 60%（50–70% ✔）
  */
 export const FOG_TUNING = {
-  density: 0.03,
+  /** 参考高度（聚焦机位）下的浓度。 */
+  density: 0.0245,
+  /** 参考高度：浓度按 sqrt(参考高度 / 相机高度) 缩放，见 `fogDensityAtAltitude`。 */
+  referenceAltitude: 7.7,
+  /** 中空 / 远景（高度 > 25）的浓度倍率：同一口径下再淡一些，读作「轻微空气透视」。 */
+  highAltitudeScale: 0.6,
   /** 太阳方向内散射强度（0–1）。 */
   sunScatter: 0.55,
 };
 
+/**
+ * 雾浓度随相机高度的换算（3A 第二轮 §15）。
+ *
+ * 可见地表的距离随高度变大（地平线切点 d ≈ sqrt(2·R·altitude)），固定浓度会让
+ * 中空机位整片刷成雾色。按 `density ∝ 1/sqrt(altitude)` 缩放，各地平线处的雾化比例
+ * 大致恒定：贴地 7.7 → 0.0245（地平线 60%），中空 60 → 0.0087 × 0.6 ≈ 0.0052
+ * （60 单位处约 9%、远处边缘约 24%）。
+ */
+export function fogDensityAtAltitude(altitude: number): number {
+  const height = Math.max(altitude, FOG_TUNING.referenceAltitude);
+  const scale = altitude > 25 ? FOG_TUNING.highAltitudeScale : 1;
+  return FOG_TUNING.density * Math.sqrt(FOG_TUNING.referenceAltitude / height) * scale;
+}
+
+/**
+ * 雾强度随相机高度的淡出：≤ 60 全强度（中空仍保留轻微空气透视），≥ 160 关闭，
+ * 全球视角（300）完全关闭。贴地（≤ 25）不淡出。
+ */
+export function fogStrengthAtAltitude(altitude: number): number {
+  return 1 - THREE.MathUtils.smoothstep(altitude, 60, 160);
+}
+
+/**
+ * 雾色（线性 HDR）：目标显示色 #b9d3e6（185/211/230），按 ACES（曝光 .92）+ sRGB 反解。
+ * 与天空地平线 `SKY_HORIZON_LINEAR`（0.3906/0.7212/1.2695 → 188/211/230）几乎同值，
+ * 地平线处地面与天空显示色差 < 3/255（审查 P2-6）。
+ */
+export const FOG_HORIZON_LINEAR = [0.3620, 0.7211, 1.2704] as const;
+/** 内散射色（线性）：暖白，朝太阳一侧的雾霾被照亮。 */
+export const FOG_SUN_LINEAR = [1.35, 1.05, 0.78] as const;
+
 export function createFogUniforms(): FogUniforms {
   return {
-    // 雾 chunk 在 tonemapping / colorspace 之后执行（gl_FragColor 已是显示空间），
-    // 所以这里给「原始 sRGB 分量」而不是线性值：用 LinearSRGBColorSpace 跳过 three 的颜色转换。
-    color: new THREE.Color().setRGB(0.7255, 0.8275, 0.902, THREE.LinearSRGBColorSpace),
-    sunColor: new THREE.Color().setRGB(1, 0.886, 0.741, THREE.LinearSRGBColorSpace),
+    color: new THREE.Color().setRGB(...FOG_HORIZON_LINEAR, THREE.LinearSRGBColorSpace),
+    sunColor: new THREE.Color().setRGB(...FOG_SUN_LINEAR, THREE.LinearSRGBColorSpace),
     sunDirection: new THREE.Vector3(-0.36, 0.5, 0.82).normalize(),
     density: { value: FOG_TUNING.density },
     strength: { value: 1 },
@@ -76,8 +112,10 @@ const FOG_PARS = /* glsl */ `
 `;
 
 const FOG_FRAGMENT = /* glsl */ `
-  // 注意：这里只替换 fog_fragment 这一段；three 的 Standard 材质把 fog 放在 tonemapping 之后，
-  // 所以雾色与输出一样要按「显示空间」给（ACES 已经作用过，fogTint 不再被压一次）。
+  // 注意：这里只替换 fog_fragment 这一段。世界渲染进 HalfFloat RT 时 three 会关掉
+  // toneMapping、输出到 working（线性）空间，fog chunk 仍在线性值上执行，之后才由
+  // OutputPass 的 ACES + sRGB 统一处理一次——所以雾色必须是**线性**色（审查 P2-6：
+  // 以前按显示空间给，ACES 再压一遍，地平线处地面与天空差出一条灰带）。
   if (swFogStrength > 0.001) {
     float fogDistance = max(vFogDepth, 0.0);
     float fogFactor = 1.0 - exp(-swFogDensity * swFogDensity * fogDistance * fogDistance);
@@ -135,6 +173,21 @@ const SHADOW_LINE_FADED = `{
 const LIGHTS_BEGIN_PATCHED = THREE.ShaderChunk.lights_fragment_begin.replace(SHADOW_LINE, SHADOW_LINE_FADED);
 
 /**
+ * 材质是否**真的**能被雾注入：必须是 three 内建、带 `#include <fog_fragment>` 的材质。
+ *
+ * - `ShaderMaterial` / `RawShaderMaterial` 一律跳过：自定义 shader 里没有 fog include，
+ *   替换无效；以前把它们记进 `userData.swFog` 会让 `lightingDebug().fog.materialAudit`
+ *   的「已接入」数字失真（审查 P2-8）。
+ * - additive 特效（弹道/护盾波纹/爆炸）必须显式 `fog: false`：雾色会染上去。
+ */
+export function canReceiveFog(material: THREE.Material): boolean {
+  const probe = material as THREE.Material & { fog?: boolean; isShaderMaterial?: boolean; isRawShaderMaterial?: boolean };
+  if (probe.fog === false) return false;
+  if (probe.isShaderMaterial || probe.isRawShaderMaterial) return false;
+  return true;
+}
+
+/**
  * 把雾注入一个材质。返回的 dispose 只解绑回调，不销毁材质本身。
  *
  * 所有材质共享同一份 `FogUniforms`（对象引用），场景里改一次密度/颜色全部生效。
@@ -144,7 +197,7 @@ export function applyAtmosphericFog(material: THREE.Material, uniforms: FogUnifo
     onBeforeCompile: (shader: THREE.WebGLProgramParametersWithUniforms) => void;
     userData: Record<string, unknown>;
   };
-  if (target.userData.swFog) return;
+  if (target.userData.swFog || !canReceiveFog(material)) return;
   target.userData.swFog = uniforms;
   const previous = target.onBeforeCompile.bind(target);
   target.onBeforeCompile = (shader) => {
@@ -172,10 +225,9 @@ export function applyAtmosphericFog(material: THREE.Material, uniforms: FogUnifo
 }
 
 /**
- * 场景级雾驱动：材质 `fog: true` 时注入（`fog: false` 的天空/特效不注入），
- * 按相机高度调 `strength`（altitude > 60 关闭），并同步太阳方向与雾色。
- *
- * 高度口径与 `atmosphere.ts` 的天空过渡一致：≤ 25 全强度，≥ 60 关闭。
+ * 场景级雾驱动：只有能接雾的内建材质注入（`fog: false` 的天空/additive 特效、
+ * 自定义 `ShaderMaterial` 一律跳过，见 `canReceiveFog`），按相机高度调 `strength` 与
+ * `density`（`fogStrengthAtAltitude` / `fogDensityAtAltitude`），并同步太阳方向与雾色。
  */
 export class AtmosphericFog {
   readonly uniforms = createFogUniforms();
@@ -192,10 +244,10 @@ export class AtmosphericFog {
     this.quality = quality;
   }
 
-  /** 把一个材质接入空气透视（幂等：同一材质只接一次）。 */
+  /** 把一个材质接入空气透视（幂等：同一材质只接一次；不能接的材质直接跳过）。 */
   apply(material: THREE.Material | THREE.Material[]) {
     for (const item of Array.isArray(material) ? material : [material]) {
-      if (!item || (item as THREE.Material & { fog?: boolean }).fog === false || this.bound.has(item)) continue;
+      if (!item || this.bound.has(item) || !canReceiveFog(item)) continue;
       this.bound.add(item);
       applyAtmosphericFog(item, this.uniforms);
     }
@@ -217,10 +269,13 @@ export class AtmosphericFog {
     this.uniforms.color.copy(color);
   }
 
-  /** 相机高度：≤ 25 全强度，≥ 60 关闭（中空 / 全球视角没有贴地雾）。 */
+  /**
+   * 相机高度：强度 ≤60 全开、≥160 关闭；浓度按 `fogDensityAtAltitude` 随高度变淡
+   * （中空 60 仍有「远处地表轻微空气透视」，见 3A 第二轮 §15）。
+   */
   setAltitude(altitude: number) {
-    const t = 1 - THREE.MathUtils.smoothstep(altitude, 25, 60);
-    this.uniforms.strength.value = t;
+    this.uniforms.strength.value = fogStrengthAtAltitude(altitude);
+    this.uniforms.density.value = fogDensityAtAltitude(altitude);
     this.sceneFog.near = 1;
     this.sceneFog.far = 2000;
   }

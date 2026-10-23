@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PlanetRenderQuality } from './render-quality';
+import { FOG_HORIZON_LINEAR } from './atmospheric-fog';
 
 /**
  * 物理天空 / 大气（第 23 轮 3A 画质）。
@@ -24,8 +25,9 @@ export interface SkyUniforms {
   /** 地平线附近的天空色（HDR，穹顶自身用）。 */
   horizon: THREE.Color;
   /**
-   * 地平线雾霾的「显示空间」色（sRGB 分量，不经 ACES）：雾 chunk 在 tonemapping 之后执行，
-   * 贴地远景的地面要与地平线处的天空同色，所以雾色取这一份，而不是 HDR 的 `horizon`。
+   * 地平线雾霾的**线性**色（目标显示色 #b9d3e6 的 ACES 反解值，见 atmospheric-fog 的
+   * `FOG_HORIZON_LINEAR`）：世界渲染进 HalfFloat RT 时雾 chunk 在线性空间执行、之后才被
+   * OutputPass 的 ACES 处理一次，所以贴地远景的地面与地平线处的天空同色（审查 P2-6）。
    */
   horizonColor: THREE.Color;
   sunColor: THREE.Color;
@@ -133,9 +135,8 @@ export function createSkyUniforms(quality: PlanetRenderQuality): SkyUniforms {
     sunDirection: new THREE.Vector3(-0.36, 0.5, 0.82).normalize(),
     zenith: new THREE.Color().setRGB(...SKY_ZENITH_LINEAR, THREE.LinearSRGBColorSpace),
     horizon: new THREE.Color().setRGB(...SKY_HORIZON_LINEAR, THREE.LinearSRGBColorSpace),
-    // 目标显示色 #b9d3e6（与 3A画质.md 的地平线雾霾同口径）；用 LinearSRGBColorSpace
-    // 只是为了跳过 three 的 sRGB→线性转换，雾 shader 拿到的是显示空间分量。
-    horizonColor: new THREE.Color().setRGB(0.7255, 0.8275, 0.902, THREE.LinearSRGBColorSpace),
+    // 目标显示色 #b9d3e6（与 3A画质.md 的地平线雾霾同口径）的 ACES 反解线性值。
+    horizonColor: new THREE.Color().setRGB(...FOG_HORIZON_LINEAR, THREE.LinearSRGBColorSpace),
     sunColor: new THREE.Color('#ffe2bd'),
     atmosphere: { value: 1 },
     stars: { value: 0.5 },
@@ -240,7 +241,7 @@ export class AtmosphereShell {
     this.setSunDirection(sunDirection);
     const shared = {
       sunDirection: { value: this.sunDirection },
-      dayColor: { value: new THREE.Color('#7db8ee') },
+      dayColor: { value: new THREE.Color('#93c4f2') },
       dayWhite: { value: new THREE.Color('#e8f3ff') },
       horizonColor: { value: new THREE.Color('#ff9a5c') },
       nightColor: { value: new THREE.Color('#0b1622') },
@@ -321,9 +322,13 @@ export class AtmosphereShell {
           float sun = dot(normalize(vObjectNormal), sunDirection);
           float day = smoothstep(-0.18, 0.5, sun);
           vec3 color = mix(veilCool, veilWarm, smoothstep(0.15, 0.9, sun));
-          // 日面才有大气：夜面不加（夜面靠 rim 的冷色轮廓）。
-          float alpha = day * (0.05 + 0.5 * thickness) * veilStrength;
-          gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.6));
+          color = mix(color, color * 0.55, 1.0 - day);
+          // 日面才有大气：夜面不加（夜面靠 rim 的冷色轮廓）。向阳面（正对太阳）最亮，
+          // 这样圆盘本身就能看出「向阳面亮、背阳面暗」，而不是整盘一样暗。
+          float sunward = smoothstep(-0.1, 0.95, sun);
+          // 背阳面留一点极薄的冷色（夜面暗而不黑），向阳面明显更亮。
+          float alpha = (0.02 + day * (0.03 + 0.30 * thickness + 0.14 * sunward)) * veilStrength;
+          gl_FragColor = vec4(color, clamp(alpha, 0.0, 0.5));
         }
       `,
       transparent: true,
@@ -382,14 +387,69 @@ export class AtmosphereShell {
  * 向中性灰靠拢，太阳圆盘/眩光不烘（那部分由 DirectionalLight 负责，重复会过曝），
  * 再乘 `SKY_IBL_INTENSITY`。天空穹顶本身的颜色不变（画面里的天空仍是目标色）。
  */
-export const SKY_IBL_DESATURATION = 0.55;
-export const SKY_IBL_INTENSITY = 0.72;
+export const SKY_IBL_DESATURATION = 0.18;
+export const SKY_IBL_INTENSITY = 0.9;
+/**
+ * 环境光的色相微调（3A 第二轮 §13 复测）：天空色 G 与 B 很接近（地平线雾霾 #b9d3e6），
+ * 暗部只吃天光时 G ≈ B 且 R 被压低 → 阴影读成青绿（实测 G−avg(R,B) ≈ +12…+18）。
+ * 烘 IBL 时把 R 抬 6%、G 压 8%（亮度基本不变，色相从青蓝挪到蓝紫），阴影回到
+ * 「偏蓝不偏青」。只作用于 IBL，画面里的天空穹顶仍是目标色。
+ */
+export const SKY_IBL_RED = 1.0;
+export const SKY_IBL_GREEN = 1.0;
 
-export function createSkyEnvironment(renderer: THREE.WebGLRenderer, sunDirection: THREE.Vector3, envSize: number): THREE.WebGLRenderTarget {
+/**
+ * 天空 shader 的「高出地平线角度 → 地平线雾霾权重」解析式（与 SKY_FRAGMENT 同一口径）：
+ * `t = exp(-aboveHorizon / 0.055)`，1 = 地平线雾霾、0 = 天顶深青蓝。
+ *
+ * 抽出来是为了能单测审查 P1-5 的根因：烘焙相机放在球心时，`aboveHorizon` 处处是 90°，
+ * 整个 IBL 只有天顶色、地平线白丢失。`cameraPos` / `planetCenter` / `radius` 与 shader 同名同义。
+ */
+export function skyHorizonFactor(
+  direction: THREE.Vector3,
+  cameraPos: THREE.Vector3,
+  planetCenter: THREE.Vector3,
+  radius: number,
+): number {
+  const d = direction.clone().normalize();
+  // 相机与球心重合时 shader 里的 normalize(0) 是 NaN；这里按「在球心 = 处处 90°」处理
+  // （与 GLSL 里 `cameraPosition - planetCenter` 退化后的实际观感一致：只有天顶色）。
+  if (cameraPos.distanceToSquared(planetCenter) < 1e-8) return 0;
+  const toCenter = planetCenter.clone().sub(cameraPos).normalize();
+  const fromCenter = Math.acos(THREE.MathUtils.clamp(d.dot(toCenter), -1, 1));
+  const distanceToCenter = Math.max(cameraPos.distanceTo(planetCenter), radius + 0.001);
+  const grazing = Math.asin(THREE.MathUtils.clamp(radius / distanceToCenter, 0, 1));
+  const aboveHorizon = Math.max(fromCenter - grazing, 0);
+  return Math.exp(-aboveHorizon / 0.055);
+}
+
+/**
+ * IBL 的烘焙观察点：相机沿 +Z 悬在地表上方 `altitude` 处（场景的 `updateCamera` 同一口径）。
+ *
+ * 不能放在球心（审查 P1-5）：`fromScene` 的 cube 相机在原点时，天空 shader 的地平线判据
+ * 处处是 90°，地平线白完全丢失 → IBL 只剩天顶深蓝 → 陶瓷白偏冷。
+ */
+export function skyIblObserver(radius: number, altitude: number): THREE.Vector3 {
+  return new THREE.Vector3(0, 0, radius + Math.max(altitude, 3.5));
+}
+
+export function createSkyEnvironment(
+  renderer: THREE.WebGLRenderer,
+  sunDirection: THREE.Vector3,
+  envSize: number,
+  /** 烘焙位置（世界坐标）：应在星球表面（相机高度附近），不能是球心（见 `skyIblObserver`）。 */
+  observer = skyIblObserver(100, 3.5),
+  planetRadius = 100,
+): THREE.WebGLRenderTarget {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const scene = new THREE.Scene();
   const dome = new SkyDome('high');
   dome.setSunDirection(sunDirection);
+  dome.setPlanet(new THREE.Vector3(0, 0, 0), planetRadius);
+  // 烘焙相机放在地表上方：天空 shader 的地平线判据用 `cameraPosition`，放在球心时
+  // 「高于地平线」恒为 90°，地平线雾霾（白）完全丢失，IBL 只剩天顶深蓝 → 陶瓷白偏冷
+  // （审查 P1-5，也是第二轮 §13 的根因）。
+  dome.mesh.position.copy(observer);
   // 环境贴图要的是「全天空」的亮度：贴地机位的高度过渡在这里不适用。
   dome.uniforms.atmosphere.value = 1;
   dome.uniforms.stars.value = 0.3;
@@ -401,10 +461,14 @@ export function createSkyEnvironment(renderer: THREE.WebGLRenderer, sunDirection
   };
   desaturate(dome.uniforms.zenith);
   desaturate(dome.uniforms.horizon);
+  for (const color of [dome.uniforms.zenith, dome.uniforms.horizon]) {
+    color.r *= SKY_IBL_RED;
+    color.g *= SKY_IBL_GREEN;
+  }
   // 环境贴图里不要太阳圆盘（会与 DirectionalLight 叠加过曝）。
   dome.uniforms.sunDisc.value = 0;
   scene.add(dome.mesh);
-  const target = pmrem.fromScene(scene, 0.02, 0.1, 4000, { size: envSize });
+  const target = pmrem.fromScene(scene, 0.02, 0.1, 4000, { size: envSize, position: observer.clone() });
   dome.dispose();
   pmrem.dispose();
   return target;

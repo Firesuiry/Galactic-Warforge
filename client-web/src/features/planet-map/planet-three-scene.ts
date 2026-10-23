@@ -11,7 +11,7 @@ import { createPlanetSurface, updatePlanetSurface, updatePlanetSurfaceTime, disp
 import { IndustrialModels } from './three/industrial-models';
 import { CombatEffects, specsFromCombatEvent, type CombatPoint } from './three/combat-effects';
 import { createSpace } from './three/space';
-import { createSkyEnvironment } from './three/atmosphere';
+import { createSkyEnvironment, skyIblObserver } from './three/atmosphere';
 import { AtmosphericFog } from './three/atmospheric-fog';
 import { CameraMotion, type MotionOutput } from './three/camera-motion';
 import { GradePass } from './three/post/grade-pass';
@@ -439,7 +439,7 @@ export class PlanetThreeScene {
     const sunDirection = this.sunlight.position.clone().sub(this.sunlight.target.position).normalize();
     // 烘焙位置：相机当前所在的地表点（相机在 `updateCamera` 里总是沿 +Z 方向、距球心
     // RADIUS + altitude）。IBL 是低频环境光，用当前高度即可；不能放在球心（审查 P1-5）。
-    this.environmentObserver.set(0, 0, RADIUS + Math.max(this.altitude, 3.5));
+    this.environmentObserver.copy(skyIblObserver(RADIUS, this.altitude));
     this.environment = createSkyEnvironment(this.renderer, sunDirection, this.settings.envSize, this.environmentObserver, RADIUS);
     this.scene.environment = this.environment.texture;
     // IBL 贴图已去饱和 + 降强度（atmosphere.ts 的 SKY_IBL_*），场景倍率不再额外翻倍。

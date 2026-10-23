@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { AtmosphereShell, SKY_HORIZON_LINEAR, SKY_ZENITH_LINEAR, createSkyUniforms } from './atmosphere';
+import { AtmosphereShell, SKY_HORIZON_LINEAR, SKY_ZENITH_LINEAR, createSkyUniforms, skyHorizonFactor, skyIblObserver } from './atmosphere';
+import { FOG_HORIZON_LINEAR } from './atmospheric-fog';
 
 /**
  * 第 23 轮 3A 第二轮 §14：全球视角的大气方向。
@@ -64,8 +65,37 @@ describe('sky palette', () => {
     // 天顶深青蓝 #2f6fa8、地平线雾霾 #b9d3e6（docs/guide/3A画质.md §1）。
     expect(sky.zenith.toArray().map((v) => Number(v.toFixed(4)))).toEqual([...SKY_ZENITH_LINEAR]);
     expect(sky.horizon.toArray().map((v) => Number(v.toFixed(4)))).toEqual([...SKY_HORIZON_LINEAR]);
-    // 雾色是显示空间分量（不经 ACES）：存的是 #b9d3e6 的原始 sRGB 分量（0.7255/0.8275/0.902），
-    // 用 LinearSRGBColorSpace 只是为了跳过 three 的颜色转换，所以按分量比对、不按 hex。
-    expect(sky.horizonColor.toArray().map((v) => Number(v.toFixed(4)))).toEqual([0.7255, 0.8275, 0.902]);
+    // 雾色是**线性**色（审查 P2-6）：目标显示色 #b9d3e6 的 ACES 反解值，与 atmospheric-fog 的
+    // FOG_HORIZON_LINEAR 同一份常量。
+    expect(sky.horizonColor.toArray().map((v) => Number(v.toFixed(4)))).toEqual([...FOG_HORIZON_LINEAR]);
+  });
+});
+
+describe('天空 IBL 烘焙位置（审查 P1-5）', () => {
+  it('烘焙观察点在地表上方，不在球心', () => {
+    const observer = skyIblObserver(100, 7.7);
+    expect(observer.toArray()).toEqual([0, 0, 100 + 7.7]);
+    // 高度低于下限时抬到 3.5（避免烘焙相机贴进地表）。
+    expect(skyIblObserver(100, 0).z).toBe(103.5);
+  });
+
+  it('球心烘焙时地平线权重恒为 0（地平线白丢失），地表烘焙时地平线方向 ≈ 1', () => {
+    const center = new THREE.Vector3(0, 0, 0);
+    const radius = 100;
+    // 球心：任意方向都「高出地平线」90°，t = exp(-π/2/0.055) ≈ 0。
+    for (const direction of [new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1)]) {
+      expect(skyHorizonFactor(direction, center, center, radius)).toBeLessThan(1e-6);
+    }
+    // 地表上方：真正的地平线方向（从相机看球面的切点，俯角 dip = acos(R/D) ≈ 21.8°）→ t ≈ 1；
+    // 天顶（+Z）→ t ≈ 0；水平方向已经在地平线上方 21.8°（天空偏蓝，t ≈ 0）。
+    const observer = skyIblObserver(radius, 7.7);
+    const dip = Math.acos(radius / observer.length());
+    const horizon = new THREE.Vector3(0, Math.sin(dip), -Math.cos(dip));
+    expect(skyHorizonFactor(horizon, observer, center, radius)).toBeGreaterThan(0.9);
+    expect(skyHorizonFactor(new THREE.Vector3(0, 0, 1), observer, center, radius)).toBeLessThan(0.01);
+    expect(skyHorizonFactor(new THREE.Vector3(0, 1, 0), observer, center, radius)).toBeLessThan(0.01);
+    // 同一方向：球心烘焙恒为 0，地表烘焙在地平线处接近 1（审查探针：0.033/0.083/0.180 vs
+    // 0.100/0.192/0.353，差约 3 倍）。
+    expect(skyHorizonFactor(horizon, center, center, radius)).toBe(0);
   });
 });
