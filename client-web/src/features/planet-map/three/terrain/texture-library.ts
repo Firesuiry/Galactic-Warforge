@@ -112,9 +112,53 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+/**
+ * 调色（第 23 轮第二轮 L17）：把每层 albedo 的**平均色**校正到美术方向的指定色，
+ * 同时保留纹理自身的明暗/色相变化（按像素相对均值做比例缩放，压缩到 0.8 次方）。
+ *
+ * 不这么做的话，ambientCG 的原图各自偏色：火山土平均色 (152,147,87) 是暖黄，
+ * 大面积铺开会让整块地表读成黄绿色、亮度也压不住。校正后地表的主色由这里定，
+ * 纹理只贡献「起伏与斑驳」。
+ */
+const LAYER_TARGET: Partial<Record<TerrainLayerName, [number, number, number]>> = {
+  // 可建造地：苔草橄榄为主（#5d6b3a，H≈78°），草地略亮更黄，火山土与碎石都压暗、去黄。
+  moss_grass: [0.400, 0.455, 0.235],
+  grass: [0.430, 0.490, 0.230],
+  volcanic_soil: [0.228, 0.206, 0.185],
+  gravel: [0.305, 0.295, 0.278],
+  mud: [0.215, 0.192, 0.152],
+  sand_mud: [0.415, 0.388, 0.325],
+  // 阻挡格：玄武岩近黑带冷调，地衣岩是暗橄榄灰（不要黄）。
+  basalt: [0.170, 0.168, 0.180],
+  lichen_rock: [0.225, 0.240, 0.198],
+};
+
+const srgbToLinear = (value: number) => (value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4));
+const linearToSrgb = (value: number) => (value <= 0.0031308 ? value * 12.92 : 1.055 * Math.pow(value, 1 / 2.4) - 0.055);
+
+/** 按层校正平均色到目标值；`data` 是该层的 sRGB 字节（原地修改）。 */
+function calibrateLayer(name: TerrainLayerName, data: Uint8Array, offset: number, length: number) {
+  const target = LAYER_TARGET[name];
+  if (!target) return;
+  const sum = [0, 0, 0];
+  for (let i = offset; i < offset + length; i += 4) {
+    for (let channel = 0; channel < 3; channel++) sum[channel] += srgbToLinear(data[i + channel] / 255);
+  }
+  const count = length / 4;
+  const mean = sum.map(value => Math.max(1e-4, value / count));
+  const targetLinear = target.map(value => srgbToLinear(value));
+  for (let i = offset; i < offset + length; i += 4) {
+    for (let channel = 0; channel < 3; channel++) {
+      // 目标色 × (像素/均值)^0.8：均值落在目标色上，起伏被压缩到 0.8 次方（不出现硬块）。
+      const ratio = Math.pow(Math.max(1e-4, srgbToLinear(data[i + channel] / 255)) / mean[channel], 0.8);
+      data[i + channel] = Math.round(Math.min(1, Math.max(0, linearToSrgb(targetLinear[channel] * ratio))) * 255);
+    }
+  }
+}
+
 /** 把一张 webp 画进指定层。canvas 统一按「不转换色彩空间」读回原始字节：
  * albedo 的 sRGB 编码保留，由纹理的 SRGBColorSpace 交给 GPU 解码。 */
-function drawLayer(image: HTMLImageElement, target: Uint8Array, layer: number) {
+function drawLayer(image: HTMLImageElement, target: Uint8Array, layer: number, name: TerrainLayerName, calibrate = true) {
   const canvas = document.createElement('canvas');
   canvas.width = SIZE; canvas.height = SIZE;
   const context = canvas.getContext('2d', { willReadFrequently: true })!;
@@ -122,6 +166,7 @@ function drawLayer(image: HTMLImageElement, target: Uint8Array, layer: number) {
   context.drawImage(image, 0, 0, SIZE, SIZE);
   const pixels = context.getImageData(0, 0, SIZE, SIZE).data;
   target.set(pixels, layer * SIZE * SIZE * 4);
+  if (calibrate) calibrateLayer(name, target, layer * SIZE * SIZE * 4, SIZE * SIZE * 4);
 }
 
 /**
@@ -134,8 +179,9 @@ export async function loadTerrainTextures(onReady?: (textures: TerrainTextures) 
   const packedData = textures.packedPixels;
   const jobs: Promise<void>[] = [];
   TERRAIN_LAYER_NAMES.forEach((name, layer) => {
-    jobs.push(loadImage(`${BASE}/${name}_albedo.webp`).then((image) => drawLayer(image, albedoData, layer)));
-    jobs.push(loadImage(`${BASE}/${name}_packed.webp`).then((image) => drawLayer(image, packedData, layer)));
+    jobs.push(loadImage(`${BASE}/${name}_albedo.webp`).then((image) => drawLayer(image, albedoData, layer, name)));
+    // packed 图是数据（法线/粗糙/高度），不参与调色。
+    jobs.push(loadImage(`${BASE}/${name}_packed.webp`).then((image) => drawLayer(image, packedData, layer, name, false)));
   });
   try {
     await Promise.all(jobs);
