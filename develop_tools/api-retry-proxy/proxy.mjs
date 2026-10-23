@@ -26,6 +26,8 @@ const TRANSIENT_400 = [
   /model_param_invalid/,
   /invalid request error trace_id/, // {"type":"invalid_request_error","code":"",...}
   /send it again/i,
+  // 2026-10-23 网关抖动期间新出现：上游部分节点开了 thinking 回传校验，换节点重发可过。
+  /content\[\]\.thinking.*must be passed back/,
 ];
 // 其中明确要求「重新发送」的，本代理重试用尽后改报 503，让 Claude Code 再按 5xx 自己重试一轮；
 // 另两种可能是请求本身固定会错，保持 400 尽快失败（见 README「放弃之后」）。
