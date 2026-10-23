@@ -189,7 +189,7 @@ export class IndustrialActivity {
     geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3).setUsage(THREE.DynamicDrawUsage));
     geometry.setAttribute('particleSize', new THREE.BufferAttribute(this.sizes, 1).setUsage(THREE.DynamicDrawUsage));
     const material = new THREE.ShaderMaterial({
-      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
       vertexShader: `attribute float particleSize; varying vec3 tint; void main(){ tint=color; vec4 view=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*view; gl_PointSize=clamp(particleSize*650./max(.01,-view.z),1.,24.); }`,
       fragmentShader: `varying vec3 tint; void main(){ float r=length(gl_PointCoord-.5)*2.; if(r>1.) discard; gl_FragColor=vec4(tint,pow(1.-r,2.)*.7); }`,
     });

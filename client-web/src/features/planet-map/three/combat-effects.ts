@@ -295,7 +295,7 @@ export class CombatEffects {
     if (!material) {
       material = new THREE.MeshBasicMaterial({
         color: FIRE_TONE_COLORS[tone],
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       });
@@ -367,7 +367,7 @@ export class CombatEffects {
     const fx = this.freeFlashes.pop() ?? {
       sprite: new THREE.Sprite(new THREE.SpriteMaterial({
         map: this.flashTexture,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),
@@ -450,7 +450,7 @@ export class CombatEffects {
     const fx = this.freeRipples.pop() ?? {
       mesh: new THREE.Mesh(this.rippleGeometry, new THREE.MeshBasicMaterial({
         color: 0x5fd7ff,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -476,14 +476,14 @@ export class CombatEffects {
     const fx = this.freeExplosions.pop() ?? {
       mesh: new THREE.Mesh(this.explosionGeometry, new THREE.MeshBasicMaterial({
         color: 0xffa245,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),
       flash: new THREE.Sprite(new THREE.SpriteMaterial({
         map: this.flashTexture,
         color: 0xfff3c9,
-        blending: THREE.AdditiveBlending,
+        blending: THREE.AdditiveBlending, fog: false,
         transparent: true,
         depthWrite: false,
       })),

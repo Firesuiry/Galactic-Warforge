@@ -80,19 +80,21 @@ export function beltDeckTexture(tier: 1 | 2 | 3): THREE.CanvasTexture {
   // 两个档位色 chevron（每格 .25 / .75 处）：外圈半透明晕 + 实心箭身，读起来像带面里嵌的灯条。
   ctx.lineJoin = 'miter';
   ctx.lineCap = 'butt';
+  // 箭头「更细更淡」（3A 画质 §7）：箭身从 11 收到 7、外圈晕从 22 收到 14，
+  // 同时保留档位色对比——远景仍读得出流向，近景不再像一条黄灯带。
   for (const center of [64, 192]) {
     const chevron = () => {
       ctx.beginPath();
-      ctx.moveTo(center - 18, 30);
-      ctx.lineTo(center + 12, 64);
-      ctx.lineTo(center - 18, 98);
+      ctx.moveTo(center - 16, 34);
+      ctx.lineTo(center + 11, 64);
+      ctx.lineTo(center - 16, 94);
     };
     ctx.strokeStyle = color;
-    ctx.globalAlpha = .22;
-    ctx.lineWidth = 22;
+    ctx.globalAlpha = .16;
+    ctx.lineWidth = 14;
     chevron(); ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = 11;
+    ctx.globalAlpha = .85;
+    ctx.lineWidth = 7;
     chevron(); ctx.stroke();
   }
   ctx.globalAlpha = 1;

@@ -81,7 +81,7 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, foreignMechaIds, in
           const ids = commandableUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits, foreignMechaIds);
           store.setControlGroup(index, ids);
           if (ids.length > 0) {
-            sfx.uiClick();
+            sfx.unitAck();
           }
           event.preventDefault();
         }
@@ -102,7 +102,7 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, foreignMechaIds, in
             store.setSelected(first
               ? { kind: 'unit', id: first.id, position: first.position }
               : null);
-            sfx.uiClick();
+            sfx.unitSelect();
           }
         }
         return;
@@ -116,19 +116,19 @@ export function usePlanetRtsHotkeys({ planet, knownOwnUnits, foreignMechaIds, in
         case 'a':
           if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits, foreignMechaIds).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'attack_move' });
-            sfx.uiClick();
+            sfx.orderAttack();
           }
           break;
         case 'p':
           if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits, foreignMechaIds).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'patrol' });
-            sfx.uiClick();
+            sfx.orderMove();
           }
           break;
         case 'g':
           if (orderEligibleUnitIds(planet, store.selectedUnits, playerId, knownOwnUnits, foreignMechaIds).length > 0) {
             store.setInteractionMode({ kind: 'unit_order', order: 'guard' });
-            sfx.uiClick();
+            sfx.orderMove();
           }
           break;
         case 's':

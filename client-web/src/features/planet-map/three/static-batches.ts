@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { STOPPED_GLOW } from './industrial-models';
 
 export interface StaticBatchTile { x: number; y: number }
 export interface StaticBatchEntry {
@@ -13,6 +14,8 @@ interface Snapshot {
   tile: StaticBatchTile;
   matrix: THREE.Matrix4;
   visible: boolean;
+  /** 上次同步时该建筑是否停机（发光件批要按它拆批）。 */
+  dim: boolean;
 }
 interface Batch {
   geometry: THREE.BufferGeometry;
@@ -22,6 +25,8 @@ interface Batch {
   receiveShadow: boolean;
   renderOrder: number;
   layersMask: number;
+  /** 停机发光件批：实例色 = 0.3 灰（材质把实例色乘进自发光）。 */
+  dim?: boolean;
   parts: { matrix: THREE.Matrix4; tile: StaticBatchTile }[];
 }
 
@@ -41,19 +46,24 @@ export class StaticBatches {
   /** Returns true only when static structure/placement changed and buffers were rebuilt.
    * World/camera rotation and parent-layer visibility never rewrite instance matrices.
    * Rigid children below each root are immutable; replace the root when its model changes.
+   *
+   * `stopped(root)` 标记停机建筑（M5）：它的发光件批用实例色 0.3 灰，逐栋调暗，
+   * 不改共享材质（材质里 `totalEmissiveRadiance *= vColor.rgb`）。同一材质按停机与否分成两批。
    */
-  refresh(entries: readonly StaticBatchEntry[]): boolean {
+  refresh(entries: readonly StaticBatchEntry[], stopped?: (root: THREE.Object3D) => boolean): boolean {
     let same = entries.length === this.snapshots.length;
     for (let index = 0; index < entries.length; index++) {
       const entry = entries[index], previous = this.snapshots[index];
       entry.root.updateMatrix();
       if (!previous || previous.root !== entry.root || previous.layer !== entry.layer
         || previous.tile.x !== entry.tile.x || previous.tile.y !== entry.tile.y
-        || previous.visible !== entry.root.visible || !previous.matrix.equals(entry.root.matrix)) same = false;
+        || previous.visible !== entry.root.visible || !previous.matrix.equals(entry.root.matrix)
+        || previous.dim !== Boolean(stopped?.(entry.root))) same = false;
     }
     if (same) return false;
     this.releaseInstances();
-    this.snapshots = entries.map(entry => ({ root: entry.root, layer: entry.layer, tile: { ...entry.tile }, matrix: entry.root.matrix.clone(), visible: entry.root.visible }));
+    this.snapshots = entries.map(entry => ({ root: entry.root, layer: entry.layer, tile: { ...entry.tile }, matrix: entry.root.matrix.clone(),
+      visible: entry.root.visible, dim: Boolean(stopped?.(entry.root)) }));
     const groups = new Map<string, Batch>();
     const inverseLayers = new Map<THREE.Object3D, THREE.Matrix4>();
     for (const entry of entries) {
@@ -68,13 +78,15 @@ export class StaticBatches {
         if (!object.visible || object.userData.industrialRotation) return;
         if (object instanceof THREE.Mesh && !(object instanceof THREE.InstancedMesh) && !(object instanceof THREE.SkinnedMesh)) {
           const materials = Array.isArray(object.material) ? object.material : [object.material];
+          const glow = materials.some(material => material.userData.glowFinish);
+          const dim = glow && Boolean(stopped?.(entry.root));
           const key = [entry.layer.uuid, object.geometry.uuid, ...materials.map(material => material.uuid),
-            object.castShadow, object.receiveShadow, object.renderOrder, object.layers.mask].join(':');
+            object.castShadow, object.receiveShadow, object.renderOrder, object.layers.mask, dim].join(':');
           let batch = groups.get(key);
           if (!batch) {
             batch = { geometry: object.geometry, material: object.material, layer: entry.layer,
               castShadow: object.castShadow, receiveShadow: object.receiveShadow,
-              renderOrder: object.renderOrder, layersMask: object.layers.mask, parts: [] };
+              renderOrder: object.renderOrder, layersMask: object.layers.mask, parts: [], dim };
             groups.set(key, batch);
           }
           batch.parts.push({ matrix: new THREE.Matrix4().multiplyMatrices(inverse!, object.matrixWorld), tile: { ...entry.tile } });
@@ -92,8 +104,13 @@ export class StaticBatches {
       mesh.renderOrder = batch.renderOrder; mesh.layers.mask = batch.layersMask;
       mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
       const tiles: StaticBatchTile[] = [];
-      batch.parts.forEach((part, index) => { mesh.setMatrixAt(index, part.matrix); tiles.push(part.tile); });
+      const dim = new THREE.Color(STOPPED_GLOW, STOPPED_GLOW, STOPPED_GLOW);
+      batch.parts.forEach((part, index) => {
+        mesh.setMatrixAt(index, part.matrix); tiles.push(part.tile);
+        if (batch.dim) mesh.setColorAt(index, dim);
+      });
       mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingBox(); mesh.computeBoundingSphere();
       batch.layer.add(mesh); this.instances.set(mesh, tiles);
     }

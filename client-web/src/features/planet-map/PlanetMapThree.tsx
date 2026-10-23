@@ -22,25 +22,15 @@ import { projectTheaterZoneRing, theaterZoneContainsTile } from './planet-three-
 import { PlanetHoverTip } from './PlanetHoverTip';
 import { useHudRailTop } from './use-hud-rail-top';
 import { describeHover } from './hover-info';
-import type { PlanetRenderQuality } from './three/render-quality';
+import { RENDER_QUALITY_STORAGE_KEY, readPlanetRenderQuality, type PlanetRenderQuality } from './three/render-quality';
 import { sfx } from '@/engine/audio';
 import { subscribeBattleEvents } from '@/engine/battle-events';
 import { useSessionSnapshot } from '@/hooks/use-session';
 import { exposeTestHook } from '@/test-hooks';
 
-const QUALITY_STORAGE_KEY = 'siliconworld-planet-quality';
+const QUALITY_STORAGE_KEY = RENDER_QUALITY_STORAGE_KEY;
 /** 点选落空提示的停留时长（ms）：一次点击的回执，不是常驻状态。 */
 const PICK_NOTICE_TTL_MS = 2400;
-
-function readQuality(): PlanetRenderQuality {
-  const query = new URLSearchParams(window.location.search).get('quality');
-  if (query === 'low' || query === 'balanced' || query === 'high') return query;
-  try {
-    const saved = localStorage.getItem(QUALITY_STORAGE_KEY);
-    if (saved === 'low' || saved === 'balanced' || saved === 'high') return saved;
-  } catch { /* Storage can be disabled; rendering still works. */ }
-  return 'balanced';
-}
 
 interface Props {
   planet: PlanetRenderView;
@@ -94,7 +84,7 @@ export function PlanetMapThree(props: Props) {
   initialZoomRef.current = props.initialZoom;
   /** 最近一次读到的相机高度（R20-A ⑥）：场景就绪前为 null，状态行省略缩放档。 */
   const [cameraAltitude, setCameraAltitude] = useState<number | null>(null);
-  const [quality, setQuality] = useState<PlanetRenderQuality>(readQuality);
+  const [quality, setQuality] = useState<PlanetRenderQuality>(readPlanetRenderQuality);
   // 迷雾格点击提示：不移动镜头（移动会把场景窗口带到没有己方实体的窗口，画面变空）。
   const [fogNotice, setFogNotice] = useState<TilePoint | null>(null);
   // 点选落空提示（试玩 1016 B4）：目标格不在视野内（已聚焦过去）/ 点击处不在星球表面，
@@ -249,7 +239,7 @@ export function PlanetMapThree(props: Props) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const factor = zoomFactorForKey(event.key, event);
-      if (factor !== null) scene.current?.zoom(factor);
+      if (factor !== null) scene.current?.zoomSmooth(factor);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -296,7 +286,7 @@ export function PlanetMapThree(props: Props) {
     } else {
       store.setSelected(null);
     }
-    if (ids.length > 0) sfx.uiClick();
+    if (ids.length > 0) sfx.unitSelect();
   }
 
   // 点选落空提示是「一次性回执」，2.4s 后自动消失（与迷雾提示的常驻语义不同）。
@@ -446,6 +436,8 @@ export function PlanetMapThree(props: Props) {
       captureScreenshot: () => scene.current?.capture() ?? null,
       // R20-A ⑥：调试面板按需拉相机状态（打开面板 / 点「复制链接」时）。
       getViewport: () => viewportReader.current?.() ?? null,
+      // 音频声相：格 → 画布 CSS 坐标（scene.project 已在场景里，这里只透出）。
+      projectTile: (tile) => scene.current?.project(tile) ?? null,
     });
   }, [ready]);
 
@@ -494,7 +486,7 @@ export function PlanetMapThree(props: Props) {
 
   const home = () => {
     const tile = usePlanetViewStore.getState().homeTile ?? resolveHomeTile(props.planet, session.playerId);
-    if (tile) scene.current?.focus(tile);
+    if (tile) scene.current?.focusSmooth(tile);
   };
 
   // Shift+左键框选：capture 阶段拦截，阻止球面旋转；抬起时按屏幕投影选中矩形内己方单位。
@@ -772,6 +764,10 @@ export function PlanetMapThree(props: Props) {
       // 见 `three/vfx/fixture-hooks.ts`（动态导入，不进生产 bundle）；真机不使用。
       vfxPhase: (phase: string, seconds?: number) => target.applyVfxFixturePhase(phase, seconds),
       vfxStats: () => target.vfxStats(),
+      // 画面调试探针（3A 画质迭代用，只读）：天空 / 雾 / 环境光的当前取值。
+      lightingDebug: () => target.lightingDebug(),
+      // AO 探针（审查 P1-3 验收）：读 GTAO 降噪贴图的统计，默认全屏，可传归一化区域。
+      aoStats: (region?: { x: number; y: number; width: number; height: number }) => target.aoStats(region),
       clickTile: (tile: TilePoint, button: 0 | 2 = 0) => target.clickTile(tile, { button }),
       dragTiles: (from: TilePoint, to: TilePoint, modifiers: DragModifiers = {}) => {
         const start = pagePos(from);
@@ -1010,16 +1006,16 @@ export function PlanetMapThree(props: Props) {
           图层勾选与 2D 的「图层与视角」是**同一份内容**（PlanetPage 传同一组件进来），
           免得两个视图各维护一套图层开关。 */}
       <div className="planet-three__nav-rail" ref={railRef}>
-        <button className="secondary-button planet-three__nav-btn" title="全球视角" aria-label="全球视角" onClick={() => scene.current?.orbit()}>
+        <button className="secondary-button planet-three__nav-btn" title="全球视角" aria-label="全球视角" onClick={() => scene.current?.orbitSmooth()}>
           <Globe2 size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         <button className="secondary-button planet-three__nav-btn" title="聚焦基地" aria-label="聚焦基地" onClick={home}>
           <House size={16} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button className="secondary-button planet-three__nav-btn" title="3D 放大" aria-label="3D 放大" onClick={() => scene.current?.zoom(1.4)}>
+        <button className="secondary-button planet-three__nav-btn" title="3D 放大" aria-label="3D 放大" onClick={() => scene.current?.zoomSmooth(1.4)}>
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button className="secondary-button planet-three__nav-btn" title="3D 缩小" aria-label="3D 缩小" onClick={() => scene.current?.zoom(1 / 1.4)}>
+        <button className="secondary-button planet-three__nav-btn" title="3D 缩小" aria-label="3D 缩小" onClick={() => scene.current?.zoomSmooth(1 / 1.4)}>
           <Minus size={16} strokeWidth={2} aria-hidden="true" />
         </button>
         {props.layerPanel !== undefined ? (
