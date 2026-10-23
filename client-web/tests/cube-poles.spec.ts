@@ -3,9 +3,12 @@ import { surfaceNormal, surfaceStep } from '../../shared-client/src/surface';
 
 import { revealBuildCard } from './support/build-bar';
 import { backendEntry } from './support/scenario';
+import { requireScenario } from './support/scenario-gate';
 
-// Run with SW_TEST_MAP=<repo>/server/testdata/map-cube-poles.yaml SW_CUBE_POLES=1.
-test.skip(process.env.SW_CUBE_POLES !== '1', 'Requires the isolated north/south pole backend fixture.');
+// 极区夹具场景（N=48，北/南极面中心各一名玩家）：`npx playwright test --project=poles`。
+// 场景由 `poles` project 自己的 webServer 提供（config-dev + map-cube-poles），见
+// tests/support/scenario-env.ts 的 POLES。其它场景整文件跳过。
+requireScenario('poles', '需要极区地图夹具（server/testdata/map-cube-poles.yaml）。');
 for(const [player,key,hemisphere] of [['p1','key_player_1','north'],['p2','key_player_2','south']] as const) {
   test(`${hemisphere} pole: real construction and unit movement`,async({page})=>{
     test.setTimeout(150_000);
