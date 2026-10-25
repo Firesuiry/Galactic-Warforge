@@ -184,6 +184,40 @@ func TestTransferIntoLogisticsStationStorageFull(t *testing.T) {
 	}
 }
 
+// 契约 1 补充（审查 P2-5）：储物仓「物品槽位已满」（只接受 N 种物品、一个都装不下）
+// 也归 STORAGE_FULL——它不会自行恢复，但原因由回执写明「槽位已满」，不是参数错误。
+func TestTransferIntoFullSlotsReportsStorageFull(t *testing.T) {
+	core := newE2ETestCore(t)
+	ws := core.World()
+
+	player := ws.Players["p1"]
+	starterMecha(ws, player.PlayerID).Inventory = model.ItemInventory{model.ItemCopperOre: 1}
+
+	depot := newBuilding("b-depot-slots", model.BuildingTypeDepotMk1, "p1", model.Position{X: 6, Y: 9})
+	attachBuilding(ws, depot)
+	if depot.Storage.Slots != 3 {
+		t.Fatalf("test premise broken: depot slots = %d", depot.Storage.Slots)
+	}
+	inventory := depot.Storage.EnsureInventory()
+	inventory[model.ItemIronIngot] = 1
+	inventory[model.ItemIronOre] = 1
+	inventory[model.ItemStoneOre] = 1
+	if depot.Storage.DistinctItems() != depot.Storage.Slots {
+		t.Fatalf("test premise broken: distinct items %d != slots %d", depot.Storage.DistinctItems(), depot.Storage.Slots)
+	}
+
+	res, _ := execCommand(core, model.CmdTransferItem, ws, "p1", transferCommand(depot.ID, model.ItemCopperOre, 1, ""))
+	if res.Code != model.CodeStorageFull {
+		t.Fatalf("expected STORAGE_FULL for a full slot table, got %s (%s)", res.Code, res.Message)
+	}
+	if !strings.Contains(res.Message, "无法接收") || !strings.Contains(res.Message, "槽位已满") {
+		t.Fatalf("STORAGE_FULL receipt must name the full slot table, got %q", res.Message)
+	}
+	if got := starterMecha(ws, player.PlayerID).Inventory[model.ItemCopperOre]; got != 1 {
+		t.Fatalf("nothing can be accepted, backpack must stay 1, got %d", got)
+	}
+}
+
 // 契约 1 用例 7：to_player 背包满仍走 INSUFFICIENT_RESOURCE（不变成 STORAGE_FULL）。
 func TestTransferOutIntoFullBackpackStaysInsufficientResource(t *testing.T) {
 	core := newE2ETestCore(t)

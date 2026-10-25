@@ -441,8 +441,15 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
 
     const specFor = (itemId: string): ItemSpec | undefined => specs.find((spec) => spec.itemId === itemId);
     const takenCount = (itemId: string): number => taken.get(itemId) ?? 0;
-    /** 该项是否已经不需要再搬（按「源里还剩多少」+「已取出多少」判断）。 */
+    /**
+     * 该项是否已经不需要再搬。
+     * `--to` 时**源清空 ≠ 货已到**：背包里还有该物品就必须继续往目标送，
+     * 否则目标只收了一部分时会误报成功、把货留在背包（审查 P1）。
+     */
     const needsMore = (itemId: string, remaining: number): boolean => {
+      if (toBuildingId && (inventory[itemId] ?? 0) > 0) {
+        return true;
+      }
       const spec = specFor(itemId);
       if (remaining <= 0) {
         // 指定物品从没取到过任何货：交给服务端给原文（「…里没有可取出的…」）。
@@ -478,15 +485,31 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
     const failureText = (reason: string, extraNote = ''): string =>
       `${toBuildingId ? '已转运' : '已取出'} ${sourceLabel}${toBuildingId ? ` → ${targetLabel}` : ''}：${drainProgressText()}${extraNote ? `（${extraNote}）` : ''}（${reason}）`;
 
+    /** --to 的失败回执：源剩 / 背包残留 / 目标已收三个数字必须写清（审查 P1 要求）。 */
+    const toFailure = async (itemId: string, reason: string): Promise<string> => {
+      const sourceNow = await tryInspect(api, planetId, buildingId);
+      const sourceLeft = sourceNow ? (drainableQuantities(sourceNow)[itemId] ?? 0) : 0;
+      return fmtFailure(
+        `已转运 ${sourceLabel} → ${targetLabel}：${drainProgressText()}（源剩 ${sourceLeft}、背包残留 ${inventory[itemId] ?? 0}、目标已收 ${takenCount(itemId)}；${reason}）`,
+      );
+    };
+
     for (;;) {
       const source = await tryInspect(api, planetId, buildingId);
       if (!source) {
         return fmtFailure(failureText('源建筑已不存在（可能已被拆除）'));
       }
       const available = drainableQuantities(source);
+      if (toBuildingId) {
+        // 背包残留是判断「是否真的送到」的一部分，每轮以服务端背包为准。
+        inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
+      }
       const itemIds = specs.length > 0 ? specs.map((spec) => spec.itemId) : Object.keys(available).filter((itemId) => (available[itemId] ?? 0) > 0);
       const pending = itemIds.filter((itemId) => !errors.has(itemId) && needsMore(itemId, available[itemId] ?? 0));
       if (pending.length === 0) {
+        if (errors.size > 0) {
+          return fmtFailure(failureText([...errors.values()].join('；')));
+        }
         if (specs.length > 0 || [...taken.keys()].length > 0) {
           return fmtOk(successText());
         }
@@ -496,23 +519,20 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
         const name = itemLabel(catalog, itemId);
         const spec = specFor(itemId);
         const remaining = available[itemId] ?? 0;
-        if (remaining <= 0) {
-          const outcome = await runTransfer(api, clock, buildingId, itemId, 1, 'to_player', planetId);
-          return fmtFailure(failureText(outcome.message));
-        }
+
         if (!toBuildingId) {
           // 直接取进背包。
+          if (remaining <= 0) {
+            const outcome = await runTransfer(api, clock, buildingId, itemId, 1, 'to_player', planetId);
+            return fmtFailure(failureText(outcome.message));
+          }
           const before = inventory[itemId] ?? 0;
           const targetLeft = spec?.count !== undefined ? spec.count - takenCount(itemId) : remaining;
           const quantity = Math.min(remaining, targetLeft);
           const outcome = await runTransfer(api, clock, buildingId, itemId, quantity, 'to_player', planetId);
           attempts += 1;
           if (!outcome.ok) {
-            return fmtFailure(
-              failureText(
-                `${name} 已取出 ${takenCount(itemId)} 个后${outcome.message}；源里还剩 ${remaining} 个`,
-              ),
-            );
+            return fmtFailure(failureText(`${outcome.message}；源里还剩 ${remaining} 个`));
           }
           inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
           taken.set(itemId, takenCount(itemId) + ((inventory[itemId] ?? 0) - before));
@@ -527,9 +547,14 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
           continue;
         }
 
-        // 经背包中转：先取进背包（背包里已有该物品时跳过取货），再装进目标。
+        // 经背包中转：先取进背包（背包里已有该物品时跳过取货），再把背包里的货
+        // **全部**装进目标；目标只收一部分就继续装着，直到背包残留为 0。
         let carrying = inventory[itemId] ?? 0;
         if (carrying <= 0) {
+          if (remaining <= 0) {
+            const outcome = await runTransfer(api, clock, buildingId, itemId, 1, 'to_player', planetId);
+            return fmtFailure(failureText(outcome.message));
+          }
           const targetLeft = spec?.count !== undefined ? spec.count - takenCount(itemId) : remaining;
           const quantity = Math.min(remaining, targetLeft);
           const outcome = await runTransfer(api, clock, buildingId, itemId, quantity, 'to_player', planetId);
@@ -554,25 +579,31 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
             inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
             taken.set(itemId, takenCount(itemId) + (beforeLoad - (inventory[itemId] ?? 0)));
             attempted.add(itemId);
+            carrying = inventory[itemId] ?? 0;
+            if (carrying > 0) {
+              // 目标只收下了一部分：继续把背包里剩下的装进去（下一轮多半是 STORAGE_FULL）。
+              if (attempts >= MAX_TRANSFERS) {
+                return toFailure(itemId, `超过 ${MAX_TRANSFERS} 次尝试仍未送达`);
+              }
+              continue;
+            }
             break;
           }
           if (outcome.code === 'STORAGE_FULL') {
             if (clock.now() - startedAt >= timeout * 1000) {
-              return fmtFailure(
-                failureText(`超时 ${timeout}s：${outcome.message}`, `背包里还剩 ${carrying} 个「${name}」`),
-              );
+              return toFailure(itemId, `超时 ${timeout}s：${outcome.message}`);
             }
             await clock.sleep(POLL_INTERVAL_MS);
             continue;
           }
           errors.set(
             itemId,
-            `${name} ${takenCount(itemId)} 个后${outcome.message}（背包里还剩 ${carrying} 个）`,
+            `${name}：${outcome.message}（源剩 ${remaining}、背包残留 ${carrying}、目标已收 ${takenCount(itemId)}）`,
           );
           continue items;
         }
         if (attempts >= MAX_TRANSFERS) {
-          return fmtFailure(failureText(`超过 ${MAX_TRANSFERS} 次尝试仍未取空`));
+          return toFailure(itemId, `超过 ${MAX_TRANSFERS} 次尝试仍未送达`);
         }
       }
       if (errors.size > 0) {

@@ -9,7 +9,7 @@
 | 总览 | `briefing` | 我的机甲：背包（完整）、作业、位置；已完成科技、当前研究；告警（带 alert_type 和 building_id） |
 | 机甲 | `mecha list` | 每台机甲的操作者、存活、背包格数、施工 pending/active、作业；底部一行是「我的机甲」 |
 | 周边 | `scene [--limit all] [--json]` | 以我的机甲为中心的 48×48：建筑（ID、类型、锚点、占地、状态）、按种类汇总的矿点（格数、范围、代表矿点 ID）、单位。指定窗口：`scene 40 130 24 16`；要原始数据加 `--json`；**文本默认只列前 20 栋建筑**，超出用 `--limit all` |
-| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型。**文本输出不显示库存容量**：只列 `inventory` / `output` 的件数，看「快满」不能只看它。容量用 `inspect <ID> --json` 看 `storage.capacity`（主库存）/ `storage.buffer_capacity`（输入、输出缓冲）；`catalog building <id>` 只给占地、造价、耗电和 IO 口，不给库存容量。常用建筑的容量数值见 [logistics.md](logistics.md) 6.5 |
+| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型。**文本输出不显示库存容量**：只列 `inventory` / `output` 的件数，看「快满」不能只看它。容量用 `inspect <ID> --json` 看 `storage.capacity`（主库存）/ `storage.buffer_capacity`（输入 + 输出缓冲**总量**，按 `storage.priority` 拆分，公式见 [logistics.md](logistics.md) 第 5 节）；`catalog building <id>` 只给占地、造价、耗电和 IO 口，不给库存容量。常用建筑的容量数值见 [logistics.md](logistics.md) 6.5 |
 | 我的施工队列 | `planet_runtime --mine` | 每个任务的状态、`wait_reason`（缺料、并发满、区域满、占地上站着单位） |
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
 | 告警 | `alerts --active-only` | 还在发生的产线问题。**`--active-only` 只滤掉已恢复的条目，不按时间过滤**：老告警只要问题一直没解决就会一直挂着（实测某矿机 `output_blocked` 从 t50 挂到 t40000+），所以看到一条告警**不代表它刚刚发生**。判断新旧看行首的 `[tN]`：t 离当前 tick 很远就是陈年问题。要只看最近发生的用 `--since-tick <n>` |
@@ -78,7 +78,7 @@
 ### transfer / transfer --take
 1. 目标建筑有存储（传送带没有）。
 2. 在基站覆盖内，或者机甲在 18 格内。
-3. 装料：背包里有货；生产建筑每种原料只收配方用量的 2 倍。
+3. 装料：背包里有货；生产建筑每种原料受输入缓冲（`buffer_capacity` 按 priority 拆分）+ 主库存可用量限制，一个都装不下时服务端返回 `STORAGE_FULL`（不是参数错误）。
 4. 取料：建筑里确实有货（`inspect`），背包有空格。
 
 ### feed / drain（批量搬运）

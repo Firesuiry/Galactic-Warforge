@@ -46,6 +46,8 @@ interface FakeState {
   buildings: Record<string, FakeBuilding>;
   slotsUsed: number;
   slotsTotal: number;
+  /** 每个目标建筑累计收下的数量（验证「目标确实收够了」）。 */
+  acceptedTotals: Record<string, Record<string, number>>;
 }
 
 interface FakeOptions {
@@ -79,6 +81,7 @@ function createFakeApi(options: FakeOptions) {
     ),
     slotsUsed: 0,
     slotsTotal: 40,
+    acceptedTotals: {},
   };
   const transferCalls: Array<{ buildingId: string; itemId: string; quantity: number; direction: string }> = [];
   const pending = new Map<string, { status: string; code: string; message: string }>();
@@ -162,6 +165,8 @@ function createFakeApi(options: FakeOptions) {
     }
     building.inventory[itemId] = (building.inventory[itemId] ?? 0) + accepted;
     state.backpack[itemId] = have - accepted;
+    const totals = (state.acceptedTotals[buildingId] ??= {});
+    totals[itemId] = (totals[itemId] ?? 0) + accepted;
     return { status: 'executed', code: 'OK', message: `已传输 ${accepted} 个「${itemId}」至建筑` };
   }
 
@@ -361,6 +366,18 @@ describe('feed 累计装入', () => {
     assert.equal(state.backpack.magnetic_coil, 22);
   });
 
+  it('回执只数成功搬运：被 STORAGE_FULL 挡回的尝试不计入', async () => {
+    const clock = fakeClock();
+    const { api } = createFakeApi({
+      backpack: { iron_ore: 10 },
+      buildings: [building({ id: 'b-1', fullForCalls: 1, acceptPerTransfer: 8 })],
+    });
+    const out = stripAnsi(await cmdFeed(['b-1', 'iron_ore:10', '--wait'], context(api, clock)));
+    assert.match(out, /^✓ /);
+    assert.match(out, /铁矿 10\/10/);
+    assert.match(out, /共 2 次搬运/);
+  });
+
   it('--wait 超时：报告每项已装/目标与原因', async () => {
     const clock = fakeClock();
     const { api } = createFakeApi({
@@ -476,7 +493,7 @@ describe('drain 取货 / 转运', () => {
     const out = stripAnsi(await cmdDrain(['b-smelter', 'iron_ingot', '--to', 'b-lab'], context(api, clock)));
     assert.match(out, /^✗ /);
     assert.match(out, /只接受矩阵/);
-    assert.match(out, /背包里还剩 5 个/);
+    assert.match(out, /背包残留 5/);
     assert.ok(transferCalls.length <= 3, `不能无限重试（实际 ${transferCalls.length} 次）`);
   });
 
@@ -507,7 +524,7 @@ describe('drain 取货 / 转运', () => {
     const out = stripAnsi(await cmdDrain(['b-smelter', 'iron_ingot', '--to', 'b-depot', '--timeout', '3'], context(api, clock)));
     assert.match(out, /^✗ /);
     assert.match(out, /超时 3s/);
-    assert.match(out, /背包里还剩 18 个/);
+    assert.match(out, /背包残留 18/);
   });
 
   it('源被拆中途 → ✗ 带已取出数', async () => {
@@ -596,5 +613,41 @@ describe('drain 取货 / 转运', () => {
     assert.match(out, /铁块 5 个/);
     assert.match(out, /磁线圈/);
     assert.match(out, /建筑只接受 3 种物品/);
+  });
+
+  it('P1：目标只收一部分时继续送到收完，不能误报成功（目标会消耗）', async () => {
+    const clock = fakeClock();
+    const { api, state, transferCalls } = createFakeApi({
+      backpack: {},
+      buildings: [
+        building({ id: 'b-smelter', type: 'arc_smelter', outputBuffer: { iron_ingot: 8 }, givePerTransfer: 8 }),
+        // 目标每轮只收 3 个、并且每次调用前消耗掉 3 个（模拟目标在消耗）。
+        building({ id: 'b-target', type: 'depot_mk1', inputWindow: 3, consumePerCall: 3 }),
+      ],
+    });
+    const out = stripAnsi(await cmdDrain(['b-smelter', 'iron_ingot', '--to', 'b-target'], context(api, clock)));
+    assert.match(out, /^✓ 已转运 电弧熔炉 → 小型储物仓：铁块 8 个/);
+    assert.equal(state.acceptedTotals['b-target'].iron_ingot, 8, '目标必须累计收下 8 个');
+    assert.equal(state.backpack.iron_ingot ?? 0, 0, '背包不能有残留');
+    // 8 个分 3 次装入（3+3+2），不能停在第一次。
+    assert.ok(transferCalls.filter((call) => call.direction === 'to_building').length >= 3);
+  });
+
+  it('P1：目标一直收不下 → ✗ 且写清源剩/背包残留/目标已收', async () => {
+    const clock = fakeClock();
+    const { api, state } = createFakeApi({
+      backpack: {},
+      buildings: [
+        building({ id: 'b-smelter', type: 'arc_smelter', outputBuffer: { iron_ingot: 8 }, givePerTransfer: 8 }),
+        building({ id: 'b-target', type: 'depot_mk1', acceptPerTransfer: 0 }),
+      ],
+    });
+    const out = stripAnsi(await cmdDrain(['b-smelter', 'iron_ingot', '--to', 'b-target', '--timeout', '2'], context(api, clock)));
+    assert.match(out, /^✗ /);
+    assert.match(out, /源剩 0/);
+    assert.match(out, /背包残留 8/);
+    assert.match(out, /目标已收 0/);
+    assert.match(out, /超时 2s/);
+    assert.equal(state.backpack.iron_ingot, 8);
   });
 });

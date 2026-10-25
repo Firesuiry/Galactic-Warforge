@@ -156,7 +156,7 @@ cd server && go run ./cmd/server -config config-war.yaml -map-config map-war.yam
 
 `OK`、`INVALID_TARGET`、`NOT_OWNER`、`NOT_OPERATOR`、`OUT_OF_RANGE`、`INSUFFICIENT_RESOURCE`、`STORAGE_FULL`、`DUPLICATE`、`VALIDATION_FAILED`、`ENTITY_NOT_FOUND`、`POSITION_OCCUPIED`、`INVALID_ELEVATION`、`UNAUTHORIZED`、`EXECUTOR_UNAVAILABLE`、`EXECUTOR_BUSY`、`GAME_FINISHED`。
 
-`STORAGE_FULL`（`transfer_item` 的 `to_building`）：目标建筑当前**一个都装不下**（主库存满/输入缓冲满/产出预留线/物流站物品缓存满），属于暂时状态——腾出空间或等建筑消耗后可原样重试，与参数错误的 `VALIDATION_FAILED` 区分。
+`STORAGE_FULL`（`transfer_item` 的 `to_building`）：目标建筑当前**一个都装不下**——主库存满、输入缓冲满（按 `storage.buffer_capacity` 与 `priority` 拆分后的输入份额）、产出预留线、物流站物品缓存满，或**物品槽位已满**（建筑只接受 N 种物品）都归这一类。多数情况是暂时状态（腾出空间或等建筑消耗后可原样重试）；储物仓/补给站这类不消耗物品的建筑槽位满了要手动取出一种物品，不会自行恢复。与参数错误的 `VALIDATION_FAILED` 区分。
 
 `NOT_OPERATOR`：`move` / `attack` / `unit_order` 选中了别的发令者绑定的机甲——该单位逐个跳过，其余单位照常执行（命令仍为 `executed`，message 写明跳过了几台）。空闲机甲谁都能动。
 

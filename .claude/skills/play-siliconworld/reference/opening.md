@@ -93,7 +93,7 @@ scripts/sw wait running <熔炉ID>
 scripts/sw inspect <熔炉ID>            # output 一项出现 iron_ingot 就成了
 ```
 
-熔炉的成品先放在输出缓冲里（容量 8）：**不接出料汇约 50 tick 就攒满，熔炉停在 output_blocked，整条线跟着停**。所以阶段 3 就把出料汇接上（下面坐标与上面这组实测布局配套，见 [logistics.md](logistics.md) 6.1）：
+熔炉的成品先放在输出缓冲里（`buffer_capacity` 8 按 priority 2:1 拆成**输入 5 / 输出 3**）：**不接出料汇时约 4 批产出（输出缓冲 3 格 + 主库存产出预留 1 格；`smelt_iron` 60 tick/批 ≈ 240 tick）就堵死，熔炉停在 output_blocked，整条线跟着停**。所以阶段 3 就把出料汇接上（下面坐标与上面这组实测布局配套，见 [logistics.md](logistics.md) 6.1）：
 
 ```bash
 scripts/sw - <<'EOF'
@@ -106,7 +106,7 @@ scripts/sw wait build
 scripts/sw inspect <补给站ID>     # inventory.iron_ingot 持续增长
 ```
 
-临时兜底（出料汇还没建好 / 只是临时取料）：`scripts/sw drain <熔炉ID> iron_ingot` 一条命令把输出缓冲里的 8 个成品全部取进背包，比 `transfer … --take` 逐个取省事；**不要等堵死再处理**。
+临时兜底（出料汇还没建好 / 只是临时取料）：`scripts/sw drain <熔炉ID> iron_ingot` 一条命令把输出缓冲 + 主库存产出预留区的成品全部取进背包（真机实测一次取走 7 个 = 输出缓冲 3 + 主库存预留区 4），比 `transfer … --take` 逐个取省事；**不要等堵死再处理**。
 
 ### 阶段 4：铜线 + 第二组电
 
@@ -166,7 +166,7 @@ scripts/sw networks                               # 不能有缺电和未接电�
 ### 阶段 7：喂料 → 矩阵 → 研究电磁学
 
 - 电磁矩阵的配方是磁线圈 1 + 电路板 1 → 矩阵 1（`catalog recipes --building assembling_machine_mk1` 可查），不能手搓，只能用制造台做。
-- 制造台每种原料能装多少 = **输入缓冲上限**（`storage.buffer_capacity`，`inspect <制造台> --json` 可查，常见 8）加上主库存里扣掉产出预留后的空位（**不是「配方用量的 2 倍」**）。所以要么分轮装，要么直接用 `feed` 让命令替你等。**喂料前先算总量**：把研究成本（`catalog techs --available` 里电磁学显示 **电磁矩阵 ×20**，已按本局节奏换算）按配方反推，得到这一整轮总共要喂多少，**一次备齐**，不要边喂边补——制造台的原料窗口只有 2，喂进去的会被立刻消耗；中途断料时，后面每一轮都会以同样的「背包不够」失败。
+- 制造台每种原料能装多少 = **输入缓冲**（`buffer_capacity` 8 按 priority 2:1 拆成输入 5）+ 主库存里扣掉产出预留后的空位（**不是「配方用量的 2 倍」**）。所以要么分轮装，要么直接用 `feed` 让命令替你等。**喂料前先算总量**：把研究成本（`catalog techs --available` 里电磁学显示 **电磁矩阵 ×20**，已按本局节奏换算）按配方反推，得到这一整轮总共要喂多少，**一次备齐**，不要边喂边补——喂进去的会被产线立刻消耗，中途断料时后面每一轮都会以同样的「背包不够」失败。
   - 直接反算：`scripts/sw plan need electromagnetic_matrix 20`。它会按配方逐层展开到基础原料，标出背包/本方建筑里已有的量，并汇总缺口。手算时按下面的口径（每批的输入/输出见 `catalog recipes`）：
     ```text
     电磁矩阵 ×20  ← 磁线圈 1 + 电路板 1 → 矩阵 1 / 批（制造台 20 批）
