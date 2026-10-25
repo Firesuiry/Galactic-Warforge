@@ -9,7 +9,7 @@
 | 总览 | `briefing` | 我的机甲：背包（完整）、作业、位置；已完成科技、当前研究；告警（带 alert_type 和 building_id） |
 | 机甲 | `mecha list` | 每台机甲的操作者、存活、背包格数、施工 pending/active、作业；底部一行是「我的机甲」 |
 | 周边 | `scene [--limit all] [--json]` | 以我的机甲为中心的 48×48：建筑（ID、类型、锚点、占地、状态）、按种类汇总的矿点（格数、范围、代表矿点 ID）、单位。指定窗口：`scene 40 130 24 16`；要原始数据加 `--json`；**文本默认只列前 20 栋建筑**，超出用 `--limit all` |
-| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型。**文本输出不显示库存容量**：只列 `inventory` / `output` 的件数，看「快满」不能只看它。容量用 `inspect <ID> --json` 看 `storage.capacity`（主库存）/ `storage.buffer_capacity`（输入、输出缓冲）；`catalog building <id>` 只给占地、造价、耗电和 IO 口，不给库存容量。常用建筑的容量数值见 [logistics.md](logistics.md) 6.5 |
+| 单个实体 | `inspect <ID>` | 状态和原因、配方与进度、库存和输出缓冲、活跃告警；机甲显示作业；分拣器显示两端连到了谁。按 ID 前缀自动判断类型。**文本输出不显示库存容量**：只列 `inventory` / `output` 的件数，看「快满」不能只看它。容量用 `inspect <ID> --json` 看 `storage.capacity`（主库存）/ `storage.buffer_capacity`（输入 + 输出缓冲**总量**，按 `storage.priority` 拆分，公式见 [logistics.md](logistics.md) 第 5 节）；`catalog building <id>` 只给占地、造价、耗电和 IO 口，不给库存容量。常用建筑的容量数值见 [logistics.md](logistics.md) 6.5 |
 | 我的施工队列 | `planet_runtime --mine` | 每个任务的状态、`wait_reason`（缺料、并发满、区域满、占地上站着单位） |
 | 电网 | `networks` | 每个电网的发电、用电、缺不缺电；没接上电的建筑 |
 | 告警 | `alerts --active-only` | 还在发生的产线问题。**`--active-only` 只滤掉已恢复的条目，不按时间过滤**：老告警只要问题一直没解决就会一直挂着（实测某矿机 `output_blocked` 从 t50 挂到 t40000+），所以看到一条告警**不代表它刚刚发生**。判断新旧看行首的 `[tN]`：t 离当前 tick 很远就是陈年问题。要只看最近发生的用 `--since-tick <n>` |
@@ -53,6 +53,7 @@
 - **施工**：落成只要 1–2 tick，所以 `construction_active` 几乎总是 0。要看的是 `pending`，它代表在排队或缺料。
 - **能量**：`briefing` 里的 `energy` 只是电网结余的展示，不是建造用的货币。这个游戏是**纯实物经济**，没有 minerals。
 - **科技门槛**：建筑或配方满足**任意一个**解锁科技即可；研究科技要求前置**全部**完成。
+- **STORAGE_FULL**：`transfer` / `feed` / `drain --to` 的「一个都装不下」（主库存满、输入缓冲满、产出预留线、物流站物品缓存满），是**暂时状态不是参数错误**——等建筑消耗、腾空间或加 `--wait` 重试即可；`VALIDATION_FAILED` 才是真参数错。
 - **矿点**：`scene` 里的矿点 ID（例如 `planet-1-1-res-1693`）就是 `mine_resource` 用的 ID，不是物品 ID。`scene --json` 的 `resources[]` 每项是一个矿点（不是格子），带 `kind`、`position{x,y}`（这一格的坐标）、`remaining`；按矿格数统计覆盖范围时直接数 `resources[]` 里落在范围内的项。
 
 ## 4. 下令前自检
@@ -77,8 +78,13 @@
 ### transfer / transfer --take
 1. 目标建筑有存储（传送带没有）。
 2. 在基站覆盖内，或者机甲在 18 格内。
-3. 装料：背包里有货；生产建筑每种原料只收配方用量的 2 倍。
+3. 装料：背包里有货；生产建筑每种原料受输入缓冲（`buffer_capacity` 按 priority 拆分）+ 主库存可用量限制，一个都装不下时服务端返回 `STORAGE_FULL`（不是参数错误）。
 4. 取料：建筑里确实有货（`inspect`），背包有空格。
+
+### feed / drain（批量搬运）
+1. `feed <建筑> <物品>[:<数量>],…`：数量是**本次命令累计装入量**；`STORAGE_FULL` 加 `--wait` 等建筑消耗，其它错误码立即失败并列出每项已装/目标。
+2. `drain <建筑> [物品] [--to <目标>]`：不带物品 = 取空 `inventory + output_buffer`；`--to` 目标满会等消耗（`--timeout`，默认 120s），背包满了先腾格子或改用 `--to`。
+3. 用前先 `inspect` 确认目标建筑有存储、在 18 格内（或基站覆盖内）；传送带没有存储，`feed` / `drain` 都会被拒。
 
 ### produce
 1. 成本在**建筑库存**里，不在背包里。先用 `transfer` 装进去。

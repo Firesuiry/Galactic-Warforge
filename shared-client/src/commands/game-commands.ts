@@ -81,6 +81,7 @@ import { cmdCheckpoint } from './checkpoint.js';
 import { cmdWait, type WaitOptions } from './wait.js';
 import { configureDistributor, configureMechaLogistics, installBot, uninstallBot } from './distributor.js';
 import { cmdHelp } from './help.js';
+import { cmdDrain, cmdFeed } from './item-transfer.js';
 import { cmdDispatchMecha, cmdMecha } from './mecha.js';
 import {
   cmdBlueprints,
@@ -205,6 +206,8 @@ export const GAME_COMMANDS: Record<string, CommandEntry> = {
   theater_set_objective: { handler: cmdTheaterSetObjective },
   blockade_planet: { handler: cmdBlockadePlanet },
   transfer: { handler: cmdTransfer },
+  feed: { handler: cmdFeed },
+  drain: { handler: cmdDrain },
   refuel_mecha: { handler: cmdRefuelMecha },
   mine_resource: { handler: cmdMineResource },
   craft_item: { handler: cmdCraftItem },

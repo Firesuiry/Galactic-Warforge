@@ -406,13 +406,15 @@ as                                     # 临时恢复为玩家本人发令
 | `save` | `save [--reason <text>]` | Trigger manual save |
 | `checkpoint` | `checkpoint <list\|save <name>\|load <name>> [--note <text>] [--contract <file.json>] [--replace]` | 命名存档点：list 列出（登录即可），save 存当前对局（admin，regression 契约须全过；bug- 前缀只记录），load 热加载（admin） |
 
-### 管理、调试与工具（26 条）
+### 管理、调试与工具（28 条）
 
 | 动词 | 用法 | 说明 |
 |---|---|---|
 | `catalog_commands` | — | Public command structure catalog (GET /catalog/commands) |
 | `haul` | `haul <unit_id[,unit_id...]> --from <building_id> --to <building_id> [--item <item_id>] [--planet <planet_id>]` | 运输机器人往返搬运：起点建筑 → 终点建筑，--item 锁定单一物品（缺省自动选终点能收的第一种） |
 | `auto_haul` | `auto_haul <unit_id[,unit_id...]> [--planet <planet_id>]` | 运输机器人切回全局自动搬运（出厂默认）：每 10 tick 按本行星缺料建筑派单，无需求时原地待命 |
+| `feed` | `feed <建筑ID> <物品ID>[:数量][,物品ID[:数量]…] [--wait] [--fill] [--timeout <秒>] [--planet <行星ID>]` | 批量装料：把机甲背包里的多种物品累计装入建筑（数量按**本次命令累计装入量**算，不是建筑里的最终数量）。每轮对每项试一次，装入量以背包减少量为准；省略数量或 --fill = 一次装到当前输入窗口上限；--wait = 窗口满了等建筑消耗（默认 120s 超时），要求每项都写数量；STORAGE_FULL（装不下）才等，参数错误立即失败 |
+| `drain` | `drain <建筑ID> [物品ID[:数量][,物品ID[:数量]…]] [--to <目标建筑ID>] [--timeout <秒>] [--planet <行星ID>]` | 批量取货/转运：不带物品列表 = 取空建筑 inventory + output_buffer 里所有物品（每轮重读，兼容持续产出）；不带 --to 取进机甲背包（背包满即失败并报已取出/源剩余）；--to = 经背包中转装进目标建筑，目标满（STORAGE_FULL）等消耗后重试，默认 120s 超时 |
 | `raw` | `raw <json>` | Send raw /commands request JSON |
 | `audit` | `audit [options]` | Query audit log |
 | `event_snapshot` | `event_snapshot [options]` | Query event snapshot |

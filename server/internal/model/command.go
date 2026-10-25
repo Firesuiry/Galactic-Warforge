@@ -122,10 +122,15 @@ const (
 	CodeNotOwner             ResultCode = "NOT_OWNER"
 	CodeOutOfRange           ResultCode = "OUT_OF_RANGE"
 	CodeInsufficientResource ResultCode = "INSUFFICIENT_RESOURCE"
-	CodeDuplicate            ResultCode = "DUPLICATE"
-	CodeValidationFailed     ResultCode = "VALIDATION_FAILED"
-	CodeEntityNotFound       ResultCode = "ENTITY_NOT_FOUND"
-	CodePositionOccupied     ResultCode = "POSITION_OCCUPIED"
+	// CodeStorageFull 装入目标当前一个都收不下：主库存满、输入缓冲满、产出预留线、
+	// 物流站物品缓存满，以及**物品槽位已满**（建筑只接受 N 种物品）都归这一类。
+	// 多数情况是暂时状态（腾出空间/等建筑消耗后可重试），但储物仓这类不消耗物品的
+	// 建筑槽位满了要手动取出一种物品，不会自行恢复；与参数错误的 VALIDATION_FAILED 区分。
+	CodeStorageFull      ResultCode = "STORAGE_FULL"
+	CodeDuplicate        ResultCode = "DUPLICATE"
+	CodeValidationFailed ResultCode = "VALIDATION_FAILED"
+	CodeEntityNotFound   ResultCode = "ENTITY_NOT_FOUND"
+	CodePositionOccupied ResultCode = "POSITION_OCCUPIED"
 	// CodeInvalidElevation 高架层参数不合法（第 19 轮契约 §3.2）：非传送带给了
 	// elevation > 0、超出 0–4、高架带没有明确方向、同层占格冲突等。
 	CodeInvalidElevation    ResultCode = "INVALID_ELEVATION"

@@ -174,8 +174,14 @@ func (gc *GameCore) execTransferItem(ws *model.WorldState, playerID string, cmd 
 		return res, nil
 	}
 	if accepted <= 0 {
-		res.Code = model.CodeValidationFailed
-		res.Message = fmt.Sprintf("%s无法接收「%s」", buildingDisplayName(building), itemDisplayName(itemID))
+		// 「一个都装不下」是暂时状态（缓冲满/预留线/物流站缓存满），不是参数错误：
+		// 用 STORAGE_FULL 让调用方能等消耗/腾空间后重试，不靠解析文案猜。
+		reason := "物流站缓存已满"
+		if building.Storage != nil {
+			reason = transferLoadBlockReason(building, itemID)
+		}
+		res.Code = model.CodeStorageFull
+		res.Message = fmt.Sprintf("无法接收「%s」：%s", itemDisplayName(itemID), reason)
 		return res, nil
 	}
 

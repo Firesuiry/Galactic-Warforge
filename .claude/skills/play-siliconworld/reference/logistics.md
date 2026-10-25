@@ -67,7 +67,12 @@
 
 ## 5. 生产建筑的原料窗口
 
-分拣器和手动 `transfer` 往熔炉、制造台里装料时，每种原料最多只收**配方用量的 2 倍**。例如电磁矩阵要磁线圈 1 + 电路板 1，每次就只能各装 2 个。少量手动喂料要反复装；长期运行就用分拣器，从补给站或传送带上取料。
+装料上限不是「配方用量的 2 倍」，而是两个真实口径之和：
+
+- **输入缓冲**：`storage.buffer_capacity` 是**输入 + 输出缓冲总量**，按 `storage.priority` 拆分：输入份额 = `buffer_capacity × input_priority / (input_priority + output_priority)`。例：`arc_smelter` / `assembling_machine_mk1` buffer 8、2:1 → **输入 5 / 输出 3**；`matrix_lab` buffer 12、2:2 → 输入 6 / 输出 6；`mining_machine` buffer 12、1:2 → 输入 4 / 输出 8。`inspect <建筑> --json` 下发 `storage.buffer_capacity` 与 `storage.priority`，按公式算，**不要写死 8**；
+- **主库存可用量**：`storage.capacity − storage.reserve − 已用 inventory`（产出预留要留给成品）。
+
+两处都占满就一个也收不下，服务端返回 `STORAGE_FULL`（暂时装不下，不是参数错误）。手动喂料用 `feed … --wait` 自动等消耗（见 6.6）；长期运行就用分拣器，从补给站或传送带上取料。
 
 ## 6. 产线模板（坐标为实测值）
 
@@ -88,6 +93,8 @@ build 65 143 supply_station                         # 占 65–67 × 143–145
 
 验证：`inspect` 熔炉显示 running，`inspect` 补给站的铁块持续增长（实测 72 → 278）。
 
+这一组就是**熔炉出料汇模板**：熔炉 → 分拣器 → 传送带 → 分拣器 → 补给站。**不接出料汇时产物先占输出缓冲 3 格（buffer 8 按 2:1 拆分）+ 主库存产出预留 1 格 = 4 批（`smelt_iron` 60 tick/批 ≈ 240 tick）后熔炉停转**（真机实测：拆掉出料分拣器后输出缓冲只攒到 3 个）；临时兜底用 `drain <熔炉ID> iron_ingot` 一条命令取空（实测一次取走 7 个 = 输出缓冲 3 + 主库存预留区 4）。
+
 - **补给站的位置不是随便挑的空地**：它必须落在最后一个分拣器（`build 64 144 sorter_mk1 --rotation 90`）的**正面轴上**，也就是从 (64,144) 向东那条线，补给站的占地要覆盖 (65,144)。把补给站放到带子的侧面、或者和熔炉同一行，最后这个分拣器的放货端就会「未连上」，整条线不搬货也不报警。通用规则见第 8 节第 5 条。
 
 ### 6.2 制造台 → 研究站（cp-matrix-line）
@@ -102,7 +109,7 @@ build 64 150 conveyor_belt_mk1 --direction west
 build 63 150 conveyor_belt_mk1 --direction west # 带尾
 build 63 149 sorter_mk1 --rotation 0            # 背面（南）取带尾，正面（北）放进研究站 (62,146)
 build 66 152 tesla_tower
-# 原料：transfer <制造台> magnetic_coil 2 / circuit_board 2，反复装（原料窗口见第 5 节）
+# 原料：scripts/sw feed <制造台> magnetic_coil:20,circuit_board:20 --wait（原料窗口见第 5 节、用法见 6.6）
 ```
 
 研究站不设配方，就是研究模式，只收矩阵。
@@ -122,18 +129,39 @@ build 58 157 sorter_mk1 --rotation 180   # 背面（北）跳过 1 个空格取�
 
 ## 6.5 吞吐与缓冲参考
 
-| 建筑 | 产出速度 | 主库存 | 输入缓冲 | 输出缓冲 | 备注 |
+| 建筑 | 产出速度 | 主库存 | 输入缓冲（拆分后） | 输出缓冲（拆分后） | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| `mining_machine` | 8/tick | 48 | 12 | 12 | 没出口几 tick 就满 |
-| `arc_smelter` | 1 批 / 配方时长（铁铜 60 tick） | 24 | 8 | 8 | 成品攒在输出缓冲 |
-| `assembling_machine_mk1` | 1 批 / 配方时长 | 24 | 8 | 8 | |
-| `matrix_lab` | 1 批 / 配方时长 | 36 | 12 | 12 | 研究模式另算 |
-| `supply_station` | — | 1000 | 200 | 200 | 开局可建的产线终点 |
+| `mining_machine` | 8/tick | 48 | 4 | 8 | 没出口几 tick 就满（buffer 12、1:2） |
+| `arc_smelter` | 1 批 / 配方时长（铁铜 60 tick） | 24 | 5 | 3 | 成品攒在输出缓冲（buffer 8、2:1） |
+| `assembling_machine_mk1` | 1 批 / 配方时长 | 24 | 5 | 3 | buffer 8、2:1 |
+| `matrix_lab` | 1 批 / 配方时长 | 36 | 6 | 6 | buffer 12、2:2；研究模式另算 |
+| `supply_station` | — | 1000 | 133 | 67 | buffer 200、2:1；开局可建的产线终点 |
 | `conveyor_belt_mk1` | 1/tick，每格堆 2 | — | — | — | Mk.II 2/tick、每格堆 3；Mk.III 5/tick、每格堆 6 |
 
-- 缓冲按「输入/输出优先级」分配，默认 2:1，上表是默认值。实际值以 `inspect` 的 `storage.capacity / buffer_capacity / output_buffer` 为准。
+- 缓冲按「输入/输出优先级」分配（默认 2:1），上表是默认值；实际值以 `inspect --json` 的 `storage.capacity / buffer_capacity / priority` 按第 5 节公式算。
 - **估算等待时间**：N 个成品 ≈ N × 配方时长 ÷ 制造台数量（tick）。tick 速率看 `health` 或 `/games/current`，例如 10 tick/s 时 600 tick = 60 秒。
 - 手搓一批的时长 = 配方 `duration`（`catalog recipes` 能查）。例如齿轮 20 tick/批。
+
+### 6.6 批量搬运：feed / drain
+
+`transfer` 一次只搬一种物品、一个数量；补满一座制造台要十几轮、熔炉每 3 批产出（≈180 tick）输出缓冲就满、又要取一次。这两类重复劳动直接用批量命令：
+
+```bash
+# 累计装入（数量是本次命令的累计装入量，不是建筑里的最终数量）
+scripts/sw feed <建筑ID> magnetic_coil:20,circuit_board:20 --wait   # 窗口满了等建筑消耗，默认 120s 超时
+scripts/sw feed <建筑ID> magnetic_coil:20,circuit_board:20          # 不带 --wait：装到窗口满就停并报告差额
+scripts/sw feed <建筑ID> magnetic_coil                              # 省略数量 = 一次装到当前窗口上限
+scripts/sw feed <建筑ID> magnetic_coil --fill                       # 同上（显式写法）
+
+# 取空 / 转运
+scripts/sw drain <熔炉ID> iron_ingot                              # 取空该物品进背包（实测输出缓冲 3 个 + 主库存预留区 4 个 = 一次取 7 个）
+scripts/sw drain <熔炉ID>                                         # 不带物品 = 取空 inventory + output_buffer 全部物品
+scripts/sw drain <制造台ID> electromagnetic_matrix --to <研究站ID>  # 经背包中转送进研究站；目标满就等它消耗
+```
+
+- 计数只看**机甲背包的增减量**（服务端只扣实际装入量），不解析回执文案。
+- `STORAGE_FULL`（装不下）是暂时状态：`--wait` 时等建筑消耗/腾空间后继续；`VALIDATION_FAILED`、`ENTITY_NOT_FOUND` 等参数/状态错误立即失败，不会空转。
+- 背包满了 `drain` 会报「已取出 N 个后背包已满（已用 x/y 格）；源里还剩 M 个」，先腾背包或加 `--to` 转运到别的建筑。
 
 ## 7. 供电
 
