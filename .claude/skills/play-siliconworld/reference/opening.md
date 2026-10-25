@@ -93,7 +93,20 @@ scripts/sw wait running <熔炉ID>
 scripts/sw inspect <熔炉ID>            # output 一项出现 iron_ingot 就成了
 ```
 
-熔炉的成品先放在输出缓冲里（容量 8），满了熔炉就停。所以要么接出料分拣器（见 [logistics.md](logistics.md) 6.1），要么定期 `transfer <熔炉ID> iron_ingot 8 --take`。
+熔炉的成品先放在输出缓冲里（容量 8）：**不接出料汇约 50 tick 就攒满，熔炉停在 output_blocked，整条线跟着停**。所以阶段 3 就把出料汇接上（下面坐标与上面这组实测布局配套，见 [logistics.md](logistics.md) 6.1）：
+
+```bash
+scripts/sw - <<'EOF'
+build 63 143 sorter_mk1 --rotation 180            # 背面（北）取熔炉 (63,142)，正面（南）放到带子 (63,144)
+build 63 144 conveyor_belt_mk1 --direction south
+build 64 144 sorter_mk1 --rotation 90             # 背面（西）取带子，正面（东）放进补给站
+build 65 143 supply_station                       # 占 65–67 × 143–145，铁块落点
+EOF
+scripts/sw wait build
+scripts/sw inspect <补给站ID>     # inventory.iron_ingot 持续增长
+```
+
+临时兜底（出料汇还没建好 / 只是临时取料）：`scripts/sw drain <熔炉ID> iron_ingot` 一条命令把输出缓冲里的 8 个成品全部取进背包，比 `transfer … --take` 逐个取省事；**不要等堵死再处理**。
 
 ### 阶段 4：铜线 + 第二组电
 
@@ -153,7 +166,7 @@ scripts/sw networks                               # 不能有缺电和未接电�
 ### 阶段 7：喂料 → 矩阵 → 研究电磁学
 
 - 电磁矩阵的配方是磁线圈 1 + 电路板 1 → 矩阵 1（`catalog recipes --building assembling_machine_mk1` 可查），不能手搓，只能用制造台做。
-- 制造台每种原料一次最多收 2 个（配方用量的 2 倍），所以要分轮装料。**喂料前先算总量**：把研究成本（`catalog techs --available` 里电磁学显示 **电磁矩阵 ×20**，已按本局节奏换算）按配方反推，得到这一整轮总共要喂多少，**一次备齐**，不要边喂边补——制造台的原料窗口只有 2，喂进去的会被立刻消耗；中途断料时，后面每一轮都会以同样的「背包不够」失败。
+- 制造台每种原料能装多少 = **输入缓冲上限**（`storage.buffer_capacity`，`inspect <制造台> --json` 可查，常见 8）加上主库存里扣掉产出预留后的空位（**不是「配方用量的 2 倍」**）。所以要么分轮装，要么直接用 `feed` 让命令替你等。**喂料前先算总量**：把研究成本（`catalog techs --available` 里电磁学显示 **电磁矩阵 ×20**，已按本局节奏换算）按配方反推，得到这一整轮总共要喂多少，**一次备齐**，不要边喂边补——制造台的原料窗口只有 2，喂进去的会被立刻消耗；中途断料时，后面每一轮都会以同样的「背包不够」失败。
   - 直接反算：`scripts/sw plan need electromagnetic_matrix 20`。它会按配方逐层展开到基础原料，标出背包/本方建筑里已有的量，并汇总缺口。手算时按下面的口径（每批的输入/输出见 `catalog recipes`）：
     ```text
     电磁矩阵 ×20  ← 磁线圈 1 + 电路板 1 → 矩阵 1 / 批（制造台 20 批）
@@ -176,19 +189,18 @@ scripts/sw networks                               # 不能有缺电和未接电�
 - 速度：一座矩阵研究站是 `research_per_tick=1`，也就是每 tick 消耗 1 个矩阵、推进 1 点。20 个矩阵理论上 20 tick，但**供电不足会按比例降速**，实际可能慢好几倍。用 `wait ticks` 轮询 `briefing` 的 progress，不要假设固定时长。
 
 ```bash
-# 喂料是分轮的：制造台每种原料一次只收 2 个（配方用量的 2 倍）。
-# 总量要一次备齐：磁线圈 20、电路板 20；喂之前先 mecha list 确认背包数量，不要边喂边补。
-for i in $(seq 10); do
-  scripts/sw transfer <制造台ID> magnetic_coil 2
-  scripts/sw transfer <制造台ID> circuit_board 2
-  scripts/sw wait item electromagnetic_matrix $((2*i)) --in <研究站ID>
-done
+# 两条命令代替原来 10 轮 transfer + 10 次 wait item：
+scripts/sw feed <制造台ID> magnetic_coil:20,circuit_board:20 --wait   # 累计装入 20+20，窗口满了自动等消耗
+scripts/sw wait item electromagnetic_matrix 20 --in <制造台ID>        # 等矩阵产出（inventory + output_buffer 合计）
+scripts/sw drain <制造台ID> electromagnetic_matrix --to <研究站ID>     # 一条命令把矩阵全送进研究站
+scripts/sw inspect <研究站ID>                                         # inventory.electromagnetic_matrix = 20
 scripts/sw start_research electromagnetism
 scripts/sw wait ticks 30
 scripts/sw briefing          # 已完成科技里出现 electromagnetism
 ```
 
-- 循环里每一轮都要能成功。**中途某一轮报「机甲背包需有 2 个「电路板」，当前 0 个」，就停下来补料，不要继续跑后面的轮次**——后面每一轮都会以同样的原因失败，白白刷出一串失败记录（第三次验证因此产生了 20 条重复失败）。补料后再从断点接着喂。
+- `feed` 的数量是**本次命令累计装入量**（不是建筑里的最终数量），计数以背包减少量为准；`STORAGE_FULL`（装不下）才等消耗，遇到「研究站不收非矩阵」这类参数错误立即失败并列出每项已装/目标。`drain --to` 目标满了会等目标消耗后重试（默认 120 秒，`--timeout` 可调）。
+- 中途报「背包里没有「电路板」」就停下补料——后面的等待只会重复同一个失败；补到货后原命令重跑即可（累计计数从零重新算）。
 - 料不够就先手搓：磁线圈要磁铁（`smelt_magnet`，吃**铁矿**），电路板要铁块 + 铜块。
 - 矩阵不够时，`start_research` 也会成功，但进度会停住（`blocked_reason` 显示等待矩阵或供电不足）。所以要先等 20 个都到位。
 
