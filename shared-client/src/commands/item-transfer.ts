@@ -20,6 +20,8 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const POLL_INTERVAL_MS = 1000;
 /** 单条 transfer_item 的执行等待（受理后的下一 tick 执行 + /audit 轮询）。 */
 const EXEC_TIMEOUT_MS = 15_000;
+/** 等执行结果的审计轮询间隔：执行在下一 tick，100ms 轮询能把单次搬运压到 ~0.2s。 */
+const EXEC_POLL_INTERVAL_MS = 100;
 /** 单条命令的搬运次数上限：防服务端持续产出/持续消耗导致的死循环。 */
 const MAX_TRANSFERS = 200;
 
@@ -118,7 +120,7 @@ async function runTransfer(
   }
   const awaited = await api.awaitExecution(response.request_id, 1, {
     timeoutMs: EXEC_TIMEOUT_MS,
-    pollIntervalMs: POLL_INTERVAL_MS,
+    pollIntervalMs: EXEC_POLL_INTERVAL_MS,
     now: clock.now,
     sleep: clock.sleep,
   });
@@ -265,7 +267,8 @@ export async function cmdFeed(args: string[], ctx: CommandContext): Promise<stri
     const errors = new Map<string, string>();
     const startedAt = clock.now();
     let inventory = backpack.inventory;
-    let transfers = 0;
+    let transfers = 0; // 实际搬成功的次数（回执用）
+    let attempts = 0; // 含被 STORAGE_FULL 挡回的尝试（上限用）
     let blockReason = '';
 
     const isDone = (spec: ItemSpec): boolean => {
@@ -298,8 +301,9 @@ export async function cmdFeed(args: string[], ctx: CommandContext): Promise<stri
           continue;
         }
         const outcome = await runTransfer(api, clock, buildingId, spec.itemId, quantity, 'to_building', planetId);
-        transfers += 1;
+        attempts += 1;
         if (outcome.ok) {
+          transfers += 1;
           inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
           loaded.set(spec.itemId, (loaded.get(spec.itemId) ?? 0) + (before - (inventory[spec.itemId] ?? 0)));
           if (spec.count === undefined) {
@@ -324,8 +328,8 @@ export async function cmdFeed(args: string[], ctx: CommandContext): Promise<stri
           `已装入 ${target}：${feedProgressText(catalog, specs, loaded)}（共 ${transfers} 次搬运，用 ${fmtSeconds(clock.now() - startedAt)} 秒）`,
         );
       }
-      if (transfers >= MAX_TRANSFERS) {
-        return fmtFailure(failure(`超过 ${MAX_TRANSFERS} 次搬运仍未完成`));
+      if (attempts >= MAX_TRANSFERS) {
+        return fmtFailure(failure(`超过 ${MAX_TRANSFERS} 次尝试仍未完成`));
       }
       if (!wait) {
         const detail = feedFailureDetail(
@@ -348,7 +352,10 @@ export async function cmdFeed(args: string[], ctx: CommandContext): Promise<stri
       if (!progressed && !blockReason) {
         return fmtFailure(failure('这一轮没有任何进展'));
       }
-      await clock.sleep(POLL_INTERVAL_MS);
+      // 有进展就立刻再试（窗口刚腾出空位）；只有被 STORAGE_FULL 挡住时才睡 1 秒。
+      if (!progressed) {
+        await clock.sleep(POLL_INTERVAL_MS);
+      }
     }
   } catch (error) {
     return fmtError(errorMessage(error));
@@ -427,7 +434,8 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
     const attempted = new Set<string>();
     const startedAt = clock.now();
     let inventory = initial.inventory;
-    let transfers = 0;
+    let transfers = 0; // 实际搬成功的次数（回执用）
+    let attempts = 0; // 含被 STORAGE_FULL 挡回的尝试（上限用）
     // --to 时单项的致命错误（目标不收/参数错）：记下来继续转运其它项，最后汇总失败。
     const errors = new Map<string, string>();
 
@@ -498,7 +506,7 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
           const targetLeft = spec?.count !== undefined ? spec.count - takenCount(itemId) : remaining;
           const quantity = Math.min(remaining, targetLeft);
           const outcome = await runTransfer(api, clock, buildingId, itemId, quantity, 'to_player', planetId);
-          transfers += 1;
+          attempts += 1;
           if (!outcome.ok) {
             return fmtFailure(
               failureText(
@@ -509,8 +517,9 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
           inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
           taken.set(itemId, takenCount(itemId) + ((inventory[itemId] ?? 0) - before));
           attempted.add(itemId);
-          if (transfers >= MAX_TRANSFERS) {
-            return fmtFailure(failureText(`超过 ${MAX_TRANSFERS} 次搬运仍未取空`));
+          transfers += 1;
+          if (attempts >= MAX_TRANSFERS) {
+            return fmtFailure(failureText(`超过 ${MAX_TRANSFERS} 次尝试仍未取空`));
           }
           if (clock.now() - startedAt >= timeout * 1000) {
             return fmtFailure(failureText(`超时 ${timeout}s`));
@@ -524,12 +533,13 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
           const targetLeft = spec?.count !== undefined ? spec.count - takenCount(itemId) : remaining;
           const quantity = Math.min(remaining, targetLeft);
           const outcome = await runTransfer(api, clock, buildingId, itemId, quantity, 'to_player', planetId);
-          transfers += 1;
+          attempts += 1;
           if (!outcome.ok) {
             errors.set(itemId, `${name} 取货失败：${outcome.message}（源里还剩 ${remaining} 个）`);
             continue items;
           }
           inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
+          transfers += 1;
           carrying = inventory[itemId] ?? 0;
           if (carrying <= 0) {
             return fmtFailure(failureText(`${name} 取进背包后数量为 0`));
@@ -538,8 +548,9 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
         for (;;) {
           const beforeLoad = carrying;
           const outcome = await runTransfer(api, clock, toBuildingId, itemId, beforeLoad, 'to_building', planetId);
-          transfers += 1;
+          attempts += 1;
           if (outcome.ok) {
+            transfers += 1;
             inventory = (await fetchBackpack(api, issuerId, planetId))?.inventory ?? inventory;
             taken.set(itemId, takenCount(itemId) + (beforeLoad - (inventory[itemId] ?? 0)));
             attempted.add(itemId);
@@ -560,8 +571,8 @@ export async function cmdDrain(args: string[], ctx: CommandContext): Promise<str
           );
           continue items;
         }
-        if (transfers >= MAX_TRANSFERS) {
-          return fmtFailure(failureText(`超过 ${MAX_TRANSFERS} 次搬运仍未取空`));
+        if (attempts >= MAX_TRANSFERS) {
+          return fmtFailure(failureText(`超过 ${MAX_TRANSFERS} 次尝试仍未取空`));
         }
       }
       if (errors.size > 0) {
